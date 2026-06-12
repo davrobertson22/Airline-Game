@@ -1,0 +1,504 @@
+import { useMemo } from 'react';
+import { useGame } from '../store/GameContext.jsx';
+import { getAirport } from '../data/airports.js';
+import AirportLink from './AirportLink.jsx';
+import { getAircraftType } from '../data/aircraft.js';
+import {
+  buildRouteMarket, computeMarketShare, buildCompetitorOffer,
+  computeQualityScore, computeConnectingDemand, HUB_TIERS,
+} from '../models/demand.js';
+import { getAlliance } from '../data/alliances.js';
+import {
+  simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent,
+} from '../utils/simulation.js';
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+function weekToMonth(week) {
+  return Math.min(12, Math.max(1, Math.ceil(week * 12 / 52)));
+}
+
+const TIER_COLOR = { budget: 'var(--yellow)', legacy: 'var(--accent)', premium: 'var(--purple)' };
+
+function TierBadge({ tier }) {
+  return (
+    <span style={{
+      color: TIER_COLOR[tier] ?? 'var(--text-muted)',
+      background: (TIER_COLOR[tier] ?? 'var(--text-muted)') + '22',
+      border: `1px solid ${(TIER_COLOR[tier] ?? 'var(--text-muted)')}55`,
+      borderRadius: 4, padding: '1px 7px', fontSize: 11, fontWeight: 700,
+      textTransform: 'capitalize',
+    }}>
+      {tier}
+    </span>
+  );
+}
+
+function Stat({ label, value, sub, color }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontWeight: 700, fontSize: 15, color: color ?? 'var(--text)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function MarketSharePie({ slices }) {
+  // slices: [{ label, pax, color, isPlayer, isUnmet }]
+  const total = slices.reduce((s, sl) => s + sl.pax, 0);
+  if (total === 0) return null;
+
+  const cx = 60, cy = 60, r = 52;
+  let angle = -Math.PI / 2;
+
+  const paths = slices.map((sl, i) => {
+    const sweep = (sl.pax / total) * 2 * Math.PI;
+    if (sweep < 0.001) return null;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    angle += sweep;
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    const large = sweep > Math.PI ? 1 : 0;
+    return (
+      <path
+        key={i}
+        d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`}
+        fill={sl.color}
+        opacity={sl.isUnmet ? 0.25 : sl.isPlayer ? 1 : 0.65}
+      />
+    );
+  });
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <svg viewBox="0 0 120 120" style={{ width: 110, height: 110, flexShrink: 0 }}>
+        {paths}
+      </svg>
+      <div style={{ flex: 1, minWidth: 120 }}>
+        {slices.map((sl, i) => {
+          const pct = Math.round(sl.pax / total * 100);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, fontSize: 12 }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+                background: sl.color,
+                opacity: sl.isUnmet ? 0.35 : 1,
+              }} />
+              <span style={{
+                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                color: sl.isUnmet ? 'var(--text-dim)' : sl.isPlayer ? 'var(--text)' : 'var(--text-muted)',
+                fontWeight: sl.isPlayer ? 700 : 400,
+                fontStyle: sl.isUnmet ? 'italic' : 'normal',
+              }}>
+                {sl.isPlayer && <span style={{ color: 'var(--green)', marginRight: 4 }}>▶</span>}
+                {sl.label}
+              </span>
+              <span style={{ flexShrink: 0, color: sl.isUnmet ? 'var(--text-dim)' : sl.isPlayer ? 'var(--green)' : 'var(--text-muted)' }}>
+                {sl.pax.toLocaleString()} · {pct}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function RouteDetail({ origin, dest, onBack }) {
+  const { state } = useGame();
+  const gameDate  = { week: state.week, month: weekToMonth(state.week) };
+  const hubs      = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
+
+  const originAirport = getAirport(origin);
+  const destAirport   = getAirport(dest);
+  const dist          = Math.round(distanceKm(originAirport, destAirport));
+  const refP          = referencePrice(origin, dest);
+  const routeKey      = [origin, dest].sort().join('-');
+
+  // Market
+  const market      = useMemo(() => buildRouteMarket(origin, dest, gameDate), [origin, dest, gameDate.month]);
+  const totalDemand = market.leisureDemand + market.businessDemand;
+
+  // Player routes on this pair (either direction)
+  const playerRoutes = state.routes.filter(r =>
+    (r.origin === origin && r.destination === dest) ||
+    (r.origin === dest   && r.destination === origin)
+  );
+
+  // Competitors on this route
+  const competitorsOnRoute = (state.competitors ?? []).filter(c => c.routes?.[routeKey]);
+
+  // Build market share
+  const { shareResults } = useMemo(() => {
+    const hubBonus = (code) => {
+      const tier = hubs[code]?.tier;
+      return tier ? (HUB_TIERS[tier]?.qualityBonus ?? 0) : 0;
+    };
+    const maxHubBonus = Math.max(hubBonus(origin), hubBonus(dest));
+
+    let playerOffer = null;
+    if (playerRoutes.length > 0) {
+      const route    = playerRoutes[0];
+      const aircraft = state.fleet.find(a => a.id === route.aircraftId);
+      const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+      if (type) {
+        const totalFreq = playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0);
+        playerOffer = {
+          airlineId:         'player',
+          origin, destination: dest,
+          economyPrice:      route.classPrices?.economy ?? route.ticketPrice,
+          businessPrice:     route.classPrices?.businessClass ?? null,
+          weeklyFrequency:   totalFreq,
+          seatsPerFlight:    type.seats,
+          economySeats:      type.seats * totalFreq,
+          businessSeats:     (aircraft.config?.businessClass ?? 0) * totalFreq,
+          qualityScore:      Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
+          connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+        };
+      }
+    }
+
+    const compOffers = competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean);
+    const allOffers  = [...(playerOffer ? [playerOffer] : []), ...compOffers];
+    const results    = computeMarketShare(market, allOffers);
+    return { shareResults: results };
+  }, [playerRoutes, competitorsOnRoute, market, origin, dest, state.hub, hubs]);
+
+  // Live simulate each player aircraft
+  const playerSims = useMemo(() =>
+    playerRoutes.flatMap(route => {
+      const aircraft = state.fleet.find(a => a.id === route.aircraftId);
+      if (!aircraft) return [];
+      const result = simulateRoute(route, aircraft, gameDate);
+      return result ? [{ route, aircraft, type: getAircraftType(aircraft.typeId), result }] : [];
+    }),
+    [playerRoutes, state.fleet, gameDate]
+  );
+
+  const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);
+  const totalRev     = playerSims.reduce((s, {result}) => s + result.revenue, 0);
+  const totalOpCost  = playerSims.reduce((s, {result}) => s + result.totalOpCost, 0);
+  const avgLoad      = playerSims.length ? playerSims.reduce((s, {result}) => s + result.loadFactor, 0) / playerSims.length : 0;
+
+  // Aggregate class summary across all player sims
+  const CABIN_ORDER = ['firstClass', 'businessClass', 'premiumEconomy', 'economy'];
+  const CLASS_LABELS = { firstClass: 'First', businessClass: 'Business', premiumEconomy: 'Prem Eco', economy: 'Economy' };
+  const CLASS_COLORS = { firstClass: 'var(--purple)', businessClass: 'var(--accent)', premiumEconomy: 'var(--yellow)', economy: 'var(--green)' };
+  const aggregateClasses = CABIN_ORDER.reduce((acc, cls) => {
+    let totalSeats = 0, totalPaxCls = 0;
+    for (const { route, result } of playerSims) {
+      const cs = result.classSummary?.[cls];
+      if (!cs) continue;
+      // cs.passengers is round-trip; seats is per-direction per-flight
+      totalSeats  += cs.seats * (route.weeklyFrequency ?? 0); // one-way capacity
+      totalPaxCls += cs.passengers / 2; // one-way pax
+    }
+    if (totalSeats > 0) acc[cls] = { seats: totalSeats, pax: totalPaxCls, loadFactor: totalPaxCls / totalSeats };
+    return acc;
+  }, {});
+  const activeClasses = CABIN_ORDER.filter(cls => aggregateClasses[cls]);
+
+  // Connecting
+  const rcOrigin = state.routes.filter(r => r.origin === origin || r.destination === origin).length;
+  const rcDest   = state.routes.filter(r => r.origin === dest   || r.destination === dest).length;
+
+  const connecting = useMemo(() => {
+    // Build alliance/codeshare partner hub codes for external feed boost
+    const allianceDef        = state.allianceMembership ? getAlliance(state.allianceMembership.allianceId) : null;
+    const alliancePartnerIds = allianceDef?.memberIds ?? [];
+    const codeshareIds       = (state.codeshareAgreements ?? []).map(a => a.competitorId);
+    const allPartnerIds      = new Set([...alliancePartnerIds, ...codeshareIds]);
+    const partnerHubCodes    = (state.competitors ?? [])
+      .filter(c => allPartnerIds.has(c.id) && c.homeHub)
+      .map(c => c.homeHub);
+
+    // Use total frequency across all player sub-routes on this pair
+    const weeklyFrequency = playerRoutes.reduce((s, r) => s + (r.weeklyFrequency ?? 0), 0) || 7;
+
+    return computeConnectingDemand(origin, dest, hubs, rcOrigin, rcDest, refP,
+      { weeklyFrequency, partnerHubCodes }
+    );
+  }, [origin, dest, hubs, rcOrigin, rcDest, refP, playerRoutes,
+      state.allianceMembership, state.codeshareAgreements, state.competitors]);
+
+  return (
+    <div>
+      {/* Back + header */}
+      <button className="btn btn-ghost" style={{ fontSize: 13, marginBottom: 14 }} onClick={onBack}>
+        ← Back to Routes
+      </button>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 22, letterSpacing: -0.5 }}>
+            <AirportLink code={origin} style={{ fontSize: 22, fontWeight: 700 }} />
+            {' → '}
+            <AirportLink code={dest} style={{ fontSize: 22, fontWeight: 700 }} />
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
+            {originAirport?.city} → {destAirport?.city} · {dist.toLocaleString()} km
+          </div>
+        </div>
+        {playerRoutes.length > 0 && (
+          <div style={{ background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--green)', flexShrink: 0 }}>
+            ✈ Operating · {playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0)}× / wk
+          </div>
+        )}
+      </div>
+
+      {/* Row 1: Market overview + Market share side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 12 }}>
+
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Market</div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+            <Stat label="Total Demand" value={totalDemand.toLocaleString()} sub="pax / wk one-way" color="var(--accent)" />
+            <Stat label="Leisure"      value={market.leisureDemand.toLocaleString()} />
+            <Stat label="Business"     value={market.businessDemand.toLocaleString()} />
+            <Stat label="Ref Price"    value={`$${refP}`} />
+            <Stat label="Seasonality"  value={`×${market.seasonalityFactor.toFixed(2)}`} sub={`month ${gameDate.month}`} />
+          </div>
+          {(() => {
+            const leisurePct  = totalDemand > 0 ? Math.round(market.leisureDemand  / totalDemand * 100) : 85;
+            const businessPct = totalDemand > 0 ? Math.round(market.businessDemand / totalDemand * 100) : 15;
+            return (
+              <>
+                <div style={{ height: 6, background: 'var(--surface3)', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+                  <div style={{ flex: leisurePct,  background: 'var(--accent)', opacity: 0.6 }} />
+                  <div style={{ flex: businessPct, background: 'var(--purple)' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 4, fontSize: 11, color: 'var(--text-dim)' }}>
+                  <span><span style={{ color: 'var(--accent)' }}>■</span> Leisure {leisurePct}%</span>
+                  <span><span style={{ color: 'var(--purple)' }}>■</span> Business {businessPct}%</span>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Market Share</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            {shareResults.length} {shareResults.length === 1 ? 'airline' : 'airlines'} · {totalDemand.toLocaleString()} pax/wk pool
+          </div>
+          {shareResults.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No airlines on this route yet.</div>
+          ) : (() => {
+            const servedPax = shareResults.reduce((s, r) => s + r.totalPax, 0);
+            const unmet = Math.max(0, totalDemand - servedPax);
+            const pieSlices = [
+              ...shareResults.map(s => {
+                const isPlayer = s.airlineId === 'player';
+                const comp = (state.competitors ?? []).find(c => c.id === s.airlineId);
+                return {
+                  label:    isPlayer ? state.airlineName : (comp?.name ?? s.airlineId),
+                  pax:      s.totalPax,
+                  color:    isPlayer ? 'var(--green)'
+                            : comp?.tier === 'premium' ? 'var(--purple)'
+                            : comp?.tier === 'budget'  ? 'var(--yellow)'
+                            : 'var(--accent)',
+                  isPlayer,
+                  isUnmet:  false,
+                };
+              }),
+              ...(unmet > 0 ? [{ label: 'Unmet demand', pax: unmet, color: 'var(--text-dim)', isPlayer: false, isUnmet: true }] : []),
+            ];
+            return (
+              <>
+                <MarketSharePie slices={pieSlices} />
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
+                  Based on price · quality · frequency
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Row 2: Your performance — full width */}
+      {playerSims.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Your Performance</div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
+            <Stat label="Weekly Pax"   value={totalPax.toLocaleString()} />
+            <Stat label="Avg Load"     value={formatPercent(avgLoad)} color={avgLoad >= 0.75 ? 'var(--green)' : avgLoad >= 0.45 ? 'var(--yellow)' : 'var(--red)'} />
+            <Stat label="Revenue/wk"   value={formatMoney(totalRev)} color="var(--green)" />
+            <Stat label="Op Cost/wk"   value={formatMoney(totalOpCost)} color="var(--red)" />
+            <Stat label="Op Profit/wk" value={(totalRev - totalOpCost >= 0 ? '+' : '') + formatMoney(totalRev - totalOpCost)} color={totalRev - totalOpCost >= 0 ? 'var(--green)' : 'var(--red)'} />
+          </div>
+          {/* Load factor by class */}
+          {activeClasses.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: playerSims.length > 1 ? 14 : 0 }}>
+              {activeClasses.map(cls => {
+                const { loadFactor, pax, seats } = aggregateClasses[cls];
+                const lf = loadFactor;
+                const color = lf >= 0.75 ? 'var(--green)' : lf >= 0.45 ? 'var(--yellow)' : 'var(--red)';
+                return (
+                  <div key={cls} style={{
+                    flex: '1 1 120px', background: 'var(--surface2)', borderRadius: 'var(--radius)',
+                    padding: '10px 12px', borderTop: `3px solid ${CLASS_COLORS[cls]}`,
+                  }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{CLASS_LABELS[cls]}</div>
+                    <div style={{ fontWeight: 700, fontSize: 18, color }}>{formatPercent(lf)}</div>
+                    <div style={{ height: 4, background: 'var(--surface3)', borderRadius: 2, overflow: 'hidden', margin: '5px 0' }}>
+                      <div style={{ width: `${Math.round(lf * 100)}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{Math.round(pax).toLocaleString()} / {seats.toLocaleString()} seats</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {playerSims.length > 1 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 480 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Aircraft', 'Freq', 'Pax', 'Load', ...activeClasses.map(c => CLASS_LABELS[c]), 'Revenue', 'Op Profit'].map(h => (
+                      <th key={h} style={{ padding: '5px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {playerSims.map(({ route, aircraft, result }) => (
+                    <tr key={route.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aircraft.name}</td>
+                      <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{route.weeklyFrequency}×</td>
+                      <td style={{ padding: '7px 10px', fontWeight: 600, whiteSpace: 'nowrap' }}>{result.passengers.toLocaleString()}</td>
+                      <td style={{ padding: '7px 10px', fontWeight: 600, whiteSpace: 'nowrap', color: result.loadFactor >= 0.75 ? 'var(--green)' : result.loadFactor >= 0.45 ? 'var(--yellow)' : 'var(--red)' }}>{formatPercent(result.loadFactor)}</td>
+                      {activeClasses.map(cls => {
+                        const cs = result.classSummary?.[cls];
+                        if (!cs) return <td key={cls} style={{ padding: '7px 10px', color: 'var(--text-dim)' }}>—</td>;
+                        const lf = cs.loadFactor;
+                        return (
+                          <td key={cls} style={{ padding: '7px 10px', whiteSpace: 'nowrap', color: lf >= 0.75 ? 'var(--green)' : lf >= 0.45 ? 'var(--yellow)' : 'var(--red)', fontWeight: 600 }}>
+                            {formatPercent(lf)}
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: '7px 10px', color: 'var(--green)', whiteSpace: 'nowrap' }}>{formatMoney(result.revenue)}</td>
+                      <td style={{ padding: '7px 10px', whiteSpace: 'nowrap', color: result.profit >= 0 ? 'var(--green)' : 'var(--red)' }}>{result.profit >= 0 ? '+' : ''}{formatMoney(result.profit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Row 3: Competitors — full width */}
+      {competitorsOnRoute.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Competitors</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
+              <thead>
+                <tr style={{ background: 'var(--surface2)' }}>
+                  {['Airline', 'Tier', 'Freq/wk', 'Seats/wk', 'Est. Price', 'Quality', 'Est. Pax'].map(h => (
+                    <th key={h} style={{ padding: '7px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {competitorsOnRoute.map(c => {
+                  const cfg       = c.routes[routeKey];
+                  const offer     = buildCompetitorOffer(c, market);
+                  const estPrice  = offer?.economyPrice ?? Math.round(refP * cfg.priceMultiplier);
+                  const estSeats  = offer?.economySeats ?? 150 * cfg.frequency;
+                  const priceDiff = Math.round((estPrice / refP - 1) * 100);
+                  const share     = shareResults.find(s => s.airlineId === c.id);
+                  return (
+                    <tr key={c.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name}</td>
+                      <td style={{ padding: '8px 12px' }}><TierBadge tier={c.tier} /></td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{cfg.frequency}× each way</td>
+                      <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{(estSeats * 2).toLocaleString()}</td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                        ${estPrice}
+                        <span style={{ fontSize: 11, marginLeft: 5, color: priceDiff > 0 ? 'var(--red)' : 'var(--green)' }}>
+                          ({priceDiff >= 0 ? '+' : ''}{priceDiff}%)
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ width: 48, height: 5, background: 'var(--surface3)', borderRadius: 3, overflow: 'hidden', flexShrink: 0 }}>
+                            <div style={{ width: `${c.baseQualityScore}%`, height: '100%', background: TIER_COLOR[c.tier] ?? 'var(--accent)' }} />
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.baseQualityScore}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {share ? share.totalPax.toLocaleString() : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Row 4: Connecting passengers — full width */}
+      {connecting.totalPax > 0 && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Connecting Passengers</div>
+          <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 12 }}>
+            +{connecting.totalPax} pax · {formatMoney(connecting.totalRevenue)}/wk
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {[{ label: origin, side: connecting.origin }, { label: dest, side: connecting.destination }].map(({ label, side }) =>
+              side.pax > 0 && (
+                <div key={label} style={{
+                  flex: '1 1 180px', background: 'var(--surface2)', borderRadius: 'var(--radius)',
+                  padding: '12px 14px', borderLeft: `3px solid ${side.source === 'own-hub' ? 'var(--green)' : 'var(--accent)'}`,
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}><AirportLink code={label} style={{ fontSize: 15, fontWeight: 700 }} /></div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: side.source === 'own-hub' ? 'var(--green)' : 'var(--accent)' }}>
+                    +{side.pax} <span style={{ fontSize: 12, fontWeight: 400 }}>pax/wk</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                    {side.source === 'own-hub' ? '✓ Own hub · 100% yield' : side.source === 'partner-hub' ? 'Partner hub · 80% yield' : 'Gateway · 80% yield'}
+                  </div>
+                  {/* Breakdown for own-hub endpoints */}
+                  {side.source === 'own-hub' && (
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+                      {side.externalPax > 0 && <span>Ext {side.externalPax}</span>}
+                      {side.internalPax > 0 && <span>Int {side.internalPax}</span>}
+                      {side.freqMult != null && side.freqMult !== 1 && (
+                        <span style={{ color: side.freqMult > 1 ? 'var(--green)' : 'var(--red)' }}>
+                          Freq ×{side.freqMult.toFixed(1)}
+                        </span>
+                      )}
+                      {side.distBonus > 0.02 && (
+                        <span style={{ color: 'var(--accent)' }}>
+                          Long-haul +{Math.round(side.distBonus * 100)}%
+                        </span>
+                      )}
+                      {side.partnerBoost > 0 && (
+                        <span style={{ color: 'var(--purple)' }}>
+                          Partners +{Math.round(side.partnerBoost * 100)}%
+                        </span>
+                      )}
+                      {side.congestion < 0.99 && (
+                        <span style={{ color: 'var(--yellow)' }}>
+                          Congestion ×{side.congestion.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 4 }}>{formatMoney(side.revenue)}/wk</div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

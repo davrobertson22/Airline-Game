@@ -1,0 +1,1362 @@
+/**
+ * demand.js — Rich demand model scaffold
+ *
+ * This module defines the data shapes and core calculations for the
+ * market demand system. It sits on top of simulation.js and is designed
+ * so that competition, service quality, fare classes, and network effects
+ * can be implemented incrementally without breaking existing code.
+ *
+ * KEY CONCEPTS
+ * ─────────────
+ * 1. RouteMarket     – total passenger pool for a city pair this week
+ * 2. AirlineOffer    – what one airline offers on that route (price, quality, freq)
+ * 3. MarketShare     – how demand splits across competing airlines
+ * 4. DemandResult    – passengers & revenue for one airline on one route
+ *
+ * PASSENGER SEGMENTS
+ * ───────────────────
+ * Leisure  – price-sensitive, elasticity ~1.5. Cares little about frequency.
+ * Business – quality/time-sensitive, elasticity ~0.6. Pays premium, wants freq.
+ *
+ * HOW SHARE IS CALCULATED
+ * ────────────────────────
+ * Each airline gets a utility score per segment. Share = softmax over utilities.
+ * Utility = qualityWeight * qualityScore - priceWeight * (price / refPrice)
+ *         + frequencyWeight * log(frequency + 1)
+ *         + connectivityBonus
+ *
+ * If the player is the ONLY airline on a route, no competitive softmax is
+ * needed — they capture min(adjustedDemand, capacity).
+ */
+
+import { baseCityPairDemand, referencePrice, routeDistance } from '../utils/market.js';
+import { getAirport, getAirportScores } from '../data/airports.js';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+/** Business class share of total route demand — now route-specific via getRouteClassDemandShares(). */
+export const BUSINESS_DEMAND_SHARE = 0.15; // kept for any external references; prefer the function below
+
+/** Business class price is this multiple of economy reference price. */
+export const BUSINESS_PRICE_MULTIPLIER = 3.5;
+
+/**
+ * Price elasticity per segment.
+ * A ratio of (refPrice / yourPrice) is raised to this power.
+ */
+export const ELASTICITY = {
+  leisure: 1.5,
+  business: 0.6,
+};
+
+/**
+ * Utility weights used in competitive market-share model.
+ * Tune these to change how much price vs quality vs frequency matter.
+ */
+export const UTILITY_WEIGHTS = {
+  leisure:  { price: 1.8, quality: 0.5, frequency: 0.4 },
+  business: { price: 0.8, quality: 1.4, frequency: 0.9 },
+};
+
+/**
+ * Seasonality multipliers by month (1-indexed).
+ * Route-specific seasonal profiles (index 1–12 = Jan–Dec).
+ * Each value is a demand multiplier for that month.
+ */
+
+// ── Seasonal profiles ──────────────────────────────────────────────────────
+export const SEASONAL_PROFILES = {
+  // Northern summer + December holiday peak. Default for most N-hemisphere routes.
+  generic:     [null, 0.82, 0.80, 0.90, 0.95, 1.05, 1.15, 1.25, 1.22, 1.00, 0.92, 0.88, 1.10],
+
+  // Business hub routes (long-haul between financial centres). Stable, Aug dip.
+  business:    [null, 0.96, 0.97, 1.02, 1.06, 1.08, 1.04, 0.87, 0.82, 1.06, 1.08, 1.02, 0.97],
+
+  // Leisure/beach destinations — very strong summer, quiet shoulder seasons.
+  beach:       [null, 0.70, 0.68, 0.78, 0.88, 0.98, 1.28, 1.48, 1.42, 1.05, 0.84, 0.76, 1.10],
+
+  // Ski/winter-sport destinations — peaks Dec–Mar, deep summer trough.
+  ski:         [null, 1.22, 1.30, 1.14, 0.70, 0.58, 0.62, 0.85, 0.88, 0.78, 0.84, 1.10, 1.30],
+
+  // Southern-hemisphere origins/destinations — seasons are flipped.
+  southern:    [null, 1.25, 1.28, 1.08, 0.90, 0.80, 0.74, 0.76, 0.80, 0.94, 1.02, 1.12, 1.20],
+
+  // Asia–Pacific: Chinese New Year Jan/Feb, Golden Week May, steady.
+  asia:        [null, 1.14, 1.22, 0.95, 1.02, 1.12, 1.00, 0.96, 0.97, 1.03, 1.05, 1.00, 0.96],
+
+  // Middle East: cool-season peak Oct–Apr, summer too hot for leisure.
+  middleEast:  [null, 1.10, 1.08, 0.96, 0.88, 0.84, 0.78, 0.76, 0.78, 0.90, 1.04, 1.14, 1.18],
+
+  // Caribbean / tropical — dry-season winter peak, hurricane-season summer trough.
+  caribbean:   [null, 1.14, 1.18, 1.10, 0.97, 0.84, 0.76, 0.73, 0.70, 0.78, 0.88, 1.00, 1.20],
+
+  // Sub-Saharan Africa — safari dry-season Jul–Oct peak; otherwise fairly stable.
+  africa:      [null, 0.90, 0.88, 0.86, 0.90, 0.92, 0.96, 1.10, 1.12, 1.10, 1.06, 0.96, 0.92],
+};
+
+// ── Country → profile mapping ─────────────────────────────────────────────
+const COUNTRY_PROFILE = {
+  // Southern hemisphere
+  AU: 'southern', NZ: 'southern',
+  AR: 'southern', CL: 'southern', PE: 'southern', BR: 'southern',
+  ZA: 'southern',
+
+  // Middle East
+  AE: 'middleEast', QA: 'middleEast', SA: 'middleEast', IL: 'middleEast',
+
+  // Asia
+  JP: 'asia', KR: 'asia', CN: 'asia', TW: 'asia', HK: 'asia', IN: 'asia',
+  SG: 'asia', MY: 'asia', TH: 'asia', ID: 'asia', PH: 'asia',
+
+  // Africa
+  KE: 'africa', NG: 'africa', ET: 'africa', EG: 'africa', MA: 'africa',
+
+  // Caribbean / tropical
+  MX: 'caribbean', PA: 'caribbean',
+
+  // Beach Mediterranean — leisure-driven even though geographically Europe
+  ES: 'beach', IT: 'beach', GR: 'beach', PT: 'beach',
+
+  // Ski / alpine — winter sport dominant (short routes; blends with partner airport)
+  CH: 'ski', AT: 'ski', NO: 'ski', FI: 'ski',
+  // SE: actually mixed but leave generic for now (ski in winter, Midsommar peak)
+};
+
+/**
+ * Return the seasonal multiplier profile (index 1–12) for a route.
+ * Averages origin and destination profiles so mixed routes blend naturally.
+ * e.g.  JFK (generic) → GVA (ski)  →  slightly winter-heavy compromise
+ *        LHR (generic) → DXB (middleEast) → dampened summer, stronger autumn
+ */
+export function getSeasonalProfile(originCode, destCode) {
+  const oCountry = getAirport(originCode)?.country ?? 'US';
+  const dCountry = getAirport(destCode)?.country   ?? 'US';
+
+  const oPid = COUNTRY_PROFILE[oCountry] ?? 'generic';
+  const dPid = COUNTRY_PROFILE[dCountry] ?? 'generic';
+
+  if (oPid === dPid) return SEASONAL_PROFILES[oPid];
+
+  // Blend origin + destination profiles
+  const oP = SEASONAL_PROFILES[oPid];
+  const dP = SEASONAL_PROFILES[dPid];
+  return [null, ...Array.from({ length: 12 }, (_, i) =>
+    Math.round(((oP[i + 1] + dP[i + 1]) / 2) * 1000) / 1000
+  )];
+}
+
+// Keep the old export for any code still referencing it (will be removed later).
+export const SEASONALITY = SEASONAL_PROFILES.generic;
+
+// ─── Data Shapes (JSDoc typedefs) ─────────────────────────────────────────────
+
+/**
+ * @typedef {object} RouteMarket
+ * Total demand pool for a city pair in the current game week.
+ *
+ * @property {string}  origin
+ * @property {string}  destination
+ * @property {number}  baseWeeklyDemand   - raw gravity model output (one-way pax/week)
+ * @property {number}  leisureDemand      - price-sensitive segment (pax/week)
+ * @property {number}  businessDemand     - quality/freq-sensitive segment (pax/week)
+ * @property {number}  seasonalityFactor  - 0.8–1.3 multiplier for current month
+ * @property {number}  maturityFactor     - 0–1, ramps to 1 over ~8 weeks on a new route
+ * @property {number}  referencePrice     - market equilibrium economy price ($)
+ * @property {number}  distanceKm
+ */
+
+/**
+ * @typedef {object} AirlineOffer
+ * What a single airline offers on a route this week.
+ * Both player and AI competitors use this shape.
+ *
+ * @property {string}       airlineId         - 'player' or competitor id
+ * @property {string}       origin
+ * @property {string}       destination
+ * @property {number}       economyPrice      - one-way economy fare ($)
+ * @property {number|null}  businessPrice     - one-way business fare ($), null = no business cabin
+ * @property {number}       weeklyFrequency   - one-way departures per week
+ * @property {number}       seatsPerFlight    - economy seats (business is separate allocation)
+ * @property {number}       economySeats      - total weekly economy capacity (seatsPerFlight * freq)
+ * @property {number}       businessSeats     - total weekly business capacity
+ * @property {number}       qualityScore      - 0–100 (see computeQualityScore)
+ * @property {number}       connectivityBonus - 0–0.3, hub network bonus (see computeConnectivityBonus)
+ */
+
+/**
+ * @typedef {object} QualityInputs
+ * Raw inputs used to compute an airline's qualityScore on a route.
+ *
+ * @property {number} onTimeRate         - 0–1 (1 = always on time). Starts at 0.85.
+ * @property {'economy'|'premium'|'business'} serviceLevel - cabin tier
+ * @property {number} fleetAgeYears      - average age of aircraft on route
+ * @property {number} customerRating     - 0–5 stars (player-facing display metric)
+ */
+
+/**
+ * @typedef {object} CompetitorAirline
+ * An AI-controlled airline operating in the same market.
+ * TODO: implement AI logic to adjust prices in response to player.
+ *
+ * @property {string}   id
+ * @property {string}   name
+ * @property {string}   homeHub           - IATA code of their hub airport
+ * @property {string}   tier              - 'budget' | 'legacy' | 'premium'
+ * @property {number}   baseQualityScore  - fixed quality for now (35–80)
+ * @property {object}   routes            - map of routeKey → { frequency, priceMultiplier }
+ */
+
+/**
+ * @typedef {object} MarketShareResult
+ * How demand splits across all airlines on a route.
+ *
+ * @property {string} airlineId
+ * @property {number} leisureShare    - 0–1 fraction of leisure segment
+ * @property {number} businessShare   - 0–1 fraction of business segment
+ * @property {number} leisurePax      - passengers carried (leisure)
+ * @property {number} businessPax     - passengers carried (business)
+ * @property {number} totalPax        - both segments combined
+ * @property {number} economyRevenue
+ * @property {number} businessRevenue
+ * @property {number} totalRevenue
+ * @property {boolean} capacityCapped - true if demand exceeded available seats
+ */
+
+// ─── Route demand character ───────────────────────────────────────────────────
+
+/**
+ * Premium-segment share by seasonal profile.
+ * Leisure-heavy profiles have very few premium passengers;
+ * business-corridor profiles have a large premium share.
+ */
+const PROFILE_PREMIUM_SHARE = {
+  business:   0.36,  // e.g. FRA-LHR, JFK-ORD — heavy corporate travel
+  middleEast: 0.28,  // Gulf hubs attract high-yield business traffic
+  asia:       0.24,  // mixed, strong business corridors
+  generic:    0.18,  // default N-hemisphere route
+  southern:   0.16,  // Southern-hemisphere mixed
+  africa:     0.14,  // mostly leisure + diaspora
+  beach:      0.08,  // Mediterranean leisure destinations
+  ski:        0.08,  // ski/alpine — almost entirely leisure
+  caribbean:  0.07,  // Caribbean — tourist-dominant
+};
+
+/**
+ * Compute demand class shares for a route using per-airport business/leisure scores.
+ *
+ * Each airport has a businessScore (0–100) and a leisureScore (0–100).
+ * The route's premium share is determined by the ratio of the combined
+ * business scores to the total combined scores — so FRA (b=88,l=28) + LHR
+ * (b=82,l=55) gives ~35% premium, while CUN (b=8,l=92) + MCO (b=12,l=92)
+ * gives ~5% premium. Long-haul adds a small bonus (passengers pay for comfort).
+ *
+ * Returns fractions that sum to 1.0.
+ *
+ * @param {string} origin
+ * @param {string} destination
+ * @returns {{ firstClass: number, businessClass: number, premiumEconomy: number, economy: number }}
+ */
+export function getRouteClassDemandShares(origin, destination) {
+  const oScores = getAirportScores(origin);
+  const dScores = getAirportScores(destination);
+
+  const totalBusiness = oScores.businessScore + dScores.businessScore;
+  const totalLeisure  = oScores.leisureScore  + dScores.leisureScore;
+
+  // Premium share = business fraction of combined demand, scaled to max 0.45
+  let premiumShare = (totalBusiness / (totalBusiness + totalLeisure)) * 0.45;
+
+  // Long-haul adds premium demand: flat beds and extra legroom matter more on a 10h flight
+  const dist = routeDistance(origin, destination);
+  const distBonus = Math.min(0.08, dist / 50000); // +1% per 500 km, capped at +8%
+  premiumShare = Math.min(0.45, premiumShare + distBonus);
+
+  // First class is only meaningful on long-haul (>4 000 km)
+  const firstShare   = dist > 4000 ? premiumShare * 0.10 : premiumShare * 0.03;
+  const bizShare     = premiumShare * 0.60;
+  const premEcoShare = premiumShare - firstShare - bizShare;
+  const ecoShare     = 1 - premiumShare;
+
+  return {
+    firstClass:     +firstShare.toFixed(3),
+    businessClass:  +bizShare.toFixed(3),
+    premiumEconomy: +premEcoShare.toFixed(3),
+    economy:        +ecoShare.toFixed(3),
+  };
+}
+
+// ─── Core calculations ────────────────────────────────────────────────────────
+
+/**
+ * Build a RouteMarket for a given city pair and game date.
+ *
+ * @param {string} origin
+ * @param {string} destination
+ * @param {object} gameDate   - { week: number, month: number }  (month 1-12)
+ * @param {number} [maturityFactor=1]  - pass <1 if route was recently opened
+ * @returns {RouteMarket}
+ */
+export function buildRouteMarket(origin, destination, gameDate, maturityFactor = 1) {
+  const base     = baseCityPairDemand(origin, destination);
+  const refPrice = referencePrice(origin, destination);
+  const seasonal = getSeasonalProfile(origin, destination)[gameDate.month] ?? 1;
+  const adjusted = Math.round(base * seasonal * maturityFactor);
+
+  const shares        = getRouteClassDemandShares(origin, destination);
+  const premiumShare  = shares.firstClass + shares.businessClass + shares.premiumEconomy;
+  const businessDemand = Math.round(adjusted * premiumShare);
+  const leisureDemand  = adjusted - businessDemand;
+
+  return {
+    origin,
+    destination,
+    baseWeeklyDemand: base,
+    leisureDemand,
+    businessDemand,
+    seasonalityFactor: seasonal,
+    maturityFactor,
+    referencePrice: refPrice,
+    distanceKm: routeDistance(origin, destination),
+  };
+}
+
+/**
+ * Compute a 0–100 quality score from raw inputs.
+ * Used both by the player and AI competitors.
+ *
+ * @param {QualityInputs} inputs
+ * @returns {number}
+ */
+export function computeQualityScore({ onTimeRate, serviceLevel, fleetAgeYears, customerRating }) {
+  const onTimePoints    = onTimeRate * 30;          // max 30
+  const servicePts      = { economy: 0, premium: 12, business: 22 }[serviceLevel] ?? 0;
+  const agePts          = Math.max(0, 20 - fleetAgeYears * 1.5); // max 20 (new a/c), 0 at ~13yr
+  const ratingPts       = (customerRating / 5) * 28; // max 28
+
+  return Math.min(100, Math.round(onTimePoints + servicePts + agePts + ratingPts));
+}
+
+/**
+ * Hub connectivity bonus for an airline on a given route.
+ * Rewards airlines whose hub matches origin or destination —
+ * connecting traffic feeds demand to that flight.
+ *
+ * TODO: extend to count actual connections through the network.
+ *
+ * @param {string} airlineHub   - IATA code of airline's primary hub
+ * @param {string} origin
+ * @param {string} destination
+ * @returns {number}  0.0–0.25
+ */
+export function computeConnectivityBonus(airlineHub, origin, destination) {
+  if (airlineHub === origin || airlineHub === destination) return 0.20;
+  return 0;
+  // TODO: iterate airline route network, count connections through hub → bonus up to 0.25
+}
+
+/**
+ * Compute utility score for one airline on one segment.
+ * Higher = more attractive to passengers.
+ *
+ * @param {AirlineOffer} offer
+ * @param {RouteMarket}  market
+ * @param {'leisure'|'business'} segment
+ * @returns {number}
+ */
+export function computeUtility(offer, market, segment) {
+  const w        = UTILITY_WEIGHTS[segment];
+  const price    = segment === 'business' && offer.businessPrice != null
+                   ? offer.businessPrice
+                   : offer.economyPrice;
+  const refPrice = segment === 'business'
+                   ? market.referencePrice * BUSINESS_PRICE_MULTIPLIER
+                   : market.referencePrice;
+
+  const priceUtil   = -(price / refPrice) * w.price;
+  const qualityUtil = (offer.qualityScore / 100) * w.quality;
+  const freqUtil    = Math.log1p(offer.weeklyFrequency) * w.frequency;
+  const connUtil    = offer.connectivityBonus;
+
+  return priceUtil + qualityUtil + freqUtil + connUtil;
+}
+
+/**
+ * Softmax over an array of utility values.
+ * Returns an array of market share fractions (sum = 1).
+ *
+ * @param {number[]} utilities
+ * @returns {number[]}
+ */
+export function softmax(utilities) {
+  const max  = Math.max(...utilities);          // numerical stability
+  const exps = utilities.map(u => Math.exp(u - max));
+  const sum  = exps.reduce((a, b) => a + b, 0);
+  return exps.map(e => e / sum);
+}
+
+/**
+ * Compute market share and revenue for ALL airlines on a route.
+ *
+ * @param {RouteMarket}    market
+ * @param {AirlineOffer[]} offers   - one per airline serving this route
+ * @returns {MarketShareResult[]}
+ */
+export function computeMarketShare(market, offers) {
+  if (offers.length === 0) return [];
+
+  // Single airline: monopoly, no softmax needed
+  if (offers.length === 1) {
+    return [_monopolyResult(market, offers[0])];
+  }
+
+  // Competitive market: softmax share allocation with price elasticity on market size.
+  // Elasticity compresses the total market based on the share-weighted average price
+  // across all carriers, so pricing above the reference price shrinks the pie rather
+  // than just redistributing share.  Each airline's effective demand is:
+  //   market.demand × elasticityFactor × softmaxShare
+  const leisureUtils  = offers.map(o => computeUtility(o, market, 'leisure'));
+  const businessUtils = offers.map(o => computeUtility(o, market, 'business'));
+  const leisureShares  = softmax(leisureUtils);
+  const businessShares = softmax(businessUtils);
+
+  // Weighted-average prices across the market (share-weighted)
+  const avgLeisurePrice  = offers.reduce((s, o, i) => s + o.economyPrice  * leisureShares[i],  0);
+  const avgBusinessPrice = offers.reduce((s, o, i) => {
+    const p = (o.businessPrice != null ? o.businessPrice : o.economyPrice * BUSINESS_PRICE_MULTIPLIER);
+    return s + p * businessShares[i];
+  }, 0);
+
+  // Elasticity factors: demand shrinks when average market price is above reference
+  const leisureElasticityFactor  = Math.pow(market.referencePrice / Math.max(avgLeisurePrice,  1), ELASTICITY.leisure);
+  const businessElasticityFactor = Math.pow(
+    (market.referencePrice * BUSINESS_PRICE_MULTIPLIER) / Math.max(avgBusinessPrice, 1),
+    ELASTICITY.business
+  );
+  const adjustedLeisureDemand  = Math.round(market.leisureDemand  * Math.min(1.5, leisureElasticityFactor));
+  const adjustedBusinessDemand = Math.round(market.businessDemand * Math.min(1.5, businessElasticityFactor));
+
+  return offers.map((offer, i) => {
+    const lShare = leisureShares[i];
+    const bShare = businessShares[i];
+
+    // Raw demand allocation (elastic total × softmax share)
+    let leisurePax  = Math.round(adjustedLeisureDemand  * lShare);
+    let businessPax = Math.round(adjustedBusinessDemand * bShare);
+
+    // Cap at capacity
+    const leisureCapped  = leisurePax  > offer.economySeats;
+    const businessCapped = offer.businessPrice != null && businessPax > offer.businessSeats;
+    if (leisureCapped)  leisurePax  = offer.economySeats;
+    if (businessCapped) businessPax = offer.businessSeats;
+
+    const economyRevenue  = leisurePax  * offer.economyPrice;
+    const businessRevenue = offer.businessPrice != null ? businessPax * offer.businessPrice : 0;
+
+    return {
+      airlineId:       offer.airlineId,
+      leisureShare:    lShare,
+      businessShare:   bShare,
+      leisurePax,
+      businessPax,
+      totalPax:        leisurePax + businessPax,
+      economyRevenue:  Math.round(economyRevenue),
+      businessRevenue: Math.round(businessRevenue),
+      totalRevenue:    Math.round(economyRevenue + businessRevenue),
+      capacityCapped:  leisureCapped || businessCapped,
+    };
+  });
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+function _monopolyResult(market, offer) {
+  const noBusiness = offer.businessPrice == null;
+
+  // Compute business demand first so we can detect overflow before sizing leisure.
+  const businessAdj = noBusiness
+    ? 0
+    : Math.round(market.businessDemand * Math.pow(
+        (market.referencePrice * BUSINESS_PRICE_MULTIPLIER) / offer.businessPrice,
+        ELASTICITY.business
+      ));
+  const businessPax = noBusiness ? 0 : Math.min(businessAdj, offer.businessSeats);
+
+  // Business travelers who can't get a premium seat downgrade to economy rather
+  // than not fly — fold overflow into the leisure / economy pool.
+  const businessOverflow = noBusiness ? 0 : Math.max(0, businessAdj - businessPax);
+
+  // When there's no business cabin, all business travelers fold into the leisure pool.
+  // When business is offered but full, overflow also folds into the leisure pool.
+  const leisurePool = noBusiness
+    ? market.leisureDemand + market.businessDemand
+    : market.leisureDemand + businessOverflow;
+
+  // Demand with price elasticity applied
+  const leisureAdj  = Math.round(
+    leisurePool * Math.pow(market.referencePrice / offer.economyPrice, ELASTICITY.leisure)
+  );
+
+  const leisurePax  = Math.min(leisureAdj,  offer.economySeats);
+
+  const economyRevenue  = leisurePax  * offer.economyPrice;
+  const businessRevenue = businessPax * (offer.businessPrice ?? 0);
+
+  return {
+    airlineId:       offer.airlineId,
+    leisureShare:    1,
+    businessShare:   offer.businessPrice != null ? 1 : 0,
+    leisurePax,
+    businessPax,
+    totalPax:        leisurePax + businessPax,
+    economyRevenue:  Math.round(economyRevenue),
+    businessRevenue: Math.round(businessRevenue),
+    totalRevenue:    Math.round(economyRevenue + businessRevenue),
+    capacityCapped:  leisurePax < leisureAdj || businessPax < businessAdj,
+  };
+}
+
+// ─── Competitor definitions ────────────────────────────────────────────────────
+// TODO: move to src/data/competitors.js once AI logic is added
+
+/**
+ * Starter set of AI competitors.
+ * priceMultiplier is relative to referencePrice().
+ * routes: { [routeKey]: { frequency, priceMultiplier } }
+ *   routeKey = `${origin}-${destination}` (always alphabetical)
+ */
+export const COMPETITOR_AIRLINES = [
+  // ── Legacy ────────────────────────────────────────────────────────────────
+  { id: 'globalair',     name: 'Global Air',          homeHub: 'LHR', tier: 'legacy',  logoId: 'compass', baseQualityScore: 68, cash: 50_000_000, weeklyStats: null, routes: {} },
+  { id: 'continentalx',  name: 'Continental Express', homeHub: 'JFK', tier: 'legacy',  logoId: 'eagle',   baseQualityScore: 70, cash: 45_000_000, weeklyStats: null, routes: {} },
+  { id: 'eaglewings',    name: 'Eagle Wings',          homeHub: 'ATL', tier: 'legacy',  logoId: 'horizon', baseQualityScore: 65, cash: 35_000_000, weeklyStats: null, routes: {} },
+  { id: 'pacificrim',    name: 'Pacific Rim Airlines', homeHub: 'NRT', tier: 'legacy',  logoId: 'jade',    baseQualityScore: 72, cash: 55_000_000, weeklyStats: null, routes: {} },
+  { id: 'euroconnect',   name: 'Euro Connect',         homeHub: 'CDG', tier: 'legacy',  logoId: 'sapphire',baseQualityScore: 66, cash: 40_000_000, weeklyStats: null, routes: {} },
+  { id: 'southerncross', name: 'Southern Cross',       homeHub: 'SYD', tier: 'legacy',  logoId: 'comet',   baseQualityScore: 64, cash: 30_000_000, weeklyStats: null, routes: {} },
+  { id: 'iberoair',      name: 'Ibero Air',            homeHub: 'MAD', tier: 'legacy',  logoId: 'phoenix', baseQualityScore: 62, cash: 32_000_000, weeklyStats: null, routes: {} },
+  { id: 'rhineair',      name: 'Rhine Air',            homeHub: 'FRA', tier: 'legacy',  logoId: 'summit',  baseQualityScore: 69, cash: 48_000_000, weeklyStats: null, routes: {} },
+
+  // ── Budget ────────────────────────────────────────────────────────────────
+  { id: 'zoomjet',       name: 'ZoomJet',              homeHub: 'ORD', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 38, cash: 15_000_000, weeklyStats: null, routes: {} },
+  { id: 'fastfly',       name: 'FastFly',              homeHub: 'LAX', tier: 'budget',  logoId: 'prism',   baseQualityScore: 40, cash: 12_000_000, weeklyStats: null, routes: {} },
+  { id: 'nofrills',      name: 'NoFrills',             homeHub: 'AMS', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 35, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'sunroute',      name: 'Sunroute',             homeHub: 'MIA', tier: 'budget',  logoId: 'phoenix', baseQualityScore: 42, cash: 10_000_000, weeklyStats: null, routes: {} },
+  { id: 'asiaexpress',   name: 'Asia Express',         homeHub: 'BKK', tier: 'budget',  logoId: 'jade',    baseQualityScore: 36, cash:  9_000_000, weeklyStats: null, routes: {} },
+  { id: 'vivasud',       name: 'Viva Sud',             homeHub: 'BOG', tier: 'budget',  logoId: 'prism',   baseQualityScore: 38, cash:  8_000_000, weeklyStats: null, routes: {} },
+
+  // ── Premium ───────────────────────────────────────────────────────────────
+  { id: 'apexair',       name: 'Apex Air',             homeHub: 'DXB', tier: 'premium', logoId: 'crown',   baseQualityScore: 85, cash: 80_000_000, weeklyStats: null, routes: {} },
+  { id: 'gulfpearl',     name: 'Gulf Pearl',           homeHub: 'DOH', tier: 'premium', logoId: 'sapphire',baseQualityScore: 88, cash: 75_000_000, weeklyStats: null, routes: {} },
+  { id: 'silkroute',     name: 'Silk Route',           homeHub: 'SIN', tier: 'premium', logoId: 'jade',    baseQualityScore: 82, cash: 70_000_000, weeklyStats: null, routes: {} },
+  { id: 'orientprestige',name: 'Orient Prestige',      homeHub: 'HKG', tier: 'premium', logoId: 'compass', baseQualityScore: 80, cash: 65_000_000, weeklyStats: null, routes: {} },
+  { id: 'nordicelite',   name: 'Nordic Elite',         homeHub: 'ARN', tier: 'premium', logoId: 'arctic',  baseQualityScore: 78, cash: 35_000_000, weeklyStats: null, routes: {} },
+  { id: 'pampapremium',  name: 'Pampa Premium',        homeHub: 'GRU', tier: 'premium', logoId: 'summit',  baseQualityScore: 76, cash: 42_000_000, weeklyStats: null, routes: {} },
+];
+
+// ─── Hub tiers ────────────────────────────────────────────────────────────────
+
+/**
+ * Three-tier hub investment system.
+ *
+ * captureRate:      fraction of the gateway pool the player captures (before network bonus)
+ * qualityBonus:     quality-score points added to routes through this hub
+ * weeklyInvestment: ongoing weekly cost in $ on top of gate fees
+ * minGates:         gate requirement to reach this tier
+ */
+export const HUB_TIERS = {
+  1: {
+    name: 'Hub',
+    captureRate:      0.25,
+    qualityBonus:     5,
+    weeklyInvestment: 25_000,     // dedicated agents, connection management, basic lounge
+    minGates:         10,
+    color:            '#388bfd',   // var(--accent)
+  },
+  2: {
+    name: 'Major Hub',
+    captureRate:      0.38,
+    qualityBonus:     12,
+    weeklyInvestment: 150_000,    // full lounge, fast-connect baggage, connection desk staff
+    minGates:         15,         // requires 5 more gates than tier-1 designation
+    color:            '#d29922',   // var(--yellow)
+  },
+  3: {
+    name: 'International Gateway',
+    captureRate:      0.55,
+    qualityBonus:     20,
+    weeklyInvestment: 500_000,    // premium lounges, dedicated transfer facilities, customs staff
+    minGates:         20,
+    color:            '#a371f7',   // var(--purple)
+  },
+};
+
+export const HUB_TIER_COUNT = 3;
+export const HUB_MIN_GATES  = 10;   // minimum gates to designate any hub
+
+// ─── Connecting passengers ────────────────────────────────────────────────────
+
+/**
+ * Gateway score for each airport: how transit-heavy it is (0–1).
+ * High scores = lots of passengers connecting through, low = mostly O&D.
+ * Airports not listed default to 0.20.
+ *
+ * Sources: approximate real-world transit fractions.
+ */
+export const AIRPORT_GATEWAY_SCORES = {
+  DXB: 0.85,  // Dubai: ~75% of traffic is transit
+  SIN: 0.80,  // Changi: major Asia-Pacific hub
+  AMS: 0.75,  // Schiphol: ~40% transit, punches above its weight
+  FRA: 0.70,  // Frankfurt: major European hub-of-hubs
+  LHR: 0.65,  // Heathrow: busiest European O&D, still ~35% transit
+  HKG: 0.70,  // Hong Kong: key Asia gateway
+  IST: 0.65,  // Istanbul: growing hub, links East–West
+  ICN: 0.60,  // Incheon: Asia's most-connected single airport
+  CDG: 0.55,  // Paris: significant but more O&D than FRA/AMS
+  NRT: 0.55,  // Tokyo Narita: gateway to Japan
+  JFK: 0.50,  // New York: global gateway, moderate transit
+  ORD: 0.48,  // Chicago: US hub-of-hubs
+  LAX: 0.45,  // LA: large but terminal-fragmented
+  // All others: 0.20 (default)
+};
+
+/**
+ * Weekly transit passenger pool at an airport (one-directional through-pax).
+ * Calibrated so DXB yields ~680 base connecting pax available to capture.
+ */
+const BASE_GATEWAY_POOL = 800;
+
+/**
+ * Compute connecting passenger demand for one endpoint of a route.
+ *
+ * @param {string}   airportCode       - the airport to evaluate
+ * @param {object}   hubs              - player's hub map: { [code]: { tier: 1|2|3 } }
+ * @param {number}   playerRoutesHere  - how many player routes touch this airport (incl. this one)
+ * @param {number}   ticketPrice       - one-way ticket price on the route ($)
+ * @param {object}   [opts]
+ * @param {number}   [opts.weeklyFrequency=7]  - one-way departures per week on this route
+ * @param {number}   [opts.distKm=0]           - great-circle distance of the route (km)
+ * @param {string[]} [opts.partnerHubCodes=[]] - homeHub codes of alliance/codeshare partners
+ *                                               (one entry per partner; duplicates allowed)
+ * @returns {{ pax, revenue, yield, source, tier?, externalPax?, internalPax?, freqMult?, factors? }}
+ */
+function connectingAtEndpoint(airportCode, hubs, playerRoutesHere, ticketPrice, {
+  weeklyFrequency = 7,
+  distKm = 0,
+  partnerHubCodes = [],
+} = {}) {
+  const gwScore = AIRPORT_GATEWAY_SCORES[airportCode] ?? 0.20;
+  const pool    = gwScore * BASE_GATEWAY_POOL;
+
+  const hubInfo = hubs[airportCode]; // { tier } or undefined
+
+  if (hubInfo) {
+    // Connecting pax has two components:
+    //
+    // 1. External feed — gateway/partner airlines routing pax through your hub to
+    //    this specific destination. Per-route, boosted by:
+    //      • long-haul routes (more pax need a connection on a 10,000 km journey than a 500 km hop)
+    //      • alliance/codeshare partners hubbing at this airport (their networks funnel pax to you)
+    //
+    // 2. Internal feed — for each OTHER route at this hub, a fraction of those passengers
+    //    want to connect to/from this route. Scaled by frequency: high-frequency routes offer
+    //    more connection windows, so more pax successfully connect. Grows linearly with spoke count.
+    //
+    // 3. Congestion penalty — very large hubs (15+ routes) see diminishing returns from
+    //    gate competition, bag transfer delays, and longer connection walks.
+
+    const tierDef     = HUB_TIERS[hubInfo.tier] ?? HUB_TIERS[1];
+    const otherRoutes = Math.max(0, playerRoutesHere - 1);
+
+    // ── External ──────────────────────────────────────────────────────────────
+    // Distance bonus: long-haul routes have a higher connecting fraction.
+    // Capped at +35% (roughly ~8,750 km; transatlantic/transpacific routes).
+    const distBonus = Math.min(0.35, distKm / 25000);
+
+    // Partner boost: each alliance/codeshare partner hubbing here adds 20% to
+    // external feed (their passengers route through your hub to your destinations).
+    // Capped at +60% so three or more partners give full benefit.
+    const partnerCount  = partnerHubCodes.filter(c => c === airportCode).length;
+    const partnerBoost  = Math.min(0.60, partnerCount * 0.20);
+
+    const externalPax = Math.round(
+      pool * tierDef.captureRate * (0.15 + distBonus) * (1 + partnerBoost)
+    );
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+    // Frequency multiplier: 1× at 7 flights/wk (baseline), 0.4× at 1/wk (poor
+    // connection windows), up to 1.5× at very high frequency.
+    const freqMult    = Math.min(1.5, 0.4 + (Math.log1p(weeklyFrequency) / Math.log1p(7)) * 0.6);
+    const internalPax = Math.round(pool * tierDef.captureRate * 0.06 * otherRoutes * freqMult);
+
+    // ── Congestion ────────────────────────────────────────────────────────────
+    // Soft cap above 15 routes: diminishing returns from overcrowding.
+    // At 20 routes ≈ 93% efficiency; at 30 ≈ 84%.
+    const congestion = playerRoutesHere > 15 ? Math.pow(15 / playerRoutesHere, 0.25) : 1.0;
+
+    const pax = Math.round((externalPax + internalPax) * congestion);
+    return {
+      pax,
+      revenue:      Math.round(pax * ticketPrice),
+      yield:        1.0,
+      source:       'own-hub',
+      tier:         hubInfo.tier,
+      // ── breakdown for UI display ──
+      externalPax:  Math.round(externalPax * congestion),
+      internalPax:  Math.round(internalPax * congestion),
+      freqMult:     +freqMult.toFixed(2),
+      distBonus:    +distBonus.toFixed(2),
+      partnerBoost: +partnerBoost.toFixed(2),
+      congestion:   +congestion.toFixed(2),
+    };
+  }
+
+  if (gwScore >= 0.50) {
+    // Major partner hub: interline/codeshare agreement → 80% yield
+    const pax = Math.round(pool * 0.06);
+    return { pax, revenue: Math.round(pax * ticketPrice * 0.8), yield: 0.8, source: 'partner-hub' };
+  }
+
+  // Minor gateway: light transit traffic, 80% yield
+  const pax = Math.round(pool * 0.03);
+  return { pax, revenue: Math.round(pax * ticketPrice * 0.8), yield: 0.8, source: 'gateway' };
+}
+
+/**
+ * Total connecting demand for a route (both endpoints combined).
+ *
+ * @param {string}   origin
+ * @param {string}   destination
+ * @param {object}   hubs                   - { [airportCode]: { tier: 1|2|3 } }
+ * @param {number}   playerRoutesAtOrigin   - # of player routes at origin (incl. this one)
+ * @param {number}   playerRoutesAtDest     - # of player routes at destination (incl. this one)
+ * @param {number}   ticketPrice
+ * @param {object}   [options]
+ * @param {number}   [options.weeklyFrequency=7]  - one-way departures/week on this route
+ * @param {string[]} [options.partnerHubCodes=[]] - homeHub codes of alliance/codeshare partners
+ * @returns {{
+ *   totalPax:     number,
+ *   totalRevenue: number,
+ *   origin:       object,
+ *   destination:  object,
+ * }}
+ */
+export function computeConnectingDemand(
+  origin, destination, hubs,
+  playerRoutesAtOrigin, playerRoutesAtDest,
+  ticketPrice,
+  options = {}
+) {
+  // Accept legacy string hub for backward compat
+  const hubsMap = typeof hubs === 'string'
+    ? (hubs ? { [hubs]: { tier: 1 } } : {})
+    : (hubs ?? {});
+
+  const { weeklyFrequency = 7, partnerHubCodes = [] } = options;
+  // Compute distance once here and pass to both endpoints
+  const distKm = routeDistance(origin, destination);
+
+  const endpointOpts = { weeklyFrequency, distKm, partnerHubCodes };
+  const originSide = connectingAtEndpoint(origin,      hubsMap, playerRoutesAtOrigin, ticketPrice, endpointOpts);
+  const destSide   = connectingAtEndpoint(destination, hubsMap, playerRoutesAtDest,   ticketPrice, endpointOpts);
+  return {
+    totalPax:     originSide.pax + destSide.pax,
+    totalRevenue: originSide.revenue + destSide.revenue,
+    origin:       originSide,
+    destination:  destSide,
+  };
+}
+
+/**
+ * Default routes for each AI competitor, keyed by airline id.
+ * routeKey = two IATA codes joined by '-', sorted alphabetically.
+ * frequency = one-way departures per week.
+ * priceMultiplier = multiplier applied to referencePrice() for this route.
+ *
+ * Design rationale per carrier:
+ *   globalair (LHR, legacy)  — transatlantic + European corridors + long-haul hubs
+ *   zoomjet   (ORD, budget)  — domestic US hub-and-spoke from Chicago, high frequency
+ *   apexair   (DXB, premium) — Gulf-hub ultra-long-haul to Europe/Americas/Asia
+ */
+const COMPETITOR_DEFAULT_ROUTES = {
+  globalair: {
+    'AMS-LHR': { frequency: 14, priceMultiplier: 1.05 }, // London–Amsterdam short-haul workhorse
+    'CDG-LHR': { frequency: 14, priceMultiplier: 1.05 }, // London–Paris flagship
+    'FRA-LHR': { frequency: 10, priceMultiplier: 1.05 }, // London–Frankfurt business corridor
+    'JFK-LHR': { frequency:  7, priceMultiplier: 1.08 }, // Transatlantic flagship
+    'LHR-YYZ': { frequency:  7, priceMultiplier: 1.05 }, // London–Toronto
+    'DXB-LHR': { frequency:  7, priceMultiplier: 1.06 }, // London–Dubai (contested with apexair)
+    'LHR-SIN': { frequency:  5, priceMultiplier: 1.07 }, // London–Singapore ultra-long-haul
+  },
+  zoomjet: {
+    'ATL-ORD': { frequency: 21, priceMultiplier: 0.78 }, // Chicago–Atlanta high-density
+    'DEN-ORD': { frequency: 14, priceMultiplier: 0.76 }, // Chicago–Denver
+    'DFW-ORD': { frequency: 14, priceMultiplier: 0.76 }, // Chicago–Dallas
+    'JFK-ORD': { frequency: 21, priceMultiplier: 0.80 }, // Chicago–New York shuttle
+    'LAX-ORD': { frequency: 21, priceMultiplier: 0.79 }, // Chicago–LA budget flagship
+    'LAS-ORD': { frequency: 14, priceMultiplier: 0.74 }, // Chicago–Vegas leisure route
+    'MIA-ORD': { frequency: 14, priceMultiplier: 0.77 }, // Chicago–Miami
+    'MSP-ORD': { frequency: 10, priceMultiplier: 0.75 }, // Chicago–Minneapolis regional
+  },
+  apexair: {
+    'BOM-DXB': { frequency:  7, priceMultiplier: 1.45 }, // Dubai–Mumbai premium
+    'CDG-DXB': { frequency:  7, priceMultiplier: 1.50 }, // Dubai–Paris premium
+    'DEL-DXB': { frequency:  7, priceMultiplier: 1.42 }, // Dubai–Delhi premium
+    'DXB-JFK': { frequency:  7, priceMultiplier: 1.55 }, // Dubai–New York ultra-premium
+    'DXB-JNB': { frequency:  5, priceMultiplier: 1.40 }, // Dubai–Johannesburg
+    'DXB-LHR': { frequency:  7, priceMultiplier: 1.48 }, // Dubai–London (contested with globalair)
+    'DXB-SIN': { frequency:  7, priceMultiplier: 1.45 }, // Dubai–Singapore
+  },
+
+  // ── Legacy ────────────────────────────────────────────────────────────────
+  continentalx: {
+    'BOS-JFK': { frequency: 21, priceMultiplier: 1.04 }, // NY–Boston shuttle
+    'CDG-JFK': { frequency:  5, priceMultiplier: 1.06 }, // NY–Paris
+    'JFK-LAX': { frequency: 14, priceMultiplier: 1.06 }, // NY–LA flagship
+    'JFK-LHR': { frequency:  7, priceMultiplier: 1.07 }, // Transatlantic (vs Global Air)
+    'JFK-MIA': { frequency: 14, priceMultiplier: 1.04 }, // NY–Miami
+    'JFK-ORD': { frequency: 14, priceMultiplier: 1.05 }, // NY–Chicago
+    'JFK-SFO': { frequency:  7, priceMultiplier: 1.05 }, // NY–San Francisco
+  },
+  eaglewings: {
+    'ATL-CUN': { frequency:  7, priceMultiplier: 0.98 }, // Atlanta–Cancún leisure
+    'ATL-DFW': { frequency: 14, priceMultiplier: 1.04 }, // Atlanta–Dallas
+    'ATL-GRU': { frequency:  5, priceMultiplier: 1.07 }, // Atlanta–São Paulo
+    'ATL-JFK': { frequency: 14, priceMultiplier: 1.04 }, // Atlanta–New York
+    'ATL-LAX': { frequency: 10, priceMultiplier: 1.05 }, // Atlanta–LA
+    'ATL-MIA': { frequency: 14, priceMultiplier: 1.03 }, // Atlanta–Miami
+    'ATL-ORD': { frequency: 14, priceMultiplier: 1.04 }, // Atlanta–Chicago (vs ZoomJet)
+  },
+  pacificrim: {
+    'HKG-NRT': { frequency:  7, priceMultiplier: 1.05 }, // Tokyo–Hong Kong
+    'ICN-NRT': { frequency: 14, priceMultiplier: 1.04 }, // Tokyo–Seoul
+    'LAX-NRT': { frequency:  7, priceMultiplier: 1.08 }, // Transpacific flagship
+    'NRT-PEK': { frequency: 10, priceMultiplier: 1.05 }, // Tokyo–Beijing
+    'NRT-SFO': { frequency:  5, priceMultiplier: 1.08 }, // Tokyo–San Francisco
+    'NRT-SIN': { frequency:  7, priceMultiplier: 1.06 }, // Tokyo–Singapore
+  },
+  euroconnect: {
+    'BCN-CDG': { frequency:  7, priceMultiplier: 1.03 }, // Paris–Barcelona
+    'CDG-DXB': { frequency:  7, priceMultiplier: 1.06 }, // Paris–Dubai (vs Apex)
+    'CDG-FRA': { frequency: 14, priceMultiplier: 1.03 }, // Paris–Frankfurt
+    'CDG-JFK': { frequency:  7, priceMultiplier: 1.06 }, // Paris–NY (vs Continental)
+    'CDG-LHR': { frequency: 14, priceMultiplier: 1.04 }, // Paris–London (vs Global Air)
+    'CDG-MAD': { frequency: 10, priceMultiplier: 1.03 }, // Paris–Madrid
+    'CDG-NRT': { frequency:  5, priceMultiplier: 1.07 }, // Paris–Tokyo
+  },
+  southerncross: {
+    'AKL-SYD': { frequency: 10, priceMultiplier: 1.05 }, // Sydney–Auckland
+    'BNE-SYD': { frequency: 21, priceMultiplier: 1.02 }, // Sydney–Brisbane domestic
+    'HKG-SYD': { frequency:  7, priceMultiplier: 1.07 }, // Sydney–Hong Kong
+    'LAX-SYD': { frequency:  4, priceMultiplier: 1.09 }, // Sydney–LA transpacific
+    'MEL-SYD': { frequency: 28, priceMultiplier: 1.03 }, // Sydney–Melbourne (busiest domestic)
+    'NRT-SYD': { frequency:  5, priceMultiplier: 1.08 }, // Sydney–Tokyo
+    'SIN-SYD': { frequency:  7, priceMultiplier: 1.07 }, // Sydney–Singapore
+  },
+  iberoair: {
+    'BCN-MAD': { frequency: 28, priceMultiplier: 1.02 }, // Madrid–Barcelona shuttle
+    'EZE-MAD': { frequency:  4, priceMultiplier: 1.07 }, // Madrid–Buenos Aires
+    'GRU-MAD': { frequency:  5, priceMultiplier: 1.07 }, // Madrid–São Paulo
+    'LHR-MAD': { frequency:  7, priceMultiplier: 1.04 }, // Madrid–London (vs Global Air)
+    'MAD-MEX': { frequency:  5, priceMultiplier: 1.06 }, // Madrid–Mexico City
+    'MAD-MIA': { frequency:  5, priceMultiplier: 1.06 }, // Madrid–Miami
+    'MAD-SCL': { frequency:  4, priceMultiplier: 1.07 }, // Madrid–Santiago
+  },
+  rhineair: {
+    'AMS-FRA': { frequency: 14, priceMultiplier: 1.03 }, // Frankfurt–Amsterdam
+    'FRA-JFK': { frequency:  7, priceMultiplier: 1.07 }, // Frankfurt–New York
+    'FRA-LHR': { frequency: 10, priceMultiplier: 1.04 }, // Frankfurt–London (vs Global Air)
+    'FRA-MUC': { frequency: 14, priceMultiplier: 1.02 }, // Frankfurt–Munich
+    'FRA-NRT': { frequency:  5, priceMultiplier: 1.07 }, // Frankfurt–Tokyo
+    'FRA-PEK': { frequency:  5, priceMultiplier: 1.08 }, // Frankfurt–Beijing
+    'FRA-SIN': { frequency:  5, priceMultiplier: 1.08 }, // Frankfurt–Singapore
+  },
+
+  // ── Budget ────────────────────────────────────────────────────────────────
+  fastfly: {
+    'DEN-LAX': { frequency: 14, priceMultiplier: 0.76 }, // LA–Denver
+    'JFK-LAX': { frequency: 14, priceMultiplier: 0.80 }, // LA–NY (vs Continental)
+    'LAS-LAX': { frequency: 28, priceMultiplier: 0.72 }, // LA–Vegas leisure
+    'LAX-ORD': { frequency: 21, priceMultiplier: 0.79 }, // LA–Chicago (vs ZoomJet)
+    'LAX-PHX': { frequency: 21, priceMultiplier: 0.75 }, // LA–Phoenix
+    'LAX-SEA': { frequency: 14, priceMultiplier: 0.77 }, // LA–Seattle
+    'LAX-SFO': { frequency: 21, priceMultiplier: 0.73 }, // LA–SF short-haul
+  },
+  nofrills: {
+    'AMS-ATH': { frequency:  7, priceMultiplier: 0.73 }, // Amsterdam–Athens
+    'AMS-BCN': { frequency: 14, priceMultiplier: 0.76 }, // Amsterdam–Barcelona
+    'AMS-DUB': { frequency:  7, priceMultiplier: 0.74 }, // Amsterdam–Dublin
+    'AMS-FCO': { frequency: 10, priceMultiplier: 0.74 }, // Amsterdam–Rome
+    'AMS-IST': { frequency: 10, priceMultiplier: 0.74 }, // Amsterdam–Istanbul
+    'AMS-LHR': { frequency: 14, priceMultiplier: 0.72 }, // Amsterdam–London (vs Global Air)
+    'AMS-MAD': { frequency: 10, priceMultiplier: 0.75 }, // Amsterdam–Madrid
+  },
+  sunroute: {
+    'ATL-MIA': { frequency: 10, priceMultiplier: 0.77 }, // Miami–Atlanta
+    'BOG-MIA': { frequency:  7, priceMultiplier: 0.80 }, // Miami–Bogotá
+    'CUN-MIA': { frequency: 14, priceMultiplier: 0.76 }, // Miami–Cancún
+    'GRU-MIA': { frequency:  5, priceMultiplier: 0.82 }, // Miami–São Paulo
+    'JFK-MIA': { frequency: 14, priceMultiplier: 0.78 }, // Miami–NY (vs Continental)
+    'LIM-MIA': { frequency:  7, priceMultiplier: 0.80 }, // Miami–Lima
+    'MIA-ORD': { frequency: 14, priceMultiplier: 0.77 }, // Miami–Chicago (vs ZoomJet)
+  },
+  asiaexpress: {
+    'BKK-CGK': { frequency: 10, priceMultiplier: 0.74 }, // Bangkok–Jakarta
+    'BKK-DEL': { frequency:  7, priceMultiplier: 0.77 }, // Bangkok–Delhi
+    'BKK-HKG': { frequency: 10, priceMultiplier: 0.75 }, // Bangkok–Hong Kong
+    'BKK-ICN': { frequency:  7, priceMultiplier: 0.76 }, // Bangkok–Seoul
+    'BKK-KUL': { frequency: 21, priceMultiplier: 0.72 }, // Bangkok–KL (busiest SE Asia)
+    'BKK-MNL': { frequency:  7, priceMultiplier: 0.74 }, // Bangkok–Manila
+    'BKK-SIN': { frequency: 14, priceMultiplier: 0.73 }, // Bangkok–Singapore
+  },
+  vivasud: {
+    'BOG-EZE': { frequency:  5, priceMultiplier: 0.80 }, // Bogotá–Buenos Aires
+    'BOG-GRU': { frequency:  7, priceMultiplier: 0.80 }, // Bogotá–São Paulo
+    'BOG-LIM': { frequency: 10, priceMultiplier: 0.77 }, // Bogotá–Lima
+    'BOG-MEX': { frequency:  7, priceMultiplier: 0.79 }, // Bogotá–Mexico City
+    'BOG-MIA': { frequency:  7, priceMultiplier: 0.80 }, // Bogotá–Miami (vs Sunroute)
+    'BOG-PTY': { frequency:  7, priceMultiplier: 0.75 }, // Bogotá–Panama City
+    'BOG-SCL': { frequency:  5, priceMultiplier: 0.78 }, // Bogotá–Santiago
+  },
+
+  // ── Premium ───────────────────────────────────────────────────────────────
+  gulfpearl: {
+    'BOM-DOH': { frequency:  7, priceMultiplier: 1.42 }, // Doha–Mumbai (vs Apex)
+    'CDG-DOH': { frequency:  7, priceMultiplier: 1.48 }, // Doha–Paris
+    'DEL-DOH': { frequency:  7, priceMultiplier: 1.38 }, // Doha–Delhi
+    'DOH-JFK': { frequency:  7, priceMultiplier: 1.52 }, // Doha–New York
+    'DOH-LHR': { frequency:  7, priceMultiplier: 1.45 }, // Doha–London
+    'DOH-NRT': { frequency:  5, priceMultiplier: 1.48 }, // Doha–Tokyo
+    'DOH-SIN': { frequency:  7, priceMultiplier: 1.45 }, // Doha–Singapore
+  },
+  silkroute: {
+    'CDG-SIN': { frequency:  5, priceMultiplier: 1.48 }, // Singapore–Paris
+    'DEL-SIN': { frequency:  7, priceMultiplier: 1.38 }, // Singapore–Delhi
+    'HKG-SIN': { frequency:  7, priceMultiplier: 1.42 }, // Singapore–Hong Kong
+    'LHR-SIN': { frequency:  5, priceMultiplier: 1.48 }, // Singapore–London (vs Global Air)
+    'NRT-SIN': { frequency:  7, priceMultiplier: 1.45 }, // Singapore–Tokyo
+    'SIN-SYD': { frequency:  7, priceMultiplier: 1.40 }, // Singapore–Sydney
+    'SIN-ZRH': { frequency:  4, priceMultiplier: 1.50 }, // Singapore–Zurich
+  },
+  orientprestige: {
+    'CDG-HKG': { frequency:  5, priceMultiplier: 1.48 }, // HK–Paris
+    'HKG-JFK': { frequency:  5, priceMultiplier: 1.52 }, // HK–New York
+    'HKG-LAX': { frequency:  5, priceMultiplier: 1.50 }, // HK–LA
+    'HKG-LHR': { frequency:  7, priceMultiplier: 1.45 }, // HK–London
+    'HKG-NRT': { frequency:  7, priceMultiplier: 1.42 }, // HK–Tokyo (vs Pacific Rim)
+    'HKG-SIN': { frequency:  7, priceMultiplier: 1.40 }, // HK–Singapore (vs Silk Route)
+    'HKG-SYD': { frequency:  5, priceMultiplier: 1.42 }, // HK–Sydney
+  },
+  nordicelite: {
+    'AMS-ARN': { frequency:  7, priceMultiplier: 1.30 }, // Stockholm–Amsterdam
+    'ARN-CDG': { frequency:  7, priceMultiplier: 1.32 }, // Stockholm–Paris
+    'ARN-DXB': { frequency:  5, priceMultiplier: 1.42 }, // Stockholm–Dubai
+    'ARN-HEL': { frequency:  7, priceMultiplier: 1.28 }, // Stockholm–Helsinki
+    'ARN-JFK': { frequency:  5, priceMultiplier: 1.45 }, // Stockholm–New York
+    'ARN-LHR': { frequency:  7, priceMultiplier: 1.35 }, // Stockholm–London
+    'ARN-NRT': { frequency:  4, priceMultiplier: 1.48 }, // Stockholm–Tokyo
+  },
+  pampapremium: {
+    'BOG-GRU': { frequency:  5, priceMultiplier: 1.38 }, // São Paulo–Bogotá
+    'CDG-GRU': { frequency:  4, priceMultiplier: 1.48 }, // São Paulo–Paris
+    'EZE-GRU': { frequency: 14, priceMultiplier: 1.30 }, // São Paulo–Buenos Aires
+    'GRU-JFK': { frequency:  5, priceMultiplier: 1.45 }, // São Paulo–New York
+    'GRU-LHR': { frequency:  5, priceMultiplier: 1.45 }, // São Paulo–London
+    'GRU-MIA': { frequency:  5, priceMultiplier: 1.40 }, // São Paulo–Miami
+    'GRU-SCL': { frequency:  7, priceMultiplier: 1.32 }, // São Paulo–Santiago
+  },
+};
+
+/**
+ * Populate each competitor's `routes` map with their starting network.
+ * Pass a deep-copied array — this mutates routes in place.
+ *
+ * @param {CompetitorAirline[]} [competitors]  defaults to COMPETITOR_AIRLINES
+ * @returns {CompetitorAirline[]}  same array, routes mutated in place
+ */
+export function initializeCompetitorRoutes(competitors = COMPETITOR_AIRLINES) {
+  for (const airline of competitors) {
+    const defaults = COMPETITOR_DEFAULT_ROUTES[airline.id];
+    if (defaults) {
+      Object.assign(airline.routes, defaults);
+    }
+  }
+  return competitors;
+}
+
+/**
+ * Scheduled route expansions for AI competitors.
+ *
+ * weeksAfterStart: total game-weeks elapsed when the expansion fires
+ *   (week 1 = first week of game; fires as that week completes).
+ * Re-using an existing routeKey upgrades frequency/price on that route.
+ *
+ * Growth philosophy per carrier:
+ *   globalair — deepens European frequency early, then adds long-haul spokes year 1–2
+ *   zoomjet   — saturates Chicago–East corridor fast, then spreads West and into Canada
+ *   apexair   — methodically adds one premium Asia-Pacific spoke per quarter
+ */
+export const COMPETITOR_EXPANSION_SCHEDULE = [
+  // ── Global Air (LHR, legacy) ──────────────────────────────────────────────
+  { airlineId: 'globalair', weeksAfterStart:  8, routeKey: 'CDG-LHR', frequency: 21, priceMultiplier: 1.05 }, // Paris → 3×/day
+  { airlineId: 'globalair', weeksAfterStart: 13, routeKey: 'LHR-MAD', frequency:  7, priceMultiplier: 1.04 }, // London–Madrid launch
+  { airlineId: 'globalair', weeksAfterStart: 26, routeKey: 'JFK-LHR', frequency: 10, priceMultiplier: 1.08 }, // Transatlantic frequency boost
+  { airlineId: 'globalair', weeksAfterStart: 26, routeKey: 'LHR-NRT', frequency:  5, priceMultiplier: 1.08 }, // London–Tokyo launch
+  { airlineId: 'globalair', weeksAfterStart: 39, routeKey: 'GRU-LHR', frequency:  4, priceMultiplier: 1.06 }, // London–São Paulo launch
+  { airlineId: 'globalair', weeksAfterStart: 52, routeKey: 'ICN-LHR', frequency:  5, priceMultiplier: 1.07 }, // London–Seoul launch
+  { airlineId: 'globalair', weeksAfterStart: 78, routeKey: 'LHR-SYD', frequency:  3, priceMultiplier: 1.09 }, // London–Sydney launch
+
+  // ── ZoomJet (ORD, budget) ─────────────────────────────────────────────────
+  { airlineId: 'zoomjet',   weeksAfterStart:  8, routeKey: 'JFK-ORD',  frequency: 28, priceMultiplier: 0.80 }, // NY shuttle → 4×/day
+  { airlineId: 'zoomjet',   weeksAfterStart: 13, routeKey: 'BOS-ORD',  frequency:  7, priceMultiplier: 0.78 }, // Chicago–Boston launch
+  { airlineId: 'zoomjet',   weeksAfterStart: 26, routeKey: 'ORD-PHX',  frequency: 14, priceMultiplier: 0.76 }, // Chicago–Phoenix launch
+  { airlineId: 'zoomjet',   weeksAfterStart: 39, routeKey: 'ORD-SEA',  frequency: 10, priceMultiplier: 0.77 }, // Chicago–Seattle launch
+  { airlineId: 'zoomjet',   weeksAfterStart: 52, routeKey: 'ORD-YYZ',  frequency:  7, priceMultiplier: 0.82 }, // Chicago–Toronto launch
+  { airlineId: 'zoomjet',   weeksAfterStart: 78, routeKey: 'ORD-SFO',  frequency: 14, priceMultiplier: 0.79 }, // Chicago–San Francisco launch
+
+  // ── Apex Air (DXB, premium) ───────────────────────────────────────────────
+  { airlineId: 'apexair',   weeksAfterStart: 13, routeKey: 'DXB-NRT',  frequency:  5, priceMultiplier: 1.48 }, // Dubai–Tokyo launch
+  { airlineId: 'apexair',   weeksAfterStart: 26, routeKey: 'DXB-HKG',  frequency:  7, priceMultiplier: 1.42 }, // Dubai–Hong Kong launch
+  { airlineId: 'apexair',   weeksAfterStart: 39, routeKey: 'DXB-ICN',  frequency:  5, priceMultiplier: 1.45 }, // Dubai–Seoul launch
+  { airlineId: 'apexair',   weeksAfterStart: 39, routeKey: 'DXB-JFK',  frequency: 10, priceMultiplier: 1.55 }, // NY frequency boost
+  { airlineId: 'apexair',   weeksAfterStart: 52, routeKey: 'DXB-SYD',  frequency:  4, priceMultiplier: 1.40 }, // Dubai–Sydney launch
+  { airlineId: 'apexair',   weeksAfterStart: 78, routeKey: 'DXB-LAX',  frequency:  5, priceMultiplier: 1.52 }, // Dubai–LA launch
+
+  // ── Continental Express (JFK, legacy) ─────────────────────────────────────
+  { airlineId: 'continentalx', weeksAfterStart:  8, routeKey: 'JFK-ORD',  frequency: 21, priceMultiplier: 1.05 }, // NY–Chicago freq boost
+  { airlineId: 'continentalx', weeksAfterStart: 13, routeKey: 'JFK-DFW',  frequency:  7, priceMultiplier: 1.05 }, // NY–Dallas launch
+  { airlineId: 'continentalx', weeksAfterStart: 26, routeKey: 'JFK-YYZ',  frequency:  7, priceMultiplier: 1.04 }, // NY–Toronto launch
+  { airlineId: 'continentalx', weeksAfterStart: 39, routeKey: 'JFK-NRT',  frequency:  5, priceMultiplier: 1.08 }, // NY–Tokyo launch
+  { airlineId: 'continentalx', weeksAfterStart: 52, routeKey: 'JFK-GRU',  frequency:  4, priceMultiplier: 1.07 }, // NY–São Paulo launch
+
+  // ── Eagle Wings (ATL, legacy) ─────────────────────────────────────────────
+  { airlineId: 'eaglewings', weeksAfterStart: 10, routeKey: 'ATL-MIA',  frequency: 21, priceMultiplier: 1.03 }, // Atlanta–Miami freq boost
+  { airlineId: 'eaglewings', weeksAfterStart: 18, routeKey: 'ATL-DEN',  frequency:  7, priceMultiplier: 1.04 }, // Atlanta–Denver launch
+  { airlineId: 'eaglewings', weeksAfterStart: 30, routeKey: 'ATL-SFO',  frequency:  7, priceMultiplier: 1.05 }, // Atlanta–SF launch
+  { airlineId: 'eaglewings', weeksAfterStart: 44, routeKey: 'ATL-LHR',  frequency:  4, priceMultiplier: 1.07 }, // Atlanta–London launch
+  { airlineId: 'eaglewings', weeksAfterStart: 60, routeKey: 'ATL-MEX',  frequency:  5, priceMultiplier: 1.05 }, // Atlanta–Mexico City launch
+
+  // ── Pacific Rim (NRT, legacy) ─────────────────────────────────────────────
+  { airlineId: 'pacificrim', weeksAfterStart:  8, routeKey: 'ICN-NRT',  frequency: 21, priceMultiplier: 1.04 }, // Seoul–Tokyo freq boost
+  { airlineId: 'pacificrim', weeksAfterStart: 20, routeKey: 'NRT-PVG',  frequency:  7, priceMultiplier: 1.05 }, // Tokyo–Shanghai launch
+  { airlineId: 'pacificrim', weeksAfterStart: 35, routeKey: 'NRT-SYD',  frequency:  5, priceMultiplier: 1.08 }, // Tokyo–Sydney launch
+  { airlineId: 'pacificrim', weeksAfterStart: 52, routeKey: 'LAX-NRT',  frequency: 10, priceMultiplier: 1.08 }, // Transpacific freq boost
+  { airlineId: 'pacificrim', weeksAfterStart: 70, routeKey: 'NRT-LHR',  frequency:  4, priceMultiplier: 1.09 }, // Tokyo–London launch
+
+  // ── Euro Connect (CDG, legacy) ────────────────────────────────────────────
+  { airlineId: 'euroconnect', weeksAfterStart:  8, routeKey: 'CDG-FRA',  frequency: 21, priceMultiplier: 1.03 }, // Paris–Frankfurt freq boost
+  { airlineId: 'euroconnect', weeksAfterStart: 16, routeKey: 'CDG-FCO',  frequency:  7, priceMultiplier: 1.03 }, // Paris–Rome launch
+  { airlineId: 'euroconnect', weeksAfterStart: 26, routeKey: 'CDG-GRU',  frequency:  4, priceMultiplier: 1.07 }, // Paris–São Paulo launch
+  { airlineId: 'euroconnect', weeksAfterStart: 39, routeKey: 'CDG-HKG',  frequency:  5, priceMultiplier: 1.08 }, // Paris–Hong Kong launch
+  { airlineId: 'euroconnect', weeksAfterStart: 65, routeKey: 'CDG-LAX',  frequency:  4, priceMultiplier: 1.08 }, // Paris–LA launch
+
+  // ── Southern Cross (SYD, legacy) ──────────────────────────────────────────
+  { airlineId: 'southerncross', weeksAfterStart: 12, routeKey: 'BNE-SYD',  frequency: 28, priceMultiplier: 1.02 }, // Brisbane–Sydney freq boost
+  { airlineId: 'southerncross', weeksAfterStart: 24, routeKey: 'MEL-NRT',  frequency:  5, priceMultiplier: 1.08 }, // Melbourne–Tokyo launch
+  { airlineId: 'southerncross', weeksAfterStart: 44, routeKey: 'SYD-LHR',  frequency:  4, priceMultiplier: 1.09 }, // Sydney–London launch
+  { airlineId: 'southerncross', weeksAfterStart: 65, routeKey: 'SYD-JFK',  frequency:  3, priceMultiplier: 1.10 }, // Sydney–New York ultra-long
+
+  // ── Ibero Air (MAD, legacy) ───────────────────────────────────────────────
+  { airlineId: 'iberoair', weeksAfterStart:  9, routeKey: 'BCN-MAD',  frequency: 35, priceMultiplier: 1.02 }, // Madrid–Barcelona freq boost
+  { airlineId: 'iberoair', weeksAfterStart: 20, routeKey: 'MAD-CDG',  frequency: 14, priceMultiplier: 1.03 }, // Madrid–Paris freq boost
+  { airlineId: 'iberoair', weeksAfterStart: 36, routeKey: 'MAD-BOG',  frequency:  5, priceMultiplier: 1.06 }, // Madrid–Bogotá launch
+  { airlineId: 'iberoair', weeksAfterStart: 56, routeKey: 'MAD-NRT',  frequency:  3, priceMultiplier: 1.08 }, // Madrid–Tokyo launch
+
+  // ── Rhine Air (FRA, legacy) ───────────────────────────────────────────────
+  { airlineId: 'rhineair', weeksAfterStart:  8, routeKey: 'FRA-LHR',  frequency: 14, priceMultiplier: 1.04 }, // Frankfurt–London freq boost
+  { airlineId: 'rhineair', weeksAfterStart: 18, routeKey: 'FRA-MAD',  frequency:  7, priceMultiplier: 1.04 }, // Frankfurt–Madrid launch
+  { airlineId: 'rhineair', weeksAfterStart: 30, routeKey: 'FRA-DXB',  frequency:  7, priceMultiplier: 1.06 }, // Frankfurt–Dubai launch
+  { airlineId: 'rhineair', weeksAfterStart: 52, routeKey: 'FRA-GRU',  frequency:  4, priceMultiplier: 1.07 }, // Frankfurt–São Paulo launch
+  { airlineId: 'rhineair', weeksAfterStart: 70, routeKey: 'FRA-LAX',  frequency:  5, priceMultiplier: 1.08 }, // Frankfurt–LA launch
+
+  // ── FastFly (LAX, budget) ─────────────────────────────────────────────────
+  { airlineId: 'fastfly', weeksAfterStart:  6, routeKey: 'LAX-SFO',  frequency: 28, priceMultiplier: 0.73 }, // LA–SF freq boost
+  { airlineId: 'fastfly', weeksAfterStart: 13, routeKey: 'LAX-MSP',  frequency:  7, priceMultiplier: 0.77 }, // LA–Minneapolis launch
+  { airlineId: 'fastfly', weeksAfterStart: 26, routeKey: 'ATL-LAX',  frequency: 10, priceMultiplier: 0.79 }, // LA–Atlanta launch
+  { airlineId: 'fastfly', weeksAfterStart: 45, routeKey: 'LAX-YVR',  frequency:  7, priceMultiplier: 0.80 }, // LA–Vancouver launch
+  { airlineId: 'fastfly', weeksAfterStart: 65, routeKey: 'LAX-MEX',  frequency:  7, priceMultiplier: 0.82 }, // LA–Mexico City launch
+
+  // ── NoFrills (AMS, budget) ────────────────────────────────────────────────
+  { airlineId: 'nofrills', weeksAfterStart:  6, routeKey: 'AMS-BCN',  frequency: 21, priceMultiplier: 0.76 }, // Amsterdam–Barcelona freq boost
+  { airlineId: 'nofrills', weeksAfterStart: 13, routeKey: 'AMS-WAW',  frequency:  7, priceMultiplier: 0.73 }, // Amsterdam–Warsaw launch
+  { airlineId: 'nofrills', weeksAfterStart: 24, routeKey: 'AMS-VIE',  frequency:  7, priceMultiplier: 0.74 }, // Amsterdam–Vienna launch
+  { airlineId: 'nofrills', weeksAfterStart: 39, routeKey: 'AMS-LIS',  frequency:  7, priceMultiplier: 0.73 }, // Amsterdam–Lisbon launch
+  { airlineId: 'nofrills', weeksAfterStart: 60, routeKey: 'AMS-CMN',  frequency:  5, priceMultiplier: 0.74 }, // Amsterdam–Casablanca launch
+
+  // ── Sunroute (MIA, budget) ────────────────────────────────────────────────
+  { airlineId: 'sunroute', weeksAfterStart:  8, routeKey: 'JFK-MIA',  frequency: 21, priceMultiplier: 0.78 }, // Miami–NY freq boost
+  { airlineId: 'sunroute', weeksAfterStart: 18, routeKey: 'MIA-PTY',  frequency:  7, priceMultiplier: 0.80 }, // Miami–Panama launch
+  { airlineId: 'sunroute', weeksAfterStart: 35, routeKey: 'MIA-SCL',  frequency:  5, priceMultiplier: 0.82 }, // Miami–Santiago launch
+  { airlineId: 'sunroute', weeksAfterStart: 52, routeKey: 'MIA-MEX',  frequency:  7, priceMultiplier: 0.80 }, // Miami–Mexico City launch
+
+  // ── Asia Express (BKK, budget) ────────────────────────────────────────────
+  { airlineId: 'asiaexpress', weeksAfterStart:  6, routeKey: 'BKK-SIN',  frequency: 21, priceMultiplier: 0.73 }, // Bangkok–Singapore freq boost
+  { airlineId: 'asiaexpress', weeksAfterStart: 13, routeKey: 'BKK-NRT',  frequency:  7, priceMultiplier: 0.77 }, // Bangkok–Tokyo launch
+  { airlineId: 'asiaexpress', weeksAfterStart: 26, routeKey: 'BKK-PEK',  frequency:  7, priceMultiplier: 0.75 }, // Bangkok–Beijing launch
+  { airlineId: 'asiaexpress', weeksAfterStart: 44, routeKey: 'BKK-SYD',  frequency:  5, priceMultiplier: 0.79 }, // Bangkok–Sydney launch
+  { airlineId: 'asiaexpress', weeksAfterStart: 65, routeKey: 'BKK-DXB',  frequency:  7, priceMultiplier: 0.80 }, // Bangkok–Dubai launch
+
+  // ── Viva Sud (BOG, budget) ────────────────────────────────────────────────
+  { airlineId: 'vivasud', weeksAfterStart: 10, routeKey: 'BOG-GRU',  frequency: 10, priceMultiplier: 0.80 }, // Bogotá–São Paulo freq boost
+  { airlineId: 'vivasud', weeksAfterStart: 22, routeKey: 'BOG-CUN',  frequency:  7, priceMultiplier: 0.76 }, // Bogotá–Cancún launch
+  { airlineId: 'vivasud', weeksAfterStart: 40, routeKey: 'BOG-GDL',  frequency:  7, priceMultiplier: 0.77 }, // Bogotá–Guadalajara launch
+  { airlineId: 'vivasud', weeksAfterStart: 60, routeKey: 'BOG-JFK',  frequency:  5, priceMultiplier: 0.82 }, // Bogotá–New York launch
+
+  // ── Gulf Pearl (DOH, premium) ─────────────────────────────────────────────
+  { airlineId: 'gulfpearl', weeksAfterStart: 10, routeKey: 'DOH-LHR',  frequency: 10, priceMultiplier: 1.45 }, // Doha–London freq boost
+  { airlineId: 'gulfpearl', weeksAfterStart: 20, routeKey: 'DOH-HKG',  frequency:  7, priceMultiplier: 1.42 }, // Doha–Hong Kong launch
+  { airlineId: 'gulfpearl', weeksAfterStart: 35, routeKey: 'DOH-ICN',  frequency:  5, priceMultiplier: 1.45 }, // Doha–Seoul launch
+  { airlineId: 'gulfpearl', weeksAfterStart: 52, routeKey: 'DOH-SYD',  frequency:  4, priceMultiplier: 1.40 }, // Doha–Sydney launch
+  { airlineId: 'gulfpearl', weeksAfterStart: 70, routeKey: 'DOH-LAX',  frequency:  5, priceMultiplier: 1.52 }, // Doha–LA launch
+
+  // ── Silk Route (SIN, premium) ─────────────────────────────────────────────
+  { airlineId: 'silkroute', weeksAfterStart:  8, routeKey: 'NRT-SIN',  frequency: 10, priceMultiplier: 1.45 }, // Singapore–Tokyo freq boost
+  { airlineId: 'silkroute', weeksAfterStart: 18, routeKey: 'ICN-SIN',  frequency:  7, priceMultiplier: 1.42 }, // Singapore–Seoul launch
+  { airlineId: 'silkroute', weeksAfterStart: 35, routeKey: 'SIN-YYZ',  frequency:  3, priceMultiplier: 1.52 }, // Singapore–Toronto launch
+  { airlineId: 'silkroute', weeksAfterStart: 56, routeKey: 'JFK-SIN',  frequency:  5, priceMultiplier: 1.55 }, // Singapore–NY launch
+
+  // ── Orient Prestige (HKG, premium) ───────────────────────────────────────
+  { airlineId: 'orientprestige', weeksAfterStart: 10, routeKey: 'HKG-SIN',  frequency: 10, priceMultiplier: 1.40 }, // HK–Singapore freq boost
+  { airlineId: 'orientprestige', weeksAfterStart: 22, routeKey: 'HKG-ICN',  frequency:  7, priceMultiplier: 1.40 }, // HK–Seoul launch
+  { airlineId: 'orientprestige', weeksAfterStart: 39, routeKey: 'HKG-FRA',  frequency:  5, priceMultiplier: 1.48 }, // HK–Frankfurt launch
+  { airlineId: 'orientprestige', weeksAfterStart: 60, routeKey: 'HKG-SYD',  frequency:  7, priceMultiplier: 1.42 }, // HK–Sydney freq boost
+
+  // ── Nordic Elite (ARN, premium) ───────────────────────────────────────────
+  { airlineId: 'nordicelite', weeksAfterStart: 12, routeKey: 'ARN-LHR',  frequency: 10, priceMultiplier: 1.35 }, // Stockholm–London freq boost
+  { airlineId: 'nordicelite', weeksAfterStart: 24, routeKey: 'ARN-SIN',  frequency:  4, priceMultiplier: 1.50 }, // Stockholm–Singapore launch
+  { airlineId: 'nordicelite', weeksAfterStart: 44, routeKey: 'ARN-HKG',  frequency:  4, priceMultiplier: 1.48 }, // Stockholm–HK launch
+  { airlineId: 'nordicelite', weeksAfterStart: 65, routeKey: 'ARN-ICN',  frequency:  4, priceMultiplier: 1.48 }, // Stockholm–Seoul launch
+
+  // ── Pampa Premium (GRU, premium) ──────────────────────────────────────────
+  { airlineId: 'pampapremium', weeksAfterStart: 10, routeKey: 'EZE-GRU',  frequency: 21, priceMultiplier: 1.30 }, // São Paulo–Buenos Aires freq boost
+  { airlineId: 'pampapremium', weeksAfterStart: 24, routeKey: 'GRU-LIM',  frequency:  5, priceMultiplier: 1.35 }, // São Paulo–Lima launch
+  { airlineId: 'pampapremium', weeksAfterStart: 40, routeKey: 'GRU-NRT',  frequency:  3, priceMultiplier: 1.50 }, // São Paulo–Tokyo launch
+  { airlineId: 'pampapremium', weeksAfterStart: 60, routeKey: 'GRU-DXB',  frequency:  4, priceMultiplier: 1.48 }, // São Paulo–Dubai launch
+];
+
+/**
+ * Advance competitor networks by one week.
+ * Pure function — returns new objects, safe for React state.
+ *
+ * @param {CompetitorAirline[]} competitors
+ * @param {number} weekNumber  total game-weeks elapsed since start (1-based).
+ *   Compute as: (year - startYear) * 52 + week
+ * @returns {{ competitors: CompetitorAirline[], events: CompetitorEvent[] }}
+ *
+ * @typedef {{ airlineId: string, routeKey: string, isUpgrade: boolean }} CompetitorEvent
+ */
+export function tickCompetitorGrowth(competitors, weekNumber) {
+  const scheduled = COMPETITOR_EXPANSION_SCHEDULE.filter(e => e.weeksAfterStart === weekNumber);
+  if (scheduled.length === 0) return { competitors, events: [] };
+
+  const events = [];
+  const updated = competitors.map(airline => {
+    const mine = scheduled.filter(e => e.airlineId === airline.id);
+    if (mine.length === 0) return airline;
+
+    const newRoutes = { ...airline.routes };
+    for (const entry of mine) {
+      const isUpgrade = entry.routeKey in newRoutes;
+      newRoutes[entry.routeKey] = { frequency: entry.frequency, priceMultiplier: entry.priceMultiplier };
+      events.push({ airlineId: airline.id, routeKey: entry.routeKey, isUpgrade });
+    }
+    return { ...airline, routes: newRoutes };
+  });
+
+  return { competitors: updated, events };
+}
+
+/**
+ * Adjust competitor pricing in response to the player's fares on shared routes.
+ * Call once per ADVANCE_WEEK, after tickCompetitorGrowth.
+ *
+ * Each tier has different aggression and price bounds:
+ *   budget  — cuts fast, can't price high (floor 0.65×, ceiling 0.90×)
+ *   legacy  — moderate reactions        (floor 0.85×, ceiling 1.20×)
+ *   premium — holds positioning firmly  (floor 1.25×, ceiling 1.70×)
+ *
+ * Pure function — returns new competitor objects safe for React state.
+ *
+ * @param {CompetitorAirline[]} competitors
+ * @param {Array<{origin: string, destination: string, ticketPrice: number}>} playerRoutes
+ * @returns {CompetitorAirline[]}
+ */
+export function tickCompetitorPricing(competitors, playerRoutes) {
+  // Build routeKey → player ticket price
+  const playerMap = {};
+  for (const r of playerRoutes) {
+    const key = [r.origin, r.destination].sort().join('-');
+    playerMap[key] = r.ticketPrice;
+  }
+
+  const TIER_CONFIG = {
+    budget:  { floor: 0.65, ceiling: 0.90, cutRate: 0.04,  raiseRate: 0.01  },
+    legacy:  { floor: 0.85, ceiling: 1.20, cutRate: 0.025, raiseRate: 0.015 },
+    premium: { floor: 1.25, ceiling: 1.70, cutRate: 0.015, raiseRate: 0.02  },
+  };
+
+  return competitors.map(airline => {
+    const cfg = TIER_CONFIG[airline.tier];
+    if (!cfg) return airline;
+
+    let anyChange = false;
+    const newRoutes = { ...airline.routes };
+
+    for (const routeKey of Object.keys(newRoutes)) {
+      const playerPrice = playerMap[routeKey];
+      if (playerPrice == null) continue; // player not on this route
+
+      const [a, b] = routeKey.split('-');
+      const refP = referencePrice(a, b);
+      if (!refP) continue;
+
+      const playerRatio = playerPrice / refP;
+      const compRatio   = newRoutes[routeKey].priceMultiplier;
+      let newMultiplier = compRatio;
+
+      if (playerRatio < compRatio - 0.10) {
+        // Player undercutting — competitor cuts price
+        newMultiplier = Math.max(cfg.floor, compRatio - cfg.cutRate);
+      } else if (playerRatio > compRatio + 0.15) {
+        // Player pricing premium — competitor nudges price up
+        newMultiplier = Math.min(cfg.ceiling, compRatio + cfg.raiseRate);
+      }
+
+      if (Math.abs(newMultiplier - compRatio) > 0.001) {
+        newRoutes[routeKey] = { ...newRoutes[routeKey], priceMultiplier: +newMultiplier.toFixed(4) };
+        anyChange = true;
+      }
+    }
+
+    return anyChange ? { ...airline, routes: newRoutes } : airline;
+  });
+}
+
+/**
+ * Virtual aircraft parameters by tier, calibrated from real aircraft in aircraft.js.
+ *   budget  → B737-800 equivalent (162 seats, $6.54/km op cost)
+ *   legacy  → B767-300ER / B777-200ER mix (250 seats, $10.15/km)
+ *   premium → B777-200ER / A350-900 mix (335 seats, $12.78/km)
+ */
+const TIER_AIRCRAFT = {
+  budget:  { seats: 162, costPerKm:  6.54 },
+  legacy:  { seats: 250, costPerKm: 10.15 },
+  premium: { seats: 335, costPerKm: 12.78 },
+};
+
+/**
+ * Estimated weekly fixed cost per active route (lease amortised across network).
+ * Based on ~1 aircraft per route at typical weekly lease rates.
+ */
+const TIER_FIXED_PER_ROUTE = {
+  budget:   80_000,  // ~1 737-800 lease/wk
+  legacy:  200_000,  // ~1 767/777 lease/wk
+  premium: 290_000,  // ~1 777/A350 lease/wk
+};
+
+/**
+ * Simulate one week of a competitor's entire network.
+ * Returns aggregated flights, passengers, revenue, cost, and profit.
+ *
+ * Demand model: baseCityPairDemand × seasonality, adjusted for price elasticity.
+ * Cost model: per-km op cost × distance × weekly flights + fixed lease per route.
+ *
+ * @param {CompetitorAirline} competitor
+ * @param {number} [month=1]  current game month (1-12) for seasonality
+ * @returns {{ weeklyFlights, weeklyPax, weeklyRevenue, weeklyCost, weeklyProfit }}
+ */
+export function computeCompetitorWeeklyStats(competitor, month = 1) {
+  const ac       = TIER_AIRCRAFT[competitor.tier]      ?? TIER_AIRCRAFT.legacy;
+  const fixedPR  = TIER_FIXED_PER_ROUTE[competitor.tier] ?? 200_000;
+
+  let totalFlights = 0;
+  let totalPax     = 0;
+  let totalRevenue = 0;
+  let totalOpCost  = 0;
+
+  for (const [routeKey, cfg] of Object.entries(competitor.routes)) {
+    const [a, b] = routeKey.split('-');
+    const dist  = routeDistance(a, b);
+    const refP  = referencePrice(a, b);
+    const baseD = baseCityPairDemand(a, b);
+    if (!dist || !refP || !baseD) continue;
+
+    const seasonal      = getSeasonalProfile(a, b)[month] ?? 1;
+    const price         = Math.round(refP * cfg.priceMultiplier);
+    const flightsPerWk  = cfg.frequency * 2;                          // bidirectional
+    const capOneWay     = ac.seats * cfg.frequency;
+    const priceRatio    = refP / Math.max(price, 1);
+    const demandOneWay  = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal);
+    const paxOneWay     = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
+    const weeklyPax     = paxOneWay * 2;
+
+    totalFlights += flightsPerWk;
+    totalPax     += weeklyPax;
+    totalRevenue += weeklyPax * price;
+    totalOpCost  += dist * ac.costPerKm * flightsPerWk;
+  }
+
+  const routeCount  = Object.keys(competitor.routes).length;
+  const fixedCosts  = routeCount * fixedPR;
+  const totalCost   = Math.round(totalOpCost + fixedCosts);
+  const weeklyProfit = Math.round(totalRevenue) - totalCost;
+
+  return {
+    weeklyFlights: totalFlights,
+    weeklyPax:     Math.round(totalPax),
+    weeklyRevenue: Math.round(totalRevenue),
+    weeklyCost:    totalCost,
+    weeklyProfit,
+  };
+}
+
+/**
+ * Build an AirlineOffer for a competitor on a route.
+ * Uses their fixed parameters + referencePrice multiplier.
+ *
+ * @param {CompetitorAirline} competitor
+ * @param {RouteMarket}       market
+ * @returns {AirlineOffer|null}  null if competitor doesn't serve this route
+ */
+export function buildCompetitorOffer(competitor, market) {
+  const routeKey = [market.origin, market.destination].sort().join('-');
+  const config   = competitor.routes[routeKey];
+  if (!config) return null;
+
+  const economyPrice = Math.round(market.referencePrice * config.priceMultiplier);
+  const hasBusinessClass = competitor.tier !== 'budget';
+  const businessPrice    = hasBusinessClass
+    ? Math.round(economyPrice * BUSINESS_PRICE_MULTIPLIER)
+    : null;
+
+  // Assume mid-size aircraft for competitors (TODO: give them fleet)
+  const seatsPerFlight  = 150;
+  const businessPerFlight = hasBusinessClass ? 20 : 0;
+
+  return {
+    airlineId:         competitor.id,
+    origin:            market.origin,
+    destination:       market.destination,
+    economyPrice,
+    businessPrice,
+    weeklyFrequency:   config.frequency,
+    seatsPerFlight,
+    economySeats:      seatsPerFlight  * config.frequency,
+    businessSeats:     businessPerFlight * config.frequency,
+    qualityScore:      competitor.baseQualityScore,
+    connectivityBonus: computeConnectivityBonus(competitor.homeHub, market.origin, market.destination),
+  };
+}
+
+// ─── Route maturity tracker ───────────────────────────────────────────────────
+
+/**
+ * Ramp-up factor for a newly opened route.
+ * Returns a 0–1 maturity multiplier based on weeks since route launch.
+ * Reaches ~95% by week 8, full demand by week 12.
+ *
+ * @param {number} weeksOpen
+ * @returns {number}
+ */
+export function routeMaturityFactor(weeksOpen) {
+  if (weeksOpen >= 12) return 1;
+  return Math.min(1, 0.45 + (weeksOpen / 12) * 0.55);
+}

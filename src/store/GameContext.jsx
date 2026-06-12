@@ -1,0 +1,1189 @@
+import { createContext, useContext, useReducer, useEffect } from 'react';
+import {
+  weeklyTick, defaultConfig,
+  weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
+  CLASS_FARE_MULTIPLIERS,
+} from '../utils/simulation.js';
+import { getAircraftType, effectivePurchasePrice, buyDiscount } from '../data/aircraft.js';
+import { getAirport } from '../data/airports.js';
+import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
+import {
+  COMPETITOR_AIRLINES,
+  initializeCompetitorRoutes,
+  tickCompetitorGrowth,
+  tickCompetitorPricing,
+  computeCompetitorWeeklyStats,
+  HUB_TIERS,
+  HUB_MIN_GATES,
+  HUB_TIER_COUNT,
+} from '../models/demand.js';
+import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
+import {
+  tickFuelPrice,
+  effectiveFuelMultiplier,
+  hedgeLockedPrice,
+  absoluteWeek,
+  HEDGE_DURATIONS,
+} from '../utils/fuel.js';
+import {
+  getAlliance,
+  CODESHARE_WEEKLY_FEE_BY_TIER,
+  CODESHARE_DURATION_WEEKS,
+  MAX_CODESHARE_AGREEMENTS,
+} from '../data/alliances.js';
+
+// ─────────────────────────────────────────────
+// STATE SHAPE
+// ─────────────────────────────────────────────
+
+const STARTING_CASH = 10_000_000;
+
+function freshState() {
+  return {
+    airlineName: '',
+    logoId: 'horizon',
+    hub: '',
+    cash: STARTING_CASH,
+    activeEvents:  [],    // currently active random events
+    showDebrief:   false, // show weekly debrief modal
+    pendingToasts: [],    // toast configs waiting to be shown
+    week: 1,
+    year: 2026,
+    fleet: [],         // { id, typeId, name, status, ageWeeks, config, ownershipType, fuelMod, rangeMod, maintMod, engineId, engineLabel, hasWingtips }
+    pendingOrders: [], // { id, typeId, ownershipType, name, engineId, engineLabel, hasWingtips, fuelMod, rangeMod, maintMod, deliverAbsWeek, totalPrice }
+    routes: [],      // { id, origin, destination, aircraftId, ticketPrice, weeklyFrequency, hub }
+    gates:             {},    // { [airportCode]: gateCount } — each gate = 50 slots/wk
+    hubs:              {},    // { [airportCode]: { tier: 1|2|3 } } — designated hub airports
+    labor:             DEFAULT_LABOR_STATE,
+    maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
+    marketingBudget:   0,          // weekly marketing spend ($) — 0 = no active marketing
+    loyalty: {
+      weeklyInvestment: 0,   // weekly $ spend on loyalty program
+      members: 0,            // current active members
+    },
+    financialHistory: [],  // last 52 weeks of reports
+    lastReport: null,
+    fuelPrice: { index: 1.0, history: [] },  // fuel price index + 52-week history
+    hedgeContracts: [],                       // active fuel hedge contracts
+    loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
+    phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
+    competitors: initializeCompetitorRoutes(
+      COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} }))
+    ),
+    allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
+    codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
+  };
+}
+
+// ─────────────────────────────────────────────
+// REDUCER
+// ─────────────────────────────────────────────
+
+// Use timestamp + random suffix so HMR (hot-reload resetting module scope)
+// never produces an ID that collides with IDs already stored in localStorage.
+function uid() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ─────────────────────────────────────────────
+// TAIL NUMBER GENERATION
+// ─────────────────────────────────────────────
+
+/** ICAO-style registration prefix by country code. */
+const COUNTRY_REG_PREFIX = {
+  US: 'N',  CA: 'C',  MX: 'XA', PA: 'HP', BR: 'PP', AR: 'LV',
+  CL: 'CC', CO: 'HK', PE: 'OB', GB: 'G',  FR: 'F',  DE: 'D',
+  NL: 'PH', ES: 'EC', IT: 'I',  CH: 'HB', AT: 'OE', BE: 'OO',
+  PT: 'CS', NO: 'LN', SE: 'SE', FI: 'OH', DK: 'OY', IE: 'EI',
+  PL: 'SP', GR: 'SX', TR: 'TC', AE: 'A6', QA: 'A7', SA: 'HZ',
+  IL: '4X', ZA: 'ZS', EG: 'SU', KE: '5Y', NG: '5N', MA: 'CN',
+  ET: 'ET', SG: '9V', HK: 'B',  MY: '9M', TH: 'HS', ID: 'PK',
+  PH: 'RP', IN: 'VT', LK: '4R', JP: 'JA', KR: 'HL', CN: 'B',
+  TW: 'B',  AU: 'VH', NZ: 'ZK',
+};
+
+/** Derive a 3-letter ICAO-style airline code from the airline name. */
+function airlineCode(name) {
+  const words = name.toUpperCase().replace(/[^A-Z\s]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'AIR';
+  if (words.length >= 3)  return words.slice(0, 3).map(w => w[0]).join('');
+  if (words.length === 2)  return (words[0].slice(0, 2) + words[1][0]).slice(0, 3);
+  return words[0].slice(0, 3).padEnd(3, 'X').slice(0, 3);
+}
+
+/**
+ * Generate a unique aircraft registration based on hub country and airline name.
+ * US format:  N + code + seq    → e.g. NDAL01
+ * All others: prefix + - + code + seq → e.g. G-BAW01, VH-QAN01
+ */
+function generateTailNumber(hubCode, airlineName, usedTails = []) {
+  const airport = getAirport(hubCode);
+  const country = airport?.country ?? 'US';
+  const prefix  = COUNTRY_REG_PREFIX[country] ?? 'N';
+  const code    = airlineCode(airlineName);
+
+  let n = 1;
+  let tail;
+  do {
+    const seq = String(n).padStart(2, '0');
+    tail = prefix === 'N'
+      ? `N${code}${seq}`
+      : `${prefix}-${code}${seq}`;
+    n++;
+  } while (usedTails.includes(tail) && n < 9999);
+
+  return tail;
+}
+
+function reducer(state, action) {
+  switch (action.type) {
+
+    case 'START_GAME': {
+      return {
+        ...freshState(),
+        airlineName: action.airlineName,
+        logoId:      action.logoId ?? 'horizon',
+        hub:         action.hub,
+        gates:       { [action.hub]: 1 },           // one complimentary gate at home hub
+        hubs:        { [action.hub]: { tier: 1 } }, // home airport auto-designated as tier-1 hub
+        phase:       'playing',
+      };
+    }
+
+    case 'LEASE_AIRCRAFT': {
+      const type       = getAircraftType(action.typeId);
+      const count      = state.fleet.filter(a => a.typeId === action.typeId).length + 1;
+      const name       = action.name ?? `${type?.name ?? action.typeId} #${count}`;
+      const usedTails  = state.fleet.map(a => a.tailNumber).filter(Boolean);
+      const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
+      // Default lease term by aircraft category
+      const LEASE_TERM_BY_CATEGORY = {
+        'Turboprop':    52,   // 1 year
+        'Regional Jet': 78,   // 1.5 years
+        'Narrow Body':  104,  // 2 years
+        'Wide Body':    156,  // 3 years
+      };
+      const leaseTermWeeks = action.leaseTermWeeks ?? (LEASE_TERM_BY_CATEGORY[type?.category] ?? 104);
+      const newAircraft = {
+        id:                 uid(),
+        typeId:             action.typeId,
+        name,
+        tailNumber,
+        status:             'idle',
+        ageWeeks:           0,
+        config:             defaultConfig(type?.seats ?? 100),
+        ownershipType:      'lease',
+        leaseTermWeeks,
+        leaseRemainingWeeks: leaseTermWeeks,
+      };
+      return { ...state, fleet: [...state.fleet, newAircraft] };
+    }
+
+    case 'BUY_AIRCRAFT': {
+      const type         = getAircraftType(action.typeId);
+      if (!type) return state;
+      const alreadyOwned = state.fleet.filter(a => a.typeId === action.typeId).length;
+      const price        = effectivePurchasePrice(type, alreadyOwned);
+      if (state.cash < price) return state;  // can't afford — ignore silently
+      const count      = alreadyOwned + 1;
+      const name       = action.name ?? `${type.name} #${count}`;
+      const usedTails  = state.fleet.map(a => a.tailNumber).filter(Boolean);
+      const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
+      const newAircraft = {
+        id:            uid(),
+        typeId:        action.typeId,
+        name,
+        tailNumber,
+        status:        'idle',
+        ageWeeks:      0,
+        config:        defaultConfig(type.seats),
+        ownershipType: 'owned',
+      };
+      return {
+        ...state,
+        cash:  state.cash - price,
+        fleet: [...state.fleet, newAircraft],
+      };
+    }
+
+    // ─── Ordered aircraft with staggered delivery ────────────────────────────────
+    // Lead times by category (weeks). The FIRST delivery of a type takes 2× the lead.
+    // Subsequent deliveries in the same queue stack at +lead intervals after the last.
+    //   Wide Body    → first 8w, then every 4w
+    //   Narrow Body  → first 6w, then every 3w
+    //   Regional Jet → first 4w, then every 2w
+    //   Turboprop    → first 2w, then every 1w
+    case 'ORDER_AIRCRAFT': {
+      const type = getAircraftType(action.typeId);
+      if (!type) return state;
+
+      const DELIVERY_LEAD = { 'Wide Body': 4, 'Narrow Body': 3, 'Regional Jet': 2, 'Turboprop': 1 };
+      const lead     = DELIVERY_LEAD[type.category] ?? 2;
+      const quantity = Math.max(1, Math.min(20, action.quantity ?? 1));
+
+      const currentAbsWeek = absoluteWeek(state.year, state.week);
+
+      // Resolve engine and wingtip modifiers (same for all aircraft in the batch)
+      const engineOptions  = type.configOptions?.engines ?? [];
+      const engineOpt      = engineOptions.find(e => e.id === action.engineId)
+                          ?? engineOptions.find(e => e.default)
+                          ?? engineOptions[0];
+      const engineFuelMod  = engineOpt?.fuelMod  ?? 1.0;
+      const enginePriceMod = engineOpt?.priceMod ?? 1.0;
+      const engineMaintMod = engineOpt?.maintMod ?? 1.0;
+      const wingtipDef     = type.configOptions?.wingtips;
+      const wingtipFuelMod  = (action.hasWingtips && wingtipDef) ? (wingtipDef.fuelMod  ?? 1.0) : 1.0;
+      const wingtipRangeMod = (action.hasWingtips && wingtipDef) ? (wingtipDef.rangeMod ?? 1.0) : 1.0;
+      const wingtipCost     = (action.hasWingtips && wingtipDef) ? (wingtipDef.cost     ?? 0)   : 0;
+      const fuelMod  = Math.round(engineFuelMod  * wingtipFuelMod  * 10000) / 10000;
+      const rangeMod = Math.round(                  wingtipRangeMod * 10000) / 10000;
+      const maintMod = Math.round(engineMaintMod                    * 10000) / 10000;
+
+      // Build all N orders, updating the running pendingOrders list so each order
+      // can see the previous ones when computing its staggered delivery week.
+      let runningPending = [...(state.pendingOrders ?? [])];
+      let cashBalance    = state.cash;
+      const newOrders    = [];
+
+      for (let i = 0; i < quantity; i++) {
+        const pendingOfType = runningPending.filter(o => o.typeId === action.typeId);
+
+        // First-ever order of this type takes 2× lead; subsequent stack at +lead
+        const maxExistingDelivery = pendingOfType.length > 0
+          ? Math.max(...pendingOfType.map(o => o.deliverAbsWeek))
+          : null;
+        const deliverAbsWeek = maxExistingDelivery === null
+          ? currentAbsWeek + 2 * lead          // first in queue → 2× lead
+          : maxExistingDelivery + lead;         // subsequent → +lead after last
+
+        // Price (fleet discount counts fleet + already-queued units)
+        const totalExisting  = state.fleet.filter(a => a.typeId === action.typeId).length
+                             + pendingOfType.length;
+        const unitBasePrice  = action.ownershipType === 'owned'
+          ? effectivePurchasePrice(type, totalExisting)
+          : 0;
+        const unitTotalPrice = action.ownershipType === 'owned'
+          ? Math.round(unitBasePrice * enginePriceMod) + wingtipCost
+          : 0;
+
+        // Lease: 3-month (12-week) upfront deposit required at order time
+        const baseWeeklyLease   = type.weeklyLease ?? 0;
+        const engineLeaseAdj    = Math.round(baseWeeklyLease * (enginePriceMod - 1));
+        const wingtipLeaseAdj   = (action.hasWingtips && wingtipDef) ? Math.round((wingtipDef.cost ?? 0) / 200) : 0;
+        const unitWeeklyLease   = baseWeeklyLease + engineLeaseAdj + wingtipLeaseAdj;
+        const leaseDeposit      = action.ownershipType === 'lease' ? unitWeeklyLease * 12 : 0;
+
+        // Stop if we can't afford this unit (buy price or lease deposit)
+        const unitUpfrontCost = action.ownershipType === 'owned' ? unitTotalPrice : leaseDeposit;
+        if (cashBalance < unitUpfrontCost) break;
+
+        const serialNum = totalExisting + 1;
+        const order = {
+          id:            uid(),
+          typeId:        action.typeId,
+          ownershipType: action.ownershipType,
+          name:          action.name ?? `${type.name} #${serialNum}`,
+          engineId:      engineOpt?.id    ?? null,
+          engineLabel:   engineOpt?.label ?? null,
+          hasWingtips:   action.hasWingtips ?? false,
+          fuelMod,
+          rangeMod,
+          maintMod,
+          config:        action.config ?? null,  // cabin layout chosen at order time
+          deliverAbsWeek,
+          totalPrice:    unitTotalPrice,
+          leaseDeposit:  leaseDeposit,
+          weeklyLease:   action.ownershipType === 'lease' ? unitWeeklyLease : 0,
+          orderedWeek:   state.week,
+          orderedYear:   state.year,
+        };
+
+        newOrders.push(order);
+        runningPending = [...runningPending, order];
+        cashBalance   -= unitUpfrontCost;
+      }
+
+      if (newOrders.length === 0) return state;
+
+      return {
+        ...state,
+        cash:          cashBalance,
+        pendingOrders: runningPending,
+      };
+    }
+
+    case 'CANCEL_ORDER': {
+      const order = (state.pendingOrders ?? []).find(o => o.id === action.orderId);
+      if (!order) return state;
+      // Refund purchase price with a 5% cancellation fee; leases cost nothing to cancel
+      const refund = order.ownershipType === 'owned'
+        ? Math.round(order.totalPrice * 0.95)
+        : 0;
+      return {
+        ...state,
+        cash:          state.cash + refund,
+        pendingOrders: (state.pendingOrders ?? []).filter(o => o.id !== action.orderId),
+      };
+    }
+
+    case 'RETIRE_AIRCRAFT': {
+      const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
+      const updatedRoutes = state.routes.filter(r => r.aircraftId !== action.aircraftId);
+      const updatedFleet  = state.fleet.filter(a => a.id !== action.aircraftId);
+      const routeAircraftIds = new Set(updatedRoutes.map(r => r.aircraftId));
+      const reStatusFleet = updatedFleet.map(a => ({
+        ...a,
+        status: routeAircraftIds.has(a.id) ? 'assigned' : 'idle',
+      }));
+      // Early termination penalty: 50 % of remaining weekly lease × weeks left
+      const type    = aircraft ? getAircraftType(aircraft.typeId) : null;
+      const weeksLeft = aircraft?.leaseRemainingWeeks ?? 0;
+      const penalty = (aircraft?.ownershipType === 'lease' && weeksLeft > 0)
+        ? Math.round((type?.weeklyLease ?? 0) * weeksLeft * 0.5)
+        : 0;
+      return {
+        ...state,
+        cash:   state.cash - penalty,
+        fleet:  reStatusFleet,
+        routes: updatedRoutes,
+      };
+    }
+
+    case 'CONFIGURE_AIRCRAFT': {
+      // action: { aircraftId, config, reconfCost }
+      const cost = action.reconfCost ?? 0;
+      return {
+        ...state,
+        cash:  state.cash - cost,
+        fleet: state.fleet.map(a =>
+          a.id === action.aircraftId ? { ...a, config: action.config } : a
+        ),
+      };
+    }
+
+    case 'RENAME_AIRCRAFT': {
+      return {
+        ...state,
+        fleet: state.fleet.map(a =>
+          a.id === action.aircraftId ? { ...a, name: action.name } : a
+        ),
+      };
+    }
+
+    case 'ADD_ROUTE': {
+      const aircraft = state.fleet.find(a => a.id === action.aircraftId);
+      const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+      if (!aircraft || !type) return state;
+
+      const dist = routeDistanceKm(action.origin, action.destination);
+
+      // ── Range check (account for engine/wingtip rangeMod) ───────────────────
+      const effectiveRange = Math.round(type.range * (aircraft.rangeMod ?? 1.0));
+      if (dist > effectiveRange) return state;
+
+      // ── Block-hours check: cumulative across ALL routes on this aircraft ───────
+      const existingBlockHrs = state.routes
+        .filter(r => r.aircraftId === action.aircraftId)
+        .reduce((sum, r) => sum + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0);
+      const newBlockHrs = weeklyBlockHours(dist, action.weeklyFrequency, type);
+      if (existingBlockHrs + newBlockHrs > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+      // ── Gate checks ──────────────────────────────────────────────────────────
+      const gates = state.gates ?? {};
+      if (!(gates[action.origin] > 0))      return state;  // no gate at origin
+      if (!(gates[action.destination] > 0)) return state;  // no gate at destination
+
+      // Slot availability (each freq unit = 1 departure/wk at each endpoint)
+      const slotsAt = (code) => state.routes
+        .filter(r => r.origin === code || r.destination === code)
+        .reduce((s, r) => s + r.weeklyFrequency, 0);
+      if (slotsAt(action.origin)      + action.weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
+      if (slotsAt(action.destination) + action.weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
+
+      const basePrice = action.ticketPrice;
+      const newRoute = {
+        id:              uid(),
+        origin:          action.origin,
+        destination:     action.destination,
+        aircraftId:      action.aircraftId,
+        ticketPrice:     basePrice,
+        weeklyFrequency: action.weeklyFrequency,
+        weeksOpen:       0,
+        hub:             state.hub,
+        classPrices: {
+          economy:        basePrice,
+          premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
+          businessClass:  Math.round(basePrice * CLASS_FARE_MULTIPLIERS.businessClass),
+          firstClass:     Math.round(basePrice * CLASS_FARE_MULTIPLIERS.firstClass),
+        },
+      };
+      const updatedFleet = state.fleet.map(a =>
+        a.id === action.aircraftId ? { ...a, status: 'assigned' } : a
+      );
+      return { ...state, routes: [...state.routes, newRoute], fleet: updatedFleet };
+    }
+
+    case 'ADD_GATE': {
+      const { airportCode } = action;
+      const current = (state.gates ?? {})[airportCode] ?? 0;
+      return {
+        ...state,
+        gates: { ...(state.gates ?? {}), [airportCode]: current + 1 },
+      };
+    }
+
+    case 'REMOVE_GATE': {
+      const { airportCode } = action;
+      const gates   = state.gates ?? {};
+      const current = gates[airportCode] ?? 0;
+      if (current === 0) return state;
+      // Prevent removal if existing routes need the capacity
+      const usedSlots = state.routes
+        .filter(r => r.origin === airportCode || r.destination === airportCode)
+        .reduce((s, r) => s + r.weeklyFrequency, 0);
+      if (usedSlots > (current - 1) * SLOTS_PER_GATE) return state;
+      const newGates = { ...gates };
+      if (current === 1) delete newGates[airportCode];
+      else newGates[airportCode] = current - 1;
+      return { ...state, gates: newGates };
+    }
+
+    case 'CLOSE_ROUTE': {
+      const route = state.routes.find(r => r.id === action.routeId);
+      const updatedRoutes = state.routes.filter(r => r.id !== action.routeId);
+      const updatedFleet = state.fleet.map(a => {
+        if (a.id !== route?.aircraftId) return a;
+        // Only idle the aircraft if it has no remaining routes
+        const stillActive = updatedRoutes.some(r => r.aircraftId === a.id);
+        return { ...a, status: stillActive ? 'assigned' : 'idle' };
+      });
+      return { ...state, routes: updatedRoutes, fleet: updatedFleet };
+    }
+
+    // ── Hub management ────────────────────────────────────────────────────────
+
+    case 'DESIGNATE_HUB': {
+      const gateCount = (state.gates ?? {})[action.airportCode] ?? 0;
+      if (gateCount < HUB_MIN_GATES) return state;  // need 10 gates minimum
+      if ((state.hubs ?? {})[action.airportCode]) return state;  // already a hub
+      return {
+        ...state,
+        hubs: { ...(state.hubs ?? {}), [action.airportCode]: { tier: 1 } },
+      };
+    }
+
+    case 'UPGRADE_HUB': {
+      const hubs        = state.hubs ?? {};
+      const hubInfo     = hubs[action.airportCode];
+      if (!hubInfo || hubInfo.tier >= HUB_TIER_COUNT) return state;
+      const newTier     = hubInfo.tier + 1;
+      const tierDef     = HUB_TIERS[newTier];
+      const gateCount   = (state.gates ?? {})[action.airportCode] ?? 0;
+      if (gateCount < tierDef.minGates) return state;
+      return {
+        ...state,
+        hubs: { ...hubs, [action.airportCode]: { tier: newTier } },
+      };
+    }
+
+    case 'DOWNGRADE_HUB': {
+      const hubs    = state.hubs ?? {};
+      const hubInfo = hubs[action.airportCode];
+      if (!hubInfo) return state;
+      if (hubInfo.tier <= 1) {
+        // Remove hub designation entirely
+        const newHubs = { ...hubs };
+        delete newHubs[action.airportCode];
+        return { ...state, hubs: newHubs };
+      }
+      return {
+        ...state,
+        hubs: { ...hubs, [action.airportCode]: { tier: hubInfo.tier - 1 } },
+      };
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+
+    case 'UPDATE_TICKET_PRICE': {
+      // Legacy: update economy price only, keep other classes in sync
+      return {
+        ...state,
+        routes: state.routes.map(r =>
+          r.id === action.routeId
+            ? { ...r, ticketPrice: action.ticketPrice,
+                classPrices: { ...r.classPrices, economy: action.ticketPrice } }
+            : r
+        ),
+      };
+    }
+
+    // Set individual class prices without touching others
+    case 'UPDATE_CLASS_PRICES': {
+      // action: { routeId, updates: { economy?, premiumEconomy?, businessClass?, firstClass? } }
+      return {
+        ...state,
+        routes: state.routes.map(r => {
+          if (r.id !== action.routeId) return r;
+          const merged = { ...r.classPrices, ...action.updates };
+          return {
+            ...r,
+            classPrices: merged,
+            // keep ticketPrice in sync with economy for any legacy code still reading it
+            ticketPrice: merged.economy ?? r.ticketPrice,
+          };
+        }),
+      };
+    }
+
+    case 'UPDATE_FREQUENCY': {
+      return {
+        ...state,
+        routes: state.routes.map(r =>
+          r.id === action.routeId ? { ...r, weeklyFrequency: action.weeklyFrequency } : r
+        ),
+      };
+    }
+
+    case 'SET_LABOR_PAY': {
+      // action: { group: 'pilots' | 'cabinCrew' | 'groundStaff' | 'maintenanceTeam', payMultiplier: number }
+      const current = state.labor ?? DEFAULT_LABOR_STATE;
+      return {
+        ...state,
+        labor: {
+          ...current,
+          [action.group]: {
+            ...(current[action.group] ?? { payMultiplier: 1.0, morale: 80 }),
+            payMultiplier: Math.max(0.5, Math.min(2.0, action.payMultiplier)),
+          },
+        },
+      };
+    }
+
+    case 'SET_MAINTENANCE_BUDGET': {
+      return {
+        ...state,
+        maintenanceBudget: Math.max(0.5, Math.min(2.0, action.multiplier)),
+      };
+    }
+
+    case 'SET_MARKETING_BUDGET': {
+      // action: { amount } — weekly spend in dollars, 0 = no marketing
+      return {
+        ...state,
+        marketingBudget: Math.max(0, Math.round(action.amount)),
+      };
+    }
+
+    case 'RENEW_LEASE': {
+      // action: { aircraftId } — reset lease countdown to full term (same rate)
+      return {
+        ...state,
+        fleet: state.fleet.map(a =>
+          a.id === action.aircraftId && a.ownershipType === 'lease'
+            ? { ...a, leaseRemainingWeeks: a.leaseTermWeeks ?? 104 }
+            : a
+        ),
+      };
+    }
+
+    case 'SET_LOYALTY_INVESTMENT': {
+      // action: { amount } — weekly spend in dollars, 0 = no program
+      return {
+        ...state,
+        loyalty: {
+          ...(state.loyalty ?? { members: 0 }),
+          weeklyInvestment: Math.max(0, Math.round(action.amount)),
+        },
+      };
+    }
+
+    // ─── Alliance & codeshare actions ───────────────────────────────────────
+
+    case 'JOIN_ALLIANCE': {
+      // action: { allianceId }
+      const alliance = getAlliance(action.allianceId);
+      if (!alliance) return state;
+      if (state.cash < alliance.initiationFee) return state;
+      if (state.allianceMembership) return state; // already in one
+      return {
+        ...state,
+        cash: state.cash - alliance.initiationFee,
+        allianceMembership: {
+          allianceId: alliance.id,
+          joinedWeek: state.week,
+          weeklyFee:  alliance.weeklyFee,
+        },
+      };
+    }
+
+    case 'LEAVE_ALLIANCE': {
+      return { ...state, allianceMembership: null };
+    }
+
+    case 'SIGN_CODESHARE': {
+      // action: { competitorId }
+      const activeAgreements = state.codeshareAgreements ?? [];
+      if (activeAgreements.length >= MAX_CODESHARE_AGREEMENTS) return state;
+      if (activeAgreements.some(a => a.competitorId === action.competitorId)) return state;
+
+      const comp = (state.competitors ?? []).find(c => c.id === action.competitorId);
+      if (!comp) return state;
+
+      const weeklyFee = CODESHARE_WEEKLY_FEE_BY_TIER[comp.tier] ?? CODESHARE_WEEKLY_FEE_BY_TIER.legacy;
+      const newAgreement = {
+        id:              uid(),
+        competitorId:    comp.id,
+        competitorName:  comp.name,
+        competitorTier:  comp.tier,
+        weeklyFee,
+        signedWeek:      state.week,
+        signedYear:      state.year,
+        weeksRemaining:  CODESHARE_DURATION_WEEKS,
+      };
+      return {
+        ...state,
+        codeshareAgreements: [...activeAgreements, newAgreement],
+      };
+    }
+
+    case 'CANCEL_CODESHARE': {
+      // action: { agreementId }
+      return {
+        ...state,
+        codeshareAgreements: (state.codeshareAgreements ?? []).filter(a => a.id !== action.agreementId),
+      };
+    }
+
+    case 'ADVANCE_WEEK': {
+      // ── Events: tick existing, roll for new ──────────────────────────────
+      const { updated: survivingEvents, expired: expiredEvents } =
+        tickEvents(state.activeEvents ?? []);
+      const newEvents  = rollEvents(survivingEvents);
+      const allEvents  = [...survivingEvents, ...newEvents];
+
+      // ── Compute event effects on this week's finances ──────────────────
+      let fuelMult         = 1.0;
+      let globalDemandMult = 1.0;
+      for (const ev of allEvents) {
+        const fx = ev.effects ?? {};
+        if (fx.fuelMult)         fuelMult         *= fx.fuelMult;
+        if (fx.globalDemandMult) globalDemandMult *= fx.globalDemandMult;
+      }
+
+      // ── Fuel price + hedging ──────────────────────────────────────────
+      const currentFuelIndex = state.fuelPrice?.index ?? 1.0;
+      const nowAbsWeek       = absoluteWeek(state.year, state.week);
+      const allHedges        = state.hedgeContracts ?? [];
+      const activeHedges     = allHedges.filter(h => h.expiryAbsWeek > nowAbsWeek);
+      // effectiveFuelMultiplier blends hedged (locked price) + unhedged (market index),
+      // then scaled by any active event fuel multiplier so the event flows through simulation
+      const fuelMultiplier   = effectiveFuelMultiplier(currentFuelIndex, activeHedges) * fuelMult;
+      // Tick market price for NEXT week
+      const nextFuelIndex    = tickFuelPrice(currentFuelIndex);
+      const fuelPriceHistory = [...(state.fuelPrice?.history ?? []), currentFuelIndex].slice(-52);
+      // Drop contracts that have now expired
+      const liveHedges       = allHedges.filter(h => h.expiryAbsWeek > nowAbsWeek);
+
+      const report = weeklyTick({ ...state, fuelMultiplier, loyalty: state.loyalty });
+
+      // ── Loyalty program: grow/decay member base ──────────────────────────
+      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
+      let newLoyaltyMembers = currentLoyalty.members;
+      if (currentLoyalty.weeklyInvestment > 0) {
+        // Members gained this week = passengers flown × enrollment rate driven by investment
+        // Enrollment rate tops out at ~25% of weekly passengers at $500k/wk investment
+        const weeklyPax      = report.totalPassengers ?? 0;
+        const enrollRate     = Math.min(0.25, currentLoyalty.weeklyInvestment / 2_000_000);
+        const newEnrollments = Math.round(weeklyPax * enrollRate);
+        // 2% weekly churn (members lapse if they don't fly)
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.98 + newEnrollments);
+      } else {
+        // Program inactive: 5% weekly churn (faster decay)
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.95);
+      }
+      const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers) };
+
+      // Apply event demand multiplier as a line-item adjustment to the report.
+      // (fuelMult is already baked into fuelMultiplier above, so no separate fuel adj needed.)
+      const eventDemandAdj  = report.totalRevenue ? report.totalRevenue * (globalDemandMult - 1.0) : 0;
+      const adjustedCashDelta = report.cashDelta + eventDemandAdj;
+
+      // Age aircraft — rate depends on maintenance budget
+      // Low budget → faster aging (higher future costs); high budget → slower aging
+      const mainBudget  = state.maintenanceBudget ?? 1.0;
+      const agingRate   = Math.max(0.5, 1 + (1 - mainBudget) * 0.5); // 0.5→1.25, 1.0→1.0, 2.0→0.5
+
+      // ── Mechanical failures ──────────────────────────────────────────────
+      // 1. Tick down existing grounded aircraft (decrement groundedWeeksLeft)
+      const tickedFleet = state.fleet.map(a => {
+        if (a.status !== 'grounded') return a;
+        const weeksLeft = (a.groundedWeeksLeft ?? 1) - 1;
+        if (weeksLeft <= 0) {
+          // Back in service — restore prior status based on whether it has a route
+          const hasRoute = state.routes.some(r => r.aircraftId === a.id);
+          return { ...a, status: hasRoute ? 'assigned' : 'idle', groundedWeeksLeft: 0 };
+        }
+        return { ...a, groundedWeeksLeft: weeksLeft };
+      });
+
+      // 2. Roll for new failures on non-grounded aircraft
+      const newFailures = rollMechanicalFailures(tickedFleet, mainBudget);
+      const failedIds   = new Set(newFailures.map(f => f.aircraftId));
+
+      // 3. Apply failures + age + lease countdown
+      let leaseRedeliveryCost = 0;
+      const expiredLeaseIds   = new Set();
+      const leaseWarningToasts = [];
+
+      // ── Toast configs for new / expired events ─────────────────────────
+      // NOTE: leaseWarningToasts is populated inside the agedFleet.map() below,
+      // so it must be pushed in AFTER that loop (not spread here at construction time).
+      const newToasts = [
+        ...newEvents.map(ev => ({
+          type: ev.type === 'fuel' || ev.type === 'disruption' || ev.type === 'economy'
+            ? (ev.effects?.fuelMult > 1 || ev.effects?.globalDemandMult < 1 || ev.effects?.regionDemandMult < 1
+                ? 'danger' : 'success')
+            : (ev.effects?.globalDemandMult > 1 || ev.effects?.regionDemandMult > 1 ? 'success' : 'warning'),
+          title: ev.name,
+          message: ev.description,
+          icon: ev.icon,
+          eventColor: ev.color,
+          duration: 7000,
+        })),
+        ...expiredEvents.map(ev => ({
+          type: 'info',
+          title: `${ev.name} — ended`,
+          message: `The event has resolved after ${ev.totalDur} week${ev.totalDur !== 1 ? 's' : ''}.`,
+          icon: ev.icon,
+          duration: 4000,
+        })),
+      ];
+      const agedFleet = tickedFleet.map(a => {
+        const aged = { ...a, ageWeeks: (a.ageWeeks ?? 0) + agingRate };
+        if (failedIds.has(a.id)) {
+          const failure = newFailures.find(f => f.aircraftId === a.id);
+          return { ...aged, status: 'grounded', groundedWeeksLeft: failure.weeksGrounded };
+        }
+        // Tick lease countdown for leased aircraft
+        if (a.ownershipType === 'lease' && (a.leaseRemainingWeeks ?? 0) > 0) {
+          const remaining = (a.leaseRemainingWeeks ?? 0) - 1;
+          // Warn at 8 and 4 weeks remaining
+          if (remaining === 8 || remaining === 4) {
+            const type = getAircraftType(a.typeId);
+            leaseWarningToasts.push({
+              type:     'warning',
+              title:    `⏳ Lease expiring — ${a.name}`,
+              message:  `${remaining} weeks remaining on ${a.name}'s lease. Renew in Fleet or pay early-termination fees to return.`,
+              duration: 8000,
+            });
+          }
+          // Lease expired: charge redelivery fee (4 weeks of rent) and remove
+          if (remaining <= 0) {
+            const type = getAircraftType(a.typeId);
+            leaseRedeliveryCost += (type?.weeklyLease ?? 0) * 4;
+            expiredLeaseIds.add(a.id);
+            leaseWarningToasts.push({
+              type:     'danger',
+              title:    `📋 Lease ended — ${a.name}`,
+              message:  `${a.name}'s lease has expired. Aircraft returned; redelivery fee of ${((type?.weeklyLease ?? 0) * 4).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} charged.`,
+              duration: 10000,
+            });
+            return null; // mark for removal
+          }
+          return { ...aged, leaseRemainingWeeks: remaining };
+        }
+        return aged;
+      }).filter(Boolean);
+
+      // 4. Build failure toasts
+      const failureToasts = newFailures.map(f => ({
+        type:    'danger',
+        title:   `${f.icon} Mechanical Failure — ${f.aircraftName}`,
+        message: `${f.label} detected on ${f.tailNumber || f.aircraftName}. Grounded for ${f.weeksGrounded} week${f.weeksGrounded !== 1 ? 's' : ''}.`,
+        icon:    f.icon,
+        duration: 8000,
+      }));
+
+      // 5. Build recovery toasts (aircraft that just came back from grounding)
+      const recoveredAircraft = tickedFleet
+        .filter(a => a.status === 'grounded' && (a.groundedWeeksLeft ?? 1) <= 1)
+        .filter(a => !failedIds.has(a.id)); // don't re-announce ones that just failed again
+      const recoveryToasts = recoveredAircraft.map(a => ({
+        type:    'success',
+        title:   `✅ Back in Service — ${a.name}`,
+        message: `${a.tailNumber || a.name} has completed repairs and returned to service.`,
+        icon:    '✅',
+        duration: 5000,
+      }));
+
+      // Merge lease warnings, failures, and recovery toasts in (after agedFleet is built)
+      newToasts.push(...leaseWarningToasts, ...failureToasts, ...recoveryToasts);
+
+      // Morale drifts toward target (based on pay) at 12% per week
+      const currentLabor = state.labor ?? DEFAULT_LABOR_STATE;
+      const updatedLabor = {};
+      for (const [id, g] of Object.entries(currentLabor)) {
+        const target   = moraleTarget(g.payMultiplier);
+        const newMorale = g.morale + (target - g.morale) * 0.12;
+        updatedLabor[id] = { ...g, morale: Math.max(5, Math.min(100, Math.round(newMorale * 10) / 10)) };
+      }
+
+      // ── Loan repayments ──────────────────────────────────────────────────
+      const currentLoans = state.loans ?? [];
+      let totalLoanPayments = 0;
+      let totalLoanInterest = 0;
+      const updatedLoans = currentLoans
+        .map(loan => {
+          if (loan.weeksRemaining <= 0) return null;
+          const weeklyRate = loan.interestRate / 52;
+          // Outstanding balance via present-value formula; weeklyRate=0 → flat principal
+          const remainingBal = weeklyRate > 0
+            ? Math.round(loan.weeklyPayment * (1 - Math.pow(1 + weeklyRate, -loan.weeksRemaining)) / weeklyRate)
+            : loan.weeklyPayment * loan.weeksRemaining;
+          const interestThisWeek = Math.round(remainingBal * weeklyRate);
+          totalLoanPayments += loan.weeklyPayment;
+          totalLoanInterest += interestThisWeek;
+          return {
+            ...loan,
+            weeksRemaining:    loan.weeksRemaining - 1,
+            totalInterestPaid: (loan.totalInterestPaid ?? 0) + interestThisWeek,
+          };
+        })
+        .filter(Boolean)
+        .filter(l => l.weeksRemaining > 0);
+
+      const newCash = state.cash + adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost;
+      let newWeek = state.week + 1;
+      let newYear = state.year;
+      if (newWeek > 52) { newWeek = 1; newYear++; }
+
+      // Advance competitor networks (graceful fallback for old saves missing competitors)
+      const currentCompetitors = state.competitors
+        ?? initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} })));
+      const weekNumber = (state.year - 2026) * 52 + state.week;
+      const { competitors: grownCompetitors, events: competitorEvents } =
+        tickCompetitorGrowth(currentCompetitors, weekNumber);
+      // Competitors react to player pricing on shared routes
+      const reactedCompetitors = tickCompetitorPricing(grownCompetitors, state.routes);
+
+      // Simulate competitor networks and accumulate their cash
+      const approxMonth = Math.max(1, Math.ceil(state.week * 12 / 52));
+      const updatedCompetitors = reactedCompetitors.map(c => {
+        const stats = computeCompetitorWeeklyStats(c, approxMonth);
+        return { ...c, weeklyStats: stats, cash: (c.cash ?? 0) + stats.weeklyProfit };
+      });
+
+      // ── Tick codeshare agreement durations (expire old ones) ─────────────
+      const tickedCodeshares = (state.codeshareAgreements ?? [])
+        .map(a => ({ ...a, weeksRemaining: a.weeksRemaining - 1 }))
+        .filter(a => a.weeksRemaining > 0);
+
+      // Notify about newly expired codeshares
+      const expiredCodeshares = (state.codeshareAgreements ?? []).filter(a => a.weeksRemaining <= 1);
+      for (const a of expiredCodeshares) {
+        newToasts.push({
+          type:    'info',
+          title:   `Codeshare Expired — ${a.competitorName}`,
+          message: `Your codeshare agreement with ${a.competitorName} has concluded after 1 year. Renew it in Alliances.`,
+          icon:    '🤝',
+          duration: 6000,
+        });
+      }
+
+      const historyEntry = {
+        label:       `W${state.week}/${state.year}`,
+        week:        state.week,
+        year:        state.year,
+        cash:        newCash,
+        revenue:     report.totalRevenue,
+        leases:      report.totalLeases,
+        maintenance: report.totalMaintenance,
+        fuel:        report.totalFuel,
+        crew:        report.totalCrew,
+        quality:     report.totalQuality,
+        landingFees:     report.totalLandingFees    ?? 0,
+        catering:        report.totalCatering          ?? 0,
+        groundHandling:  report.totalGroundHandling    ?? 0,
+        distribution:    report.totalDistributionCost  ?? 0,
+        layover:         report.totalLayover           ?? 0,
+        compensation:    report.totalCompensation   ?? 0,
+        gates:           report.totalGateFees       ?? 0,
+        labor:           report.totalLaborCosts     ?? 0,
+        familyCosts:     report.totalFamilyBaseCosts ?? 0,
+        hqCost:          report.totalHQCost         ?? 0,
+        insurance:       report.totalInsurance      ?? 0,
+        marketing:       report.totalMarketingSpend ?? 0,
+        loyalty:         report.totalLoyaltyCost    ?? 0,
+        partnerRevenue:  report.totalPartnerRevenue ?? 0,
+        partnerFees:     report.totalPartnerFees    ?? 0,
+        loanPayments:       totalLoanPayments,
+        loanInterest:       totalLoanInterest,
+        leaseRedelivery:    leaseRedeliveryCost,
+        totalCost:          report.totalCost + totalLoanPayments + leaseRedeliveryCost,
+        // profit = actual cash change this week (matches newCash delta)
+        profit:             adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost,
+        fuelIndex:          currentFuelIndex,
+      };
+      const newHistory = [...state.financialHistory, historyEntry].slice(-52);
+
+      // ── Deliver pending aircraft orders ──────────────────────────────────────
+      const newAbsWeek      = absoluteWeek(newYear, newWeek);
+      const allPending      = state.pendingOrders ?? [];
+      const toDeliver       = allPending.filter(o => o.deliverAbsWeek <= newAbsWeek);
+      const remainingOrders = allPending.filter(o => o.deliverAbsWeek >  newAbsWeek);
+
+      // Build delivered aircraft, accumulating used tail numbers to avoid collisions
+      const deliveredAircraft = [];
+      for (const order of toDeliver) {
+        const ordType    = getAircraftType(order.typeId);
+        const usedTails  = [
+          ...agedFleet.map(a => a.tailNumber),
+          ...deliveredAircraft.map(a => a.tailNumber),
+        ].filter(Boolean);
+        const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
+        deliveredAircraft.push({
+          id:            uid(),
+          typeId:        order.typeId,
+          name:          order.name,
+          tailNumber,
+          status:        'idle',
+          ageWeeks:      0,
+          config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
+          ownershipType: order.ownershipType,
+          fuelMod:       order.fuelMod   ?? 1.0,
+          rangeMod:      order.rangeMod  ?? 1.0,
+          maintMod:      order.maintMod  ?? 1.0,
+          engineId:      order.engineId  ?? null,
+          engineLabel:   order.engineLabel ?? null,
+          hasWingtips:   order.hasWingtips ?? false,
+        });
+        newToasts.push({
+          type:     'success',
+          title:    `✈ Aircraft Delivered — ${order.name}`,
+          message:  `Your ${ordType?.name ?? order.name} (${tailNumber}) has arrived and is ready for service.`,
+          icon:     '✈',
+          duration: 7000,
+        });
+      }
+      const finalFleet = [...agedFleet, ...deliveredAircraft];
+      // Drop routes whose aircraft lease expired this week, and age weeksOpen on survivors
+      const survivingRoutes = expiredLeaseIds.size > 0
+        ? state.routes.filter(r => !expiredLeaseIds.has(r.aircraftId))
+        : state.routes;
+      const finalRoutes = survivingRoutes.map(r => ({
+        ...r,
+        weeksOpen: (r.weeksOpen ?? 0) + 1,
+      }));
+
+      return {
+        ...state,
+        cash:              newCash,
+        week:              newWeek,
+        year:              newYear,
+        fleet:             finalFleet,
+        routes:            finalRoutes,
+        pendingOrders:     remainingOrders,
+        financialHistory:  newHistory,
+        lastReport:        { ...report, cashDelta: adjustedCashDelta - totalLoanPayments, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+        competitors:       updatedCompetitors,
+        loans:             updatedLoans,
+        labor:             updatedLabor,
+        maintenanceBudget: mainBudget,
+        activeEvents:      allEvents,
+        fuelPrice:         { index: nextFuelIndex, history: fuelPriceHistory },
+        hedgeContracts:      liveHedges,
+        loyalty:             updatedLoyalty,
+        codeshareAgreements: tickedCodeshares,
+        showDebrief:         true,
+        pendingToasts:       newToasts,
+        phase:               newCash <= 0 ? 'bankrupt' : state.phase,
+      };
+    }
+
+    case 'BUY_HEDGE': {
+      // action: { durationId, coverage }
+      // durationId: 'short' | 'medium' | 'long'
+      // coverage: 0.25 | 0.50 | 0.75 — fraction of fleet fuel to hedge
+      const opt = HEDGE_DURATIONS.find(o => o.id === action.durationId);
+      if (!opt) return state;
+
+      const marketIndex  = state.fuelPrice?.index ?? 1.0;
+      const locked       = hedgeLockedPrice(marketIndex, opt);
+      const startAbsWeek = absoluteWeek(state.year, state.week);
+      const newContract  = {
+        id:            uid(),
+        durationId:    opt.id,
+        durationLabel: opt.label,
+        coverage:      action.coverage,
+        lockedPrice:   locked,
+        marketAtPurchase: marketIndex,
+        startAbsWeek,
+        expiryAbsWeek: startAbsWeek + opt.weeks,
+        weeksTotal:    opt.weeks,
+      };
+      return {
+        ...state,
+        hedgeContracts: [...(state.hedgeContracts ?? []), newContract],
+      };
+    }
+
+    case 'TAKE_LOAN': {
+      // action: { principal, interestRate (annual), termWeeks }
+      const { principal, interestRate, termWeeks } = action;
+      const weeklyRate = interestRate / 52;
+      // Amortized weekly payment: P * r * (1+r)^n / ((1+r)^n - 1)
+      const weeklyPayment = weeklyRate > 0
+        ? Math.round(principal * weeklyRate * Math.pow(1 + weeklyRate, termWeeks) / (Math.pow(1 + weeklyRate, termWeeks) - 1))
+        : Math.round(principal / termWeeks);
+      const newLoan = {
+        id:                uid(),
+        principal,
+        interestRate,
+        termWeeks,
+        weeklyPayment,
+        weeksRemaining:    termWeeks,
+        totalInterestPaid: 0,
+        takenWeek:         state.week,
+        takenYear:         state.year,
+      };
+      return {
+        ...state,
+        cash:  state.cash + principal,
+        loans: [...(state.loans ?? []), newLoan],
+      };
+    }
+
+    case 'REPAY_LOAN': {
+      // action: { loanId } — early repayment, 2% penalty on remaining principal
+      const loan = (state.loans ?? []).find(l => l.id === action.loanId);
+      if (!loan) return state;
+      // Remaining balance ≈ outstanding principal (simplified: payment × weeks left minus future interest)
+      // Use simplified outstanding balance formula
+      const weeklyRate = loan.interestRate / 52;
+      const n = loan.weeksRemaining;
+      const remainingBalance = weeklyRate > 0
+        ? Math.round(loan.weeklyPayment * (1 - Math.pow(1 + weeklyRate, -n)) / weeklyRate)
+        : Math.round(loan.weeklyPayment * n);
+      const penalty = Math.round(remainingBalance * 0.02);
+      const totalRepay = remainingBalance + penalty;
+      if (state.cash < totalRepay) return state;
+      return {
+        ...state,
+        cash:  state.cash - totalRepay,
+        loans: (state.loans ?? []).filter(l => l.id !== action.loanId),
+      };
+    }
+
+    case 'DISMISS_DEBRIEF': {
+      return { ...state, showDebrief: false };
+    }
+
+    case 'CLEAR_TOASTS': {
+      return { ...state, pendingToasts: [] };
+    }
+
+    case 'RESET': {
+      return freshState();
+    }
+
+    default:
+      return state;
+  }
+}
+
+// ─────────────────────────────────────────────
+// CONTEXT + PROVIDER
+// ─────────────────────────────────────────────
+
+const GameContext = createContext(null);
+const SAVE_KEY = 'bbae_save_v2'; // bump version to avoid old-format conflicts
+
+/**
+ * Reconcile a loaded save to fix any ID-collision corruption.
+ *
+ * Specifically guards against the HMR bug where the module-level counter
+ * reset to 1, causing a newly-bought aircraft to share an ID with an
+ * existing aircraft already assigned to a route.
+ *
+ * Rules applied:
+ *  1. De-duplicate fleet by ID — keep the LAST entry (most recent purchase).
+ *  2. Remove routes whose aircraftId no longer matches any fleet aircraft.
+ *  3. Re-derive aircraft.status from the cleaned route list.
+ *  4. Migrate missing competitors field.
+ */
+function reconcileState(parsed) {
+  if (!parsed) return freshState();
+
+  // 1. De-duplicate fleet: if two aircraft share an ID, keep the last one.
+  const seenIds = new Map();
+  for (const a of (parsed.fleet ?? [])) seenIds.set(a.id, a);
+  const fleet = [...seenIds.values()];
+
+  // 2. Remove routes pointing at aircraft that no longer exist.
+  const fleetIds = new Set(fleet.map(a => a.id));
+  const routes   = (parsed.routes ?? []).filter(r => fleetIds.has(r.aircraftId));
+
+  // 3. Re-derive status from the cleaned routes.
+  //    Preserve 'grounded' so aircraft mid-repair survive a save/reload cycle.
+  const assignedIds = new Set(routes.map(r => r.aircraftId));
+  const cleanFleet  = fleet.map(a => ({
+    ...a,
+    status: a.status === 'grounded'
+      ? 'grounded'
+      : (assignedIds.has(a.id) ? 'assigned' : 'idle'),
+  }));
+
+  // 4. Migrate missing competitors.
+  const competitors = (parsed.competitors?.length > 0)
+    ? parsed.competitors
+    : initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} })));
+
+  // 5. Carry through pendingOrders (default to empty array for old saves).
+  const pendingOrders = parsed.pendingOrders ?? [];
+
+  return {
+    ...parsed,
+    fleet:            cleanFleet,
+    routes,
+    competitors,
+    pendingOrders,
+    // Guarantee fields added in later versions exist even on old saves
+    financialHistory: parsed.financialHistory ?? [],
+    lastReport:       parsed.lastReport       ?? null,
+    hubs:             parsed.hubs             ?? {},
+    gates:            parsed.gates            ?? {},
+    loans:            parsed.loans            ?? [],
+    hedgeContracts:   parsed.hedgeContracts   ?? [],
+    loyalty:          parsed.loyalty          ?? { weeklyInvestment: 0, members: 0 },
+    fuelPrice:        parsed.fuelPrice        ?? { index: 1.0, history: [] },
+    allianceMembership:  parsed.allianceMembership  ?? null,
+    codeshareAgreements: parsed.codeshareAgreements ?? [],
+    marketingBudget:  parsed.marketingBudget  ?? 0,
+  };
+}
+
+export function GameProvider({ children }) {
+  const [state, dispatch] = useReducer(reducer, null, () => {
+    try {
+      const saved = localStorage.getItem(SAVE_KEY);
+      if (saved) return reconcileState(JSON.parse(saved));
+    } catch (_) { /* ignore */ }
+    return freshState();
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) { /* ignore */ }
+  }, [state]);
+
+  return (
+    <GameContext.Provider value={{ state, dispatch }}>
+      {children}
+    </GameContext.Provider>
+  );
+}
+
+export function useGame() {
+  const ctx = useContext(GameContext);
+  if (!ctx) throw new Error('useGame must be used inside <GameProvider>');
+  return ctx;
+}
