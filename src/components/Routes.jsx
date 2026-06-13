@@ -35,7 +35,7 @@ function groupRoutes(routes) {
 
 export default function Routes() {
   const { state, dispatch } = useGame();
-  const { fleet, routes, hub } = state;
+  const { fleet, routes, hub, pendingOrders = [] } = state;
 
   // Detail view: null = list, { origin, destination } = route detail page
   const [detailPair, setDetailPair] = useState(null);
@@ -199,12 +199,35 @@ export default function Routes() {
             className="btn btn-primary"
             onClick={showForm && !isAddingFlights ? closeForm : openNewRoute}
             disabled={fleet.length === 0 || availableFleet.length === 0}
-            title={fleet.length === 0 ? 'Lease an aircraft first' : availableFleet.length === 0 ? 'All aircraft at full utilisation' : 'Open a new route'}
+            title={
+              fleet.length === 0 && pendingOrders.length > 0
+                ? `Your aircraft is being delivered — advance time to receive it`
+                : fleet.length === 0
+                ? 'Lease an aircraft first'
+                : availableFleet.length === 0
+                ? 'All aircraft at full utilisation'
+                : 'Open a new route'
+            }
           >
             {showForm && !isAddingFlights ? '✕ Cancel' : '+ Open Route'}
           </button>
         </div>
       </div>
+
+      {/* Pending delivery notice */}
+      {fleet.length === 0 && pendingOrders.length > 0 && (
+        <div style={{
+          background: 'var(--color-warning-bg, #fffbeb)',
+          border: '1px solid var(--color-warning, #f59e0b)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 14,
+          fontSize: 13,
+          color: 'var(--color-warning-text, #92400e)',
+        }}>
+          ✈️ Your aircraft {pendingOrders.length === 1 ? 'is' : 'are'} on the way — advance time to receive {pendingOrders.length === 1 ? 'it' : 'them'} and open routes.
+        </div>
+      )}
 
       {/* Search / filter / sort controls — only when routes exist */}
       {routeGroups.length > 0 && (

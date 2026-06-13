@@ -10,7 +10,7 @@
  *   simulation.js    ← market.js, demand.js
  */
 
-import { getAirport, getAirportScores } from '../data/airports.js';
+import { getAirport, getAirportScores, getAirportCargoScore } from '../data/airports.js';
 
 // ─── Distance ─────────────────────────────────────────────────────────────────
 
@@ -205,4 +205,104 @@ export function computeMarketCap(profitHistory, cash, qualityScore = 50) {
     annualizedProfit,
     growthRate,
   };
+}
+
+// ─── Cargo demand ───────────────────────────────────────────────────────────────
+//
+// A parallel gravity model for air freight, deliberately structured like the
+// passenger model above but with three differences (see docs/cargo-design.md):
+//
+//   1. Mass driver is TRADE, not population/tourism — keyed off cargoScore.
+//   2. Distance behaves differently: short-haul air freight is SUPPRESSED (trucks
+//      compete under ~1,500 km), while long-haul decays only gently (a box doesn't
+//      care about a 14-hour flight). So demand peaks in the medium-to-long range.
+//   3. Output unit is tonnes/week, not passengers.
+//
+// Demand is computed symmetrically for v1 but the function is DIRECTIONAL by
+// signature (o,d are not sorted) so headhaul/backhaul imbalance can be layered in
+// later without changing call sites or storage.
+
+/** Gravity constant — calibrated so HKG–LAX ≈ 1,500 tonnes/week one-way. */
+export const CARGO_GRAVITY_K = 23;
+
+/** Short-haul half-saturation (km): trucking competition halves air demand here. */
+export const CARGO_TRUCK_HALF_KM = 1500;
+
+/** Long-haul decay scale (km) and exponent — gentle, freight is time-insensitive. */
+export const CARGO_DECAY_KM  = 6000;
+export const CARGO_DECAY_EXP = 0.5;
+
+/**
+ * Cargo "mass" for one airport: how much air freight it generates/attracts.
+ * Primarily its cargoScore (0–100), modestly scaled by the size of the surrounding
+ * economy (a high-score airport in a huge metro ships more than the same score in a
+ * small one). Pure-freight hubs with tiny populations (ANC, MEM) keep most of their
+ * weight via the 0.5 floor.
+ *
+ * @param {string} code
+ * @returns {number}
+ */
+export function getCargoMass(code) {
+  const ap    = getAirport(code);
+  if (!ap) return 0;
+  const score = getAirportCargoScore(code);
+  const econ  = Math.max(0.5, Math.min(1.8, Math.sqrt(getDemandMass(ap) / 8)));
+  return score * econ;
+}
+
+/**
+ * Base weekly one-way cargo demand for a city pair, in tonnes, at reference yield.
+ * Symmetric in v1 (o,d order does not change the result).
+ *
+ * @param {string} originCode
+ * @param {string} destCode
+ * @returns {number} tonnes/week (one-way)
+ */
+export function cargoCityPairDemand(originCode, destCode) {
+  const o = getAirport(originCode);
+  const d = getAirport(destCode);
+  if (!o || !d) return 0;
+
+  const dist = distanceKm(o, d);
+  const massO = getCargoMass(originCode);
+  const massD = getCargoMass(destCode);
+
+  // Short-haul suppression (trucks compete) × gentle long-haul gravity decay.
+  const truckFactor = dist / (dist + CARGO_TRUCK_HALF_KM);
+  const decay       = Math.pow(1 + dist / CARGO_DECAY_KM, CARGO_DECAY_EXP);
+  const distFactor  = truckFactor / decay;
+
+  return Math.round(Math.sqrt(massO * massD) * CARGO_GRAVITY_K * distFactor);
+}
+
+// ─── Cargo pricing ──────────────────────────────────────────────────────────────
+
+/** Reference yield bounds and curve ($ per tonne-km). */
+export const CARGO_YIELD_BASE  = 1.19;     // intercept of the linear curve
+export const CARGO_YIELD_SLOPE = 6.8e-5;   // $/tonne-km lost per km of stage length
+export const CARGO_YIELD_CAP   = 1.10;     // short-haul ceiling
+export const CARGO_YIELD_FLOOR = 0.40;     // long-haul floor
+
+/**
+ * Market reference yield for a route, in $ per tonne-km (one-way).
+ * Yield is HIGHER on short routes (fixed handling cost amortised over fewer km) and
+ * lower on long-haul — the inverse of the passenger fare curve. Total reference
+ * revenue per tonne = cargoReferenceYield(o,d) × distanceKm.
+ *
+ *   e.g.  ~1,300 km → ~$1.10/tonne-km → ~$1,430/tonne (~$1.43/kg)
+ *        ~11,640 km → ~$0.40/tonne-km → ~$4,656/tonne (~$4.66/kg)
+ *
+ * @param {string} originCode
+ * @param {string} destCode
+ * @returns {number} $/tonne-km
+ */
+export function cargoReferenceYield(originCode, destCode) {
+  const dist = routeDistance(originCode, destCode);
+  const raw  = CARGO_YIELD_BASE - CARGO_YIELD_SLOPE * dist;
+  return Math.round(Math.max(CARGO_YIELD_FLOOR, Math.min(CARGO_YIELD_CAP, raw)) * 1000) / 1000;
+}
+
+/** Convenience: reference revenue per tonne ($, one-way) on a route. */
+export function cargoReferenceRevenuePerTonne(originCode, destCode) {
+  return Math.round(cargoReferenceYield(originCode, destCode) * routeDistance(originCode, destCode));
 }

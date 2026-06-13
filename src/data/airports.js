@@ -2177,3 +2177,102 @@ export function getAirportScores(code) {
   };
   return defaults[ap?.tier] ?? { businessScore: 40, leisureScore: 55 };
 }
+
+// ─── Per-airport cargo scores ──────────────────────────────────────────────────
+//
+// cargoScore (0–100): how freight-heavy an airport is, INDEPENDENT of passenger
+// traffic. High = major air-cargo gateway (manufacturing exports, integrator
+// superhubs, perishables gateways, belly-freight mega-hubs). 100 ≈ the world's #1
+// freight airport (HKG). Pure leisure airports score very low — sunbathers don't
+// generate air freight.
+//
+// This is deliberately NOT the same as businessScore: some places are freight
+// powerhouses with modest passenger business demand (MEM/FedEx, SDF/UPS, ANC as a
+// transpacific fuel-and-freight pivot, LEJ/DHL), while some heavy business-travel
+// airports (LCY, DCA) ship almost no cargo.
+//
+// Unlisted airports fall back to getAirportCargoScore(), which derives a value from
+// businessScore (trade activity is the best cheap proxy when we have no real data).
+
+export const CARGO_SCORES = {
+  // ── Global freight mega-hubs ────────────────────────────────────────────────
+  HKG: 100,  // Hong Kong – perennial #1 air-cargo airport
+  MEM:  98,  // Memphis – FedEx superhub
+  PVG:  96,  // Shanghai Pudong – China's export gateway
+  ANC:  95,  // Anchorage – transpacific freight pivot (tiny pax, huge cargo)
+  ICN:  92,  // Incheon – Samsung/LG electronics exports
+  SDF:  90,  // Louisville – UPS Worldport
+  DXB:  88,  // Dubai – Emirates SkyCargo
+  TPE:  88,  // Taipei – semiconductor exports
+  NRT:  86,  // Tokyo Narita
+  FRA:  85,  // Frankfurt – Lufthansa Cargo, industrial Europe
+  CVG:  85,  // Cincinnati – DHL Americas hub + Amazon Air
+  LAX:  85,  // Los Angeles – Pacific gateway
+  SIN:  84,  // Singapore Changi
+  CAN:  82,  // Guangzhou – Pearl River Delta manufacturing
+  MIA:  80,  // Miami – Latin America perishables gateway
+  AMS:  80,  // Amsterdam Schiphol
+  LEJ:  80,  // Leipzig/Halle – DHL/AeroLogic European hub
+  DOH:  80,  // Doha – Qatar Airways Cargo
+
+  // ── Strong cargo airports ───────────────────────────────────────────────────
+  ORD:  78,  // Chicago
+  CDG:  78,  // Paris Charles de Gaulle
+  IST:  78,  // Istanbul – Turkish Cargo
+  LUX:  78,  // Luxembourg – Cargolux
+  PEK:  78,  // Beijing Capital
+  HND:  72,  // Tokyo Haneda
+  LHR:  72,  // Heathrow (belly freight)
+  SZX:  72,  // Shenzhen – electronics
+  JFK:  74,  // New York
+  KIX:  68,  // Osaka Kansai
+  BOM:  68,  // Mumbai
+  DEL:  66,  // Delhi
+  ATL:  64,  // Atlanta
+  DFW:  64,  // Dallas/Fort Worth
+  BKK:  64,  // Bangkok
+  KUL:  62,  // Kuala Lumpur
+  CGK:  58,  // Jakarta
+  YYZ:  62,  // Toronto
+  GRU:  62,  // São Paulo
+  BOG:  62,  // Bogotá – cut-flower exports
+  NBO:  62,  // Nairobi – flowers/perishables
+  ADD:  62,  // Addis Ababa – Ethiopian Cargo
+  MAA:  60,  // Chennai
+  BLR:  60,  // Bengaluru
+  EMA:  62,  // East Midlands – UK express hub
+  LGG:  68,  // Liège – cargo-focused
+  HHN:  55,  // Frankfurt Hahn – cargo
+  SEA:  60,  // Seattle
+  SFO:  60,  // San Francisco
+  UIO:  58,  // Quito – flower exports
+  SCL:  56,  // Santiago – cherries/salmon
+  LIM:  54,  // Lima – asparagus/perishables
+  JNB:  58,  // Johannesburg
+  HYD:  56,  // Hyderabad – pharma
+  MNL:  54,  // Manila
+  SGN:  56,  // Ho Chi Minh City
+  HAN:  56,  // Hanoi
+  SYD:  56,  // Sydney
+  MEL:  50,  // Melbourne
+  AKL:  48,  // Auckland – perishables
+  EZE:  50,  // Buenos Aires
+};
+
+/**
+ * Cargo score (0–100) for an airport.
+ * Listed airports use their explicit value; everything else derives a value from
+ * businessScore — trade/industrial activity is the best cheap proxy for freight
+ * when we have no calibrated cargo figure. Pure-leisure airports (low businessScore)
+ * therefore generate very little cargo, as intended.
+ *
+ * @param {string} code
+ * @returns {number} 0–100
+ */
+export function getAirportCargoScore(code) {
+  if (CARGO_SCORES[code] != null) return CARGO_SCORES[code];
+  const { businessScore } = getAirportScores(code);
+  // Derived fallback: scale business activity down slightly (most business airports
+  // ship less than the dedicated freight hubs) and floor it so nowhere is truly zero.
+  return Math.max(8, Math.round(businessScore * 0.7));
+}
