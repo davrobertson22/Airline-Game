@@ -1,5 +1,6 @@
-import { getAirport, gateMonthlyFee } from '../data/airports.js';
+import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
+export { baseCityPairDemand } from './market.js';
 import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO } from '../data/families.js';
 import {
@@ -11,6 +12,7 @@ import {
   weeklyLayoverCost,
   weeklyPassengerCompensation,
   weeklyGroundHandlingCost,
+  weeklyLoungeCost,
   DISTRIBUTION_COST_PCT,
 } from '../data/overhead.js';
 import {
@@ -28,6 +30,7 @@ import {
   getAlliance,
   partnerInterlineRevenue,
 } from '../data/alliances.js';
+import { runNetworkTick } from '../models/network.js';
 
 // ─────────────────────────────────────────────
 // DISTANCE
@@ -48,26 +51,6 @@ function toRad(d) { return d * Math.PI / 180; }
 // ─────────────────────────────────────────────
 // DEMAND MODEL
 // ─────────────────────────────────────────────
-
-/**
- * Gravity model: base weekly one-way demand for a city pair.
- * Accounts for city sizes and distance.
- * Returns passengers/week in one direction at the reference price.
- */
-export function baseCityPairDemand(originCode, destCode) {
-  const o = getAirport(originCode);
-  const d = getAirport(destCode);
-  if (!o || !d) return 0;
-  const dist = distanceKm(o, d);
-  // Calibrated so a busy domestic (e.g. JFK-LAX) yields ~350 pax/week at ref price —
-  // enough to fill a 737 twice a week, with room to grow via lower prices or higher quality.
-  return Math.round(
-    (Math.sqrt(o.population * d.population) * 2000) / Math.pow(1 + dist / 3000, 1.5)
-  );
-}
-
-/** Alias so demand.js can import by its original name. */
-export const routeDemand = baseCityPairDemand;
 
 /**
  * Market reference price for a route ($ one-way, economy).
@@ -97,11 +80,17 @@ export const SEGMENT_CABIN_PREFS = {
   leisure:  { firstClass: 0.01, businessClass: 0.07, premiumEconomy: 0.22, economy: 0.70 },
 };
 
-// Fare multiplier relative to the economy (base) ticket price
+// Fare multiplier relative to the economy (base) ticket price.
+// These represent the DEFAULT prices set when a route is created and the
+// market equilibrium the demand model uses as a reference.
+// Real-world benchmarks (short/medium haul):
+//   First:    ~5× (lie-flat suite — long-haul only, modest yield on short routes)
+//   Business: ~2.5× (lie-flat or angled flat — realistic for short/medium haul)
+//   Prem Eco: ~1.4× (extra legroom, separate cabin)
 export const CLASS_FARE_MULTIPLIERS = {
-  firstClass:     8.0,
-  businessClass:  3.5,
-  premiumEconomy: 1.7,
+  firstClass:     5.0,
+  businessClass:  2.5,
+  premiumEconomy: 1.4,
   economy:        1.0,
 };
 
@@ -241,7 +230,7 @@ export function currentGameDate(state) {
 
 export function ageLabel(ageWeeks) {
   const y = Math.floor((ageWeeks ?? 0) / 52);
-  const w = (ageWeeks ?? 0) % 52;
+  const w = Math.floor((ageWeeks ?? 0) % 52);
   return y > 0 ? `${y}y ${w}w` : `${w}w`;
 }
 
@@ -374,16 +363,19 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // Demand that couldn't be served in this premium class spills to economy
     if (cls !== 'economy') spilledToEconomy += unsatisfied;
 
-    const pax  = paxOneWay * 2;
-    // Use per-class price if set; fall back to economy base × standard multiplier
-    const fare = cp[cls] ?? (economyPrice * CLASS_FARE_MULTIPLIERS[cls]);
-    const clsRevenue = pax * fare;
+    // Use per-class price if explicitly set by the player.
+    // Without explicit pricing, premium cabin passengers pay the economy fare —
+    // the player hasn't unlocked that revenue stream yet. (Revenue comes from seat
+    // differentiation only when you actively price each cabin.)
+    const fare = cp[cls] != null ? cp[cls] : economyPrice;
+    // Revenue = both directions (paxOneWay × 2 × fare); passengers stored one-way.
+    const clsRevenue = paxOneWay * 2 * fare;
 
     totalPaxOneWay += paxOneWay;
     totalRevenue   += clsRevenue;
     classSummary[cls] = {
       seats:      seatsThisClass,
-      passengers: pax,
+      passengers: paxOneWay,   // one-way pax (per direction); multiply ×2 for total boarded
       revenue:    Math.round(clsRevenue),
       loadFactor: capOneWay > 0 ? paxOneWay / capOneWay : 0,
     };
@@ -400,12 +392,12 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
       if (upgradeRemaining <= 0) break;
       const seatsThisClass = config[cls] ?? 0;
       const capOneWay      = seatsThisClass * route.weeklyFrequency;
-      const usedOneWay     = (classSummary[cls]?.passengers ?? 0) / 2;
+      const usedOneWay     = classSummary[cls]?.passengers ?? 0;  // already one-way
       const emptyOneWay    = capOneWay - usedOneWay;
       if (emptyOneWay <= 0) continue;
       const upgrades = Math.min(upgradeRemaining, emptyOneWay);
       const upgradeRev = Math.round(upgrades * 2 * economyPrice);
-      classSummary[cls].passengers += upgrades * 2;
+      classSummary[cls].passengers += upgrades;  // store one-way
       classSummary[cls].revenue    += upgradeRev;
       classSummary[cls].loadFactor  = capOneWay > 0 ? (usedOneWay + upgrades) / capOneWay : 0;
       totalPaxOneWay += upgrades;
@@ -436,10 +428,14 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   const layoverCost = weeklyLayoverCost(blockTimeOneWay, type.seats, type.category, route.weeklyFrequency);
 
   // Passenger compensation — tied to pilot on-time rate (from morale)
-  const totalPassengers = totalPaxOneWay * 2;
-  const compensationCost = weeklyPassengerCompensation(totalPassengers, onTimeRate, dist);
+  // Compensation applies to all boarded passengers (both directions = ×2).
+  const compensationCost = weeklyPassengerCompensation(totalPaxOneWay * 2, onTimeRate, dist);
 
-  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost + groundHandlingCost + layoverCost + compensationCost;
+  // Lounge & premium ground service — airport lounge access, fast-track security,
+  // dedicated check-in for business/first pax. Per-passenger, both directions.
+  const loungeCost = weeklyLoungeCost(classSummary);
+
+  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost + groundHandlingCost + layoverCost + compensationCost + loungeCost;
 
   return {
     revenue:      Math.round(totalRevenue),
@@ -448,11 +444,12 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     qualityCost,
     cateringCost,
     groundHandlingCost,
+    loungeCost,
     layoverCost,
     compensationCost,
     totalOpCost,
     profit:       Math.round(totalRevenue - totalOpCost),
-    passengers:   totalPaxOneWay * 2,
+    passengers:   totalPaxOneWay,  // one-way pax (per direction); revenue already covers both directions
     loadFactor,
     distance:     Math.round(dist),
     classSummary,
@@ -480,7 +477,12 @@ export function weeklyTick(state) {
     maintenanceBudget = 1.0, fuelMultiplier = 1.0,
     marketingBudget = 0,
     loyalty = { weeklyInvestment: 0, members: 0 },
+    awareness = 5,
   } = state;
+
+  // Awareness multiplier: new/unknown airlines attract only a fraction of potential demand.
+  // Range 0.4 (awareness=0, brand unknown) → 1.0 (awareness=100, household name).
+  const awarenessMultiplier = 0.4 + (awareness / 100) * 0.6;
 
   // ── Alliance / codeshare setup ────────────────────────────────────────────
   const allianceMembership  = state.allianceMembership  ?? null;
@@ -508,8 +510,19 @@ export function weeklyTick(state) {
     if (comp?.homeHub) partnerHubCodes.push(comp.homeHub);
   }
 
+  // ── Network O&D cannibalization ───────────────────────────────────────────
+  // Run the full network tick: enumerates 1-stop connections, applies logit
+  // diversion when a direct route competes, computes O&D-based partner revenue.
+  const networkTick = runNetworkTick({
+    routes,
+    competitors,
+    allianceMembership,
+    codeshareAgreements,
+    allianceDef,
+  });
+  const { cannibalizationMap, partnerODRevenue, partnerHealthDecay } = networkTick;
+
   // Pre-build set of route-keys where an alliance/codeshare partner also operates
-  const partnerContestedKeys = new Set();
   for (const comp of competitors) {
     if (!allPartnerIds.has(comp.id)) continue;
     for (const key of Object.keys(comp.routes)) {
@@ -543,6 +556,7 @@ export function weeklyTick(state) {
   let totalQuality        = 0;
   let totalCatering       = 0;
   let totalGroundHandling = 0;
+  let totalLounge         = 0;
   let totalLayover        = 0;
   let totalCompensation   = 0;
   let totalLandingFees    = 0;
@@ -592,7 +606,7 @@ export function weeklyTick(state) {
     const allianceLift   = partnerContestedKeys.has(routeKey) ? allianceDemandBoostPct : 0;
     const marketingLift  = mktMultiplier - 1;
     const loyaltyLift    = loyaltyMultiplier - 1;
-    const combinedMult   = mktMultiplier * loyaltyMultiplier * (1 + allianceLift);
+    const combinedMult   = awarenessMultiplier * mktMultiplier * loyaltyMultiplier * (1 + allianceLift);
     const boostedRevenue = Math.round(result.revenue * combinedMult);
     const routeRevenue   = boostedRevenue + connecting.totalRevenue;
 
@@ -614,6 +628,7 @@ export function weeklyTick(state) {
     totalQuality        += result.qualityCost;
     totalCatering       += result.cateringCost        ?? 0;
     totalGroundHandling += result.groundHandlingCost  ?? 0;
+    totalLounge         += result.loungeCost          ?? 0;
     totalLayover        += result.layoverCost         ?? 0;
     totalCompensation   += result.compensationCost    ?? 0;
     totalLandingFees    += landingFee;
@@ -644,8 +659,11 @@ export function weeklyTick(state) {
     const maint             = Math.round(
       type.baseMaintenancePerWk * maintMult * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0)
     );
-    // Owned aircraft carry no lease — only maintenance applies
-    const leaseThisWk = aircraft.ownershipType === 'owned' ? 0 : type.weeklyLease;
+    // Owned aircraft carry no lease — only maintenance applies.
+    // Use the per-aircraft weeklyLease stored at delivery time (may differ from type default
+    // due to engine options / wingtips chosen at order time); fall back to type default.
+    const leaseThisWk = aircraft.ownershipType === 'owned' ? 0
+      : (aircraft.weeklyLease ?? type.weeklyLease);
     totalLeases      += leaseThisWk;
     totalMaintenance += maint;
     fleetCosts.push({ aircraftId: aircraft.id, lease: leaseThisWk, maintenance: maint });
@@ -666,7 +684,7 @@ export function weeklyTick(state) {
     if (!count) continue;
     const ap = getAirport(code);
     if (!ap) continue;
-    totalGateFees += Math.round(count * gateMonthlyFee(ap) / 4);
+    totalGateFees += Math.round(totalGateMonthlyFee(ap, count) / 4);
   }
 
   // 5. Fleet family MRO base costs (one fixed fee per active aircraft family, regardless of fleet size)
@@ -731,7 +749,7 @@ export function weeklyTick(state) {
   // Distribution: GDS fees, OTA commissions, credit-card processing (~2.5% of revenue)
   const totalDistributionCost = Math.round((totalRevenue + totalPartnerRevenue) * DISTRIBUTION_COST_PCT);
 
-  const totalOpCost = totalFuel + totalCrew + totalQuality + totalCatering + totalGroundHandling + totalLayover + totalCompensation + totalLandingFees;
+  const totalOpCost = totalFuel + totalCrew + totalQuality + totalCatering + totalGroundHandling + totalLounge + totalLayover + totalCompensation + totalLandingFees;
   const totalCost   = totalLeases + totalMaintenance + totalOpCost + totalGateFees
     + totalLaborCosts + totalFamilyBaseCosts + totalHubInvestment
     + totalHQCost + totalInsurance + totalMarketingSpend + totalLoyaltyCost + totalPartnerFees
@@ -750,6 +768,7 @@ export function weeklyTick(state) {
     totalLandingFees:       Math.round(totalLandingFees),
     totalCatering:          Math.round(totalCatering),
     totalGroundHandling:    Math.round(totalGroundHandling),
+    totalLounge:            Math.round(totalLounge),
     totalDistributionCost:  Math.round(totalDistributionCost),
     totalLayover:           Math.round(totalLayover),
     totalCompensation:      Math.round(totalCompensation),
@@ -768,6 +787,7 @@ export function weeklyTick(state) {
     totalCodeshareFees:     Math.round(totalCodeshareFees),
     totalPartnerFees:       Math.round(totalPartnerFees),
     loyaltyMultiplier,
+    awarenessMultiplier,
     totalPassengers,
     mktMultiplier,
     totalOpCost:            Math.round(totalOpCost),

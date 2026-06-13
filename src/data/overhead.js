@@ -12,75 +12,49 @@
 //
 // Represents: executive pay, HQ office rent, GDS/reservation system,
 // crew-scheduling software, revenue management, legal, compliance, finance/accounting.
-// Jumps at fleet-size thresholds rather than scaling linearly so the cost
-// is felt as a meaningful step up when the airline grows.
+//
+// Modelled as a continuous power function of fleet size:
+//   weeklyHQCost = 45_000 × n^0.85
+//
+// This captures the two economic realities of airline overhead:
+//   (a) There are strong fixed costs — a 1-aircraft airline still needs a CEO, legal, IT
+//   (b) Economies of scale — per-aircraft overhead falls as you grow
+//
+// Calibration (weekly cost → annual cost → per-aircraft/year):
+//   1  aircraft  →  $45K/wk  →  $2.3M/yr  →  $2.3M per aircraft
+//   5  aircraft  →  $190K/wk →  $9.9M/yr  →  $2.0M per aircraft
+//   10 aircraft  →  $319K/wk →  $16.6M/yr →  $1.7M per aircraft
+//   20 aircraft  →  $599K/wk →  $31.1M/yr →  $1.6M per aircraft
+//   40 aircraft  →  $1.13M/wk → $58.7M/yr →  $1.5M per aircraft
+//   100 aircraft →  $2.53M/wk → $131M/yr  →  $1.3M per aircraft
+//
+// Industry reference: G&A runs $1–3M per aircraft/year for mid-size carriers.
 
-export const HQ_BRACKETS = [
-  {
-    minAircraft: 0,
-    maxAircraft: 0,
-    weeklyCost:  0,
-    label:       'Pre-launch',
-    description: 'No corporate structure yet.',
-  },
-  {
-    minAircraft: 1,
-    maxAircraft: 3,
-    weeklyCost:  55_000,
-    label:       'Startup',
-    description: 'Small regional office, basic booking system, skeleton management team.',
-  },
-  {
-    minAircraft: 4,
-    maxAircraft: 8,
-    weeklyCost:  140_000,
-    label:       'Regional',
-    description: 'Proper office, IT systems, revenue management, finance & legal.',
-  },
-  {
-    minAircraft: 9,
-    maxAircraft: 15,
-    weeklyCost:  290_000,
-    label:       'Mid-size',
-    description: 'Full HQ building, GDS integrations, crew-scheduling platform, HR dept.',
-  },
-  {
-    minAircraft: 16,
-    maxAircraft: 30,
-    weeklyCost:  600_000,
-    label:       'National',
-    description: 'Corporate HQ, all departments, regulatory affairs office.',
-  },
-  {
-    minAircraft: 31,
-    maxAircraft: Infinity,
-    weeklyCost:  1_200_000,
-    label:       'Major',
-    description: 'Full corporate apparatus: investor relations, government affairs, global IT.',
-  },
-];
-
-/** Weekly HQ cost for a given fleet size. */
+/** Weekly HQ & corporate overhead for a given fleet size. */
 export function calcHQCost(fleetSize) {
-  for (let i = HQ_BRACKETS.length - 1; i >= 0; i--) {
-    if (fleetSize >= HQ_BRACKETS[i].minAircraft) return HQ_BRACKETS[i].weeklyCost;
-  }
-  return 0;
+  if (fleetSize <= 0) return 0;
+  return Math.round(45_000 * Math.pow(fleetSize, 0.85));
 }
 
-/** The full bracket object for a given fleet size. */
+/**
+ * Descriptive label and description for the current fleet size — purely for UI display.
+ * Cost no longer jumps at discrete thresholds; these labels are size-based approximations.
+ */
 export function hqBracket(fleetSize) {
-  for (let i = HQ_BRACKETS.length - 1; i >= 0; i--) {
-    if (fleetSize >= HQ_BRACKETS[i].minAircraft) return HQ_BRACKETS[i];
-  }
-  return HQ_BRACKETS[0];
+  if (fleetSize === 0) return { label: 'Pre-launch',  description: 'No corporate structure yet.' };
+  if (fleetSize <= 3)  return { label: 'Startup',     description: 'Small office, basic booking system, lean management team.' };
+  if (fleetSize <= 8)  return { label: 'Regional',    description: 'Proper office, IT systems, revenue management, finance & legal.' };
+  if (fleetSize <= 15) return { label: 'Mid-size',    description: 'Full HQ, GDS integrations, crew-scheduling platform, HR dept.' };
+  if (fleetSize <= 30) return { label: 'National',    description: 'Corporate HQ, all departments, regulatory affairs office.' };
+  return                      { label: 'Major',       description: 'Full corporate apparatus: investor relations, government affairs, global IT.' };
 }
 
-/** Fleet size needed for the next HQ tier (null if already at max). */
-export function nextHQThreshold(fleetSize) {
-  const current = hqBracket(fleetSize);
-  const idx = HQ_BRACKETS.indexOf(current);
-  return idx < HQ_BRACKETS.length - 1 ? HQ_BRACKETS[idx + 1].minAircraft : null;
+/**
+ * No longer meaningful — overhead now scales continuously.
+ * Returns null so any UI that checks this simply hides the threshold warning.
+ */
+export function nextHQThreshold(_fleetSize) {
+  return null;
 }
 
 
@@ -169,20 +143,21 @@ export function weeklyLandingFee(aircraftCategory, weeklyFrequency, originTier, 
 // Economy rate assumes a snack + drink; premium cabins get full meal service.
 
 export const CATERING_COST_PER_PAX = {
-  economy:        4,    // snack + drink
-  premiumEconomy: 11,   // light meal + drink
-  businessClass:  30,   // full hot meal, wine, amenity kit
-  firstClass:     65,   // multi-course, premium spirits, luxury amenities
+  economy:        12,   // snack + drink (legacy: 4 — was too low, real rate ~$10-15)
+  premiumEconomy: 28,   // light meal + drink (legacy: 11)
+  businessClass:  80,   // full hot meal, wine, amenity kit (legacy: 30 — real rate ~$80-150)
+  firstClass:     160,  // multi-course, premium spirits, luxury amenities (legacy: 65)
 };
 
 /**
  * Weekly catering cost for one route.
- * classSummary: { [cls]: { passengers: number } } — total pax both directions.
+ * classSummary: { [cls]: { passengers: number } } — one-way pax (per direction).
+ * Multiply by 2 to get total boarded passengers in both directions.
  */
 export function weeklyCateringCost(classSummary) {
   return Math.round(
     Object.entries(CATERING_COST_PER_PAX).reduce((s, [cls, rate]) => {
-      return s + (classSummary[cls]?.passengers ?? 0) * rate;
+      return s + (classSummary[cls]?.passengers ?? 0) * 2 * rate;
     }, 0)
   );
 }
@@ -197,18 +172,52 @@ export function weeklyCateringCost(classSummary) {
 export const GROUND_HANDLING_COST_PER_PAX = {
   economy:        10,   // standard ramp + bag + boarding
   premiumEconomy: 13,   // slightly more baggage weight, priority boarding
-  businessClass:  20,   // dedicated check-in, lounge coordination, bag priority
-  firstClass:     35,   // personal agent, limo-to-tarmac, bespoke handling
+  businessClass:  30,   // dedicated check-in, lounge coordination, bag priority (was 20)
+  firstClass:     55,   // personal agent, limo-to-tarmac, bespoke handling (was 35)
 };
 
 /**
  * Weekly ground handling cost for one route.
- * classSummary: { [cls]: { passengers: number } } — total pax both directions.
+ * classSummary: { [cls]: { passengers: number } } — one-way pax (per direction).
+ * Multiply by 2 to get total boarded passengers in both directions.
  */
 export function weeklyGroundHandlingCost(classSummary) {
   return Math.round(
     Object.entries(GROUND_HANDLING_COST_PER_PAX).reduce((s, [cls, rate]) => {
-      return s + (classSummary[cls]?.passengers ?? 0) * rate;
+      return s + (classSummary[cls]?.passengers ?? 0) * 2 * rate;
+    }, 0)
+  );
+}
+
+
+// ─── 5b. Lounge & premium airport services ────────────────────────────────────
+//
+// Airport lounge access, fast-track security, priority check-in, and dedicated
+// ground agents for business/first class passengers.
+//
+// This is a substantial, real cost often omitted from simple models:
+//   - Lounge access (owned lounge amortised, or pay-per-use third-party): ~$40-60/pax
+//   - Fast-track security facilitation fees: ~$10-15/pax at major airports
+//   - Dedicated premium check-in agents: included in ground handling above
+//
+// Applied per boarded premium passenger (both directions).
+
+export const LOUNGE_COST_PER_PAX = {
+  economy:        0,
+  premiumEconomy: 0,
+  businessClass:  60,   // lounge access + fast-track + premium ground service
+  firstClass:     110,  // first class terminal/lounge (Heathrow T5, Lufthansa FTL, etc.)
+};
+
+/**
+ * Weekly lounge & premium airport service cost for one route.
+ * classSummary: { [cls]: { passengers: number } } — one-way pax (per direction).
+ * Multiply by 2 to get total boarded passengers in both directions.
+ */
+export function weeklyLoungeCost(classSummary) {
+  return Math.round(
+    Object.entries(LOUNGE_COST_PER_PAX).reduce((s, [cls, rate]) => {
+      return s + (classSummary[cls]?.passengers ?? 0) * 2 * rate;
     }, 0)
   );
 }
@@ -249,7 +258,7 @@ export function weeklyLayoverCost(blockTimeHrs, seats, category, weeklyFreq) {
 }
 
 
-// ─── 6. Passenger compensation ───────────────────────────────────────────────
+// ─── 8. Passenger compensation ───────────────────────────────────────────────
 //
 // When flights are significantly delayed or cancelled, airlines owe compensation
 // (EU261 / DOT rules).  Linked to pilot morale → on-time-rate.
@@ -284,7 +293,7 @@ export function weeklyPassengerCompensation(passengers, onTimeRate, distKm) {
 }
 
 
-// ─── 7. Marketing ─────────────────────────────────────────────────────────────
+// ─── 9. Marketing ─────────────────────────────────────────────────────────────
 //
 // The player sets a weekly marketing spend.  It drives a demand multiplier
 // across all routes, with steeply diminishing returns.
@@ -313,4 +322,31 @@ export function marketingDemandMultiplier(weeklySpend, weeklyRevenue) {
   const scale = Math.max(weeklyRevenue * MARKETING_REVENUE_SHARE, 50_000);
   const boost = MARKETING_MAX_BOOST * (1 - Math.exp(-weeklySpend / scale));
   return 1 + boost;
+}
+
+
+// ─── 10. Route launch cost ────────────────────────────────────────────────────
+//
+// One-time cost charged when the player opens a new route.
+// Covers: route authority filings, bilateral agreements, slot deposits,
+// launch marketing campaign, OTA listing fees, initial catering contracts.
+//
+// Scales with distance (longer routes require more regulatory work and a
+// bigger launch marketing push to fill seats):
+//   formula: $40K + dist × $22/km
+//
+// Reference points:
+//   500 km  (short regional)       →  $51K
+//   1,500 km (medium domestic)     →  $73K
+//   3,500 km (transcontinental)    → $117K
+//   6,000 km (transatlantic)       → $172K
+//   10,000 km (ultra long-haul)    → $260K
+//   15,000 km (max range)          → $370K
+
+/**
+ * One-time cash cost to open a new route, in dollars.
+ * @param {number} distKm  – great-circle distance of the route
+ */
+export function routeLaunchCost(distKm) {
+  return Math.round(40_000 + distKm * 22);
 }

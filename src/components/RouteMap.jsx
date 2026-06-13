@@ -4,14 +4,14 @@ import { getAirport } from '../data/airports.js';
 import { simulateRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
 import { getAlliance } from '../data/alliances.js';
 
-// ── Split a great-circle path into segments at antimeridian crossings ─────────
-// Returns array of point-arrays; each segment stays within one world copy so
-// Leaflet markers and polyline endpoints always land on the same world copy.
+// ── Great-circle path as a single continuous segment ─────────────────────────
+// Keeps longitudes unwrapped (may exceed ±180) so Leaflet draws one smooth arc
+// across world copies instead of splitting at the antimeridian edge.
 function segmentsForRoute(lat1, lon1, lat2, lon2, n = 80) {
   const raw = greatCirclePoints(lat1, lon1, lat2, lon2, n);
   if (raw.length === 0) return [raw];
 
-  // Step 1 – make longitudes continuous (may leave [-180, 180])
+  // Unwrap longitudes so the path is continuous (Leaflet handles >±180 fine)
   const norm = [[...raw[0]]];
   for (let i = 1; i < raw.length; i++) {
     let lon = raw[i][1];
@@ -21,19 +21,7 @@ function segmentsForRoute(lat1, lon1, lat2, lon2, n = 80) {
     norm.push([raw[i][0], lon]);
   }
 
-  // Step 2 – wrap back to [-180, 180] and split where a crossing occurs
-  const segments = [];
-  let current = [];
-  for (const [lat, lonNorm] of norm) {
-    const lon = ((lonNorm + 180) % 360 + 360) % 360 - 180;
-    if (current.length > 0 && Math.abs(lon - current[current.length - 1][1]) > 90) {
-      segments.push(current);
-      current = [];
-    }
-    current.push([lat, lon]);
-  }
-  if (current.length > 0) segments.push(current);
-  return segments;
+  return [norm];
 }
 
 // ── Great-circle interpolation ────────────────────────────────────────────────

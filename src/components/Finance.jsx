@@ -18,7 +18,7 @@ import {
   FUEL_MIN_INDEX, FUEL_MAX_INDEX,
 } from '../utils/fuel.js';
 import {
-  calcHQCost, hqBracket, nextHQThreshold,
+  calcHQCost, hqBracket,
   weeklyInsuranceCost, weeklyLandingFee,
   marketingDemandMultiplier, MARKETING_MAX_BOOST,
   weeklyCateringCost, weeklyLayoverCost, weeklyPassengerCompensation,
@@ -94,7 +94,7 @@ function blendedFareMultiplier(config, type) {
 function calcUnitEconomics(route, aircraft, type, result, fleet, routes) {
   const dist  = result.distance;
   const ASK   = type.seats * route.weeklyFrequency * 2 * dist;
-  const RPK   = result.passengers * dist;
+  const RPK   = result.passengers * 2 * dist;  // passengers is one-way; ×2 to match ASK (both directions)
   const RASK  = ASK > 0 ? result.revenue    / ASK : 0;
   const CASKop= ASK > 0 ? result.totalOpCost / ASK : 0;
 
@@ -328,7 +328,7 @@ function PLStatement() {
     const dist         = result.distance ?? routeDistanceKm(route.origin, route.destination);
     const blockHrs     = type ? blockTimeHours(dist, type) : 0;
     const layover      = result.layoverCost      ?? weeklyLayoverCost(blockHrs, type?.seats ?? 150, type?.category ?? 'Narrow Body', route.weeklyFrequency);
-    const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers, onTimeRate, dist);
+    const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers * 2, onTimeRate, dist);  // ×2: compensation covers all boarded pax both directions
     return { route, aircraft, type, catering, layover, compensation, dist, blockHrs };
   });
   const totCatering     = cateringByRoute.reduce((s, r) => s + r.catering, 0);
@@ -372,9 +372,13 @@ function PLStatement() {
   const totOpex = totFuel + totFlightOps + totPassengerServices + totOtherCosts + totAircraftCosts + totGates + totPeopleLabor + marketingBudgetVal + totDistribution + totGA;
   const ebitda  = totRev - totOpex;
   const ebit    = ebitda - totDepreciation;
-  const netIncome = ebit - totInterestExpense - totPrincipalRepayment;
   const margin  = totRev > 0 ? ebit / totRev : 0;
-  const totCosts = totOpex + totDepreciation + totInterestExpense + totPrincipalRepayment;
+  // Corporate tax: 21% on positive EBIT (applied before interest for game simplicity)
+  const CORPORATE_TAX_RATE = 0.21;
+  const corporateTax = Math.round(Math.max(0, ebit) * CORPORATE_TAX_RATE);
+  const ytdCorporateTax = ytd(financialHistory, 'corporateTax');
+  const netIncome = ebit - corporateTax - totInterestExpense - totPrincipalRepayment;
+  const totCosts = totOpex + totDepreciation + corporateTax + totInterestExpense + totPrincipalRepayment;
 
   // ── YTD ───────────────────────────────────────────────────────────────────
   const ytdRev    = ytd(financialHistory, 'revenue');
@@ -396,7 +400,15 @@ function PLStatement() {
     - (h.catering ?? 0) - (h.groundHandling ?? 0) - (h.layover ?? 0) - (h.compensation ?? 0)
     - (h.leases ?? 0) - (h.maintenance ?? 0) - (h.familyCosts ?? 0)
     - (h.insurance ?? 0) - (h.labor ?? 0) - (h.gates ?? 0)
-    - (h.marketing ?? 0) - (h.distribution ?? 0) - (h.hqCost ?? 0);
+    - (h.marketing ?? 0) - (h.distribution ?? 0) - (h.hqCost ?? 0) - (h.hubInvestment ?? 0);
+
+  // Historical net income = EBITDA − depreciation − tax − interest − principal
+  const histNetIncome = h =>
+    histEbitda(h)
+    - (h.depreciation ?? 0)
+    - (h.corporateTax ?? 0)
+    - (h.interest ?? 0)
+    - (h.principalRepayment ?? 0);
 
   const recentWeeks = financialHistory.slice(-3);   // up to 3 actual weeks
 
@@ -490,7 +502,7 @@ function PLStatement() {
           },
           {
             label: 'Commercial',
-            vals: recentWeeks.map(h => (h.hqCost ?? 0) + (h.marketing ?? 0) + (h.distribution ?? 0)),
+            vals: recentWeeks.map(h => (h.hqCost ?? 0) + (h.hubInvestment ?? 0) + (h.marketing ?? 0) + (h.distribution ?? 0)),
             proj: totGA + marketingBudgetVal + totDistribution,
             color: 'var(--red)',
             sign: '-',
@@ -506,8 +518,16 @@ function PLStatement() {
             separator: true,
           },
           {
+            label: 'Corporate Tax (21%)',
+            vals: recentWeeks.map(h => h.corporateTax ?? 0),
+            proj: corporateTax,
+            color: 'var(--red)',
+            sign: '-',
+            cost: true,
+          },
+          {
             label: 'Net Income',
-            vals: recentWeeks.map(h => h.profit ?? 0),
+            vals: recentWeeks.map(h => histNetIncome(h)),
             proj: netIncome,
             color: null,
             sign: '',
@@ -670,7 +690,7 @@ function PLStatement() {
                                 )}
                                 {Object.entries(result.classSummary ?? {}).map(([cls, data]) => {
                                   if (!data?.passengers) return null;
-                                  const fare = route.ticketPrice * CLASS_FARE_MULTIPLIERS[cls];
+                                  const fare = route.classPrices?.[cls] ?? route.ticketPrice;
                                   return (
                                     <tr key={`${route.id}-${cls}`} style={{ background: 'rgba(0,0,0,.15)' }}>
                                       <td style={{ paddingLeft: multi ? 64 : 56, fontSize: 12, color: 'var(--text-muted)' }}>
@@ -875,20 +895,7 @@ function PLStatement() {
                   <td />
                 </tr>
               ))}
-              {totalFamilyCosts > 0 && (
-                <tr>
-                  <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
-                    Fleet family MRO base ({familySet.size} type{familySet.size !== 1 ? 's' : ''})
-                    <span style={{ marginLeft: 6, fontSize: 11 }}>
-                      {[...familySet].map(id => FAMILY_INFO[id]?.name).filter(Boolean).join(', ')}
-                    </span>
-                  </td>
-                  {pw && <td />}
-                  <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-totalFamilyCosts)}</td>
-                  <td />
-                </tr>
-              )}
-              <LineItem label="  Total maintenance" prior={pw ? -(pw.maintenance ?? 0) : undefined} weekly={-(totMaint + totalFamilyCosts)} ytd={-(ytdMaint + ytdFamily)} />
+              <LineItem label="  Total maintenance" prior={pw ? -(pw.maintenance ?? 0) : undefined} weekly={-totMaint} ytd={-ytdMaint} />
               {totInsurance > 0 && (
                 <>
                   <SubSectionHeader label="Insurance" />
@@ -919,7 +926,7 @@ function PLStatement() {
                   <LineItem label="  Total insurance" prior={pw ? -(pw.insurance ?? 0) : undefined} weekly={-totInsurance} ytd={-ytdInsurance} />
                 </>
               )}
-              <TotalRow label="Total Aircraft &amp; Fleet" prior={pw ? -pwAircraftCosts : undefined} weekly={-totAircraftCosts} ytd={-(ytdLease + ytdMaint + ytdFamily + ytdInsurance)} />
+              <TotalRow label="Total Aircraft &amp; Fleet" prior={pw ? -pwAircraftCosts : undefined} weekly={-totAircraftCosts} ytd={-(ytdLease + ytdMaint + ytdInsurance)} />
             </CollapsibleSection>
 
             {/* D. Airports & Ground Handling */}
@@ -974,6 +981,23 @@ function PLStatement() {
                     </tr>
                   );
                 })}
+                <LineItem label="  Total labor overhead" prior={pw ? -(pw.labor ?? 0) : undefined} weekly={-totalLaborWeekly} ytd={-ytdLabor} />
+                {totalFamilyCosts > 0 && (
+                  <>
+                    <SubSectionHeader label="Fleet Family MRO Base" />
+                    <tr>
+                      <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
+                        Type-rating infrastructure ({familySet.size} family{familySet.size !== 1 ? 'ies' : ''})
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
+                          {[...familySet].map(id => FAMILY_INFO[id]?.name).filter(Boolean).join(', ')}
+                        </span>
+                      </td>
+                      {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-(pw.familyCosts ?? 0))}</td>}
+                      <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-totalFamilyCosts)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{ytdFamily > 0 ? formatMoney(-ytdFamily) : '—'}</td>
+                    </tr>
+                  </>
+                )}
                 <TotalRow label="Total People &amp; Labour" prior={pw ? -pwPeopleLabor : undefined} weekly={-totPeopleLabor} ytd={-(ytdLabor + ytdFamily)} />
               </CollapsibleSection>
             )}
@@ -1030,10 +1054,7 @@ function PLStatement() {
                   <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
                     HQ &amp; corporate overhead
                     <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
-                      {hqInfo.label} · {hqInfo.description.split('.')[0]}
-                      {nextHQThreshold(fleet.length) && (
-                        <span style={{ color: 'var(--yellow)' }}> · jumps at {nextHQThreshold(fleet.length)} aircraft</span>
-                      )}
+                      {hqInfo.label} · {fleet.length} aircraft · scales continuously
                     </span>
                   </td>
                   {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-(pw.hqCost ?? 0))}</td>}
@@ -1048,12 +1069,12 @@ function PLStatement() {
                         {Object.keys(hubs).length} hub{Object.keys(hubs).length !== 1 ? 's' : ''} · ongoing tier costs
                       </span>
                     </td>
-                    {pw && <td />}
+                    {pw && <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{pw.hubInvestment ? formatMoney(-(pw.hubInvestment)) : '—'}</td>}
                     <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{formatMoney(-totHubInvestment)}</td>
                     <td />
                   </tr>
                 )}
-                <TotalRow label="Total G&amp;A" prior={pw ? -(pw.hqCost ?? 0) : undefined} weekly={-totGA} ytd={-ytdHQCost} />
+                <TotalRow label="Total G&amp;A" prior={pw ? -((pw.hqCost ?? 0) + (pw.hubInvestment ?? 0)) : undefined} weekly={-totGA} ytd={-ytdHQCost} />
               </CollapsibleSection>
             )}
 
@@ -1104,6 +1125,19 @@ function PLStatement() {
               </td>
             </tr>
 
+            {/* Corporate Tax */}
+            {corporateTax > 0 && (
+              <tr>
+                <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                  Corporate Tax (21%)
+                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>21% of positive EBIT</span>
+                </td>
+                {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-Math.round(Math.max(0, pwEbit ?? 0) * 0.21))}</td>}
+                <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{formatMoney(-corporateTax)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{ytdCorporateTax > 0 ? formatMoney(-ytdCorporateTax) : '—'}</td>
+              </tr>
+            )}
+
             {/* ══ FINANCING ══ */}
             {totLoanPayments > 0 && (
               <>
@@ -1126,7 +1160,7 @@ function PLStatement() {
                     return (
                       <tr key={loan.id} style={{ background: 'rgba(0,0,0,.1)' }}>
                         <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 11 }}>
-                          {loan.termWeeks}-wk loan · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
+                          {loan.label ? `${loan.label} · ` : ''}{loan.termWeeks}-wk loan · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
                           <span style={{ marginLeft: 8 }}>int {formatMoney(int)} + principal {formatMoney(loan.weeklyPayment - int)}</span>
                         </td>
                         {pw && <td />}
@@ -1334,7 +1368,7 @@ function BalanceSheet() {
                     {loanLiabilities.map(({ loan, balance }) => (
                       <BSRow
                         key={loan.id}
-                        label={`${loan.termWeeks}-week loan`}
+                        label={loan.label ?? `${loan.termWeeks}-week loan`}
                         sublabel={`${(loan.interestRate * 100).toFixed(1)}% APR · ${loan.weeksRemaining} wks remaining · ${formatMoney(loan.weeklyPayment)}/wk`}
                         value={balance}
                         indent={1}
@@ -1499,7 +1533,7 @@ function RouteBreakdown() {
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>Revenue by Class</div>
                       {Object.entries(result.classSummary ?? {}).map(([cls, data]) => {
                         if (!data?.seats) return null;
-                        const fare = route.ticketPrice * CLASS_FARE_MULTIPLIERS[cls];
+                        const fare = route.classPrices?.[cls] ?? route.ticketPrice;
                         return (
                           <div key={cls} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12 }}>
                             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CLASS_COLORS[cls], flexShrink: 0 }} />
@@ -1643,9 +1677,10 @@ function AirportBreakdown() {
   routeData.forEach(({ route, result }) => {
     ensure(route.origin);
     ensure(route.destination);
-    // Each airport gets the route attributed to it; revenue split 50/50
+    // Each airport gets the route attributed to it; revenue split 50/50.
+    // passengers is one-way, so each airport endpoint gets that count directly.
     const halfRev = Math.round(result.revenue / 2);
-    const halfPax = Math.round(result.passengers / 2);
+    const halfPax = result.passengers;  // already one-way; each airport attributed one direction
     airportMap[route.origin].routes.push(route);
     airportMap[route.origin].revenue += halfRev;
     airportMap[route.origin].pax     += halfPax;
@@ -1741,22 +1776,38 @@ function CashFlow() {
 
   const projRevenue = routeData.reduce((s, r) => s + r.revenue, 0);
   const projOpCost  = routeData.reduce((s, r) => s + r.totalOpCost, 0);
+  const cfLaborState = state.labor ?? DEFAULT_LABOR_STATE;
+  const { maintenanceCostMultiplier: cfMaintMult } = laborEffects(cfLaborState);
+  const cfMaintBudget = state.maintenanceBudget ?? 1.0;
   const projLeases  = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
     return s + (a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0));
   }, 0);
   const projMaint   = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
-    return s + Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks));
+    return s + Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks) * cfMaintBudget * cfMaintMult);
   }, 0);
+  const projInsurance = fleet.reduce((s, a) => s + weeklyInsuranceCost(a, getAircraftType(a.typeId)), 0);
   const projGates   = Object.entries(state.gates ?? {}).reduce((s, [code, n]) => {
     return s + Math.round(gateMonthlyFee(getAirport(code)) * n / 4.33);
   }, 0);
+  const projLandingFees = routes.reduce((s, r) => {
+    const aircraft = fleet.find(a => a.id === r.aircraftId);
+    const type = aircraft ? getAircraftType(aircraft.typeId) : null;
+    return s + weeklyLandingFee(
+      type?.category ?? 'Narrow Body', r.weeklyFrequency,
+      getAirport(r.origin)?.tier ?? 'major', getAirport(r.destination)?.tier ?? 'major',
+    );
+  }, 0);
+  const projDistribution = Math.round(projRevenue * DISTRIBUTION_COST_PCT);
+  const projMarketing  = state.marketingBudget ?? 0;
+  const projHQ         = calcHQCost(fleet.length);
+  const projHubInvest  = Object.values(state.hubs ?? {}).reduce((s, h) => s + (HUB_TIERS[h.tier]?.weeklyInvestment ?? 0), 0);
 
   // Labor overhead
-  const cfLabor = state.labor && fleet.length > 0
+  const cfLabor = fleet.length > 0
     ? LABOR_GROUPS.reduce((sum, g) => {
-        const payMult = (state.labor ?? DEFAULT_LABOR_STATE)[g.id]?.payMultiplier ?? 1.0;
+        const payMult = cfLaborState[g.id]?.payMultiplier ?? 1.0;
         return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleet.length);
       }, 0)
     : 0;
@@ -1764,13 +1815,25 @@ function CashFlow() {
   // Fleet family MRO
   const cfFamily = weeklyFamilyBaseCost(fleet);
 
+  // Loan payments (financing outflows)
+  const cfActiveLoans = state.loans ?? [];
+  const cfLoanPayments = cfActiveLoans.reduce((s, l) => s + l.weeklyPayment, 0);
+  const cfLoanInterest = cfActiveLoans.reduce((s, l) => {
+    const r = l.interestRate / 52;
+    const n = l.weeksRemaining;
+    const bal = r > 0 ? Math.round(l.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : l.weeklyPayment * n;
+    return s + Math.round(bal * r);
+  }, 0);
+
   // Non-cash depreciation on owned aircraft (add back for operating CF)
   const projDepreciation = fleet.filter(a => a.ownershipType === 'owned').reduce((s, a) => {
     const t = getAircraftType(a.typeId);
     return t?.purchasePrice ? s + Math.round(t.purchasePrice / (20 * 52)) : s;
   }, 0);
 
-  const projNetIncome   = projRevenue - projOpCost - projLeases - projMaint - projGates - cfLabor - cfFamily;
+  const projNetIncome   = projRevenue - projOpCost - projLeases - projMaint - projInsurance
+    - projGates - projLandingFees - projDistribution - projMarketing - projHQ - projHubInvest
+    - cfLabor - cfFamily;
   const projOperatingCF = projNetIncome + projDepreciation;
 
   // Investing CF — estimated from cash reconciliation
@@ -1782,7 +1845,9 @@ function CashFlow() {
 
   const runway = projNetIncome < 0 && cash > 0 ? Math.floor(cash / -projNetIncome) : Infinity;
 
-  const totalCosts = projOpCost + projLeases + projMaint + projGates + cfLabor + cfFamily;
+  const totalCosts = projOpCost + projLeases + projMaint + projInsurance + projGates
+    + projLandingFees + projDistribution + projMarketing + projHQ + projHubInvest
+    + cfLabor + cfFamily;
 
   return (
     <div>
@@ -1813,15 +1878,42 @@ function CashFlow() {
               <CFTotalRow label="Net Investing Cash Flow"   value={-Math.round(avgWeeklyInvesting)} />
               <Spacer />
               <SectionHeader label="Financing Activities" />
-              <tr><td style={{ paddingLeft: 28, color: 'var(--text-dim)', fontSize: 13 }}>No external financing</td><td style={{ textAlign: 'right', color: 'var(--text-dim)' }}>—</td></tr>
-              <CFTotalRow label="Net Financing Cash Flow"   value={0} />
+              {cfLoanPayments > 0 ? (
+                <>
+                  <CFRow label="Interest expense"    value={-cfLoanInterest} />
+                  <CFRow label="Principal repayment" value={-(cfLoanPayments - cfLoanInterest)} />
+                  {cfActiveLoans.map(loan => {
+                    const r = loan.interestRate / 52;
+                    const n = loan.weeksRemaining;
+                    const bal = r > 0 ? Math.round(loan.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : loan.weeklyPayment * n;
+                    const int = Math.round(bal * r);
+                    return (
+                      <tr key={loan.id}>
+                        <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 11 }}>
+                          {loan.label ?? `${loan.termWeeks}-wk loan`} · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
+                          <span style={{ marginLeft: 8 }}>int {formatMoney(int)} + principal {formatMoney(loan.weeklyPayment - int)}</span>
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>{formatMoney(-loan.weeklyPayment)}</td>
+                      </tr>
+                    );
+                  })}
+                </>
+              ) : (
+                <tr><td style={{ paddingLeft: 28, color: 'var(--text-dim)', fontSize: 13 }}>No active loans</td><td style={{ textAlign: 'right', color: 'var(--text-dim)' }}>—</td></tr>
+              )}
+              <CFTotalRow label="Net Financing Cash Flow"   value={-cfLoanPayments} />
               <Spacer />
-              <tr style={{ background: 'var(--surface2)', fontWeight: 700 }}>
-                <td style={{ padding: '12px 16px', fontSize: 14 }}>NET CHANGE IN CASH</td>
-                <td style={{ textAlign: 'right', padding: '12px 16px', fontSize: 14, color: projOperatingCF >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                  {projOperatingCF >= 0 ? '+' : ''}{formatMoney(projOperatingCF)}
-                </td>
-              </tr>
+              {(() => {
+                const netChange = projOperatingCF - cfLoanPayments;
+                return (
+                  <tr style={{ background: 'var(--surface2)', fontWeight: 700 }}>
+                    <td style={{ padding: '12px 16px', fontSize: 14 }}>NET CHANGE IN CASH</td>
+                    <td style={{ textAlign: 'right', padding: '12px 16px', fontSize: 14, color: netChange >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {netChange >= 0 ? '+' : ''}{formatMoney(netChange)}
+                    </td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>
@@ -1847,24 +1939,34 @@ function CashFlow() {
               <div className="card-title">Cost Mix</div>
               <div style={{ display: 'flex', height: 16, borderRadius: 3, overflow: 'hidden', marginBottom: 10 }}>
                 {[
-                  { v: projLeases,  c: '#f85149', l: 'Leases'   },
-                  { v: projMaint,   c: '#d29922', l: 'Maint'    },
-                  { v: projOpCost,  c: '#388bfd', l: 'Op Costs' },
-                  { v: projGates,   c: '#3fb950', l: 'Gates'    },
-                  { v: cfLabor,     c: '#a371f7', l: 'Labor'    },
-                  { v: cfFamily,    c: '#4fc3f7', l: 'MRO Base' },
+                  { v: projLeases,      c: '#f85149', l: 'Leases'       },
+                  { v: projMaint,       c: '#d29922', l: 'Maint'        },
+                  { v: projInsurance,   c: '#e07b39', l: 'Insurance'    },
+                  { v: projOpCost,      c: '#388bfd', l: 'Op Costs'     },
+                  { v: projLandingFees, c: '#1f7fc4', l: 'Landing Fees' },
+                  { v: projGates,       c: '#3fb950', l: 'Gates'        },
+                  { v: cfLabor,         c: '#a371f7', l: 'Labor'        },
+                  { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
+                  { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
+                  { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
+                  { v: projHQ + projHubInvest, c: '#8b949e', l: 'G&A'  },
                 ].map((s, i) => s.v > 0 && (
                   <div key={i} style={{ width: `${(s.v/totalCosts)*100}%`, background: s.c }} title={`${s.l}: ${formatMoney(s.v)}`} />
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
                 {[
-                  { v: projLeases,  c: '#f85149', l: 'Leases'   },
-                  { v: projMaint,   c: '#d29922', l: 'Maint'    },
-                  { v: projOpCost,  c: '#388bfd', l: 'Op Costs' },
-                  { v: projGates,   c: '#3fb950', l: 'Gates'    },
-                  { v: cfLabor,     c: '#a371f7', l: 'Labor'    },
-                  { v: cfFamily,    c: '#4fc3f7', l: 'MRO Base' },
+                  { v: projLeases,      c: '#f85149', l: 'Leases'       },
+                  { v: projMaint,       c: '#d29922', l: 'Maint'        },
+                  { v: projInsurance,   c: '#e07b39', l: 'Insurance'    },
+                  { v: projOpCost,      c: '#388bfd', l: 'Op Costs'     },
+                  { v: projLandingFees, c: '#1f7fc4', l: 'Landing Fees' },
+                  { v: projGates,       c: '#3fb950', l: 'Gates'        },
+                  { v: cfLabor,         c: '#a371f7', l: 'Labor'        },
+                  { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
+                  { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
+                  { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
+                  { v: projHQ + projHubInvest, c: '#8b949e', l: 'G&A'  },
                 ].filter(s => s.v > 0).map((s, i) => (
                   <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: s.c, display: 'inline-block' }} />
@@ -2042,14 +2144,39 @@ function Forecast() {
 
   const baseRevenue  = routeData.reduce((s, r) => s + r.revenue, 0);
   const baseOpCost   = routeData.reduce((s, r) => s + r.totalOpCost, 0);
+  const fcLaborState = state.labor ?? DEFAULT_LABOR_STATE;
+  const { maintenanceCostMultiplier: fcMaintMult } = laborEffects(fcLaborState);
+  const fcMaintBudget = state.maintenanceBudget ?? 1.0;
   const baseFixed    = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
     const lease = a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0);
-    const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks));
-    return s + lease + maint;
-  }, 0) + Object.entries(state.gates ?? {}).reduce((s, [code, n]) => {
+    const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks) * fcMaintBudget * fcMaintMult);
+    const ins   = weeklyInsuranceCost(a, t);
+    return s + lease + maint + ins;
+  }, 0)
+  + weeklyFamilyBaseCost(fleet)
+  + Object.entries(state.gates ?? {}).reduce((s, [code, n]) => {
     return s + Math.round(gateMonthlyFee(getAirport(code)) * n / 4.33);
-  }, 0);
+  }, 0)
+  + (fleet.length > 0 ? LABOR_GROUPS.reduce((sum, g) => {
+      const payMult = fcLaborState[g.id]?.payMultiplier ?? 1.0;
+      return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleet.length);
+    }, 0) : 0)
+  + calcHQCost(fleet.length)
+  + Object.values(state.hubs ?? {}).reduce((s, h) => s + (HUB_TIERS[h.tier]?.weeklyInvestment ?? 0), 0)
+  + (state.marketingBudget ?? 0)
+  + routes.reduce((s, r) => {
+      const aircraft = fleet.find(a => a.id === r.aircraftId);
+      const type = aircraft ? getAircraftType(aircraft.typeId) : null;
+      const originAp = getAirport(r.origin);
+      const destAp   = getAirport(r.destination);
+      return s + weeklyLandingFee(
+        type?.category ?? 'Narrow Body',
+        r.weeklyFrequency,
+        originAp?.tier ?? 'major',
+        destAp?.tier   ?? 'major',
+      );
+    }, 0);
 
   // Revenue-weighted fleet seasonal factor for a given month.
   // Each route contributes its own seasonal profile, weighted by its current-month revenue.
@@ -2071,14 +2198,15 @@ function Forecast() {
 
   let runningCash = cash;
   const forecastWeeks = Array.from({ length: 12 }, (_, i) => {
-    const offset    = i + 1;
-    const month     = futureMonth(absWeekBase, offset);
-    const seasonal  = fleetSeasonalAt(month);
-    const adjRev    = Math.round(baseRevenue * (seasonal / currentSeasonal));
-    const adjOpCost = Math.round(baseOpCost  * (seasonal / currentSeasonal));
-    const totalCost = adjOpCost + baseFixed;
-    const net       = adjRev - totalCost;
-    runningCash    += net;
+    const offset       = i + 1;
+    const month        = futureMonth(absWeekBase, offset);
+    const seasonal     = fleetSeasonalAt(month);
+    const adjRev       = Math.round(baseRevenue * (seasonal / currentSeasonal));
+    const adjOpCost    = Math.round(baseOpCost  * (seasonal / currentSeasonal));
+    const distribution = Math.round(adjRev * DISTRIBUTION_COST_PCT);
+    const totalCost    = adjOpCost + baseFixed + distribution;
+    const net          = adjRev - totalCost;
+    runningCash       += net;
     return { offset, month, seasonal, adjRev, totalCost, net, cash: runningCash };
   });
 

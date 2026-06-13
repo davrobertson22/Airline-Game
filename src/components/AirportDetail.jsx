@@ -7,6 +7,7 @@ import {
 import {
   AIRPORT_GATEWAY_SCORES, HUB_TIERS,
 } from '../models/demand.js';
+import { getAirportRestrictions } from '../data/airportRestrictions.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ export default function AirportDetail({ code, onBack }) {
   const myGates   = gates[code] ?? 0;
   const hubInfo   = hubs[code];
   const hubTier   = hubInfo ? HUB_TIERS[hubInfo.tier] : null;
+
+  const restrictions = getAirportRestrictions(code); // array, may be empty
 
   const slotCap  = myGates * SLOTS_PER_GATE;
   const slotsUsed = state.routes
@@ -161,8 +164,32 @@ export default function AirportDetail({ code, onBack }) {
               {myGates} {myGates === 1 ? 'gate' : 'gates'}
             </span>
           )}
+          {restrictions.map((r, i) => (
+            <span key={i} style={{ background: 'rgba(220,53,69,0.12)', color: 'var(--red)', border: '1px solid rgba(220,53,69,0.35)', borderRadius: 4, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>
+              🚫 {r.shortLabel}
+            </span>
+          ))}
         </div>
       </div>
+
+      {restrictions.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          {restrictions.map((r, i) => (
+            <div key={i} style={{
+              background: 'rgba(220,53,69,0.07)',
+              border: '1px solid rgba(220,53,69,0.25)',
+              borderRadius: 'var(--radius)',
+              padding: '10px 14px',
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.5,
+            }}>
+              <strong style={{ color: 'var(--red)' }}>{r.label}:</strong>{' '}
+              {r.description}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
 

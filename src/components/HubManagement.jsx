@@ -158,10 +158,11 @@ function HubCard({ code, hubData, gateCount, routeCount, connectingEst }) {
 
 // ─── Designatable airport card ────────────────────────────────────────────────
 
-function DesignatableCard({ code, gateCount }) {
+function DesignatableCard({ code, gateCount, homeCountry }) {
   const { dispatch } = useGame();
   const airport = getAirport(code);
   const gwScore = AIRPORT_GATEWAY_SCORES[code] ?? 0.20;
+  const isForeign = homeCountry && airport?.country !== homeCountry;
 
   function designate() {
     dispatch({ type: 'DESIGNATE_HUB', airportCode: code });
@@ -172,6 +173,7 @@ function DesignatableCard({ code, gateCount }) {
       display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px',
       background: 'var(--surface2)', borderRadius: 'var(--radius)',
       border: '1px solid var(--border)', marginBottom: 8,
+      opacity: isForeign ? 0.6 : 1,
     }}>
       <div style={{ flex: 1 }}>
         <AirportLink code={code} style={{ fontWeight: 700, fontSize: 15, marginRight: 8 }} />
@@ -181,11 +183,22 @@ function DesignatableCard({ code, gateCount }) {
             ★ Major gateway
           </span>
         )}
+        {isForeign && (
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--yellow)' }}>
+            🔒 Foreign airport — hubs restricted to {homeCountry}
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', minWidth: 70 }}>
         {gateCount} {gateCount === 1 ? 'gate' : 'gates'}
       </div>
-      <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={designate}>
+      <button
+        className="btn btn-primary"
+        style={{ fontSize: 12 }}
+        onClick={designate}
+        disabled={isForeign}
+        title={isForeign ? `Hubs can only be built in ${homeCountry}` : undefined}
+      >
         Designate Hub
       </button>
     </div>
@@ -196,8 +209,9 @@ function DesignatableCard({ code, gateCount }) {
 
 export default function HubManagement() {
   const { state } = useGame();
-  const hubs  = state.hubs  ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
-  const gates = state.gates ?? {};
+  const hubs        = state.hubs  ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
+  const gates       = state.gates ?? {};
+  const homeCountry = state.homeCountry ?? null;
 
   // Routes per airport for connecting estimate
   const routeCountByAirport = useMemo(() => {
@@ -253,6 +267,9 @@ export default function HubManagement() {
           Designating an airport as a hub unlocks connecting passenger traffic — passengers feeding in from other routes boost your load factors and revenue.
           Upgrade to higher tiers to capture more of this traffic and improve your reputation on all routes through that hub.
           You need at least <strong style={{ color: 'var(--text)' }}>10 gates</strong> to designate any hub, and <strong style={{ color: 'var(--text)' }}>20 gates</strong> for an International Gateway.
+          {homeCountry && (
+            <span> 🔒 <strong style={{ color: 'var(--text)' }}>Political restriction:</strong> hubs may only be built in your home country (<strong style={{ color: 'var(--text)' }}>{homeCountry}</strong>).</span>
+          )}
         </div>
       </div>
 
@@ -285,7 +302,7 @@ export default function HubManagement() {
             Ready to Designate
           </div>
           {designatable.map(([code, count]) => (
-            <DesignatableCard key={code} code={code} gateCount={count} />
+            <DesignatableCard key={code} code={code} gateCount={count} homeCountry={homeCountry} />
           ))}
         </div>
       )}

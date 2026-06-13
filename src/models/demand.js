@@ -45,7 +45,7 @@ export const BUSINESS_PRICE_MULTIPLIER = 3.5;
  * A ratio of (refPrice / yourPrice) is raised to this power.
  */
 export const ELASTICITY = {
-  leisure: 1.5,
+  leisure: 1.8,   // raised from 1.5 — overpricing now meaningfully reduces demand
   business: 0.6,
 };
 

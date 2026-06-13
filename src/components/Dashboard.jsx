@@ -29,14 +29,37 @@ export default function Dashboard() {
   const idleAircraft     = fleet.filter(a => a.status === 'idle').length;
 
   // ── Cost breakdown ─────────────────────────────────────────────────────────
-  const weeklyFuel  = routeResults.reduce((s, { result }) => s + (result?.fuelCost  ?? 0), 0);
-  const weeklyCrew  = routeResults.reduce((s, { result }) => s + (result?.crewCost  ?? 0), 0);
-  const weeklyMaint = fleet.reduce((s, a) => {
-    const type = getAircraftType(a.typeId);
-    return s + Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
-  }, 0);
-  const weeklyOtherOp    = Math.max(0, projectedOpCost - weeklyFuel - weeklyCrew);
-  const totalWeeklyCosts = weeklyFuel + weeklyCrew + weeklyLeaseCost + weeklyMaint + weeklyOtherOp;
+  // Prefer lastReport (has all buckets). Fall back to per-route projections for new games.
+  const costBreakdown = useMemo(() => {
+    if (lastReport && lastReport.totalCost > 0) {
+      const fuel        = lastReport.totalFuel              ?? 0;
+      const crew        = (lastReport.totalCrew             ?? 0) + (lastReport.totalLaborCosts ?? 0);
+      const leases      = lastReport.totalLeases            ?? 0;
+      const maintenance = lastReport.totalMaintenance       ?? 0;
+      const gates       = (lastReport.totalGateFees         ?? 0) + (lastReport.totalLandingFees ?? 0);
+      const service     = (lastReport.totalQuality          ?? 0) + (lastReport.totalCatering    ?? 0)
+                        + (lastReport.totalGroundHandling   ?? 0) + (lastReport.totalLounge      ?? 0)
+                        + (lastReport.totalLayover          ?? 0) + (lastReport.totalCompensation ?? 0);
+      const overhead    = (lastReport.totalHQCost           ?? 0) + (lastReport.totalInsurance   ?? 0)
+                        + (lastReport.totalFamilyBaseCosts  ?? 0) + (lastReport.totalDistributionCost ?? 0);
+      const growth      = (lastReport.totalMarketingSpend   ?? 0) + (lastReport.totalLoyaltyCost ?? 0)
+                        + (lastReport.totalHubInvestment    ?? 0) + (lastReport.totalPartnerFees ?? 0);
+      const total       = fuel + crew + leases + maintenance + gates + service + overhead + growth;
+      return { fuel, crew, leases, maintenance, gates, service, overhead, growth, total, fromReport: true };
+    }
+    // Projection fallback (missing gates/overhead/growth — new game, no report yet)
+    const fuel        = routeResults.reduce((s, { result }) => s + (result?.fuelCost  ?? 0), 0);
+    const crew        = routeResults.reduce((s, { result }) => s + (result?.crewCost  ?? 0), 0);
+    const maintenance = fleet.reduce((s, a) => {
+      const type = getAircraftType(a.typeId);
+      return s + Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
+    }, 0);
+    const service = Math.max(0, projectedOpCost - fuel - crew);
+    const total   = fuel + crew + weeklyLeaseCost + maintenance + service;
+    return { fuel, crew, leases: weeklyLeaseCost, maintenance, gates: 0, service, overhead: 0, growth: 0, total, fromReport: false };
+  }, [lastReport, routeResults, fleet, weeklyLeaseCost, projectedOpCost]);
+
+  const totalWeeklyCosts = costBreakdown.total;
 
   // ── Route profit normalization (for mini-bars) ─────────────────────────────
   const routeProfitMap = routeResults.reduce((acc, { route, result }) => {
@@ -185,7 +208,7 @@ export default function Dashboard() {
             <div className="card-title" style={{ marginBottom: 0 }}>Weekly Cost Breakdown</div>
             <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{formatMoney(totalWeeklyCosts)} total</span>
           </div>
-          <CostBreakdownChart fuel={weeklyFuel} crew={weeklyCrew} leases={weeklyLeaseCost} maintenance={weeklyMaint} other={weeklyOtherOp} total={totalWeeklyCosts} />
+          <CostBreakdownChart breakdown={costBreakdown} />
         </div>
       )}
 
@@ -520,15 +543,19 @@ function FinancialChart({ history, currentWeek }) {
 
 // ── Cost breakdown stacked bar ────────────────────────────────────────────────
 
-function CostBreakdownChart({ fuel, crew, leases, maintenance, other, total }) {
+function CostBreakdownChart({ breakdown }) {
+  const { fuel, crew, leases, maintenance, gates, service, overhead, growth, total, fromReport } = breakdown;
   if (total === 0) return null;
 
   const segments = [
-    { label: 'Fuel',        value: fuel,        color: '#f0883e' },
-    { label: 'Crew',        value: crew,        color: '#388bfd' },
-    { label: 'Leases',      value: leases,      color: '#f85149' },
-    { label: 'Maintenance', value: maintenance, color: '#a371f7' },
-    { label: 'Other',       value: other,       color: '#8b949e' },
+    { label: 'Fuel',         value: fuel,        color: '#f0883e' },
+    { label: 'Crew',         value: crew,        color: '#388bfd' },
+    { label: 'Leases',       value: leases,      color: '#f85149' },
+    { label: 'Maintenance',  value: maintenance, color: '#a371f7' },
+    { label: 'Gates & Fees', value: gates,       color: '#d2a679' },
+    { label: 'Service',      value: service,     color: '#79c0ff' },
+    { label: 'Overhead',     value: overhead,    color: '#8b949e' },
+    { label: 'Growth',       value: growth,      color: '#56d364' },
   ].filter(s => s.value > 0);
 
   return (
@@ -556,6 +583,11 @@ function CostBreakdownChart({ fuel, crew, leases, maintenance, other, total }) {
           </div>
         ))}
       </div>
+      {!fromReport && (
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 6 }}>
+          Projected — gates, overhead &amp; growth costs will appear after week 1
+        </div>
+      )}
     </div>
   );
 }

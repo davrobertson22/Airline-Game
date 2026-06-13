@@ -37,7 +37,7 @@ function playerQuality(route, fleet) {
 
 export default function Competition() {
   const { state } = useGame();
-  const { competitors = [], routes, fleet } = state;
+  const { competitors = [], routes, fleet, financialHistory = [] } = state;
   const [expandedCarrier, setExpandedCarrier] = useState(null);
 
   // Map from routeKey → player route object
@@ -52,17 +52,22 @@ export default function Competition() {
     competitors.some(c => k in c.routes)
   );
 
+  // Prior week profit for player
+  const playerLastWeek = financialHistory.length > 0
+    ? financialHistory[financialHistory.length - 1].profit ?? null
+    : null;
+
   return (
     <div>
-      {/* ── Competitor overview cards ─────────────────────────────────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: 12,
-        marginBottom: 24,
-      }}>
-        {competitors.map(c => <CompetitorCard key={c.id} carrier={c} playerRouteMap={playerRouteMap} />)}
-      </div>
+      {/* ── Leaderboard ───────────────────────────────────────────────────── */}
+      <Leaderboard
+        competitors={competitors}
+        playerLastWeek={playerLastWeek}
+        playerName={state.airlineName}
+        playerLogoId={state.logoId}
+        playerHub={state.hub}
+        playerCash={state.cash}
+      />
 
       {/* ── Contested routes ──────────────────────────────────────────────── */}
       <SectionHeader>⚔ Contested Routes</SectionHeader>
@@ -106,6 +111,134 @@ export default function Competition() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, playerHub, playerCash }) {
+  // Build unified list with player + competitors
+  const entries = [
+    {
+      id: '__player__',
+      name: playerName,
+      logoId: playerLogoId,
+      hub: playerHub,
+      cash: playerCash,
+      tier: null,
+      weeklyProfit: playerLastWeek,
+      isPlayer: true,
+    },
+    ...competitors.map(c => ({
+      id: c.id,
+      name: c.name,
+      logoId: c.logoId,
+      hub: c.homeHub,
+      cash: c.cash ?? null,
+      tier: c.tier,
+      weeklyProfit: c.weeklyStats?.weeklyProfit ?? null,
+      isPlayer: false,
+    })),
+  ];
+
+  const hasAnyData = entries.some(e => e.weeklyProfit !== null);
+
+  // Sort: null profits go to bottom; otherwise descending
+  const sorted = [...entries].sort((a, b) => {
+    if (a.weeklyProfit === null && b.weeklyProfit === null) return 0;
+    if (a.weeklyProfit === null) return 1;
+    if (b.weeklyProfit === null) return -1;
+    return b.weeklyProfit - a.weeklyProfit;
+  });
+
+  const maxAbsProfit = Math.max(...sorted.map(e => Math.abs(e.weeklyProfit ?? 0)), 1);
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <SectionHeader>🏆 Industry Leaderboard — Prior Week Profit</SectionHeader>
+
+      {!hasAnyData && (
+        <div className="empty-state" style={{ marginBottom: 8 }}>
+          <div className="empty-state-icon">📊</div>
+          <div className="empty-state-text">Advance one week to populate the leaderboard</div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {sorted.map((entry, idx) => {
+          const profit = entry.weeklyProfit;
+          const isPositive = profit !== null && profit >= 0;
+          const profitColor = profit === null ? 'var(--text-muted)' : isPositive ? 'var(--green)' : '#f87171';
+          const barWidth = profit !== null ? Math.abs(profit) / maxAbsProfit * 100 : 0;
+          const tier = entry.tier ? TIER_META[entry.tier] : null;
+
+          const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+
+          return (
+            <div
+              key={entry.id}
+              className="card"
+              style={{
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                border: entry.isPlayer ? '1px solid rgba(59,130,246,0.4)' : undefined,
+                background: entry.isPlayer ? 'rgba(59,130,246,0.06)' : undefined,
+              }}
+            >
+              {/* Rank */}
+              <div style={{ width: 28, textAlign: 'center', fontSize: idx < 3 ? 18 : 13, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>
+                {rankBadge}
+              </div>
+
+              {/* Logo */}
+              <AirlineLogo id={entry.logoId} size={32} />
+
+              {/* Name + hub */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{entry.name}</span>
+                  {entry.isPlayer && (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'rgba(59,130,246,0.2)', color: '#60a5fa', fontWeight: 700 }}>
+                      YOU
+                    </span>
+                  )}
+                  {tier && (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--surface2)', color: tier.color, fontWeight: 600 }}>
+                      {tier.label}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    <AirportLink code={entry.hub} style={{ color: 'var(--text-muted)' }} />
+                  </span>
+                </div>
+
+                {/* Bar */}
+                <div style={{ marginTop: 5, height: 4, background: 'var(--surface2)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${barWidth}%`,
+                    background: profitColor,
+                    borderRadius: 2,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              </div>
+
+              {/* Profit */}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: profitColor }}>
+                  {profit === null
+                    ? '–'
+                    : `${isPositive ? '+' : ''}${formatMoney(profit)}`
+                  }
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>prior week profit</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function SectionHeader({ children }) {
   return (

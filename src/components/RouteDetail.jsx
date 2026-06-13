@@ -11,6 +11,7 @@ import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent,
 } from '../utils/simulation.js';
+import { weeklyLandingFee } from '../data/overhead.js';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -179,9 +180,20 @@ export default function RouteDetail({ origin, dest, onBack }) {
     [playerRoutes, state.fleet, gameDate]
   );
 
+  // result.passengers is one-way (per direction) — directly comparable to market demand.
   const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);
   const totalRev     = playerSims.reduce((s, {result}) => s + result.revenue, 0);
-  const totalOpCost  = playerSims.reduce((s, {result}) => s + result.totalOpCost, 0);
+  const totalOpCost  = playerSims.reduce((s, { route, aircraft, type: aType, result }) => {
+    const originAp = getAirport(route.origin);
+    const destAp   = getAirport(route.destination);
+    const lf       = weeklyLandingFee(
+      aType?.category ?? 'Narrow Body',
+      route.weeklyFrequency,
+      originAp?.tier ?? 'major',
+      destAp?.tier   ?? 'major',
+    );
+    return s + result.totalOpCost + lf;
+  }, 0);
   const avgLoad      = playerSims.length ? playerSims.reduce((s, {result}) => s + result.loadFactor, 0) / playerSims.length : 0;
 
   // Aggregate class summary across all player sims
@@ -193,9 +205,9 @@ export default function RouteDetail({ origin, dest, onBack }) {
     for (const { route, result } of playerSims) {
       const cs = result.classSummary?.[cls];
       if (!cs) continue;
-      // cs.passengers is round-trip; seats is per-direction per-flight
+      // cs.passengers is one-way (per direction); seats is per-direction per-flight
       totalSeats  += cs.seats * (route.weeklyFrequency ?? 0); // one-way capacity
-      totalPaxCls += cs.passengers / 2; // one-way pax
+      totalPaxCls += cs.passengers; // one-way pax
     }
     if (totalSeats > 0) acc[cls] = { seats: totalSeats, pax: totalPaxCls, loadFactor: totalPaxCls / totalSeats };
     return acc;
@@ -283,7 +295,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Market Share</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-            {shareResults.length} {shareResults.length === 1 ? 'airline' : 'airlines'} · {totalDemand.toLocaleString()} pax/wk pool
+            {shareResults.length} {shareResults.length === 1 ? 'airline' : 'airlines'} · {totalDemand.toLocaleString()} base demand one-way
           </div>
           {shareResults.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No airlines on this route yet.</div>
@@ -312,6 +324,11 @@ export default function RouteDetail({ origin, dest, onBack }) {
                 <MarketSharePie slices={pieSlices} />
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
                   Based on price · quality · frequency
+                  {servedPax > totalDemand && (
+                    <span style={{ color: 'var(--green)', marginLeft: 6 }}>
+                      · market expanded to {servedPax.toLocaleString()} via low fares
+                    </span>
+                  )}
                 </div>
               </>
             );
@@ -324,7 +341,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 12 }}>Your Performance</div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
-            <Stat label="Weekly Pax"   value={totalPax.toLocaleString()} />
+            <Stat label="Weekly Pax"   value={totalPax.toLocaleString()} sub="pax / wk one-way" />
             <Stat label="Avg Load"     value={formatPercent(avgLoad)} color={avgLoad >= 0.75 ? 'var(--green)' : avgLoad >= 0.45 ? 'var(--yellow)' : 'var(--red)'} />
             <Stat label="Revenue/wk"   value={formatMoney(totalRev)} color="var(--green)" />
             <Stat label="Op Cost/wk"   value={formatMoney(totalOpCost)} color="var(--red)" />
@@ -347,7 +364,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
                     <div style={{ height: 4, background: 'var(--surface3)', borderRadius: 2, overflow: 'hidden', margin: '5px 0' }}>
                       <div style={{ width: `${Math.round(lf * 100)}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{Math.round(pax).toLocaleString()} / {seats.toLocaleString()} seats</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{Math.round(pax).toLocaleString()} / {seats.toLocaleString()} seats one-way/wk</div>
                   </div>
                 );
               })}
@@ -358,7 +375,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 480 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Aircraft', 'Freq', 'Pax', 'Load', ...activeClasses.map(c => CLASS_LABELS[c]), 'Revenue', 'Op Profit'].map(h => (
+                    {['Aircraft', 'Freq', 'Pax (each way)', 'Load', ...activeClasses.map(c => CLASS_LABELS[c]), 'Revenue', 'Op Profit'].map(h => (
                       <th key={h} style={{ padding: '5px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -399,7 +416,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
               <thead>
                 <tr style={{ background: 'var(--surface2)' }}>
-                  {['Airline', 'Tier', 'Freq/wk', 'Seats/wk', 'Est. Price', 'Quality', 'Est. Pax'].map(h => (
+                  {['Airline', 'Tier', 'Freq/wk', 'Seats/wk (one-way)', 'Est. Price', 'Quality', 'Est. Pax (one-way)'].map(h => (
                     <th key={h} style={{ padding: '7px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -417,7 +434,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
                       <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name}</td>
                       <td style={{ padding: '8px 12px' }}><TierBadge tier={c.tier} /></td>
                       <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{cfg.frequency}× each way</td>
-                      <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{(estSeats * 2).toLocaleString()}</td>
+                      <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{estSeats.toLocaleString()}</td>
                       <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                         ${estPrice}
                         <span style={{ fontSize: 11, marginLeft: 5, color: priceDiff > 0 ? 'var(--red)' : 'var(--green)' }}>

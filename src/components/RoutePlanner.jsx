@@ -11,6 +11,8 @@ import {
   buildCompetitorOffer, computeQualityScore,
   computeConnectingDemand, AIRPORT_GATEWAY_SCORES,
 } from '../models/demand.js';
+import { routeLaunchCost } from '../data/overhead.js';
+import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 
 function weekToMonth(week) {
   return Math.min(12, Math.max(1, Math.ceil(week * 12 / 52)));
@@ -174,6 +176,14 @@ export default function RoutePlanner() {
     ),
     [state.routes, origin, dest]
   );
+
+  // Regulatory restriction check (depends on route, frequency, AND selected aircraft type)
+  const routeRestriction = useMemo(() => {
+    if (!routeData) return null;
+    const selectedType = getAircraftType(selectedTypeId);
+    const category = selectedType?.category ?? null;
+    return checkRouteRestrictions(origin, dest, routeData.dist, frequency, category);
+  }, [origin, dest, routeData, frequency, selectedTypeId]);
 
   // Competitors on this route (use live state.competitors)
   const competitorsOnRoute = useMemo(() => {
@@ -351,6 +361,36 @@ export default function RoutePlanner() {
               </div>
             </div>
           </div>
+
+          {/* ── Regulatory restriction banner ── */}
+          {routeRestriction && (
+            <div style={{
+              background: 'rgba(220,53,69,0.10)',
+              border: '1px solid rgba(220,53,69,0.40)',
+              borderRadius: 'var(--radius)',
+              padding: '12px 16px',
+              marginBottom: 12,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start',
+            }}>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>🚫</span>
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 14, marginBottom: 4 }}>
+                  {routeRestriction.restriction.label}
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, background: 'rgba(220,53,69,0.15)', borderRadius: 3, padding: '2px 6px' }}>
+                    {routeRestriction.restriction.shortLabel}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {routeRestriction.restriction.description}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--red)', fontWeight: 500 }}>
+                  ⛔ This route cannot be launched: {routeRestriction.reason.split(': ')[1] ?? routeRestriction.reason}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Competitors ── */}
           <div className="card" style={{ marginBottom: 12 }}>
@@ -579,26 +619,45 @@ export default function RoutePlanner() {
 
                 {/* Open route CTA */}
                 {simulation && (() => {
-                  const idle = idleByType[selectedTypeId] ?? [];
+                  const idle       = idleByType[selectedTypeId] ?? [];
+                  const lCost      = routeLaunchCost(routeData.dist);
+                  const canAfford  = state.cash >= lCost;
+                  const blocked    = !!routeRestriction;
                   return (
-                    <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                      {idle.length > 0 ? (
-                        <button
-                          className="btn btn-primary"
-                          style={{ padding: '8px 20px' }}
-                          onClick={() => handleOpenRoute(idle[0].id)}
-                        >
-                          Open Route with {idle[0].name}
-                        </button>
-                      ) : (
-                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                          No idle {simulation.type.name} available — lease one from the Market first.
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                        {blocked ? (
+                          <button className="btn btn-primary" style={{ padding: '8px 20px', opacity: 0.35, cursor: 'not-allowed' }} disabled>
+                            🚫 Route Blocked by Regulation
+                          </button>
+                        ) : idle.length > 0 ? (
+                          <button
+                            className="btn btn-primary"
+                            style={{ padding: '8px 20px', opacity: canAfford ? 1 : 0.5 }}
+                            disabled={!canAfford}
+                            onClick={() => handleOpenRoute(idle[0].id)}
+                          >
+                            Open Route with {idle[0].name}
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                            No idle {simulation.type.name} available — lease one from the Market first.
+                          </div>
+                        )}
+                        {simulation.netProfit < 0 && (
+                          <span style={{ fontSize: 12, color: 'var(--yellow)' }}>
+                            ⚠ Route is currently unprofitable at these settings
+                          </span>
+                        )}
+                      </div>
+                      {!blocked && (
+                        <div style={{ fontSize: 12, color: canAfford ? 'var(--text-muted)' : 'var(--red)' }}>
+                          {canAfford ? '💸' : '⚠'} One-time launch cost: <strong>{formatMoney(lCost)}</strong>
+                          {!canAfford && ' — insufficient cash'}
+                          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>
+                            (regulatory filings, slot deposits, launch marketing)
+                          </span>
                         </div>
-                      )}
-                      {simulation.netProfit < 0 && (
-                        <span style={{ fontSize: 12, color: 'var(--yellow)' }}>
-                          ⚠ Route is currently unprofitable at these settings
-                        </span>
                       )}
                     </div>
                   );

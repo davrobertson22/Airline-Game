@@ -74,7 +74,7 @@ export default function Routes() {
       const type = ac ? getAircraftType(ac.typeId) : null;
       return s + (type?.seats ?? 0) * r.weeklyFrequency;
     }, 0);
-    const avgLoad = totalSeats > 0 ? (totalPax / 2) / totalSeats : 0;
+    const avgLoad = totalSeats > 0 ? totalPax / totalSeats : 0;  // totalPax is one-way; totalSeats is one-way capacity
     const distance = sims[0]?.result?.distance ?? 0;
     return { ...group, totalProfit, totalRevenue, avgLoad, distance };
   }), [routes, fleet, state.week]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -307,10 +307,10 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
   const totalPax    = sims.reduce((s, { result }) => s + (result?.passengers  ?? 0), 0);
   const totalProfit = totalRev - totalOp;
 
-  // Blended load factor: total pax (one direction) / total one-way seat capacity
+  // Blended load factor: one-way pax / one-way seat capacity
   const totalSeatsOneWay = sims.reduce((s, { type, route }) =>
     s + (type?.seats ?? 0) * route.weeklyFrequency, 0);
-  const blendedLoad = totalSeatsOneWay > 0 ? (totalPax / 2) / totalSeatsOneWay : 0;
+  const blendedLoad = totalSeatsOneWay > 0 ? totalPax / totalSeatsOneWay : 0;  // totalPax is already one-way
 
   const profitColor = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
   const loadColor   = blendedLoad > 0.7 ? 'var(--green)' : blendedLoad > 0.4 ? 'var(--yellow)' : 'var(--red)';

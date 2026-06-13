@@ -173,7 +173,7 @@ function AppInner() {
           Bastian Boys Airline Empires
         </div>
         <div className="topbar-sep" />
-        <AirlineLogo id={state.logoId} size={28} radius={6} />
+        <AirlineLogo id={state.logoId} size={28} radius={6} accentColor={state.logoColor} />
         <div className="topbar-airline">{state.airlineName}</div>
         <div className="topbar-spacer" />
         <div className="topbar-kpis">

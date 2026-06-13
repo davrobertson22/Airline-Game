@@ -155,6 +155,10 @@ export default function Reputation() {
   const demandMultiplier = 1 + (rep.overall - 50) / 100 * 0.15;
   const elasticityReduction = (rep.overall - 50) / 100 * 0.20;
 
+  // Awareness
+  const awareness = state.awareness ?? 5;
+  const awarenessMultiplier = 0.4 + (awareness / 100) * 0.6;
+
   if (fleet.length === 0 && routes.length === 0) {
     return (
       <div className="empty-state">
@@ -197,6 +201,17 @@ export default function Reputation() {
             {Math.round(rep.qualityDemandScore)}<span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>/100</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>as seen in demand model</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Brand Awareness</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor(awareness) }}>{Math.round(awareness)}</span>
+            <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
+          </div>
+          <ScoreBar value={awareness} color={scoreColor(awareness)} />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            Demand reach: <span style={{ color: scoreColor(awareness), fontWeight: 600 }}>{formatPercent(awarenessMultiplier - 1 + 1)}</span> of potential
+          </div>
         </div>
       </div>
 
@@ -248,6 +263,13 @@ export default function Reputation() {
             icon="👥"
             detail={laborSummary(labor)}
             tip={rep.morale < 60 ? 'Raise pay multipliers for struggling groups' : undefined}
+          />
+          <DimensionRow
+            label="Brand Awareness"
+            score={Math.round(awareness)}
+            icon="📣"
+            detail={`${formatPercent(awarenessMultiplier)} of potential demand reached. Grows via passengers flown + marketing spend.`}
+            tip={awareness < 40 ? 'Increase marketing budget or fly more passengers to build awareness' : undefined}
           />
         </div>
       </div>

@@ -10,7 +10,7 @@ import {
 import { formatMoney, weeklyBlockHours, routeDistanceKm } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
-  calcHQCost, hqBracket, nextHQThreshold,
+  calcHQCost, hqBracket,
   weeklyInsuranceCost, marketingDemandMultiplier, MARKETING_MAX_BOOST,
 } from '../data/overhead.js';
 
@@ -530,7 +530,6 @@ export default function Operations() {
       {fleet.length > 0 && (() => {
         const hqInfo = hqBracket(fleet.length);
         const hqCost = calcHQCost(fleet.length);
-        const nextThreshold = nextHQThreshold(fleet.length);
         const totalInsurance = fleet.reduce((s, a) => {
           const t = getAircraftType(a.typeId);
           return s + weeklyInsuranceCost(a, t);
@@ -556,13 +555,11 @@ export default function Operations() {
                   −{formatMoney(hqCost)}/wk
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  <strong style={{ color: 'var(--accent)' }}>{hqInfo.label}</strong> tier ({fleet.length} aircraft)
+                  <strong style={{ color: 'var(--accent)' }}>{hqInfo.label}</strong> · {fleet.length} aircraft
                   <br />{hqInfo.description}
-                  {nextThreshold && (
-                    <div style={{ marginTop: 6, color: 'var(--yellow)', fontSize: 11 }}>
-                      ⚠ Next tier at {nextThreshold} aircraft — overhead jumps to {formatMoney(calcHQCost(nextThreshold))}/wk
-                    </div>
-                  )}
+                  <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-dim)' }}>
+                    Scales continuously: ~$45K × fleet<sup>0.85</sup>
+                  </div>
                 </div>
               </div>
               <div>

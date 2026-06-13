@@ -1,24 +1,26 @@
 // Airport data: IATA code, name, city, country, lat, lon, population (millions, metro area)
 // Population drives passenger demand in the gravity model.
+// effectivePop (optional): demand catchment in millions for major hubs whose metro population
+//   understates true demand due to connecting traffic / national gateway role.
 // tier: 'mega' | 'major' | 'regional' — affects hub bonus calculations
 
 export const AIRPORTS = [
   // ── NORTH AMERICA ───────────────────────────────────────────────────────────
   { code: 'JFK', name: 'John F. Kennedy Intl',      city: 'New York',       country: 'US', lat: 40.64,  lon: -73.78,   population: 20.1, tier: 'mega'     },
   { code: 'LAX', name: 'Los Angeles Intl',           city: 'Los Angeles',    country: 'US', lat: 33.94,  lon: -118.40,  population: 13.2, tier: 'mega'     },
-  { code: 'ORD', name: "O'Hare Intl",                city: 'Chicago',        country: 'US', lat: 41.97,  lon: -87.90,   population: 9.5,  tier: 'major'    },
-  { code: 'ATL', name: 'Hartsfield-Jackson',         city: 'Atlanta',        country: 'US', lat: 33.64,  lon: -84.43,   population: 6.2,  tier: 'major'    },
-  { code: 'DFW', name: 'Dallas/Fort Worth Intl',     city: 'Dallas',         country: 'US', lat: 32.90,  lon: -97.04,   population: 7.7,  tier: 'major'    },
+  { code: 'ORD', name: "O'Hare Intl",                city: 'Chicago',        country: 'US', lat: 41.97,  lon: -87.90,   population: 9.5,  tier: 'mega'     },
+  { code: 'ATL', name: 'Hartsfield-Jackson',         city: 'Atlanta',        country: 'US', lat: 33.64,  lon: -84.43,   population: 6.2,  tier: 'mega'     },
+  { code: 'DFW', name: 'Dallas/Fort Worth Intl',     city: 'Dallas',         country: 'US', lat: 32.90,  lon: -97.04,   population: 7.7,  tier: 'mega'     },
   { code: 'DEN', name: 'Denver Intl',                city: 'Denver',         country: 'US', lat: 39.86,  lon: -104.67,  population: 2.9,  tier: 'major'    },
-  { code: 'SFO', name: 'San Francisco Intl',         city: 'San Francisco',  country: 'US', lat: 37.62,  lon: -122.38,  population: 4.7,  tier: 'major'    },
+  { code: 'SFO', name: 'San Francisco Intl',         city: 'San Francisco',  country: 'US', lat: 37.62,  lon: -122.38,  population: 4.7,  tier: 'major',  effectivePop: 10 },
   { code: 'SEA', name: 'Seattle-Tacoma Intl',        city: 'Seattle',        country: 'US', lat: 47.45,  lon: -122.31,  population: 4.0,  tier: 'major'    },
   { code: 'MIA', name: 'Miami Intl',                 city: 'Miami',          country: 'US', lat: 25.79,  lon: -80.29,   population: 6.2,  tier: 'major'    },
   { code: 'BOS', name: 'Logan Intl',                 city: 'Boston',         country: 'US', lat: 42.37,  lon: -71.00,   population: 4.9,  tier: 'major'    },
-  { code: 'LAS', name: 'Harry Reid Intl',            city: 'Las Vegas',      country: 'US', lat: 36.08,  lon: -115.15,  population: 2.3,  tier: 'regional' },
+  { code: 'LAS', name: 'Harry Reid Intl',            city: 'Las Vegas',      country: 'US', lat: 36.08,  lon: -115.15,  population: 2.3,  tier: 'major'    },
   { code: 'PHX', name: 'Phoenix Sky Harbor',         city: 'Phoenix',        country: 'US', lat: 33.44,  lon: -112.01,  population: 5.1,  tier: 'major'    },
   { code: 'IAD', name: 'Dulles Intl',                city: 'Washington DC',  country: 'US', lat: 38.94,  lon: -77.46,   population: 6.4,  tier: 'major'    },
-  { code: 'MSP', name: 'Minneapolis-St. Paul Intl',  city: 'Minneapolis',    country: 'US', lat: 44.88,  lon: -93.22,   population: 3.7,  tier: 'regional' },
-  { code: 'YYZ', name: 'Toronto Pearson Intl',       city: 'Toronto',        country: 'CA', lat: 43.68,  lon: -79.63,   population: 6.2,  tier: 'major'    },
+  { code: 'MSP', name: 'Minneapolis-St. Paul Intl',  city: 'Minneapolis',    country: 'US', lat: 44.88,  lon: -93.22,   population: 3.7,  tier: 'major'    },
+  { code: 'YYZ', name: 'Toronto Pearson Intl',       city: 'Toronto',        country: 'CA', lat: 43.68,  lon: -79.63,   population: 6.2,  tier: 'mega'     },
   { code: 'YVR', name: 'Vancouver Intl',             city: 'Vancouver',      country: 'CA', lat: 49.19,  lon: -123.18,  population: 2.6,  tier: 'regional' },
   { code: 'YUL', name: 'Montréal-Trudeau Intl',      city: 'Montreal',       country: 'CA', lat: 45.47,  lon: -73.74,   population: 4.2,  tier: 'regional' },
   { code: 'MEX', name: 'Benito Juárez Intl',         city: 'Mexico City',    country: 'MX', lat: 19.44,  lon: -99.07,   population: 21.7, tier: 'mega'     },
@@ -36,16 +38,16 @@ export const AIRPORTS = [
   { code: 'LIM', name: 'Jorge Chávez Intl',          city: 'Lima',           country: 'PE', lat: -12.02, lon: -77.11,   population: 11.0, tier: 'major'    },
 
   // ── EUROPE ───────────────────────────────────────────────────────────────────
-  { code: 'LHR', name: 'Heathrow',                   city: 'London',         country: 'GB', lat: 51.47,  lon: -0.45,    population: 9.3,  tier: 'mega'     },
+  { code: 'LHR', name: 'Heathrow',                   city: 'London',         country: 'GB', lat: 51.47,  lon: -0.45,    population: 9.3,  tier: 'mega', effectivePop: 22 },
   { code: 'CDG', name: 'Charles de Gaulle',          city: 'Paris',          country: 'FR', lat: 49.01,  lon: 2.55,     population: 11.0, tier: 'mega'     },
-  { code: 'FRA', name: 'Frankfurt Airport',          city: 'Frankfurt',      country: 'DE', lat: 50.03,  lon: 8.57,     population: 5.8,  tier: 'major'    },
-  { code: 'AMS', name: 'Amsterdam Schiphol',         city: 'Amsterdam',      country: 'NL', lat: 52.31,  lon: 4.77,     population: 2.5,  tier: 'major'    },
+  { code: 'FRA', name: 'Frankfurt Airport',          city: 'Frankfurt',      country: 'DE', lat: 50.03,  lon: 8.57,     population: 5.8,  tier: 'mega',  effectivePop: 12 },
+  { code: 'AMS', name: 'Amsterdam Schiphol',         city: 'Amsterdam',      country: 'NL', lat: 52.31,  lon: 4.77,     population: 2.5,  tier: 'mega',  effectivePop: 9  },
   { code: 'MAD', name: 'Adolfo Suárez Barajas',      city: 'Madrid',         country: 'ES', lat: 40.47,  lon: -3.57,    population: 6.7,  tier: 'major'    },
   { code: 'BCN', name: 'Josep Tarradellas Barcelona',city: 'Barcelona',      country: 'ES', lat: 41.30,  lon: 2.08,     population: 5.6,  tier: 'major'    },
   { code: 'FCO', name: 'Fiumicino',                  city: 'Rome',           country: 'IT', lat: 41.80,  lon: 12.24,    population: 4.3,  tier: 'major'    },
   { code: 'MXP', name: 'Malpensa',                   city: 'Milan',          country: 'IT', lat: 45.63,  lon: 8.73,     population: 3.2,  tier: 'major'    },
   { code: 'MUC', name: 'Munich Airport',             city: 'Munich',         country: 'DE', lat: 48.35,  lon: 11.79,    population: 2.9,  tier: 'major'    },
-  { code: 'ZRH', name: 'Zurich Airport',             city: 'Zurich',         country: 'CH', lat: 47.46,  lon: 8.55,     population: 1.4,  tier: 'regional' },
+  { code: 'ZRH', name: 'Zurich Airport',             city: 'Zurich',         country: 'CH', lat: 47.46,  lon: 8.55,     population: 1.4,  tier: 'major'    },
   { code: 'VIE', name: 'Vienna Intl',                city: 'Vienna',         country: 'AT', lat: 48.11,  lon: 16.57,    population: 1.9,  tier: 'regional' },
   { code: 'BRU', name: 'Brussels Airport',           city: 'Brussels',       country: 'BE', lat: 50.90,  lon: 4.48,     population: 2.1,  tier: 'regional' },
   { code: 'LIS', name: 'Humberto Delgado Airport',   city: 'Lisbon',         country: 'PT', lat: 38.77,  lon: -9.13,    population: 2.9,  tier: 'regional' },
@@ -59,9 +61,9 @@ export const AIRPORTS = [
   { code: 'IST', name: 'Istanbul Airport',           city: 'Istanbul',       country: 'TR', lat: 41.26,  lon: 28.74,    population: 15.6, tier: 'mega'     },
 
   // ── MIDDLE EAST ──────────────────────────────────────────────────────────────
-  { code: 'DXB', name: 'Dubai Intl',                 city: 'Dubai',          country: 'AE', lat: 25.25,  lon: 55.36,    population: 3.3,  tier: 'mega'     },
+  { code: 'DXB', name: 'Dubai Intl',                 city: 'Dubai',          country: 'AE', lat: 25.25,  lon: 55.36,    population: 3.3,  tier: 'mega', effectivePop: 18 },
   { code: 'AUH', name: 'Abu Dhabi Intl',             city: 'Abu Dhabi',      country: 'AE', lat: 24.44,  lon: 54.65,    population: 1.5,  tier: 'major'    },
-  { code: 'DOH', name: 'Hamad Intl',                 city: 'Doha',           country: 'QA', lat: 25.27,  lon: 51.61,    population: 2.4,  tier: 'major'    },
+  { code: 'DOH', name: 'Hamad Intl',                 city: 'Doha',           country: 'QA', lat: 25.27,  lon: 51.61,    population: 2.4,  tier: 'mega',  effectivePop: 8 },
   { code: 'RUH', name: 'King Khalid Intl',           city: 'Riyadh',         country: 'SA', lat: 24.96,  lon: 46.70,    population: 7.7,  tier: 'major'    },
   { code: 'TLV', name: 'Ben Gurion Intl',            city: 'Tel Aviv',       country: 'IL', lat: 32.01,  lon: 34.89,    population: 4.3,  tier: 'regional' },
 
@@ -75,8 +77,8 @@ export const AIRPORTS = [
   { code: 'ADD', name: 'Addis Ababa Bole Intl',      city: 'Addis Ababa',    country: 'ET', lat: 8.98,   lon: 38.80,    population: 5.0,  tier: 'regional' },
 
   // ── SOUTH & SOUTHEAST ASIA ──────────────────────────────────────────────────
-  { code: 'SIN', name: 'Changi Airport',             city: 'Singapore',      country: 'SG', lat: 1.36,   lon: 103.99,   population: 5.7,  tier: 'mega'     },
-  { code: 'HKG', name: 'Hong Kong Intl',             city: 'Hong Kong',      country: 'HK', lat: 22.31,  lon: 113.91,   population: 7.5,  tier: 'mega'     },
+  { code: 'SIN', name: 'Changi Airport',             city: 'Singapore',      country: 'SG', lat: 1.36,   lon: 103.99,   population: 5.7,  tier: 'mega', effectivePop: 22 },
+  { code: 'HKG', name: 'Hong Kong Intl',             city: 'Hong Kong',      country: 'HK', lat: 22.31,  lon: 113.91,   population: 7.5,  tier: 'mega', effectivePop: 18 },
   { code: 'KUL', name: 'Kuala Lumpur Intl',          city: 'Kuala Lumpur',   country: 'MY', lat: 2.74,   lon: 101.71,   population: 8.3,  tier: 'major'    },
   { code: 'BKK', name: 'Suvarnabhumi Airport',       city: 'Bangkok',        country: 'TH', lat: 13.69,  lon: 100.75,   population: 15.7, tier: 'major'    },
   { code: 'CGK', name: 'Soekarno-Hatta Intl',        city: 'Jakarta',        country: 'ID', lat: -6.13,  lon: 106.66,   population: 34.5, tier: 'mega'     },
@@ -113,6 +115,7 @@ export const AIRPORTS = [
   { code: 'PHL', name: 'Philadelphia Intl',             city: 'Philadelphia',    country: 'US', lat: 39.87,  lon: -75.24,   population: 6.1,  tier: 'major'    },
   { code: 'CLT', name: 'Charlotte Douglas Intl',        city: 'Charlotte',       country: 'US', lat: 35.21,  lon: -80.94,   population: 2.7,  tier: 'major'    },
   { code: 'BWI', name: 'Baltimore/Washington Intl',     city: 'Baltimore',       country: 'US', lat: 39.17,  lon: -76.67,   population: 2.9,  tier: 'regional' },
+  { code: 'DCA', name: 'Reagan National Airport',        city: 'Washington DC',   country: 'US', lat: 38.85,  lon: -77.04,   population: 6.4,  tier: 'major'    },
   { code: 'IAH', name: 'George Bush Intercontinental',  city: 'Houston',         country: 'US', lat: 29.98,  lon: -95.34,   population: 7.3,  tier: 'major'    },
   { code: 'HOU', name: 'William P. Hobby Airport',      city: 'Houston',         country: 'US', lat: 29.65,  lon: -95.28,   population: 7.3,  tier: 'regional' },
   { code: 'SLC', name: 'Salt Lake City Intl',           city: 'Salt Lake City',  country: 'US', lat: 40.79,  lon: -111.98,  population: 1.2,  tier: 'regional' },
@@ -208,6 +211,7 @@ export const AIRPORTS = [
 
   // ── EUROPE (additional) ──────────────────────────────────────────────────────
   { code: 'LGW', name: 'Gatwick Airport',               city: 'London',          country: 'GB', lat: 51.15,  lon: -0.18,    population: 9.3,  tier: 'major'    },
+  { code: 'LCY', name: 'London City Airport',           city: 'London',          country: 'GB', lat: 51.51,  lon: 0.05,     population: 9.3,  tier: 'regional' },
   { code: 'STN', name: 'Stansted Airport',              city: 'London',          country: 'GB', lat: 51.89,  lon: 0.24,     population: 9.3,  tier: 'regional' },
   { code: 'MAN', name: 'Manchester Airport',            city: 'Manchester',      country: 'GB', lat: 53.36,  lon: -2.27,    population: 2.8,  tier: 'major'    },
   { code: 'BHX', name: 'Birmingham Airport',            city: 'Birmingham',      country: 'GB', lat: 52.45,  lon: -1.74,    population: 2.6,  tier: 'regional' },
@@ -1054,17 +1058,49 @@ export function getAirport(code) {
 
 /** Monthly gate rental cost by airport tier. */
 export const GATE_FEE_BY_TIER = {
-  mega:     120_000,   // LHR, JFK, DXB, NRT …
-  major:     70_000,   // ORD, SFO, FRA …
+  mega:     120_000,   // LHR, JFK, ORD, ATL, DFW, FRA, AMS …
+  major:     70_000,   // SFO, MIA, BOS, ZRH …
   regional:  30_000,   // smaller city airports
 };
 
 /**
- * Monthly gate fee for a given airport object.
- * @param {object} airport - airport record from AIRPORTS
+ * Marginal cost escalation per additional gate.
+ * Each gate costs this much MORE (proportionally) than the previous one.
+ * mega: +10% / gate, major: +5% / gate, regional: +2% / gate.
  */
-export function gateMonthlyFee(airport) {
-  return GATE_FEE_BY_TIER[airport?.tier] ?? 50_000;
+export const GATE_COST_ESCALATION = {
+  mega:     1.10,
+  major:    1.05,
+  regional: 1.02,
+};
+
+/**
+ * Monthly fee for the Nth gate at an airport (1-indexed).
+ * Gate 1 = base rate; gate 2 = base × escalation; gate N = base × escalation^(N-1).
+ *
+ * @param {object} airport  - airport record from AIRPORTS
+ * @param {number} [n=1]    - which gate number (1 = first gate)
+ */
+export function gateMonthlyFee(airport, n = 1) {
+  const base = GATE_FEE_BY_TIER[airport?.tier] ?? 50_000;
+  const rate = GATE_COST_ESCALATION[airport?.tier] ?? 1.05;
+  return Math.round(base * Math.pow(rate, n - 1));
+}
+
+/**
+ * Total monthly cost for holding `count` gates at an airport.
+ * = sum of gateMonthlyFee(airport, 1..count)
+ * = base × (rate^count − 1) / (rate − 1)   when rate ≠ 1
+ *
+ * @param {object} airport  - airport record from AIRPORTS
+ * @param {number} count    - number of gates held
+ */
+export function totalGateMonthlyFee(airport, count) {
+  if (!count || count <= 0) return 0;
+  const base = GATE_FEE_BY_TIER[airport?.tier] ?? 50_000;
+  const rate = GATE_COST_ESCALATION[airport?.tier] ?? 1.05;
+  if (rate === 1) return base * count;
+  return Math.round(base * (Math.pow(rate, count) - 1) / (rate - 1));
 }
 
 // ─── Per-airport business / leisure scores ─────────────────────────────────────
@@ -1091,6 +1127,7 @@ export const AIRPORT_SCORES = {
   BOS: { businessScore: 70, leisureScore: 52 },   // academia / finance
   PHX: { businessScore: 55, leisureScore: 50 },
   IAD: { businessScore: 78, leisureScore: 28 },   // DC govt/defense – low leisure
+  DCA: { businessScore: 82, leisureScore: 30 },   // Reagan National – premium business/govt shuttle
   IAH: { businessScore: 65, leisureScore: 38 },   // Houston energy sector
   MSP: { businessScore: 60, leisureScore: 40 },
   DTW: { businessScore: 62, leisureScore: 38 },
@@ -1166,6 +1203,7 @@ export const AIRPORT_SCORES = {
   IST: { businessScore: 68, leisureScore: 62 },
   BER: { businessScore: 62, leisureScore: 58 },
   LGW: { businessScore: 45, leisureScore: 72 },   // Gatwick – budget/leisure flights
+  LCY: { businessScore: 90, leisureScore: 20 },   // London City – Canary Wharf/finance, almost pure business
   MAN: { businessScore: 58, leisureScore: 60 },
   LYS: { businessScore: 58, leisureScore: 50 },
   NCE: { businessScore: 32, leisureScore: 75 },   // Nice – Riviera leisure
@@ -1239,6 +1277,82 @@ export const AIRPORT_SCORES = {
   BNE: { businessScore: 55, leisureScore: 65 },
   AKL: { businessScore: 58, leisureScore: 68 },
 };
+
+// ── Region mapping ────────────────────────────────────────────────────────────
+// Maps ISO country codes to display region names.
+export const COUNTRY_REGION = {
+  // North America (includes Central America & Caribbean)
+  US: 'North America', CA: 'North America', MX: 'North America',
+  PA: 'North America', CU: 'North America', DO: 'North America',
+  JM: 'North America', BS: 'North America', BB: 'North America',
+  SX: 'North America', TT: 'North America', KY: 'North America',
+  BM: 'North America', SV: 'North America', GT: 'North America',
+  HN: 'North America', NI: 'North America', CR: 'North America',
+  PR: 'North America',
+  // South America
+  BR: 'South America', AR: 'South America', CL: 'South America',
+  CO: 'South America', PE: 'South America', EC: 'South America',
+  PY: 'South America', UY: 'South America', VE: 'South America',
+  BO: 'South America', CW: 'South America', SR: 'South America',
+  GY: 'South America',
+  // Europe
+  GB: 'Europe', FR: 'Europe', DE: 'Europe', NL: 'Europe',
+  ES: 'Europe', IT: 'Europe', CH: 'Europe', AT: 'Europe',
+  BE: 'Europe', PT: 'Europe', NO: 'Europe', SE: 'Europe',
+  FI: 'Europe', DK: 'Europe', IE: 'Europe', PL: 'Europe',
+  GR: 'Europe', TR: 'Europe', CZ: 'Europe', HU: 'Europe',
+  RO: 'Europe', BG: 'Europe', HR: 'Europe', RS: 'Europe',
+  SI: 'Europe', MK: 'Europe', AL: 'Europe', SK: 'Europe',
+  UA: 'Europe', BY: 'Europe', EE: 'Europe', LV: 'Europe',
+  LT: 'Europe', RU: 'Europe', IS: 'Europe',
+  // Middle East & Central Asia
+  AE: 'Middle East', QA: 'Middle East', SA: 'Middle East',
+  IL: 'Middle East', KW: 'Middle East', BH: 'Middle East',
+  OM: 'Middle East', LB: 'Middle East', JO: 'Middle East',
+  IQ: 'Middle East', IR: 'Middle East', AZ: 'Middle East',
+  GE: 'Middle East', AM: 'Middle East', UZ: 'Middle East',
+  KZ: 'Middle East', KG: 'Middle East', TM: 'Middle East',
+  TJ: 'Middle East', AF: 'Middle East', PK: 'Middle East',
+  // Africa
+  ZA: 'Africa', EG: 'Africa', KE: 'Africa', NG: 'Africa',
+  MA: 'Africa', ET: 'Africa', DZ: 'Africa', TN: 'Africa',
+  LY: 'Africa', SD: 'Africa', GH: 'Africa', CI: 'Africa',
+  SN: 'Africa', ML: 'Africa', BF: 'Africa', NE: 'Africa',
+  TD: 'Africa', TG: 'Africa', BJ: 'Africa', CD: 'Africa',
+  CM: 'Africa', GA: 'Africa', CG: 'Africa', TZ: 'Africa',
+  UG: 'Africa', RW: 'Africa', ZW: 'Africa', MW: 'Africa',
+  MZ: 'Africa', NA: 'Africa', BW: 'Africa', MG: 'Africa',
+  MU: 'Africa', ZM: 'Africa',
+  // Asia (South, Southeast, East)
+  SG: 'Asia', HK: 'Asia', MY: 'Asia', TH: 'Asia',
+  ID: 'Asia', PH: 'Asia', IN: 'Asia', LK: 'Asia',
+  BD: 'Asia', MM: 'Asia', VN: 'Asia', NP: 'Asia',
+  JP: 'Asia', KR: 'Asia', CN: 'Asia', TW: 'Asia',
+  KH: 'Asia', LA: 'Asia', BN: 'Asia', MO: 'Asia',
+  // Oceania
+  AU: 'Oceania', NZ: 'Oceania', PF: 'Oceania', NC: 'Oceania',
+  FJ: 'Oceania', PG: 'Oceania', SB: 'Oceania', VU: 'Oceania',
+  GU: 'Oceania', CK: 'Oceania', WS: 'Oceania', TO: 'Oceania', KI: 'Oceania',
+  // Additional Europe
+  JE: 'Europe', CY: 'Europe', LU: 'Europe', MT: 'Europe',
+  ME: 'Europe', BA: 'Europe', XK: 'Europe', MD: 'Europe', IM: 'Europe',
+  // Additional North America (Caribbean / Central America)
+  BZ: 'North America', AG: 'North America', GD: 'North America', KN: 'North America',
+  // Additional Africa
+  ER: 'Africa', CF: 'Africa', GM: 'Africa', SO: 'Africa', DJ: 'Africa',
+  AO: 'Africa', MR: 'Africa', GW: 'Africa', RE: 'Africa', SC: 'Africa',
+  CV: 'Africa', ST: 'Africa',
+  // Additional Middle East
+  YE: 'Middle East',
+};
+
+export const REGIONS = [
+  'North America', 'South America', 'Europe', 'Middle East', 'Africa', 'Asia', 'Oceania',
+];
+
+export function getRegion(country) {
+  return COUNTRY_REGION[country] ?? 'Other';
+}
 
 /**
  * Return {businessScore, leisureScore} for an airport.

@@ -7,6 +7,7 @@ import {
 import { getAircraftType, effectivePurchasePrice, buyDiscount } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
+import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import {
   COMPETITOR_AIRLINES,
   initializeCompetitorRoutes,
@@ -31,6 +32,7 @@ import {
   CODESHARE_DURATION_WEEKS,
   MAX_CODESHARE_AGREEMENTS,
 } from '../data/alliances.js';
+import { routeLaunchCost } from '../data/overhead.js';
 
 // ─────────────────────────────────────────────
 // STATE SHAPE
@@ -42,7 +44,9 @@ function freshState() {
   return {
     airlineName: '',
     logoId: 'horizon',
+    logoColor: '#f5a623',
     hub: '',
+    homeCountry: '',  // ISO country code of starting hub — hubs restricted to this country
     cash: STARTING_CASH,
     activeEvents:  [],    // currently active random events
     showDebrief:   false, // show weekly debrief modal
@@ -72,6 +76,7 @@ function freshState() {
     ),
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
+    awareness: 5,                // 0–100: how well-known the airline is; gates demand
   };
 }
 
@@ -139,13 +144,38 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'START_GAME': {
+      // Startup capital: $10M loan at 8% APR over 5 years (260 weeks).
+      // Player starts with the cash but must service the debt.
+      const STARTUP_PRINCIPAL   = 10_000_000;
+      const STARTUP_RATE        = 0.08;          // 8% APR
+      const STARTUP_TERM        = 260;           // 5 years
+      const startupWeeklyRate   = STARTUP_RATE / 52;
+      const startupFactor       = Math.pow(1 + startupWeeklyRate, STARTUP_TERM);
+      const startupWeeklyPayment = Math.round(
+        STARTUP_PRINCIPAL * startupWeeklyRate * startupFactor / (startupFactor - 1)
+      );
+      const startupLoan = {
+        id:                uid(),
+        principal:         STARTUP_PRINCIPAL,
+        interestRate:      STARTUP_RATE,
+        termWeeks:         STARTUP_TERM,
+        weeklyPayment:     startupWeeklyPayment,  // ≈ $46,600/wk
+        weeksRemaining:    STARTUP_TERM,
+        totalInterestPaid: 0,
+        takenWeek:         1,
+        takenYear:         2026,
+        label:             'Startup Capital',
+      };
       return {
         ...freshState(),
         airlineName: action.airlineName,
-        logoId:      action.logoId ?? 'horizon',
+        logoId:      action.logoId    ?? 'horizon',
+        logoColor:   action.logoColor ?? '#f5a623',
         hub:         action.hub,
-        gates:       { [action.hub]: 1 },           // one complimentary gate at home hub
-        hubs:        { [action.hub]: { tier: 1 } }, // home airport auto-designated as tier-1 hub
+        homeCountry: getAirport(action.hub)?.country ?? '',
+        gates:       { [action.hub]: 1 },
+        hubs:        { [action.hub]: { tier: 1 } },
+        loans:       [startupLoan],
         phase:       'playing',
       };
     }
@@ -381,6 +411,9 @@ function reducer(state, action) {
       const effectiveRange = Math.round(type.range * (aircraft.rangeMod ?? 1.0));
       if (dist > effectiveRange) return state;
 
+      // ── Regulatory restriction check (perimeter rules, slot caps, aircraft size) ─
+      if (checkRouteRestrictions(action.origin, action.destination, dist, action.weeklyFrequency, type.category)) return state;
+
       // ── Block-hours check: cumulative across ALL routes on this aircraft ───────
       const existingBlockHrs = state.routes
         .filter(r => r.aircraftId === action.aircraftId)
@@ -400,6 +433,10 @@ function reducer(state, action) {
       if (slotsAt(action.origin)      + action.weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
       if (slotsAt(action.destination) + action.weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
 
+      // ── Route launch cost ──────────────────────────────────────────────────────
+      const launchCost = routeLaunchCost(dist);
+      if (state.cash < launchCost) return state;   // can't afford to open route
+
       const basePrice = action.ticketPrice;
       const newRoute = {
         id:              uid(),
@@ -409,6 +446,7 @@ function reducer(state, action) {
         ticketPrice:     basePrice,
         weeklyFrequency: action.weeklyFrequency,
         weeksOpen:       0,
+        launchCost,
         hub:             state.hub,
         classPrices: {
           economy:        basePrice,
@@ -420,7 +458,12 @@ function reducer(state, action) {
       const updatedFleet = state.fleet.map(a =>
         a.id === action.aircraftId ? { ...a, status: 'assigned' } : a
       );
-      return { ...state, routes: [...state.routes, newRoute], fleet: updatedFleet };
+      return {
+        ...state,
+        cash:   state.cash - launchCost,
+        routes: [...state.routes, newRoute],
+        fleet:  updatedFleet,
+      };
     }
 
     case 'ADD_GATE': {
@@ -466,6 +509,9 @@ function reducer(state, action) {
       const gateCount = (state.gates ?? {})[action.airportCode] ?? 0;
       if (gateCount < HUB_MIN_GATES) return state;  // need 10 gates minimum
       if ((state.hubs ?? {})[action.airportCode]) return state;  // already a hub
+      // Political restriction: hubs only permitted in home country
+      const airportCountry = getAirport(action.airportCode)?.country;
+      if (state.homeCountry && airportCountry !== state.homeCountry) return state;
       return {
         ...state,
         hubs: { ...(state.hubs ?? {}), [action.airportCode]: { tier: 1 } },
@@ -684,7 +730,24 @@ function reducer(state, action) {
       // Drop contracts that have now expired
       const liveHedges       = allHedges.filter(h => h.expiryAbsWeek > nowAbsWeek);
 
-      const report = weeklyTick({ ...state, fuelMultiplier, loyalty: state.loyalty });
+      // Age + mechanical tick must run BEFORE weeklyTick so that aircraft recovering
+      // from grounding this week can actually fly and earn revenue.
+      const mainBudgetPre = state.maintenanceBudget ?? 1.0;
+      const agingRatePre  = Math.max(0.5, 1 + (1 - mainBudgetPre) * 0.5);
+
+      // Tick down existing grounded aircraft (decrement groundedWeeksLeft) so any
+      // aircraft returning from repair this week is 'assigned'/'idle' when passed to weeklyTick.
+      const tickedFleetPre = state.fleet.map(a => {
+        if (a.status !== 'grounded') return a;
+        const weeksLeft = (a.groundedWeeksLeft ?? 1) - 1;
+        if (weeksLeft <= 0) {
+          const hasRoute = state.routes.some(r => r.aircraftId === a.id);
+          return { ...a, status: hasRoute ? 'assigned' : 'idle', groundedWeeksLeft: 0 };
+        }
+        return { ...a, groundedWeeksLeft: weeksLeft };
+      });
+
+      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty });
 
       // ── Loyalty program: grow/decay member base ──────────────────────────
       const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
@@ -703,28 +766,31 @@ function reducer(state, action) {
       }
       const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers) };
 
+      // ── Awareness: grows from operations + marketing, decays without activity ──
+      // Organic: passengers flying builds word-of-mouth. Marketing accelerates growth.
+      // Diminishing returns: harder to grow from 80→100 than 5→80.
+      const currentAwareness = state.awareness ?? 5;
+      const diminishingFactor = 1 - currentAwareness / 100;
+      const organicGain   = Math.min(1.0, (report.totalPassengers ?? 0) / 1000) * diminishingFactor;
+      const mktGain       = Math.min(2.0, (state.marketingBudget ?? 0) / 25000) * diminishingFactor;
+      // Slow natural decay — stops at 5 (airline stays findable even without active marketing)
+      const awarenessDecay = state.routes.length === 0 ? 0.5 : 0.05;
+      const newAwareness   = Math.max(5, Math.min(100,
+        currentAwareness + organicGain + mktGain - awarenessDecay
+      ));
+
       // Apply event demand multiplier as a line-item adjustment to the report.
       // (fuelMult is already baked into fuelMultiplier above, so no separate fuel adj needed.)
       const eventDemandAdj  = report.totalRevenue ? report.totalRevenue * (globalDemandMult - 1.0) : 0;
       const adjustedCashDelta = report.cashDelta + eventDemandAdj;
 
-      // Age aircraft — rate depends on maintenance budget
-      // Low budget → faster aging (higher future costs); high budget → slower aging
-      const mainBudget  = state.maintenanceBudget ?? 1.0;
-      const agingRate   = Math.max(0.5, 1 + (1 - mainBudget) * 0.5); // 0.5→1.25, 1.0→1.0, 2.0→0.5
+      // agingRate and tickedFleet were computed before weeklyTick above.
+      const mainBudget = mainBudgetPre;
+      const agingRate  = agingRatePre;
 
       // ── Mechanical failures ──────────────────────────────────────────────
-      // 1. Tick down existing grounded aircraft (decrement groundedWeeksLeft)
-      const tickedFleet = state.fleet.map(a => {
-        if (a.status !== 'grounded') return a;
-        const weeksLeft = (a.groundedWeeksLeft ?? 1) - 1;
-        if (weeksLeft <= 0) {
-          // Back in service — restore prior status based on whether it has a route
-          const hasRoute = state.routes.some(r => r.aircraftId === a.id);
-          return { ...a, status: hasRoute ? 'assigned' : 'idle', groundedWeeksLeft: 0 };
-        }
-        return { ...a, groundedWeeksLeft: weeksLeft };
-      });
+      // tickedFleet (grounded countdown tick) was already applied before weeklyTick.
+      const tickedFleet = tickedFleetPre;
 
       // 2. Roll for new failures on non-grounded aircraft
       const newFailures = rollMechanicalFailures(tickedFleet, mainBudget);
@@ -852,7 +918,11 @@ function reducer(state, action) {
         .filter(Boolean)
         .filter(l => l.weeksRemaining > 0);
 
-      const newCash = state.cash + adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost;
+      // Corporate income tax — 21% on positive weekly pre-tax profit
+      const CORPORATE_TAX_RATE = 0.21;
+      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost;
+      const corporateTax    = Math.round(Math.max(0, preTaxProfit) * CORPORATE_TAX_RATE);
+      const newCash = state.cash + preTaxProfit - corporateTax;
       let newWeek = state.week + 1;
       let newYear = state.year;
       if (newWeek > 52) { newWeek = 1; newYear++; }
@@ -913,15 +983,17 @@ function reducer(state, action) {
         hqCost:          report.totalHQCost         ?? 0,
         insurance:       report.totalInsurance      ?? 0,
         marketing:       report.totalMarketingSpend ?? 0,
+        hubInvestment:   report.totalHubInvestment  ?? 0,
         loyalty:         report.totalLoyaltyCost    ?? 0,
         partnerRevenue:  report.totalPartnerRevenue ?? 0,
         partnerFees:     report.totalPartnerFees    ?? 0,
         loanPayments:       totalLoanPayments,
         loanInterest:       totalLoanInterest,
         leaseRedelivery:    leaseRedeliveryCost,
+        corporateTax:       corporateTax,
         totalCost:          report.totalCost + totalLoanPayments + leaseRedeliveryCost,
-        // profit = actual cash change this week (matches newCash delta)
-        profit:             adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost,
+        // profit = actual cash change this week (after tax, matches newCash delta)
+        profit:             preTaxProfit - corporateTax,
         fuelIndex:          currentFuelIndex,
       };
       const newHistory = [...state.financialHistory, historyEntry].slice(-52);
@@ -941,6 +1013,10 @@ function reducer(state, action) {
           ...deliveredAircraft.map(a => a.tailNumber),
         ].filter(Boolean);
         const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
+        const DELIVERY_LEASE_TERMS = { 'Turboprop': 52, 'Regional Jet': 78, 'Narrow Body': 104, 'Wide Body': 156 };
+        const deliveredLeaseTerm = order.ownershipType === 'lease'
+          ? (DELIVERY_LEASE_TERMS[ordType?.category] ?? 104)
+          : undefined;
         deliveredAircraft.push({
           id:            uid(),
           typeId:        order.typeId,
@@ -950,6 +1026,9 @@ function reducer(state, action) {
           ageWeeks:      0,
           config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
           ownershipType: order.ownershipType,
+          weeklyLease:        order.weeklyLease ?? 0,
+          leaseTermWeeks:     deliveredLeaseTerm,
+          leaseRemainingWeeks: deliveredLeaseTerm,
           fuelMod:       order.fuelMod   ?? 1.0,
           rangeMod:      order.rangeMod  ?? 1.0,
           maintMod:      order.maintMod  ?? 1.0,
@@ -984,7 +1063,7 @@ function reducer(state, action) {
         routes:            finalRoutes,
         pendingOrders:     remainingOrders,
         financialHistory:  newHistory,
-        lastReport:        { ...report, cashDelta: adjustedCashDelta - totalLoanPayments, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+        lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         loans:             updatedLoans,
         labor:             updatedLabor,
@@ -994,6 +1073,7 @@ function reducer(state, action) {
         hedgeContracts:      liveHedges,
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
+        awareness:           Math.round(newAwareness * 10) / 10,
         showDebrief:         true,
         pendingToasts:       newToasts,
         phase:               newCash <= 0 ? 'bankrupt' : state.phase,
@@ -1141,10 +1221,35 @@ function reconcileState(parsed) {
   // 5. Carry through pendingOrders (default to empty array for old saves).
   const pendingOrders = parsed.pendingOrders ?? [];
 
+  // 6. Reprice existing routes that are still using the old (too-high) fare multipliers.
+  //    Old multipliers: business=3.5×, PE=1.7×, first=8.0×
+  //    New multipliers: business=2.5×, PE=1.4×, first=5.0×
+  //    Detection: check if businessClass price = economyPrice × 3.5 (within ±1).
+  const migratedRoutes = routes.map(r => {
+    const eco = r.classPrices?.economy ?? r.ticketPrice;
+    if (!eco || !r.classPrices) return r;
+    const bizRatio = (r.classPrices.businessClass ?? 0) / eco;
+    const peRatio  = (r.classPrices.premiumEconomy ?? 0) / eco;
+    // Reprice if using the old 3.5× / 1.7× defaults (allow ±5% rounding tolerance)
+    const usingOldMultipliers =
+      Math.abs(bizRatio - 3.5) < 0.18 &&
+      Math.abs(peRatio  - 1.7) < 0.09;
+    if (!usingOldMultipliers) return r;
+    return {
+      ...r,
+      classPrices: {
+        economy:        eco,
+        premiumEconomy: Math.round(eco * CLASS_FARE_MULTIPLIERS.premiumEconomy),
+        businessClass:  Math.round(eco * CLASS_FARE_MULTIPLIERS.businessClass),
+        firstClass:     Math.round(eco * CLASS_FARE_MULTIPLIERS.firstClass),
+      },
+    };
+  });
+
   return {
     ...parsed,
     fleet:            cleanFleet,
-    routes,
+    routes:           migratedRoutes,
     competitors,
     pendingOrders,
     // Guarantee fields added in later versions exist even on old saves
@@ -1159,6 +1264,7 @@ function reconcileState(parsed) {
     allianceMembership:  parsed.allianceMembership  ?? null,
     codeshareAgreements: parsed.codeshareAgreements ?? [],
     marketingBudget:  parsed.marketingBudget  ?? 0,
+    awareness:        parsed.awareness        ?? 5,
   };
 }
 
