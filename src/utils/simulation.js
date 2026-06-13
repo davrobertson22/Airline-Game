@@ -130,6 +130,62 @@ export const CLASS_SPACE_MULTIPLIERS = {
   economy:        1.00,
 };
 
+// ─── Cabin density dynamics ───────────────────────────────────────────────────
+//
+// Two real effects flow from how densely a cabin is configured:
+//   1. PAYLOAD → RANGE. Fewer/heavier-spaced passengers mean less payload weight,
+//      so the aircraft can trade that weight for fuel and fly further. A densest
+//      all-economy cabin is the baseline (no bonus); a light cabin gains range.
+//   2. EMPTY FLOOR → COMFORT. Floor space you deliberately leave unfilled becomes
+//      extra room per passenger, raising perceived quality (but you sell fewer seats).
+
+/** Max range bonus when the cabin carries (almost) no payload.
+ *  Passengers are only ~12–15% of a jet's max takeoff weight, so trading payload
+ *  for fuel on a fixed airframe realistically buys ~10–15% range — not more. (The
+ *  real A350 ULR's bigger gain comes from added fuel tankage, which we don't model.) */
+export const CONFIG_RANGE_GAIN_MAX = 0.15;     // up to +15% range
+/** Max quality points awarded for an entirely empty (impossibly spacious) floor. */
+export const CONFIG_SPACE_QUALITY_MAX = 14;
+
+/** Economy-equivalent seat units consumed by a cabin config. */
+export function configSeatUnits(config) {
+  return (config.firstClass     ?? 0) * CLASS_SPACE_MULTIPLIERS.firstClass
+       + (config.businessClass  ?? 0) * CLASS_SPACE_MULTIPLIERS.businessClass
+       + (config.premiumEconomy ?? 0) * CLASS_SPACE_MULTIPLIERS.premiumEconomy
+       + (config.economy        ?? 0) * CLASS_SPACE_MULTIPLIERS.economy;
+}
+
+/** Total physical passengers (bodies) a cabin config seats. */
+export function configBodies(config) {
+  return (config.firstClass ?? 0) + (config.businessClass ?? 0)
+       + (config.premiumEconomy ?? 0) + (config.economy ?? 0);
+}
+
+/**
+ * Range multiplier from cabin payload. Densest all-economy = 1.0 (baseline);
+ * lighter cabins (premium-heavy or partly empty) extend range up to +CONFIG_RANGE_GAIN_MAX.
+ */
+export function configRangeMod(config, type) {
+  const maxBodies = type?.seats ?? 0;
+  if (!maxBodies) return 1;
+  const frac = Math.max(0, Math.min(1, configBodies(config) / maxBodies));
+  return 1 + CONFIG_RANGE_GAIN_MAX * (1 - frac);
+}
+
+/** Quality points from floor space left deliberately empty (extra room per pax). */
+export function configSpaceQualityBonus(config, type) {
+  const maxUnits = type?.seats ?? 0;
+  if (!maxUnits) return 0;
+  const emptyFrac = Math.max(0, 1 - configSeatUnits(config) / maxUnits);
+  return Math.round(emptyFrac * CONFIG_SPACE_QUALITY_MAX);
+}
+
+/** Full effective range (km): manufacturer range × engine/wingtip mod × cabin-payload mod. */
+export function effectiveRangeKm(aircraft, type) {
+  const config = aircraft.config ?? defaultConfig(type.seats);
+  return Math.round(type.range * (aircraft.rangeMod ?? 1.0) * configRangeMod(config, type));
+}
+
 // ─────────────────────────────────────────────
 // QUALITY CONSTANTS
 // ─────────────────────────────────────────────
@@ -295,12 +351,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   const type   = getAircraftType(aircraft.typeId);
   if (!origin || !dest || !type) return null;
 
-  const dist = distanceKm(origin, dest);
-  const effectiveRange = Math.round(type.range * (aircraft.rangeMod ?? 1.0));
-  if (dist > effectiveRange) return null;
-
   // Cabin config (fall back to all-economy if not configured)
   const config = aircraft.config ?? defaultConfig(type.seats);
+
+  const dist = distanceKm(origin, dest);
+  // Effective range includes the cabin-payload bonus: a lighter cabin flies further.
+  const effectiveRange = effectiveRangeKm(aircraft, type);
+  if (dist > effectiveRange) return null;
 
   // Derive a qualityScore for the demand model from the route's service settings.
   // serviceLevel maps seat quality → demand.js tier names.
@@ -316,8 +373,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     fleetAgeYears:  (aircraft.ageWeeks ?? 0) / 52,
     customerRating,
   });
+  // Space bonus: floor left empty (lower density) gives passengers more room.
+  const spaceQualityBonus = configSpaceQualityBonus(config, type);
   // Hub quality bonus: routes through a player-designated hub get a quality boost from hub investment
-  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + (route.hubQualityBonus ?? 0)));
+  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + spaceQualityBonus + (route.hubQualityBonus ?? 0)));
 
   // Hub connectivity bonus (mirrors old hubBonus but expressed as 0–0.25 for the utility model)
   const connectivityBonus = (route.origin === route.hub || route.destination === route.hub) ? 0.20 : 0;
@@ -359,7 +418,9 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // Premium classes are filled first; any demand that can't find a premium seat
   // spills down into economy (passengers downgrade rather than not fly).
   const { leisurePax, businessPax } = demandResult; // one-way totals
-  const totalCapOneWay = type.seats * route.weeklyFrequency;
+  // Capacity reflects the REAL configured seat count (premium cabins + any empty
+  // floor reduce it below the aircraft's max economy-equivalent units).
+  const totalCapOneWay = configBodies(config) * route.weeklyFrequency;
   let totalRevenue     = 0;
   let totalPaxOneWay   = 0;
   const classSummary   = {};

@@ -8,6 +8,8 @@ import {
   SERVICE_QUALITY_COST_PER_ROUTE,
   defaultConfig,
   formatMoney,
+  configRangeMod,
+  configSpaceQualityBonus,
 } from '../utils/simulation.js';
 
 const QUALITY_LEVELS = { basic: 0, standard: 1, premium: 2, luxury: 3 };
@@ -56,17 +58,27 @@ export default function FleetConfig({ aircraftId, onClose }) {
   const [first,  setFirst]  = useState(current.firstClass     ?? 0);
   const [biz,    setBiz]    = useState(current.businessClass  ?? 0);
   const [prem,   setPrem]   = useState(current.premiumEconomy ?? 0);
+  const [ecoSeats, setEcoSeats] = useState(current.economy    ?? maxSeats);
   const [seatQ,  setSeatQ]  = useState(current.seatQuality    ?? 'standard');
   const [servQ,  setServQ]  = useState(current.serviceQuality ?? 'standard');
 
-  // Economy fills the remaining seat UNITS automatically.
   // Premium classes take more floor space: First=2×, Business=1.5×, PremEco=1.25×.
-  const usedUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
-                  + biz   * CLASS_SPACE_MULTIPLIERS.businessClass
-                  + prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
-  const remainingUnits = maxSeats - usedUnits;
-  const eco  = Math.max(0, Math.floor(remainingUnits));
-  const over = remainingUnits < 0;
+  const premiumUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
+                     + biz   * CLASS_SPACE_MULTIPLIERS.businessClass
+                     + prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
+  // Economy is player-set, but capped to the floor units left after premium cabins.
+  const ecoMax = Math.max(0, Math.floor(maxSeats - premiumUnits));
+  const eco    = Math.min(Math.max(0, ecoSeats), ecoMax);
+  const usedUnits  = premiumUnits + eco * CLASS_SPACE_MULTIPLIERS.economy;
+  const emptyUnits = Math.max(0, maxSeats - usedUnits);   // deliberately unfilled floor
+  const over = premiumUnits > maxSeats;
+
+  // Density dynamics preview (range + comfort from a lighter / roomier cabin).
+  const previewConfig = { firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco };
+  const baseRangeKm   = Math.round((type?.range ?? 0) * (aircraft?.rangeMod ?? 1.0));
+  const cfgRangeKm     = Math.round(baseRangeKm * configRangeMod(previewConfig, type));
+  const rangeGainPct   = baseRangeKm > 0 ? Math.round((cfgRangeKm / baseRangeKm - 1) * 100) : 0;
+  const spaceQualityBonus = configSpaceQualityBonus(previewConfig, type);
 
   // Reconfiguration cost
   const nextConfig = { firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco, seatQuality: seatQ, serviceQuality: servQ };
@@ -121,7 +133,8 @@ export default function FleetConfig({ aircraftId, onClose }) {
         <div style={{ marginBottom: 22 }}>
           <div className="card-title">Cabin Layout</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-            Economy seats fill automatically. Each seat moved between classes costs $2,500 to refit.
+            Set each cabin's seat count. Leaving floor space empty trades seats for more
+            range and a roomier, higher-quality cabin. Each seat moved costs $2,500 to refit.
           </div>
 
           <ClassInput
@@ -152,19 +165,28 @@ export default function FleetConfig({ aircraftId, onClose }) {
             color="#3ea6ff"
           />
 
-          {/* Economy (read-only) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#38d39f', flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13 }}>Economy <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>1× fare · 1× space</span></div>
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 16, minWidth: 50, textAlign: 'right', color: over ? 'var(--red)' : 'var(--text)' }}>{eco}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', width: 54 }}>auto</div>
-          </div>
+          {/* Economy (player-set, capped to floor units left after premium cabins) */}
+          <ClassInput
+            label="Economy"
+            fareLabel="1× fare"
+            spaceLabel="1× floor space"
+            value={eco}
+            max={ecoMax}
+            onChange={v => setEcoSeats(v)}
+            color="#38d39f"
+          />
+          {eco < ecoMax && (
+            <button
+              onClick={() => setEcoSeats(ecoMax)}
+              style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px 24px' }}
+            >
+              ↥ Fill remaining floor ({ecoMax - eco} more economy seats)
+            </button>
+          )}
 
-          {/* Seat unit bar — width proportional to floor space used */}
+          {/* Seat unit bar — width proportional to floor space used; empty floor shown grey */}
           <div style={{ marginTop: 4 }}>
-            <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 6, background: 'var(--surface3)' }}>
               {[
                 { units: first * CLASS_SPACE_MULTIPLIERS.firstClass,     color: '#bc8cff' },
                 { units: biz   * CLASS_SPACE_MULTIPLIERS.businessClass,  color: '#ffb43d' },
@@ -178,13 +200,26 @@ export default function FleetConfig({ aircraftId, onClose }) {
               <span style={{ color: over ? 'var(--red)' : 'var(--text-muted)' }}>
                 {over
                   ? `⚠ Over by ${(usedUnits - maxSeats).toFixed(2)} seat units — reduce a class`
-                  : `${usedUnits.toFixed(1)} / ${maxSeats} seat units used`}
+                  : `${usedUnits.toFixed(1)} / ${maxSeats} seat units used${emptyUnits >= 1 ? ` · ${emptyUnits.toFixed(0)} empty` : ''}`}
               </span>
               <span style={{ color: 'var(--text-muted)' }}>
                 {first + biz + prem + eco} physical seats total
               </span>
             </div>
           </div>
+
+          {/* Density dynamics: range + comfort from a lighter, roomier cabin */}
+          {(rangeGainPct > 0 || spaceQualityBonus > 0) && (
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 8, fontSize: 12 }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Range <strong style={{ color: 'var(--accent)' }}>+{rangeGainPct}%</strong>
+                <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>({baseRangeKm.toLocaleString()} → {cfgRangeKm.toLocaleString()} km)</span>
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Cabin comfort <strong style={{ color: 'var(--green)' }}>+{spaceQualityBonus}</strong> quality
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Quality */}

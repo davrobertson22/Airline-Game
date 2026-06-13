@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
-  CLASS_FARE_MULTIPLIERS, maxFrequency,
+  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
@@ -418,8 +418,8 @@ function reducer(state, action) {
 
       const dist = routeDistanceKm(action.origin, action.destination);
 
-      // ── Range check (account for engine/wingtip rangeMod) ───────────────────
-      const effectiveRange = Math.round(type.range * (aircraft.rangeMod ?? 1.0));
+      // ── Range check (engine/wingtip rangeMod + cabin-payload bonus) ─────────
+      const effectiveRange = effectiveRangeKm(aircraft, type);
       if (dist > effectiveRange) return state;
 
       // ── Regulatory restriction check (perimeter rules, slot caps, aircraft size) ─

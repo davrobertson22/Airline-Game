@@ -19,85 +19,87 @@ const ACCENT_COLORS = [
   { hex: '#d0a8ff', label: 'Lavender'},
 ];
 
-// ── Region grouping ──────────────────────────────────────────────────────────
-const REGION_ORDER = [
-  'North America',
-  'South America',
-  'Europe',
-  'Middle East',
-  'Africa',
-  'Asia',
-  'Oceania',
-];
-
-const COUNTRY_TO_REGION = {
-  // North America
-  US: 'North America', CA: 'North America', MX: 'North America',
-  PA: 'North America', GT: 'North America', CR: 'North America',
-  CU: 'North America', JM: 'North America', DO: 'North America',
-  PR: 'North America', BS: 'North America', BB: 'North America',
-  TT: 'North America', HN: 'North America', SV: 'North America',
-  NI: 'North America', BZ: 'North America',
-  // South America
-  BR: 'South America', AR: 'South America', CL: 'South America',
-  CO: 'South America', PE: 'South America', VE: 'South America',
-  EC: 'South America', BO: 'South America', PY: 'South America',
-  UY: 'South America', GY: 'South America', SR: 'South America',
-  // Europe
-  GB: 'Europe', FR: 'Europe', DE: 'Europe', NL: 'Europe',
-  ES: 'Europe', IT: 'Europe', CH: 'Europe', AT: 'Europe',
-  BE: 'Europe', PT: 'Europe', NO: 'Europe', SE: 'Europe',
-  FI: 'Europe', DK: 'Europe', IE: 'Europe', PL: 'Europe',
-  GR: 'Europe', TR: 'Europe', RU: 'Europe', UA: 'Europe',
-  CZ: 'Europe', HU: 'Europe', RO: 'Europe', BG: 'Europe',
-  HR: 'Europe', RS: 'Europe', SK: 'Europe', SI: 'Europe',
-  LT: 'Europe', LV: 'Europe', EE: 'Europe', IS: 'Europe',
-  LU: 'Europe', MT: 'Europe', CY: 'Europe', AL: 'Europe',
-  MK: 'Europe', BA: 'Europe', ME: 'Europe', XK: 'Europe',
-  // Middle East
-  AE: 'Middle East', QA: 'Middle East', SA: 'Middle East',
-  IL: 'Middle East', JO: 'Middle East', LB: 'Middle East',
-  IQ: 'Middle East', IR: 'Middle East', KW: 'Middle East',
-  BH: 'Middle East', OM: 'Middle East', YE: 'Middle East',
-  // Africa
-  ZA: 'Africa', EG: 'Africa', KE: 'Africa', NG: 'Africa',
-  MA: 'Africa', ET: 'Africa', GH: 'Africa', TZ: 'Africa',
-  UG: 'Africa', CM: 'Africa', CI: 'Africa', SN: 'Africa',
-  TN: 'Africa', DZ: 'Africa', LY: 'Africa', SD: 'Africa',
-  MZ: 'Africa', ZM: 'Africa', ZW: 'Africa', AO: 'Africa',
-  MU: 'Africa', MG: 'Africa', RW: 'Africa',
-  // Asia (covers South, Southeast, East Asia)
-  SG: 'Asia', HK: 'Asia', MY: 'Asia', TH: 'Asia',
-  ID: 'Asia', PH: 'Asia', IN: 'Asia', LK: 'Asia',
-  JP: 'Asia', KR: 'Asia', CN: 'Asia', TW: 'Asia',
-  VN: 'Asia', MM: 'Asia', KH: 'Asia', LA: 'Asia',
-  BD: 'Asia', NP: 'Asia', PK: 'Asia', AF: 'Asia',
-  UZ: 'Asia', KZ: 'Asia', MN: 'Asia', MO: 'Asia',
-  // Oceania
-  AU: 'Oceania', NZ: 'Oceania', PG: 'Oceania', FJ: 'Oceania',
+// ── Country name lookup (ISO → display name) ─────────────────────────────────
+const COUNTRY_NAMES = {
+  AE: 'United Arab Emirates', AF: 'Afghanistan', AL: 'Albania',
+  AO: 'Angola',               AR: 'Argentina',   AT: 'Austria',
+  AU: 'Australia',            AZ: 'Azerbaijan',  BA: 'Bosnia & Herzegovina',
+  BB: 'Barbados',             BD: 'Bangladesh',  BE: 'Belgium',
+  BG: 'Bulgaria',             BH: 'Bahrain',     BO: 'Bolivia',
+  BR: 'Brazil',               BS: 'Bahamas',     BZ: 'Belize',
+  CA: 'Canada',               CH: 'Switzerland', CI: "Côte d'Ivoire",
+  CL: 'Chile',                CM: 'Cameroon',    CN: 'China',
+  CO: 'Colombia',             CR: 'Costa Rica',  CU: 'Cuba',
+  CY: 'Cyprus',               CZ: 'Czech Republic', DE: 'Germany',
+  DK: 'Denmark',              DO: 'Dominican Republic', DZ: 'Algeria',
+  EC: 'Ecuador',              EE: 'Estonia',     EG: 'Egypt',
+  ES: 'Spain',                ET: 'Ethiopia',    FI: 'Finland',
+  FJ: 'Fiji',                 FR: 'France',      GB: 'United Kingdom',
+  GH: 'Ghana',                GR: 'Greece',      GT: 'Guatemala',
+  GY: 'Guyana',               HK: 'Hong Kong',   HN: 'Honduras',
+  HR: 'Croatia',              HU: 'Hungary',     ID: 'Indonesia',
+  IE: 'Ireland',              IL: 'Israel',      IN: 'India',
+  IQ: 'Iraq',                 IR: 'Iran',        IS: 'Iceland',
+  IT: 'Italy',                JM: 'Jamaica',     JO: 'Jordan',
+  JP: 'Japan',                KE: 'Kenya',       KH: 'Cambodia',
+  KR: 'South Korea',          KW: 'Kuwait',      KZ: 'Kazakhstan',
+  LA: 'Laos',                 LB: 'Lebanon',     LK: 'Sri Lanka',
+  LT: 'Lithuania',            LU: 'Luxembourg',  LV: 'Latvia',
+  LY: 'Libya',                MA: 'Morocco',     ME: 'Montenegro',
+  MG: 'Madagascar',           MK: 'North Macedonia', MM: 'Myanmar',
+  MN: 'Mongolia',             MO: 'Macau',       MT: 'Malta',
+  MU: 'Mauritius',            MX: 'Mexico',      MY: 'Malaysia',
+  MZ: 'Mozambique',           NG: 'Nigeria',     NI: 'Nicaragua',
+  NL: 'Netherlands',          NO: 'Norway',      NP: 'Nepal',
+  NZ: 'New Zealand',          OM: 'Oman',        PA: 'Panama',
+  PE: 'Peru',                 PG: 'Papua New Guinea', PH: 'Philippines',
+  PK: 'Pakistan',             PL: 'Poland',      PR: 'Puerto Rico',
+  PT: 'Portugal',             PY: 'Paraguay',    QA: 'Qatar',
+  RO: 'Romania',              RS: 'Serbia',      RU: 'Russia',
+  RW: 'Rwanda',               SA: 'Saudi Arabia', SD: 'Sudan',
+  SE: 'Sweden',               SG: 'Singapore',   SI: 'Slovenia',
+  SK: 'Slovakia',             SN: 'Senegal',     SR: 'Suriname',
+  SV: 'El Salvador',          TH: 'Thailand',    TN: 'Tunisia',
+  TR: 'Turkey',               TT: 'Trinidad & Tobago', TW: 'Taiwan',
+  TZ: 'Tanzania',             UA: 'Ukraine',     UG: 'Uganda',
+  US: 'United States',        UY: 'Uruguay',     UZ: 'Uzbekistan',
+  VE: 'Venezuela',            VN: 'Vietnam',     XK: 'Kosovo',
+  YE: 'Yemen',                ZA: 'South Africa', ZM: 'Zambia',
+  ZW: 'Zimbabwe',
 };
 
-function getRegion(country) {
-  return COUNTRY_TO_REGION[country] ?? 'Other';
+function countryName(code) {
+  return COUNTRY_NAMES[code] ?? code;
 }
 
-function groupedAirports() {
+// Returns [{countryName, airports[]}] sorted A-Z by country name
+function groupedByCountry(filter = '') {
+  const q = filter.trim().toLowerCase();
   const groups = {};
   for (const a of AIRPORTS) {
-    const region = getRegion(a.country);
-    if (!groups[region]) groups[region] = [];
-    groups[region].push(a);
+    const name = countryName(a.country);
+    const matches = !q
+      || a.code.toLowerCase().includes(q)
+      || a.city.toLowerCase().includes(q)
+      || a.name.toLowerCase().includes(q)
+      || name.toLowerCase().includes(q);
+    if (!matches) continue;
+    if (!groups[name]) groups[name] = [];
+    groups[name].push(a);
   }
-  for (const g of Object.values(groups)) {
-    g.sort((a, b) => a.city.localeCompare(b.city));
-  }
-  return groups;
+  return Object.entries(groups)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, airports]) => ({
+      name,
+      airports: [...airports].sort((a, b) => a.city.localeCompare(b.city)),
+    }));
 }
 
 export default function SetupScreen() {
   const { dispatch } = useGame();
   const [airlineName,       setAirlineName]       = useState('');
   const [hub,               setHub]               = useState('JFK');
+  const [hubSearch,         setHubSearch]         = useState('');
   const [logoId,            setLogoId]            = useState(AIRLINE_LOGOS[0].id);
   const [accentColor,       setAccentColor]       = useState(ACCENT_COLORS[0].hex);
   const [enableObjectives,  setEnableObjectives]  = useState(true);
@@ -115,8 +117,8 @@ export default function SetupScreen() {
     });
   }
 
-  const hubAirport = AIRPORTS.find(a => a.code === hub);
-  const groups     = groupedAirports();
+  const hubAirport    = AIRPORTS.find(a => a.code === hub);
+  const countryGroups = groupedByCountry(hubSearch);
 
   return (
     <div className="setup-screen">
@@ -251,39 +253,110 @@ export default function SetupScreen() {
           {/* ── Hub airport ── */}
           <div className="form-group">
             <label className="form-label">Home Hub Airport</label>
-            <select
-              className="form-select"
-              value={hub}
-              onChange={e => setHub(e.target.value)}
-            >
-              {REGION_ORDER.map(region => {
-                const airports = groups[region];
-                if (!airports?.length) return null;
-                return (
-                  <optgroup key={region} label={`── ${region} ──`}>
-                    {airports.map(a => (
-                      <option key={a.code} value={a.code}>
-                        {a.code} — {a.city}, {a.country}
-                      </option>
-                    ))}
-                  </optgroup>
-                );
-              })}
-              {groups['Other']?.length > 0 && (
-                <optgroup label="── Other ──">
-                  {groups['Other'].map(a => (
-                    <option key={a.code} value={a.code}>
-                      {a.code} — {a.city}, {a.country}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+
+            {/* Search box */}
+            <input
+              className="form-input"
+              type="text"
+              placeholder="Search by city, airport or country…"
+              value={hubSearch}
+              onChange={e => setHubSearch(e.target.value)}
+              style={{ marginBottom: 6 }}
+            />
+
+            {/* Scrollable airport list */}
+            <div style={{
+              maxHeight: 280,
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--surface2)',
+            }}>
+              {countryGroups.length === 0 ? (
+                <div style={{ padding: '20px 14px', color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>
+                  No airports match "{hubSearch}"
+                </div>
+              ) : countryGroups.map(({ name, airports }) => (
+                <div key={name}>
+                  {/* Country subheading */}
+                  <div style={{
+                    padding: '6px 12px',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '.8px',
+                    textTransform: 'uppercase',
+                    color: 'var(--accent)',
+                    background: 'var(--surface3)',
+                    borderBottom: '1px solid var(--border)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 1,
+                  }}>
+                    {name}
+                  </div>
+
+                  {/* Airports in this country */}
+                  {airports.map(a => {
+                    const selected = a.code === hub;
+                    return (
+                      <button
+                        key={a.code}
+                        type="button"
+                        onClick={() => setHub(a.code)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          width: '100%',
+                          padding: '7px 12px',
+                          background: selected ? 'var(--accent-dim)' : 'transparent',
+                          border: 'none',
+                          borderBottom: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          color: 'var(--text)',
+                          transition: 'background .1s',
+                        }}
+                      >
+                        <span style={{
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          color: selected ? 'var(--accent)' : 'var(--text-dim)',
+                          minWidth: 36,
+                        }}>
+                          {a.code}
+                        </span>
+                        <span style={{ fontSize: 13, flex: 1 }}>
+                          {a.city}
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
+                            {a.name}
+                          </span>
+                        </span>
+                        <span style={{
+                          fontSize: 10,
+                          color: 'var(--text-muted)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '.4px',
+                        }}>
+                          {a.tier}
+                        </span>
+                        {selected && (
+                          <span style={{ color: 'var(--accent)', fontSize: 14, marginLeft: 4 }}>✓</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+
+            {/* Selected airport summary */}
             {hubAirport && (
               <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
                 {hubAirport.name} · {hubAirport.population}M metro area · {hubAirport.tier} hub
                 <span style={{ marginLeft: 8, color: 'var(--accent)', fontWeight: 600 }}>
-                  🏠 Home country: {hubAirport.country}
+                  🏠 Home country: {countryName(hubAirport.country)}
                 </span>
               </div>
             )}

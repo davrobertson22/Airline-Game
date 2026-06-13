@@ -353,9 +353,9 @@ export const AIRCRAFT_TYPES = [
     range: 18_000,
     weeklyLease:      345_000,
     purchasePrice: 86_250_000,
-    fuelCostPerKm: 10.2,
-    crewCostPerKm: 1.95,
-    baseMaintenancePerWk: 240_000,
+    fuelCostPerKm: 12.3,   // heavier than the -900 (extra centre-tank fuel/weight)
+    crewCostPerKm: 2,      // same crew as the -900
+    baseMaintenancePerWk: 255_000,  // marginally higher than the -900
     description: 'Ultra-long-range A350. The only aircraft capable of operating the world\'s longest routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/EGLF_-_Airbus_A350-941_-_F-WZNW.jpg/960px-EGLF_-_Airbus_A350-941_-_F-WZNW.jpg',
   },

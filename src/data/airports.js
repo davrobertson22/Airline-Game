@@ -932,7 +932,7 @@ export const AIRPORTS = [
   { code: 'KTA', name: 'Karratha Airport', city: 'Karratha', country: 'AU', lat: -20.71, lon: 116.77, population: 0.03, tier: 'regional' },
   { code: 'APW', name: 'Faleolo Intl', city: 'Apia', country: 'WS', lat: -13.83, lon: -172.01, population: 0.2, tier: 'regional' },
   { code: 'TBU', name: 'Fuaamotu Intl', city: 'Nukualofa', country: 'TO', lat: -21.24, lon: -175.15, population: 0.1, tier: 'regional' },
-  { code: 'FUN', name: 'Bonriki Intl', city: 'Tarawa', country: 'KI', lat: 1.38, lon: 173.15, population: 0.06, tier: 'regional' },
+  { code: 'TRW', name: 'Bonriki Intl', city: 'Tarawa', country: 'KI', lat: 1.38, lon: 173.15, population: 0.06, tier: 'regional' },
   { code: 'ABE', name: 'Lehigh Valley Intl', city: 'Allentown', country: 'US', lat: 40.65, lon: -75.44, population: 0.8, tier: 'regional' },
   { code: 'ACT', name: 'Waco Regional Airport', city: 'Waco', country: 'US', lat: 31.61, lon: -97.23, population: 0.3, tier: 'regional' },
   { code: 'AGS', name: 'Augusta Regional Airport', city: 'Augusta', country: 'US', lat: 33.37, lon: -81.96, population: 0.6, tier: 'regional' },
@@ -1075,6 +1075,57 @@ export const AIRPORTS = [
   { code: 'RAK', name: 'Marrakesh Menara',         city: 'Marrakesh',      country: 'MA', lat: 31.61, lon: -8.04,  population: 1.5, tier: 'regional' },
   { code: 'SKD', name: 'Samarkand Intl',           city: 'Samarkand',      country: 'UZ', lat: 39.70, lon: 66.98,  population: 0.6, tier: 'regional' },
   { code: 'AUA', name: 'Queen Beatrix Intl',       city: 'Oranjestad',     country: 'AW', lat: 12.50, lon: -70.01, population: 0.1, tier: 'regional' },
+
+  // ── EXPANSION: iconic / novelty ──────────────────────────────────────────────
+  { code: 'DIL', name: 'Pres. Nicolau Lobato Intl', city: 'Dili', country: 'TL', lat: -8.55, lon: 125.53, population: 0.28, tier: 'regional' },
+  { code: 'PBH', name: 'Paro Intl', city: 'Paro', country: 'BT', lat: 27.4, lon: 89.42, population: 0.1, tier: 'regional' },
+  { code: 'USH', name: 'Malvinas Argentinas', city: 'Ushuaia', country: 'AR', lat: -54.84, lon: -68.3, population: 0.08, tier: 'regional' },
+  { code: 'FAE', name: 'Vagar', city: 'Sorvagur', country: 'FO', lat: 62.06, lon: -7.27, population: 0.05, tier: 'regional' },
+  { code: 'GOH', name: 'Nuuk Intl', city: 'Nuuk', country: 'GL', lat: 64.19, lon: -51.68, population: 0.019, tier: 'regional' },
+  { code: 'DCY', name: 'Daocheng Yading', city: 'Daocheng', country: 'CN', lat: 29.32, lon: 100.05, population: 0.03, tier: 'regional' },
+  { code: 'BPX', name: 'Qamdo Bamda', city: 'Qamdo', country: 'CN', lat: 30.55, lon: 97.11, population: 0.06, tier: 'regional' },
+  { code: 'LUA', name: 'Tenzing-Hillary', city: 'Lukla', country: 'NP', lat: 27.69, lon: 86.73, population: 0.005, tier: 'regional' },
+  { code: 'HGU', name: 'Mount Hagen Kagamuga', city: 'Mount Hagen', country: 'PG', lat: -5.83, lon: 144.3, population: 0.03, tier: 'regional' },
+  { code: 'PPG', name: 'Pago Pago Intl', city: 'Pago Pago', country: 'AS', lat: -14.33, lon: -170.71, population: 0.05, tier: 'regional' },
+  { code: 'IPC', name: 'Mataveri', city: 'Easter Island', country: 'CL', lat: -27.16, lon: -109.42, population: 0.008, tier: 'regional' },
+  { code: 'INU', name: 'Nauru Intl', city: 'Yaren', country: 'NR', lat: -0.55, lon: 166.92, population: 0.01, tier: 'regional' },
+  { code: 'GIS', name: 'Gisborne', city: 'Gisborne', country: 'NZ', lat: -38.66, lon: 177.98, population: 0.05, tier: 'regional' },
+  { code: 'FSP', name: 'St-Pierre Pointe Blanche', city: 'St-Pierre', country: 'PM', lat: 46.76, lon: -56.17, population: 0.006, tier: 'regional' },
+  { code: 'MNK', name: 'Maumere Frans Seda', city: 'Maumere', country: 'ID', lat: -8.64, lon: 122.24, population: 0.07, tier: 'regional' },
+  { code: 'BRR', name: 'Barra', city: 'Barra', country: 'GB', lat: 57.02, lon: -7.44, population: 0.001, tier: 'regional' },
+  { code: 'LYR', name: 'Svalbard Longyear', city: 'Longyearbyen', country: 'NO', lat: 78.25, lon: 15.46, population: 0.002, tier: 'regional' },
+  { code: 'HLE', name: 'St Helena', city: 'Jamestown', country: 'SH', lat: -15.96, lon: -5.65, population: 0.004, tier: 'regional' },
+  { code: 'SAB', name: 'Juancho Yrausquin', city: 'Saba', country: 'BQ', lat: 17.64, lon: -63.22, population: 0.002, tier: 'regional' },
+  { code: 'SBH', name: 'Gustaf III', city: 'Gustavia', country: 'BL', lat: 17.9, lon: -62.84, population: 0.01, tier: 'regional' },
+  { code: 'GIB', name: 'Gibraltar Intl', city: 'Gibraltar', country: 'GI', lat: 36.15, lon: -5.35, population: 0.03, tier: 'regional' },
+  { code: 'CVF', name: 'Courchevel Altiport', city: 'Courchevel', country: 'FR', lat: 45.4, lon: 6.63, population: 0.002, tier: 'regional' },
+  { code: 'SFJ', name: 'Kangerlussuaq', city: 'Kangerlussuaq', country: 'GL', lat: 67.01, lon: -50.71, population: 0.001, tier: 'regional' },
+  { code: 'NLK', name: 'Norfolk Island', city: 'Burnt Pine', country: 'NF', lat: -29.04, lon: 167.94, population: 0.002, tier: 'regional' },
+  { code: 'AXA', name: 'Clayton J Lloyd', city: 'The Valley', country: 'AI', lat: 18.2, lon: -63.06, population: 0.01, tier: 'regional' },
+  { code: 'VQS', name: 'Antonio Rivera', city: 'Vieques', country: 'US', lat: 18.13, lon: -65.49, population: 0.009, tier: 'regional' },
+  { code: 'SDU', name: 'Santos Dumont', city: 'Rio de Janeiro', country: 'BR', lat: -22.91, lon: -43.16, population: 13.6, tier: 'regional' },
+  // ── EXPANSION: UN member coverage (primary intl airport) ─────────────────────
+  { code: 'BJM', name: 'Bujumbura Intl', city: 'Bujumbura', country: 'BI', lat: -3.32, lon: 29.32, population: 1.1, tier: 'regional' },
+  { code: 'HAH', name: 'Prince Said Ibrahim', city: 'Moroni', country: 'KM', lat: -11.53, lon: 43.27, population: 0.7, tier: 'regional' },
+  { code: 'DOM', name: 'Douglas-Charles', city: 'Marigot', country: 'DM', lat: 15.55, lon: -61.3, population: 0.07, tier: 'regional' },
+  { code: 'SSG', name: 'Malabo Intl', city: 'Malabo', country: 'GQ', lat: 3.76, lon: 8.71, population: 0.3, tier: 'regional' },
+  { code: 'SHO', name: 'King Mswati III', city: 'Manzini', country: 'SZ', lat: -26.36, lon: 31.72, population: 0.4, tier: 'regional' },
+  { code: 'CKY', name: 'Conakry Intl', city: 'Conakry', country: 'GN', lat: 9.58, lon: -13.61, population: 2, tier: 'regional' },
+  { code: 'PAP', name: 'Toussaint Louverture', city: 'Port-au-Prince', country: 'HT', lat: 18.58, lon: -72.29, population: 2.8, tier: 'regional' },
+  { code: 'FNJ', name: 'Pyongyang Sunan Intl', city: 'Pyongyang', country: 'KP', lat: 39.22, lon: 125.67, population: 3, tier: 'regional' },
+  { code: 'MSU', name: 'Moshoeshoe I Intl', city: 'Maseru', country: 'LS', lat: -29.46, lon: 27.55, population: 0.4, tier: 'regional' },
+  { code: 'ROB', name: 'Roberts Intl', city: 'Monrovia', country: 'LR', lat: 6.23, lon: -10.36, population: 1.6, tier: 'regional' },
+  { code: 'MLE', name: 'Velana Intl', city: 'Male', country: 'MV', lat: 4.19, lon: 73.53, population: 0.4, tier: 'major' },
+  { code: 'MAJ', name: 'Marshall Islands Intl', city: 'Majuro', country: 'MH', lat: 7.06, lon: 171.27, population: 0.03, tier: 'regional' },
+  { code: 'PNI', name: 'Pohnpei Intl', city: 'Kolonia', country: 'FM', lat: 6.99, lon: 158.21, population: 0.04, tier: 'regional' },
+  { code: 'ULN', name: 'Chinggis Khaan Intl', city: 'Ulaanbaatar', country: 'MN', lat: 47.84, lon: 106.77, population: 1.6, tier: 'major' },
+  { code: 'ROR', name: 'Roman Tmetuchl Intl', city: 'Koror', country: 'PW', lat: 7.37, lon: 134.54, population: 0.02, tier: 'regional' },
+  { code: 'UVF', name: 'Hewanorra Intl', city: 'Vieux Fort', country: 'LC', lat: 13.73, lon: -60.95, population: 0.18, tier: 'regional' },
+  { code: 'SVD', name: 'Argyle Intl', city: 'Kingstown', country: 'VC', lat: 13.16, lon: -61.15, population: 0.11, tier: 'regional' },
+  { code: 'FNA', name: 'Lungi Intl', city: 'Freetown', country: 'SL', lat: 8.62, lon: -13.2, population: 1.3, tier: 'regional' },
+  { code: 'JUB', name: 'Juba Intl', city: 'Juba', country: 'SS', lat: 4.87, lon: 31.6, population: 0.5, tier: 'regional' },
+  { code: 'DAM', name: 'Damascus Intl', city: 'Damascus', country: 'SY', lat: 33.41, lon: 36.51, population: 2.5, tier: 'regional' },
+  { code: 'FUN', name: 'Funafuti Intl', city: 'Funafuti', country: 'TV', lat: -8.52, lon: 179.2, population: 0.006, tier: 'regional' },
 ];
 
 export function getAirport(code) {
@@ -1324,6 +1375,58 @@ export const AIRPORT_SCORES = {
   RAK: { businessScore: 25, leisureScore: 88 },   // Marrakesh – tourism
   SKD: { businessScore: 15, leisureScore: 85 },   // Samarkand – Silk Road tourism
   AUA: { businessScore: 12, leisureScore: 92 },   // Aruba – beach resort
+
+  // ── Expansion: iconic / novelty ──────────────────────────────────────────────
+  DIL: { businessScore: 32, leisureScore: 45 },   // Dili
+  PBH: { businessScore: 20, leisureScore: 80 },   // Paro
+  USH: { businessScore: 20, leisureScore: 80 },   // Ushuaia
+  FAE: { businessScore: 25, leisureScore: 70 },   // Vagar / Faroe
+  GOH: { businessScore: 35, leisureScore: 55 },   // Nuuk
+  DCY: { businessScore: 10, leisureScore: 90 },   // Daocheng Yading
+  BPX: { businessScore: 20, leisureScore: 55 },   // Qamdo Bamda
+  LUA: { businessScore: 10, leisureScore: 90 },   // Lukla
+  HGU: { businessScore: 32, leisureScore: 40 },   // Mount Hagen
+  PPG: { businessScore: 30, leisureScore: 55 },   // Pago Pago
+  IPC: { businessScore: 8,  leisureScore: 92 },   // Easter Island
+  INU: { businessScore: 30, leisureScore: 40 },   // Nauru
+  GIS: { businessScore: 32, leisureScore: 45 },   // Gisborne
+  FSP: { businessScore: 30, leisureScore: 40 },   // St-Pierre
+  MNK: { businessScore: 28, leisureScore: 55 },   // Maumere
+  BRR: { businessScore: 10, leisureScore: 85 },   // Barra
+  LYR: { businessScore: 20, leisureScore: 80 },   // Longyearbyen
+  HLE: { businessScore: 15, leisureScore: 80 },   // St Helena
+  SAB: { businessScore: 10, leisureScore: 90 },   // Saba
+  SBH: { businessScore: 20, leisureScore: 90 },   // St Barthelemy
+  GIB: { businessScore: 30, leisureScore: 70 },   // Gibraltar
+  CVF: { businessScore: 15, leisureScore: 90 },   // Courchevel
+  SFJ: { businessScore: 20, leisureScore: 70 },   // Kangerlussuaq
+  NLK: { businessScore: 15, leisureScore: 75 },   // Norfolk Island
+  AXA: { businessScore: 20, leisureScore: 85 },   // Anguilla
+  VQS: { businessScore: 15, leisureScore: 80 },   // Vieques
+  SDU: { businessScore: 60, leisureScore: 50 },   // Santos Dumont (downtown Rio)
+
+  // ── Expansion: UN member coverage ────────────────────────────────────────────
+  BJM: { businessScore: 30, leisureScore: 35 },   // Bujumbura
+  HAH: { businessScore: 25, leisureScore: 45 },   // Moroni
+  DOM: { businessScore: 20, leisureScore: 70 },   // Dominica
+  SSG: { businessScore: 40, leisureScore: 35 },   // Malabo
+  SHO: { businessScore: 28, leisureScore: 40 },   // Eswatini
+  CKY: { businessScore: 35, leisureScore: 35 },   // Conakry
+  PAP: { businessScore: 32, leisureScore: 35 },   // Port-au-Prince
+  FNJ: { businessScore: 30, leisureScore: 30 },   // Pyongyang
+  MSU: { businessScore: 28, leisureScore: 38 },   // Maseru
+  ROB: { businessScore: 32, leisureScore: 35 },   // Monrovia
+  MLE: { businessScore: 30, leisureScore: 85 },   // Male / Maldives
+  MAJ: { businessScore: 25, leisureScore: 45 },   // Majuro
+  PNI: { businessScore: 25, leisureScore: 45 },   // Pohnpei
+  ULN: { businessScore: 45, leisureScore: 45 },   // Ulaanbaatar
+  ROR: { businessScore: 25, leisureScore: 55 },   // Koror / Palau
+  UVF: { businessScore: 25, leisureScore: 70 },   // Saint Lucia
+  SVD: { businessScore: 25, leisureScore: 65 },   // St Vincent
+  FNA: { businessScore: 32, leisureScore: 38 },   // Freetown
+  JUB: { businessScore: 30, leisureScore: 30 },   // Juba
+  DAM: { businessScore: 40, leisureScore: 35 },   // Damascus
+  FUN: { businessScore: 20, leisureScore: 45 },   // Funafuti / Tuvalu
 };
 
 // ── Region mapping ────────────────────────────────────────────────────────────
@@ -1343,6 +1446,17 @@ export const COUNTRY_REGION = {
   PY: 'South America', UY: 'South America', VE: 'South America',
   BO: 'South America', CW: 'South America', SR: 'South America',
   AW: 'South America',
+  // Expansion: iconic territories + UN member coverage
+  TL: 'Asia', BT: 'Asia', KP: 'Asia', MV: 'Asia', MN: 'Asia',
+  FO: 'Europe', GI: 'Europe',
+  GL: 'North America', PM: 'North America', BQ: 'North America', BL: 'North America',
+  AI: 'North America', DM: 'North America', HT: 'North America', LC: 'North America',
+  VC: 'North America',
+  AS: 'Oceania', NR: 'Oceania', NF: 'Oceania', MH: 'Oceania', FM: 'Oceania',
+  PW: 'Oceania', TV: 'Oceania',
+  SH: 'Africa', BI: 'Africa', KM: 'Africa', GQ: 'Africa', SZ: 'Africa',
+  GN: 'Africa', LS: 'Africa', LR: 'Africa', SL: 'Africa', SS: 'Africa',
+  SY: 'Middle East',
   GY: 'South America',
   // Europe
   GB: 'Europe', FR: 'Europe', DE: 'Europe', NL: 'Europe',

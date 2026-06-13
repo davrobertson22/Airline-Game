@@ -7,7 +7,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
-  routeDistanceKm, currentGameDate,
+  routeDistanceKm, currentGameDate, effectiveRangeKm,
 } from '../utils/simulation.js';
 
 // ─── Route grouping ───────────────────────────────────────────────────────────
@@ -803,7 +803,8 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
     : null;
   const dist    = validDest ? Math.round(distanceKm(getAirport(origin), getAirport(dest))) : null;
   const refP    = validDest ? referencePrice(origin, dest) : null;
-  const inRange = type && dist ? dist <= type.range : true;
+  const effRange = type && aircraft ? effectiveRangeKm(aircraft, type) : (type?.range ?? 0);
+  const inRange  = type && dist ? dist <= effRange : true;
 
   // Block hours (cumulative)
   const existingBlockHrs = usedBlockHrsFor(aircraft);
@@ -968,7 +969,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {/* Range warning */}
         {dist && !inRange && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
-            ⚠ {type?.name} has a range of {type?.range.toLocaleString()} km — this route is {dist.toLocaleString()} km.
+            ⚠ {type?.name} has a range of {effRange.toLocaleString()} km (as configured) — this route is {dist.toLocaleString()} km.
           </div>
         )}
 
