@@ -66,10 +66,72 @@
     <!-- Static SEO landing page — hidden by React on mount, indexed by crawlers -->
     <div id="seo-landing" style="font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; padding: 0; margin: 0;">
 
-      <header style="max-width: 900px; margin: 0 auto; padding: 60px 24px 40px;">
-        <h1 style="font-size: 2.8rem; font-weight: 800; margin: 0 0 12px; color: #38bdf8;">&#x2708; Tailwinds</h1>
-        <p style="font-size: 1.3rem; color: #94a3b8; margin: 0 0 32px; max-width: 600px;">The free browser airline management game. Build your airline from scratch — lease planes, open routes, dominate competitors, and grow into a global carrier.</p>
-        <a href="#" onclick="document.getElementById('seo-landing').style.display='none'; return false;" style="display: inline-block; background: #0ea5e9; color: #fff; font-weight: 700; font-size: 1.1rem; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Play Free Now &#x2192;</a>
+      <header style="max-width: 1040px; margin: 0 auto; padding: 56px 24px 40px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center;">
+
+        <!-- Hero copy -->
+        <div style="flex: 1 1 380px; min-width: 300px;">
+          <h1 style="font-size: 2.9rem; font-weight: 800; margin: 0 0 14px; color: #38bdf8; line-height: 1.05;">&#x2708; Build your own airline empire</h1>
+          <p style="font-size: 1.25rem; color: #cbd5e1; margin: 0 0 22px; max-width: 540px; line-height: 1.5;">Start with a single plane and a $10M loan. Open routes, build hubs, out-fly your rivals, and grow from a regional carrier into a global airline.</p>
+
+          <!-- Trust row -->
+          <div style="display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0 0 26px;">
+            <span style="display:inline-flex; align-items:center; gap:6px; color:#94a3b8; font-size:0.92rem;">&#x2713; 100% free</span>
+            <span style="display:inline-flex; align-items:center; gap:6px; color:#94a3b8; font-size:0.92rem;">&#x2713; No sign-up</span>
+            <span style="display:inline-flex; align-items:center; gap:6px; color:#94a3b8; font-size:0.92rem;">&#x2713; No download</span>
+            <span style="display:inline-flex; align-items:center; gap:6px; color:#94a3b8; font-size:0.92rem;">&#x2713; Plays in your browser</span>
+          </div>
+
+          <a href="#" onclick="document.getElementById('seo-landing').style.display='none'; return false;" style="display: inline-block; background: #0ea5e9; color: #fff; font-weight: 700; font-size: 1.15rem; padding: 15px 36px; border-radius: 8px; text-decoration: none; box-shadow: 0 6px 20px -4px rgba(14,165,233,.6);">Play Free Now &#x2192;</a>
+
+          <!-- Scale cues -->
+          <div style="display: flex; flex-wrap: wrap; gap: 28px; margin: 34px 0 0;">
+            <div><div style="font-size:1.5rem; font-weight:800; color:#f1f5f9;">1,500+</div><div style="font-size:0.82rem; color:#64748b; text-transform:uppercase; letter-spacing:.5px;">Real airports</div></div>
+            <div><div style="font-size:1.5rem; font-weight:800; color:#f1f5f9;">100+</div><div style="font-size:0.82rem; color:#64748b; text-transform:uppercase; letter-spacing:.5px;">Real aircraft</div></div>
+            <div><div style="font-size:1.5rem; font-weight:800; color:#f1f5f9;">200+</div><div style="font-size:0.82rem; color:#64748b; text-transform:uppercase; letter-spacing:.5px;">Countries</div></div>
+          </div>
+        </div>
+
+        <!-- Hero visual: real screenshot if /hero.png exists, else in-game mockup -->
+        <div style="flex: 1 1 420px; min-width: 300px;">
+          <img src="/hero.png" alt="Tailwinds gameplay — route map and airline dashboard" onerror="this.style.display='none'; document.getElementById('hero-mock').style.display='block';" style="width: 100%; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 18px 50px -12px rgba(0,0,0,.7);" />
+          <div id="hero-mock" style="display:none; border-radius: 12px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 18px 50px -12px rgba(0,0,0,.7); background:#0e1623;">
+            <!-- faux browser/app chrome -->
+            <div style="display:flex; align-items:center; gap:6px; padding:9px 12px; background:#0b1220; border-bottom:1px solid #1e293b;">
+              <span style="width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>
+              <span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></span>
+              <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>
+              <span style="margin-left:10px; color:#475569; font-size:11px;">&#x2708; Tailwinds — Airline Manager</span>
+            </div>
+            <!-- KPI strip -->
+            <div style="display:flex; gap:8px; padding:12px;">
+              <div style="flex:1; background:#13203a; border:1px solid #1e293b; border-radius:8px; padding:8px 10px;"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Cash</div><div style="font-size:15px;font-weight:800;color:#34d399;">$8.4M</div></div>
+              <div style="flex:1; background:#13203a; border:1px solid #1e293b; border-radius:8px; padding:8px 10px;"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Routes</div><div style="font-size:15px;font-weight:800;color:#38bdf8;">14</div></div>
+              <div style="flex:1; background:#13203a; border:1px solid #1e293b; border-radius:8px; padding:8px 10px;"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Load</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;">82%</div></div>
+            </div>
+            <!-- route map -->
+            <svg viewBox="0 0 460 230" style="display:block; width:100%; background:radial-gradient(circle at 50% 40%, #13203a, #0b1220);">
+              <g fill="none" stroke="#38bdf8" stroke-width="1.6" opacity="0.85">
+                <path d="M120,150 Q200,40 320,90" />
+                <path d="M120,150 Q160,90 250,70" />
+                <path d="M120,150 Q230,180 360,150" />
+                <path d="M320,90 Q360,120 360,150" />
+                <path d="M250,70 Q300,60 320,90" />
+              </g>
+              <g fill="#94a3b8" opacity="0.5">
+                <circle cx="60" cy="60" r="2"/><circle cx="180" cy="40" r="2"/><circle cx="410" cy="70" r="2"/>
+                <circle cx="80" cy="200" r="2"/><circle cx="280" cy="200" r="2"/><circle cx="420" cy="190" r="2"/>
+              </g>
+              <g>
+                <circle cx="120" cy="150" r="6" fill="#0ea5e9"/><circle cx="120" cy="150" r="11" fill="none" stroke="#38bdf8" stroke-width="1.5" opacity="0.5"/>
+                <circle cx="320" cy="90" r="5" fill="#34d399"/>
+                <circle cx="250" cy="70" r="4" fill="#f1f5f9"/>
+                <circle cx="360" cy="150" r="4" fill="#f1f5f9"/>
+              </g>
+              <text x="120" y="172" fill="#cbd5e1" font-size="9" font-family="system-ui" text-anchor="middle">JFK</text>
+              <text x="332" y="86" fill="#cbd5e1" font-size="9" font-family="system-ui">LHR</text>
+            </svg>
+          </div>
+        </div>
       </header>
 
       <section style="max-width: 900px; margin: 0 auto; padding: 0 24px 60px;">
@@ -98,7 +160,7 @@
 
           <div style="background: #1e293b; border-radius: 10px; padding: 24px;">
             <h3 style="margin: 0 0 8px; color: #38bdf8; font-size: 1.05rem;">&#x2694;&#xFE0F; Competition</h3>
-            <p style="margin: 0; color: #94a3b8; font-size: 0.95rem;">Go head-to-head with AI competitors. Undercut fares, steal market share, and defend your best routes.</p>
+            <p style="margin: 0; color: #94a3b8; font-size: 0.95rem;">Go head-to-head with computer-controlled competitors. Undercut fares, steal market share, and defend your best routes.</p>
           </div>
 
           <div style="background: #1e293b; border-radius: 10px; padding: 24px;">

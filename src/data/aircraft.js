@@ -1670,6 +1670,116 @@ export const AIRCRAFT_TYPES = [
     description: 'STOL legend. Operates from water, ice, grass, and gravel runways worldwide.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/WinAir_De_Havilland_Canada_DHC-6-300_Twin_Otter_Breidenstein.jpg/960px-WinAir_De_Havilland_Canada_DHC-6-300_Twin_Otter_Breidenstein.jpg',
   },
+
+  // ── FREIGHTERS ────────────────────────────────────────────────────────────────
+  // Dedicated cargo aircraft. These carry no passengers — capacity is `payloadTonnes`
+  // (max structural payload), and they operate cargoRoutes via simulateCargoRoute().
+  // `seats: 0` and `freighter: true` keep them out of the passenger pipeline and the
+  // seat-efficiency comparison. Same airframes as their passenger equivalents, so
+  // fuel/crew/maintenance mirror those; purchase prices reflect the freighter/used
+  // conversion market. Sorted by payload (small → large).
+  {
+    id: 'atr72f',
+    name: 'ATR 72-600F',
+    manufacturer: 'ATR',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 8,
+    range: 1_500,
+    weeklyLease:       19_000,
+    purchasePrice:  4_750_000,
+    fuelBurnPer100km: 118.75,
+    crewCostPerKm: 0.77,
+    baseMaintenancePerWk: 14_000,
+    description: 'Purpose-built regional freighter. Feeds parcels and express cargo into hubs on thin short-haul lanes where a widebody would never fill.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg/960px-F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg',
+  },
+  {
+    id: 'b737800bcf',
+    name: 'Boeing 737-800BCF',
+    manufacturer: 'Boeing',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 23,
+    range: 3_750,
+    weeklyLease:       70_000,
+    purchasePrice: 17_500_000,
+    fuelBurnPer100km: 381.25,
+    crewCostPerKm: 0.79,
+    baseMaintenancePerWk: 58_000,
+    description: 'Passenger-to-freighter conversion of the best-selling 737-800. The workhorse of e-commerce and express networks on domestic and short regional cargo routes.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Delta_Boeing_737-800_N371DA_departing_Boston_June_2025.jpg/960px-Delta_Boeing_737-800_N371DA_departing_Boston_June_2025.jpg',
+  },
+  {
+    id: 'b767300f',
+    name: 'Boeing 767-300F',
+    manufacturer: 'Boeing',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 52,
+    range: 6_025,
+    weeklyLease:      175_000,
+    purchasePrice: 43_750_000,
+    fuelBurnPer100km: 593.75,
+    crewCostPerKm: 1.63,
+    baseMaintenancePerWk: 145_000,
+    description: 'The backbone of express and mid-haul cargo. FedEx and UPS fly hundreds; ideal medium-widebody capacity for transcontinental and regional intercontinental freight.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Delta_Air_Lines_B767-332_N130DL.jpg/960px-Delta_Air_Lines_B767-332_N130DL.jpg',
+  },
+  {
+    id: 'a330200f',
+    name: 'Airbus A330-200F',
+    manufacturer: 'Airbus',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 70,
+    range: 7_400,
+    weeklyLease:      185_000,
+    purchasePrice: 46_250_000,
+    fuelBurnPer100km: 625,
+    crewCostPerKm: 1.75,
+    baseMaintenancePerWk: 150_000,
+    description: 'Modern purpose-built mid-size freighter. Better fuel economics than the 767F with more payload, suited to medium and long-haul cargo trunk routes.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Bmi.a330-200.g-wwbb.arp.jpg/960px-Bmi.a330-200.g-wwbb.arp.jpg',
+  },
+  {
+    id: 'b777f',
+    name: 'Boeing 777F',
+    manufacturer: 'Boeing',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 102,
+    range: 9_200,
+    weeklyLease:      300_000,
+    purchasePrice: 78_000_000,
+    fuelBurnPer100km: 781.25,
+    crewCostPerKm: 2,
+    baseMaintenancePerWk: 220_000,
+    description: 'The definitive modern long-haul freighter. Near-jumbo payload with twin-engine economics — the choice for ultra-long intercontinental cargo trunk routes.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Cathay_Pacific_Boeing_777-200%3B_B-HNL%40HKG.jpg/960px-Cathay_Pacific_Boeing_777-200%3B_B-HNL%40HKG.jpg',
+  },
+  {
+    id: 'b747400f',
+    name: 'Boeing 747-400F',
+    manufacturer: 'Boeing',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 112,
+    range: 8_230,
+    weeklyLease:      370_000,
+    purchasePrice: 92_500_000,
+    fuelBurnPer100km: 1000,
+    crewCostPerKm: 2.25,
+    baseMaintenancePerWk: 320_000,
+    description: 'The Queen of the cargo skies. Nose-loading door swallows outsize freight; maximum payload on the densest cargo corridors, at the cost of four thirsty engines.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/B-747_Iberia.jpg/960px-B-747_Iberia.jpg',
+  },
 ];
 
 export function getAircraftType(id) {
@@ -1708,11 +1818,16 @@ export function effectivePurchasePrice(type, alreadyOwned) {
  * Lower = more efficient. Use for comparison across aircraft sizes.
  */
 export function seatEfficiency(type) {
+  // Freighters have no seats — seat efficiency is undefined for them. Return null so
+  // they're excluded from the passenger efficiency comparison rather than producing
+  // Infinity and corrupting the fleet-wide bounds below.
+  if (type.freighter || !type.seats) return null;
   return (fuelCostPerKm(type) / type.seats) * 100;
 }
 
-// Bounds across the full fleet — used to normalise efficiency bars in the UI.
-const _effValues = AIRCRAFT_TYPES.map(t => seatEfficiency(t));
+// Bounds across the passenger fleet — used to normalise efficiency bars in the UI.
+// Freighters are excluded (seatEfficiency returns null for them).
+const _effValues = AIRCRAFT_TYPES.map(t => seatEfficiency(t)).filter(v => v != null);
 export const EFFICIENCY_BEST  = Math.min(..._effValues); // lowest $/seat/100km
 export const EFFICIENCY_WORST = Math.max(..._effValues); // highest $/seat/100km
 
@@ -1721,6 +1836,7 @@ export const EFFICIENCY_WORST = Math.max(..._effValues); // highest $/seat/100km
  */
 export function efficiencyScore(type) {
   const e = seatEfficiency(type);
+  if (e == null) return null;  // freighters have no seat-efficiency score
   return Math.round(
     ((EFFICIENCY_WORST - e) / (EFFICIENCY_WORST - EFFICIENCY_BEST)) * 100
   );

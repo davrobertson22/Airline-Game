@@ -65,10 +65,14 @@ export default function SetupScreen() {
   const [logoId,            setLogoId]            = useState(AIRLINE_LOGOS[0].id);
   const [accentColor,       setAccentColor]       = useState(ACCENT_COLORS[0].hex);
   const [enableObjectives,  setEnableObjectives]  = useState(true);
+  const [step,              setStep]              = useState(1);
+
+  const STEPS = ['Brand', 'Home hub', 'Launch'];
+  const canContinue = step !== 1 || airlineName.trim().length > 0;
 
   function handleStart(e) {
     e.preventDefault();
-    if (!airlineName.trim()) return;
+    if (!airlineName.trim()) { setStep(1); return; }
     dispatch({
       type:             'START_GAME',
       airlineName:      airlineName.trim(),
@@ -91,7 +95,43 @@ export default function SetupScreen() {
           You've secured a $10,000,000 startup loan to get started — use it wisely.
         </div>
 
+        {/* ── Step indicator ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 22px' }}>
+          {STEPS.map((label, i) => {
+            const n = i + 1;
+            const active = step === n;
+            const done = step > n;
+            return (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 700,
+                    background: active || done ? 'var(--accent)' : 'var(--surface3)',
+                    color: active || done ? '#fff' : 'var(--text-dim)',
+                    transition: 'background .15s',
+                  }}>
+                    {done ? '✓' : n}
+                  </div>
+                  <span style={{
+                    fontSize: 12, fontWeight: active ? 700 : 500,
+                    color: active ? 'var(--text)' : 'var(--text-dim)',
+                    whiteSpace: 'nowrap',
+                  }}>{label}</span>
+                </div>
+                {i < STEPS.length - 1 && (
+                  <div style={{ flex: 1, height: 2, background: step > n ? 'var(--accent)' : 'var(--border)', borderRadius: 2 }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         <form onSubmit={handleStart}>
+
+          {/* ════ STEP 1 — Brand your airline ════ */}
+          <div style={{ display: step === 1 ? 'block' : 'none' }}>
 
           {/* ── Airline name ── */}
           <div className="form-group">
@@ -212,6 +252,11 @@ export default function SetupScreen() {
             )}
           </div>
 
+          </div>{/* ════ END STEP 1 ════ */}
+
+          {/* ════ STEP 2 — Home hub ════ */}
+          <div style={{ display: step === 2 ? 'block' : 'none' }}>
+
           {/* ── Hub airport ── */}
           <div className="form-group">
             <label className="form-label">Home Hub Airport</label>
@@ -324,6 +369,11 @@ export default function SetupScreen() {
             )}
           </div>
 
+          </div>{/* ════ END STEP 2 ════ */}
+
+          {/* ════ STEP 3 — Options & launch ════ */}
+          <div style={{ display: step === 3 ? 'block' : 'none' }}>
+
           {/* ── Board Objectives toggle ── */}
           <div className="form-group">
             <label className="form-label">Game Options</label>
@@ -391,13 +441,40 @@ export default function SetupScreen() {
             Don't let your cash hit zero! Your hub airport determines your <strong style={{ color: 'var(--text)' }}>home country</strong> — you can only build hubs within that country.
           </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700 }}
-          >
-            Launch Airline →
-          </button>
+          </div>{/* ════ END STEP 3 ════ */}
+
+          {/* ── Step navigation ── */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            {step > 1 && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ flex: '0 0 auto', padding: '12px 18px', fontSize: 14, fontWeight: 600 }}
+                onClick={() => setStep(s => s - 1)}
+              >
+                ← Back
+              </button>
+            )}
+            {step < 3 ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: canContinue ? 1 : 0.5, cursor: canContinue ? 'pointer' : 'not-allowed' }}
+                disabled={!canContinue}
+                onClick={() => { if (canContinue) setStep(s => s + 1); }}
+              >
+                Continue →
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700 }}
+              >
+                Launch Airline →
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </div>
