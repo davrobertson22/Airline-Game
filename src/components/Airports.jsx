@@ -84,17 +84,20 @@ export default function Airports() {
       const rb = REGIONS.indexOf(getRegion(b.country));
       if (ra !== rb) return ra - rb;
     }
-    // 2. Airports you already hold first (so you can add more gates easily)
+    // 2. Country alphabetically
+    const cc = a.country.localeCompare(b.country);
+    if (cc !== 0) return cc;
+    // 3. Airports you already hold first (so you can add more gates easily)
     const aHeld = (gates[a.code] ?? 0) > 0;
     const bHeld = (gates[b.code] ?? 0) > 0;
     if (aHeld !== bHeld) return aHeld ? -1 : 1;
-    // 3. Tier: mega → major → regional
+    // 4. Tier: mega → major → regional
     const ta = TIER_ORDER[a.tier] ?? 99;
     const tb = TIER_ORDER[b.tier] ?? 99;
     if (ta !== tb) return ta - tb;
-    // 4. Population descending (bigger markets first)
+    // 5. Population descending (bigger markets first)
     if (a.population !== b.population) return b.population - a.population;
-    // 5. Alphabetical
+    // 6. Alphabetical
     return a.code.localeCompare(b.code);
   });
 

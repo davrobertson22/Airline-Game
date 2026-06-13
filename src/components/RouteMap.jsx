@@ -166,6 +166,38 @@ export default function RouteMap() {
     return [...codes].map(getAirport).filter(Boolean);
   }, [routeData, hub]);
 
+  // Group route entries by city pair (direction-agnostic) so multiple aircraft
+  // on the same JFK↔ORD pair show as ONE line + ONE row with aggregated stats.
+  const routeGroups = useMemo(() => {
+    const map = new Map();
+    for (const d of routeData) {
+      const key = [d.origin.code, d.dest.code].sort().join('~');
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          key, origin: d.origin, dest: d.dest, members: [],
+          profit: 0, revenue: 0, passengers: 0, seats: 0, distance: 0,
+        };
+        map.set(key, g);
+      }
+      g.members.push(d);
+      if (d.result) {
+        g.profit     += d.result.profit;
+        g.revenue    += d.result.revenue;
+        g.passengers += d.result.passengers;
+        g.seats      += d.result.loadFactor > 0 ? d.result.passengers / d.result.loadFactor : 0;
+        g.distance    = d.result.distance;
+      }
+    }
+    const arr = [...map.values()];
+    for (const g of arr) {
+      g.loadFactor   = g.seats > 0 ? g.passengers / g.seats : 0;
+      g.aircraftCount = g.members.length;
+      g.hasResult    = g.members.some(m => m.result);
+    }
+    return arr;
+  }, [routeData]);
+
   // ── Style resolver: highlight selected/hovered, dim the rest ─────────────────
   const applyStyles = useCallback(() => {
     const selId = selectedIdRef.current;
@@ -282,20 +314,23 @@ export default function RouteMap() {
     layersRef.current = [];
     lineGroupsRef.current = new Map();
 
-    // Route polylines (glow halo underneath + crisp main line on top)
-    for (const { r, origin, dest, result } of routeData) {
-      const profit   = result?.profit ?? 0;
+    // Route polylines (glow halo underneath + crisp main line on top).
+    // One line per city pair — all aircraft on the pair are aggregated into the group.
+    for (const g of routeGroups) {
+      const { origin, dest } = g;
+      const profit   = g.hasResult ? g.profit : 0;
       const color    = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
       const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
 
-      const lf      = result ? `${(result.loadFactor * 100).toFixed(0)}%` : '—';
-      const pax     = result?.passengers?.toLocaleString() ?? '—';
-      const profStr = result ? `<span style="color:${color}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
-      const rev     = result ? `+${formatMoney(result.revenue)}` : '—';
+      const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
+      const pax     = g.hasResult ? Math.round(g.passengers).toLocaleString() : '—';
+      const profStr = g.hasResult ? `<span style="color:${color}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
+      const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
+      const acText  = `${g.aircraftCount} aircraft`;
       const tipHtml = `
         <div class="map-tip">
-          <div class="map-tip-title">${r.origin} <span class="map-tip-arrow">→</span> ${r.destination}</div>
-          <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
+          <div class="map-tip-title">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-sub">${origin.city} → ${dest.city} · ${acText}</div>
           <div class="map-tip-stats">
             <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
             <div><span class="map-tip-lbl">Pax/wk</span><span class="map-tip-val">${pax}</span></div>
@@ -334,18 +369,18 @@ export default function RouteMap() {
           className: 'route-line',
         });
         line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
-        line.on('mouseover', () => { setHoveredId(r.id); });
+        line.on('mouseover', () => { setHoveredId(g.key); });
         line.on('mouseout',  () => { setHoveredId(null); });
         line.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
-          setSelectedId(prev => (prev === r.id ? null : r.id));
+          setSelectedId(prev => (prev === g.key ? null : g.key));
         });
         line.addTo(map);
         main.push(line);
         layersRef.current.push(line);
       }
 
-      lineGroupsRef.current.set(r.id, { halo, main, color });
+      lineGroupsRef.current.set(g.key, { halo, main, color });
     }
 
     // Airport markers
@@ -418,7 +453,7 @@ export default function RouteMap() {
     }
 
     applyStyles();
-  }, [routeData, airportSet, hub, mapReady, applyStyles]); // mapReady ensures this re-runs after L.map() finishes
+  }, [routeGroups, airportSet, hub, mapReady, applyStyles]); // mapReady ensures this re-runs after L.map() finishes
 
   // Re-style when hover changes
   useEffect(() => {
@@ -433,14 +468,14 @@ export default function RouteMap() {
 
     const map = mapRef.current;
     if (!map || !window.L || selectedId == null) return;
-    const d = routeData.find(x => x.r.id === selectedId);
-    if (!d) return;
+    const g = routeGroups.find(x => x.key === selectedId);
+    if (!g) return;
     const bounds = window.L.latLngBounds([
-      [d.origin.lat, d.origin.lon],
-      [d.dest.lat, d.dest.lon],
+      [g.origin.lat, g.origin.lon],
+      [g.dest.lat, g.dest.lon],
     ]);
     map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
-  }, [selectedId, routeData, applyStyles]);
+  }, [selectedId, routeGroups, applyStyles]);
 
   if (routes.length === 0) {
     return (
@@ -452,7 +487,7 @@ export default function RouteMap() {
     );
   }
 
-  const selectedData = selectedId != null ? routeData.find(x => x.r.id === selectedId) : null;
+  const selectedData = selectedId != null ? routeGroups.find(x => x.key === selectedId) : null;
 
   return (
     <div>
@@ -466,9 +501,9 @@ export default function RouteMap() {
           <div>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Route Network</span>
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-              {routes.length} route{routes.length !== 1 ? 's' : ''} · {airportSet.length} airports
+              {routeGroups.length} route{routeGroups.length !== 1 ? 's' : ''} · {airportSet.length} airports
               {selectedData && (
-                <span style={{ color: 'var(--accent)' }}> · focused {selectedData.r.origin}→{selectedData.r.destination}</span>
+                <span style={{ color: 'var(--accent)' }}> · focused {selectedData.origin.code}→{selectedData.dest.code}</span>
               )}
             </span>
           </div>
@@ -579,16 +614,16 @@ export default function RouteMap() {
             </tr>
           </thead>
           <tbody>
-            {routeData.map(({ r, result, origin, dest }) => {
-              const profit = result?.profit ?? 0;
-              const lf = result?.loadFactor ?? 0;
-              const isHov = hoveredId === r.id;
-              const isSel = selectedId === r.id;
+            {routeGroups.map((g) => {
+              const profit = g.hasResult ? g.profit : 0;
+              const lf = g.hasResult ? g.loadFactor : 0;
+              const isHov = hoveredId === g.key;
+              const isSel = selectedId === g.key;
               return (
                 <tr
-                  key={r.id}
-                  onClick={() => setSelectedId(prev => (prev === r.id ? null : r.id))}
-                  onMouseEnter={() => setHoveredId(r.id)}
+                  key={g.key}
+                  onClick={() => setSelectedId(prev => (prev === g.key ? null : g.key))}
+                  onMouseEnter={() => setHoveredId(g.key)}
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
                     background: isSel ? 'var(--accent-dim)' : isHov ? 'var(--surface2)' : undefined,
@@ -599,13 +634,18 @@ export default function RouteMap() {
                   <td style={{ paddingRight: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: profit >= 0 ? 'var(--green)' : 'var(--red)' }} />
                   </td>
-                  <td><strong>{r.origin} → {r.destination}</strong></td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{origin.city} → {dest.city}</td>
+                  <td>
+                    <strong>{g.origin.code} → {g.dest.code}</strong>
+                    {g.aircraftCount > 1 && (
+                      <span className="ac-badge">{g.aircraftCount}×</span>
+                    )}
+                  </td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{g.origin.city} → {g.dest.city}</td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                    {result ? `${result.distance.toLocaleString()} km` : '—'}
+                    {g.hasResult ? `${g.distance.toLocaleString()} km` : '—'}
                   </td>
                   <td>
-                    {result ? (
+                    {g.hasResult ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{
                           fontSize: 12, fontWeight: 600,
@@ -615,7 +655,7 @@ export default function RouteMap() {
                         </span>
                         <div className="mini-bar" style={{ width: 48 }}>
                           <div className="mini-bar-fill" style={{
-                            width: `${lf * 100}%`,
+                            width: `${Math.min(lf, 1) * 100}%`,
                             background: lf > 0.7 ? 'var(--green)' : lf > 0.4 ? 'var(--yellow)' : 'var(--red)',
                           }} />
                         </div>

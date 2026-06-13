@@ -439,6 +439,23 @@ function reducer(state, action) {
       if (slotsAt(action.origin)      + action.weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
       if (slotsAt(action.destination) + action.weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
 
+      // ── Consolidate: if this aircraft already flies this exact route, merge ──
+      const existingRoute = state.routes.find(r =>
+        r.aircraftId === action.aircraftId &&
+        ((r.origin === action.origin && r.destination === action.destination) ||
+         (r.origin === action.destination && r.destination === action.origin))
+      );
+      if (existingRoute) {
+        return {
+          ...state,
+          routes: state.routes.map(r =>
+            r.id === existingRoute.id
+              ? { ...r, weeklyFrequency: r.weeklyFrequency + action.weeklyFrequency }
+              : r
+          ),
+        };
+      }
+
       // ── Route launch cost ──────────────────────────────────────────────────────
       const launchCost = routeLaunchCost(dist);
       if (state.cash < launchCost) return state;   // can't afford to open route

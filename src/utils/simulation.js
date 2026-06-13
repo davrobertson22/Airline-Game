@@ -69,16 +69,39 @@ export function referencePrice(originCode, destCode) {
 // ─────────────────────────────────────────────
 
 /**
- * How each passenger segment distributes across cabin classes.
- * Business travelers strongly prefer premium cabins;
- * leisure travelers prefer economy but a few splurge upward.
+ * How each passenger segment distributes across cabin classes, varying by route distance.
+ *
+ * Short-haul  (<1,500 km): first class barely exists; economy dominates even for business.
+ * Medium-haul (1,500–5,000 km): moderate premium mix; some first class for business.
+ * Long-haul   (>5,000 km): full premium mix; first class meaningful for business travelers.
+ *
  * Each row sums to 1.0.
  */
 export const SEGMENT_CABIN_PREFS = {
-  //                  first   biz    prem-eco  eco
-  business: { firstClass: 0.20, businessClass: 0.50, premiumEconomy: 0.20, economy: 0.10 },
-  leisure:  { firstClass: 0.01, businessClass: 0.07, premiumEconomy: 0.22, economy: 0.70 },
+  short: {
+    business: { firstClass: 0.02, businessClass: 0.40, premiumEconomy: 0.30, economy: 0.28 },
+    leisure:  { firstClass: 0.00, businessClass: 0.03, premiumEconomy: 0.15, economy: 0.82 },
+  },
+  medium: {
+    business: { firstClass: 0.08, businessClass: 0.50, premiumEconomy: 0.25, economy: 0.17 },
+    leisure:  { firstClass: 0.01, businessClass: 0.05, premiumEconomy: 0.20, economy: 0.74 },
+  },
+  long: {
+    business: { firstClass: 0.20, businessClass: 0.50, premiumEconomy: 0.20, economy: 0.10 },
+    leisure:  { firstClass: 0.02, businessClass: 0.10, premiumEconomy: 0.28, economy: 0.60 },
+  },
 };
+
+/**
+ * Return the correct SEGMENT_CABIN_PREFS tier for a given route distance.
+ * @param {number} distKm
+ * @returns {{ business: object, leisure: object }}
+ */
+export function getSegmentCabinPrefs(distKm) {
+  if (distKm < 1500) return SEGMENT_CABIN_PREFS.short;
+  if (distKm < 5000) return SEGMENT_CABIN_PREFS.medium;
+  return SEGMENT_CABIN_PREFS.long;
+}
 
 // Fare multiplier relative to the economy (base) ticket price.
 // These represent the DEFAULT prices set when a route is created and the
@@ -342,14 +365,15 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   const classSummary   = {};
   let spilledToEconomy = 0; // unserved premium demand that falls through to economy
 
+  const cabinPrefs  = getSegmentCabinPrefs(market.distanceKm);
   const CABIN_ORDER = ['firstClass', 'businessClass', 'premiumEconomy', 'economy'];
   for (const cls of CABIN_ORDER) {
     const seatsThisClass = config[cls] ?? 0;
     const capOneWay      = seatsThisClass * route.weeklyFrequency;
 
     const preferredDemand = Math.round(
-      businessPax * (SEGMENT_CABIN_PREFS.business[cls] ?? 0) +
-      leisurePax  * (SEGMENT_CABIN_PREFS.leisure[cls]  ?? 0)
+      businessPax * (cabinPrefs.business[cls] ?? 0) +
+      leisurePax  * (cabinPrefs.leisure[cls]  ?? 0)
     );
 
     // Economy also absorbs spill from premium classes that had no seats

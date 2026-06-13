@@ -155,7 +155,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
           businessPrice:     route.classPrices?.businessClass ?? null,
           weeklyFrequency:   totalFreq,
           seatsPerFlight:    type.seats,
-          economySeats:      type.seats * totalFreq,
+          economySeats:      (aircraft.config?.economy ?? type.seats) * totalFreq,
           businessSeats:     (aircraft.config?.businessClass ?? 0) * totalFreq,
           qualityScore:      Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
