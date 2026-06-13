@@ -26,7 +26,7 @@ function TierBadge({ tier }) {
 
 export default function Airports() {
   const { state, dispatch } = useGame();
-  const { gates = {}, routes, cash } = state;
+  const { gates = {}, routes, cash, hubs = {} } = state;
   const [search, setSearch]             = useState('');
   const [regionFilter, setRegionFilter] = useState(null); // null = All
   const [selectedAirport, setSelectedAirport] = useState(null);
@@ -47,16 +47,29 @@ export default function Airports() {
     .map(([code, count]) => ({ code, count, airport: getAirport(code) }))
     .filter(({ airport }) => airport)
     .sort((a, b) => {
+      // 1. Region
       const ra = REGIONS.indexOf(getRegion(a.airport.country));
       const rb = REGIONS.indexOf(getRegion(b.airport.country));
       if (ra !== rb) return ra - rb;
-      return b.count - a.count;
+      // 2. Hub airports first
+      const aIsHub = !!(hubs[a.code]);
+      const bIsHub = !!(hubs[b.code]);
+      if (aIsHub !== bIsHub) return aIsHub ? -1 : 1;
+      // 3. Slot utilisation descending (most congested needs attention first)
+      const aUtil = slotsUsedAt(a.code) / (a.count * SLOTS_PER_GATE || 1);
+      const bUtil = slotsUsedAt(b.code) / (b.count * SLOTS_PER_GATE || 1);
+      if (Math.abs(aUtil - bUtil) > 0.01) return bUtil - aUtil;
+      // 4. Gate count descending
+      if (a.count !== b.count) return b.count - a.count;
+      // 5. Alphabetical
+      return a.code.localeCompare(b.code);
     });
 
   const totalGates       = myGateEntries.reduce((s, { count }) => s + count, 0);
   const totalWeeklyFees  = myGateEntries.reduce((s, { airport, count }) =>
     s + Math.round(totalGateMonthlyFee(airport, count) / 4), 0);
 
+  const TIER_ORDER = { mega: 0, major: 1, regional: 2 };
   const filtered = AIRPORTS.filter(a => {
     if (regionFilter && getRegion(a.country) !== regionFilter) return false;
     if (!search.trim()) return true;
@@ -64,6 +77,25 @@ export default function Airports() {
     return a.code.toLowerCase().includes(q) ||
            a.city.toLowerCase().includes(q) ||
            a.name.toLowerCase().includes(q);
+  }).sort((a, b) => {
+    // 1. Region (when no filter active)
+    if (!regionFilter) {
+      const ra = REGIONS.indexOf(getRegion(a.country));
+      const rb = REGIONS.indexOf(getRegion(b.country));
+      if (ra !== rb) return ra - rb;
+    }
+    // 2. Airports you already hold first (so you can add more gates easily)
+    const aHeld = (gates[a.code] ?? 0) > 0;
+    const bHeld = (gates[b.code] ?? 0) > 0;
+    if (aHeld !== bHeld) return aHeld ? -1 : 1;
+    // 3. Tier: mega → major → regional
+    const ta = TIER_ORDER[a.tier] ?? 99;
+    const tb = TIER_ORDER[b.tier] ?? 99;
+    if (ta !== tb) return ta - tb;
+    // 4. Population descending (bigger markets first)
+    if (a.population !== b.population) return b.population - a.population;
+    // 5. Alphabetical
+    return a.code.localeCompare(b.code);
   });
 
   return (

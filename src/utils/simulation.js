@@ -523,9 +523,10 @@ export function weeklyTick(state) {
   const { cannibalizationMap, partnerODRevenue, partnerHealthDecay } = networkTick;
 
   // Pre-build set of route-keys where an alliance/codeshare partner also operates
+  const partnerContestedKeys = new Set();
   for (const comp of competitors) {
     if (!allPartnerIds.has(comp.id)) continue;
-    for (const key of Object.keys(comp.routes)) {
+    for (const key of Object.keys(comp.routes ?? {})) {
       partnerContestedKeys.add(key);
     }
   }
@@ -603,6 +604,8 @@ export function weeklyTick(state) {
       route.ticketPrice,
       { weeklyFrequency: route.weeklyFrequency ?? 7, partnerHubCodes },
     );
+    // Apply marketing + loyalty + alliance demand boosts to passenger revenue
+    const routeKey       = [route.origin, route.destination].sort().join('-');
     const cannibFactor = cannibalizationMap[routeKey] ?? 1.0;
     const connecting   = cannibFactor < 1.0
       ? {
@@ -614,9 +617,6 @@ export function weeklyTick(state) {
           cannibalizationFactor: +cannibFactor.toFixed(3),
         }
       : connectingRaw;
-
-    // Apply marketing + loyalty + alliance demand boosts to passenger revenue
-    const routeKey       = [route.origin, route.destination].sort().join('-');
     const allianceLift   = partnerContestedKeys.has(routeKey) ? allianceDemandBoostPct : 0;
     const marketingLift  = mktMultiplier - 1;
     const loyaltyLift    = loyaltyMultiplier - 1;
