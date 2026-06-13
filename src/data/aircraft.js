@@ -14,6 +14,25 @@
 
 export const AIRCRAFT_TYPES = [
 
+  // ── AEROSPATIALE/BAC ────────────────────────────────────────────────────────
+  {
+    id: 'concorde',
+    name: 'Concorde',
+    manufacturer: 'Aérospatiale/BAC',
+    category: 'Supersonic',
+    seats: 100,
+    range: 7_250,
+    weeklyLease:      400_000,
+    purchasePrice: 100_000_000,
+    fuelCostPerKm: 22,
+    crewCostPerKm: 1.5,
+    baseMaintenancePerWk: 320_000,
+    supersonic: true,
+    ticketPremium: 2.75,
+    description: 'The supersonic icon. Mach 2 transatlantic crossing in under 3.5 hours. Ticket premiums of 2.5× partially offset the extraordinary fuel burn — prestige over profit.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Concorde_at_Filton.jpg/960px-Concorde_at_Filton.jpg',
+  },
+
   // ── AIRBUS ──────────────────────────────────────────────────────────────────
   {
     id: 'a220100',
@@ -378,7 +397,7 @@ export const AIRCRAFT_TYPES = [
     id: 'a380',
     name: 'Airbus A380',
     manufacturer: 'Airbus',
-    category: 'Wide Body',
+    category: 'Double Deck',
     seats: 555,
     range: 15_200,
     weeklyLease:      510_000,
@@ -498,6 +517,21 @@ export const AIRCRAFT_TYPES = [
 
   // ── BOEING ──────────────────────────────────────────────────────────────────
   {
+    id: 'b737200',
+    name: 'Boeing 737-200Adv',
+    manufacturer: 'Boeing',
+    category: 'Narrow Body',
+    seats: 130,
+    range: 3_800,
+    weeklyLease:       44_000,
+    purchasePrice: 11_000_000,
+    fuelCostPerKm: 6.8,
+    crewCostPerKm: 0.88,
+    baseMaintenancePerWk: 45_000,
+    description: 'The original 737. Very cheap on the second-hand market but thirsty and requires a flight engineer as a third crew member. Still flying on budget carriers worldwide.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Boeing_737-200_N7332F_Pacific_Western_Airlines.jpg/960px-Boeing_737-200_N7332F_Pacific_Western_Airlines.jpg',
+  },
+  {
     id: 'b717',
     name: 'Boeing 717-200',
     manufacturer: 'Boeing',
@@ -586,6 +620,21 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 51_000,
     description: 'Stretched Classic 737. Wide second-hand market makes it accessible.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Classic_Colors_Southwest_Airlines_N648SW_Boeing_737-3H4_SJC.jpg/960px-Classic_Colors_Southwest_Airlines_N648SW_Boeing_737-3H4_SJC.jpg',
+  },
+  {
+    id: 'b707320',
+    name: 'Boeing 707-320B',
+    manufacturer: 'Boeing',
+    category: 'Narrow Body',
+    seats: 189,
+    range: 10_650,
+    weeklyLease:       68_000,
+    purchasePrice: 17_000_000,
+    fuelCostPerKm: 14.5,
+    crewCostPerKm: 1.1,
+    baseMaintenancePerWk: 68_000,
+    description: 'The aircraft that launched the jet age. Remarkable intercontinental range for its era. Four thirsty JT3D engines and a required flight engineer, but available for a fraction of modern prices.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Boeing_707-321B%2C_Pan_American_World_Airways_%28Pan_Am%29_JP6966800.jpg/960px-Boeing_707-321B%2C_Pan_American_World_Airways_%28Pan_Am%29_JP6966800.jpg',
   },
   {
     id: 'b737max7',
@@ -845,7 +894,7 @@ export const AIRCRAFT_TYPES = [
     id: 'b747200',
     name: 'Boeing 747-200B',
     manufacturer: 'Boeing',
-    category: 'Wide Body',
+    category: 'Double Deck',
     seats: 452,
     range: 12_700,
     weeklyLease:      270_000,
@@ -893,6 +942,21 @@ export const AIRCRAFT_TYPES = [
     },
   },
   {
+    id: 'b747sp',
+    name: 'Boeing 747SP',
+    manufacturer: 'Boeing',
+    category: 'Double Deck',
+    seats: 331,
+    range: 15_400,
+    weeklyLease:      295_000,
+    purchasePrice: 73_750_000,
+    fuelCostPerKm: 14,
+    crewCostPerKm: 2.3,
+    baseMaintenancePerWk: 265_000,
+    description: 'The shortened long-ranger. Fewer seats than a standard 747 but extraordinary range. The first aircraft to operate true nonstop ultra-long-haul polar routes.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Boeing_747SP_22_Pan_Am_N532PA.jpg/960px-Boeing_747SP_22_Pan_Am_N532PA.jpg',
+  },
+  {
     id: 'b777300er',
     name: 'Boeing 777-300ER',
     manufacturer: 'Boeing',
@@ -911,7 +975,7 @@ export const AIRCRAFT_TYPES = [
     id: 'b747400',
     name: 'Boeing 747-400',
     manufacturer: 'Boeing',
-    category: 'Wide Body',
+    category: 'Double Deck',
     seats: 416,
     range: 13_445,
     weeklyLease:      380_000,
@@ -956,7 +1020,7 @@ export const AIRCRAFT_TYPES = [
     id: 'b7478i',
     name: 'Boeing 747-8I',
     manufacturer: 'Boeing',
-    category: 'Wide Body',
+    category: 'Double Deck',
     seats: 467,
     range: 14_816,
     weeklyLease:      430_000,
@@ -1130,6 +1194,21 @@ export const AIRCRAFT_TYPES = [
 
   // ── DE HAVILLAND CANADA ─────────────────────────────────────────────────────
   {
+    id: 'dhc8300',
+    name: 'Dash 8-300',
+    manufacturer: 'De Havilland Canada',
+    category: 'Turboprop',
+    seats: 50,
+    range: 1_558,
+    weeklyLease:       14_000,
+    purchasePrice:  3_500_000,
+    fuelCostPerKm: 1.7,
+    crewCostPerKm: 0.74,
+    baseMaintenancePerWk: 11_200,
+    description: 'The classic Dash 8 in its most popular variant. Cheap, reliable, and widely supported. A workhorse of thin short-haul routes worldwide.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Air_Canada_Jazz_Bombardier_DHC-8-311_C-FPNG.jpg/960px-Air_Canada_Jazz_Bombardier_DHC-8-311_C-FPNG.jpg',
+  },
+  {
     id: 'q400',
     name: 'Dash 8 Q400',
     manufacturer: 'De Havilland Canada',
@@ -1255,6 +1334,21 @@ export const AIRCRAFT_TYPES = [
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Wider%C3%B8e%2C_LN-WEA%2C_Embraer_E190-E2_%40_HEL.jpg/960px-Wider%C3%B8e%2C_LN-WEA%2C_Embraer_E190-E2_%40_HEL.jpg',
   },
   {
+    id: 'e195',
+    name: 'Embraer E195',
+    manufacturer: 'Embraer',
+    category: 'Regional Jet',
+    seats: 122,
+    range: 4_260,
+    weeklyLease:       52_000,
+    purchasePrice: 13_000_000,
+    fuelCostPerKm: 4.8,
+    crewCostPerKm: 0.66,
+    baseMaintenancePerWk: 37_200,
+    description: 'Largest of the original E-jet family. Bridges regional jets and narrow-bodies on medium-thin routes.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/KLM_Cityhopper_-_Embraer_190LR_-_AN2571563.jpg/960px-KLM_Cityhopper_-_Embraer_190LR_-_AN2571563.jpg',
+  },
+  {
     id: 'e195e2',
     name: 'Embraer E195-E2',
     manufacturer: 'Embraer',
@@ -1340,6 +1434,23 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 56_000,
     description: 'Russia\'s modern narrow-body with composite wings. Competitive specs at lower cost.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Irkut_MC-21_with_engines_PW1000G_and_PD-14.jpg/960px-Irkut_MC-21_with_engines_PW1000G_and_PD-14.jpg',
+  },
+
+  // ── LOCKHEED ────────────────────────────────────────────────────────────────
+  {
+    id: 'l1011',
+    name: 'Lockheed L-1011 TriStar',
+    manufacturer: 'Lockheed',
+    category: 'Wide Body',
+    seats: 302,
+    range: 6_670,
+    weeklyLease:      175_000,
+    purchasePrice: 43_750_000,
+    fuelCostPerKm: 11.5,
+    crewCostPerKm: 2.0,
+    baseMaintenancePerWk: 155_000,
+    description: 'The DC-10\'s technically superior rival. Rolls-Royce RB.211 engines delivered better fuel economy. Lost the market battle but earned a loyal following for its smooth ride and reliability.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Lockheed_L-1011_TriStar_Delta_Air_Lines_N726DA.jpg/960px-Lockheed_L-1011_TriStar_Delta_Air_Lines_N726DA.jpg',
   },
 
   // ── MCDONNELL DOUGLAS ───────────────────────────────────────────────────────
@@ -1558,7 +1669,7 @@ export function getAircraftType(id) {
   return AIRCRAFT_TYPES.find(a => a.id === id);
 }
 
-export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body'];
+export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body', 'Supersonic'];
 
 // ─── Purchase pricing helpers ─────────────────────────────────────────────────
 

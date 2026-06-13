@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useGame } from './store/GameContext.jsx';
 import { ToastProvider, useToast } from './components/ToastSystem.jsx';
 import WeeklyDebrief from './components/WeeklyDebrief.jsx';
-import { formatMoney } from './utils/simulation.js';
+import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
 import SetupScreen from './components/SetupScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Fleet from './components/Fleet.jsx';
@@ -187,8 +187,8 @@ function AppInner() {
         <div className="topbar-spacer" />
         <div className="topbar-kpis">
           <div className="topbar-kpi">
-            <span className="topbar-kpi-label">WEEK</span>
-            <span className="topbar-kpi-value">{state.week} / {state.year}</span>
+            <span className="topbar-kpi-label">DATE</span>
+            <span className="topbar-kpi-value" style={{ fontSize: 13 }}>{formatGameDate(state)}</span>
           </div>
           <div className="topbar-kpi-divider" />
           <div className="topbar-kpi">
@@ -289,7 +289,7 @@ function AppInner() {
                 : 'Your airline ran out of cash.'}
             </p>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 24, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8 }}>
-              Weeks survived: <strong style={{ color: 'var(--text)' }}>{((state.year - 2026) * 52 + state.week)}</strong>
+              Weeks survived: <strong style={{ color: 'var(--text)' }}>{((state.year - 1) * 52 + state.week)}</strong>
               {state.missedLoanPayments > 0 && <> · Missed payments: <strong style={{ color: 'var(--red)' }}>{state.missedLoanPayments}</strong></>}
             </div>
             <button

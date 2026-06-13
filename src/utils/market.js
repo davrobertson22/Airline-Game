@@ -48,6 +48,47 @@ function demandMultiplier(code) {
   return (businessScore + leisureScore) / 100;
 }
 
+// ─── Demand mass ───────────────────────────────────────────────────────────────
+// The gravity model keys off a "demand mass" (in millions). Historically this was
+// just metro population (with `effectivePop` as a manual override for big connecting
+// hubs). Two kinds of airport are badly under-rated by population alone:
+//
+//   • Tourism magnets   – e.g. Malé/Maldives: ~0.4M residents but millions of
+//                          annual visitors. Demand comes from tourism, not population.
+//   • National gateways  – e.g. Ulaanbaatar: traffic is driven by being the only
+//                          international gateway for a whole country, not city size.
+//
+// So demand mass = population + tourism term + gateway term, with two optional,
+// data-driven airport fields and two tunable coefficients below.
+
+/** Each 1M annual inbound visitors contributes this much demand mass (in millions). */
+export const TOURISM_VISITOR_WEIGHT = 1.5;
+/** Fraction of an airport's declared national catchment that becomes demand mass. */
+export const GATEWAY_WEIGHT = 1.0;
+
+/**
+ * Effective demand mass (millions) for one airport.
+ *  - `effectivePop` (if set) stays authoritative — it already bakes in connecting/
+ *    gateway traffic for the calibrated mega-hubs, so we don't double-count it.
+ *  - otherwise: population + visitors*TOURISM_VISITOR_WEIGHT + gateway*GATEWAY_WEIGHT
+ *
+ * Airport fields (all optional, in millions):
+ *   visitors – annual inbound visitors/tourists per year
+ *   gateway  – extra national catchment that routes through this airport
+ *              (rule of thumb: national pop − metro pop, for a country's primary
+ *               international gateway)
+ *
+ * @param {object} ap  airport record
+ * @returns {number} demand mass in millions
+ */
+export function getDemandMass(ap) {
+  if (ap == null) return 0;
+  if (ap.effectivePop != null) return ap.effectivePop;
+  return (ap.population ?? 0)
+    + (ap.visitors ?? 0) * TOURISM_VISITOR_WEIGHT
+    + (ap.gateway ?? 0) * GATEWAY_WEIGHT;
+}
+
 /**
  * Base weekly one-way demand for a city pair at the reference price.
  * Airport populations are in millions (metro area).
@@ -58,11 +99,11 @@ export function baseCityPairDemand(originCode, destCode) {
   if (!o || !d) return 0;
   const dist = distanceKm(o, d);
 
-  // Use effectivePop where set (major transit hubs whose metro population understates
-  // their true demand catchment due to connecting traffic and national gateway roles).
-  // Otherwise fall back to metro population.
-  const popO = o.effectivePop ?? o.population;
-  const popD = d.effectivePop ?? d.population;
+  // Demand mass generalises population: it adds tourism + national-gateway pull for
+  // airports that population alone under-rates. `effectivePop` overrides stay intact,
+  // and any airport without the new fields keeps mass === population (no change).
+  const popO = getDemandMass(o);
+  const popD = getDemandMass(d);
 
   // Business/leisure attractiveness multiplier — cities that are strong corporate
   // or tourism destinations generate more demand than population alone implies.

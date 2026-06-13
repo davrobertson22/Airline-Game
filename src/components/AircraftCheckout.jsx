@@ -7,6 +7,7 @@ import {
   CLASS_SPACE_MULTIPLIERS,
   SEAT_QUALITY_COST_PER_ROUTE,
   SERVICE_QUALITY_COST_PER_ROUTE,
+  weekToGameDate,
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 
@@ -40,10 +41,10 @@ const CLASS_COLORS = {
 
 
 function absWeekToDisplay(absWeek) {
-  return {
-    displayYear: Math.floor((absWeek - 1) / 52) + 2026,
-    displayWeek: ((absWeek - 1) % 52) + 1,
-  };
+  const year       = Math.floor((absWeek - 1) / 52) + 1;
+  const weekInYear = ((absWeek - 1) % 52) + 1;
+  const { monthName, weekInMonth } = weekToGameDate(weekInYear);
+  return { displayYear: year, displayWeek: weekInYear, monthName, weekInMonth };
 }
 
 function AircraftPhoto({ src, alt, category }) {
@@ -228,8 +229,8 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   }
   const firstDelivery = deliveryWeeks[0];
   const lastDelivery  = deliveryWeeks[deliveryWeeks.length - 1];
-  const { displayYear: firstYear, displayWeek: firstWk } = absWeekToDisplay(firstDelivery);
-  const { displayYear: lastYear,  displayWeek: lastWk  } = absWeekToDisplay(lastDelivery);
+  const { displayYear: firstYear, monthName: firstMon, weekInMonth: firstWIM } = absWeekToDisplay(firstDelivery);
+  const { displayYear: lastYear,  monthName: lastMon,  weekInMonth: lastWIM  } = absWeekToDisplay(lastDelivery);
 
   // ── Pricing ───────────────────────────────────────────────────────────────
   const fleetCountNow   = fleet.filter(a => a.typeId === typeId).length;
@@ -315,9 +316,9 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               <span>📅</span>
               <span>
                 {quantity === 1 ? (
-                  <>First delivery in <strong>{firstDelivery - currentAbsWeek}w</strong> (Week {firstWk}, {firstYear})</>
+                  <>First delivery in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear})</>
                 ) : (
-                  <><strong>{quantity} aircraft</strong> — first in <strong>{firstDelivery - currentAbsWeek}w</strong>, last in <strong>{lastDelivery - currentAbsWeek}w</strong> · every {lead}w</>
+                  <><strong>{quantity} aircraft</strong> — first in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear}), last in <strong>{lastDelivery - currentAbsWeek}w</strong> (Wk {lastWIM} {lastMon} Y{lastYear}) · every {lead}w</>
                 )}
                 {pendingOfType.length > 0 && (
                   <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {pendingOfType.length} already queued</span>
@@ -327,13 +328,13 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             {quantity > 1 && (
               <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(56,139,253,0.2)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                 {deliveryWeeks.map((absW, i) => {
-                  const { displayYear: dy, displayWeek: dw } = absWeekToDisplay(absW);
+                  const { displayYear: dy, monthName: mn, weekInMonth: wim } = absWeekToDisplay(absW);
                   return (
                     <span key={i} style={{
                       fontSize: 11, padding: '2px 7px', borderRadius: 4,
                       background: 'rgba(56,139,253,0.15)', color: 'var(--accent)',
                       border: '1px solid rgba(56,139,253,0.25)',
-                    }}>#{i+1} — {absW - currentAbsWeek}w (W{dw}/{dy})</span>
+                    }}>#{i+1} — {absW - currentAbsWeek}w (Wk {wim} {mn} Y{dy})</span>
                   );
                 })}
               </div>

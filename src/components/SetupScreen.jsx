@@ -1,76 +1,38 @@
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { AIRPORTS } from '../data/airports.js';
+import { AIRPORTS, getCountryName } from '../data/airports.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
+// Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
 const ACCENT_COLORS = [
-  { hex: '#f5a623', label: 'Gold'    },
-  { hex: '#e53935', label: 'Red'     },
-  { hex: '#1e88e5', label: 'Blue'    },
-  { hex: '#00bfff', label: 'Cyan'    },
-  { hex: '#43a047', label: 'Green'   },
-  { hex: '#8e24aa', label: 'Purple'  },
-  { hex: '#fb8c00', label: 'Orange'  },
-  { hex: '#e91e63', label: 'Pink'    },
-  { hex: '#ffffff', label: 'White'   },
-  { hex: '#00c9a7', label: 'Teal'    },
-  { hex: '#c8950f', label: 'Amber'   },
-  { hex: '#d0a8ff', label: 'Lavender'},
+  { hex: '#ff3b3b', label: 'Crimson'    },
+  { hex: '#ff6b35', label: 'Coral'      },
+  { hex: '#ff8c00', label: 'Orange'     },
+  { hex: '#ffa200', label: 'Amber'      },
+  { hex: '#ffd000', label: 'Gold'       },
+  { hex: '#ffe600', label: 'Sun'        },
+  { hex: '#c6e600', label: 'Lime'       },
+  { hex: '#5fd23a', label: 'Green'      },
+  { hex: '#1fbf6b', label: 'Emerald'    },
+  { hex: '#00c9a7', label: 'Teal'       },
+  { hex: '#00bcd4', label: 'Cyan'       },
+  { hex: '#1e9bff', label: 'Sky'        },
+  { hex: '#3b6bff', label: 'Blue'       },
+  { hex: '#6b4bff', label: 'Indigo'     },
+  { hex: '#9b4dff', label: 'Violet'     },
+  { hex: '#c44dff', label: 'Purple'     },
+  { hex: '#ff4dd2', label: 'Magenta'    },
+  { hex: '#ff6fae', label: 'Pink'       },
+  { hex: '#d0a8ff', label: 'Lavender'   },
+  { hex: '#ffffff', label: 'White'      },
+  { hex: '#c0cad8', label: 'Silver'     },
 ];
 
-// ── Country name lookup (ISO → display name) ─────────────────────────────────
-const COUNTRY_NAMES = {
-  AE: 'United Arab Emirates', AF: 'Afghanistan', AL: 'Albania',
-  AO: 'Angola',               AR: 'Argentina',   AT: 'Austria',
-  AU: 'Australia',            AZ: 'Azerbaijan',  BA: 'Bosnia & Herzegovina',
-  BB: 'Barbados',             BD: 'Bangladesh',  BE: 'Belgium',
-  BG: 'Bulgaria',             BH: 'Bahrain',     BO: 'Bolivia',
-  BR: 'Brazil',               BS: 'Bahamas',     BZ: 'Belize',
-  CA: 'Canada',               CH: 'Switzerland', CI: "Côte d'Ivoire",
-  CL: 'Chile',                CM: 'Cameroon',    CN: 'China',
-  CO: 'Colombia',             CR: 'Costa Rica',  CU: 'Cuba',
-  CY: 'Cyprus',               CZ: 'Czech Republic', DE: 'Germany',
-  DK: 'Denmark',              DO: 'Dominican Republic', DZ: 'Algeria',
-  EC: 'Ecuador',              EE: 'Estonia',     EG: 'Egypt',
-  ES: 'Spain',                ET: 'Ethiopia',    FI: 'Finland',
-  FJ: 'Fiji',                 FR: 'France',      GB: 'United Kingdom',
-  GH: 'Ghana',                GR: 'Greece',      GT: 'Guatemala',
-  GY: 'Guyana',               HK: 'Hong Kong',   HN: 'Honduras',
-  HR: 'Croatia',              HU: 'Hungary',     ID: 'Indonesia',
-  IE: 'Ireland',              IL: 'Israel',      IN: 'India',
-  IQ: 'Iraq',                 IR: 'Iran',        IS: 'Iceland',
-  IT: 'Italy',                JM: 'Jamaica',     JO: 'Jordan',
-  JP: 'Japan',                KE: 'Kenya',       KH: 'Cambodia',
-  KR: 'South Korea',          KW: 'Kuwait',      KZ: 'Kazakhstan',
-  LA: 'Laos',                 LB: 'Lebanon',     LK: 'Sri Lanka',
-  LT: 'Lithuania',            LU: 'Luxembourg',  LV: 'Latvia',
-  LY: 'Libya',                MA: 'Morocco',     ME: 'Montenegro',
-  MG: 'Madagascar',           MK: 'North Macedonia', MM: 'Myanmar',
-  MN: 'Mongolia',             MO: 'Macau',       MT: 'Malta',
-  MU: 'Mauritius',            MX: 'Mexico',      MY: 'Malaysia',
-  MZ: 'Mozambique',           NG: 'Nigeria',     NI: 'Nicaragua',
-  NL: 'Netherlands',          NO: 'Norway',      NP: 'Nepal',
-  NZ: 'New Zealand',          OM: 'Oman',        PA: 'Panama',
-  PE: 'Peru',                 PG: 'Papua New Guinea', PH: 'Philippines',
-  PK: 'Pakistan',             PL: 'Poland',      PR: 'Puerto Rico',
-  PT: 'Portugal',             PY: 'Paraguay',    QA: 'Qatar',
-  RO: 'Romania',              RS: 'Serbia',      RU: 'Russia',
-  RW: 'Rwanda',               SA: 'Saudi Arabia', SD: 'Sudan',
-  SE: 'Sweden',               SG: 'Singapore',   SI: 'Slovenia',
-  SK: 'Slovakia',             SN: 'Senegal',     SR: 'Suriname',
-  SV: 'El Salvador',          TH: 'Thailand',    TN: 'Tunisia',
-  TR: 'Turkey',               TT: 'Trinidad & Tobago', TW: 'Taiwan',
-  TZ: 'Tanzania',             UA: 'Ukraine',     UG: 'Uganda',
-  US: 'United States',        UY: 'Uruguay',     UZ: 'Uzbekistan',
-  VE: 'Venezuela',            VN: 'Vietnam',     XK: 'Kosovo',
-  YE: 'Yemen',                ZA: 'South Africa', ZM: 'Zambia',
-  ZW: 'Zimbabwe',
-};
-
-function countryName(code) {
-  return COUNTRY_NAMES[code] ?? code;
-}
+// Country names come from the single source of truth in airports.js
+// (data/airports.js → COUNTRY_NAMES / getCountryName), so this screen never
+// drifts out of sync when new countries are added.
+const countryName = getCountryName;
 
 // Returns [{countryName, airports[]}] sorted A-Z by country name
 function groupedByCountry(filter = '') {
@@ -126,7 +88,7 @@ export default function SetupScreen() {
         <div className="setup-title">✈ Tailwinds - Airline Manager</div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
-          You have $10,000,000 to get started.
+          You've secured a $10,000,000 startup loan to get started — use it wisely.
         </div>
 
         <form onSubmit={handleStart}>

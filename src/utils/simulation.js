@@ -233,17 +233,21 @@ export const SLOTS_PER_GATE = 50;
 // Average cruise speed by aircraft category (km/h)
 const CRUISE_SPEED_KMH = {
   'Turboprop':    500,
-  'Regional Jet': 750,
+  'Regional Jet': 800,
   'Narrow Body':  840,
   'Wide Body':    870,
+  'Double Deck':  870,
+  'Supersonic':   2180,  // Concorde cruise ~Mach 2.02
 };
 
 // Ground turnaround time by category (hours)
 const TURNAROUND_HOURS = {
   'Turboprop':    0.50,   // 30 min
   'Regional Jet': 0.67,   // 40 min
-  'Narrow Body':  0.75,   // 45 min
+  'Narrow Body':  0.83,   // 50 min
   'Wide Body':    1.50,   // 90 min
+  'Double Deck':  2.00,   // 120 min — two boarding doors, complex deplaning
+  'Supersonic':   2.00,   // 120 min — complex servicing
 };
 
 /**
@@ -299,12 +303,46 @@ export function maintenanceMultiplier(ageWeeks) {
 }
 
 /**
+ * Game calendar: 52 weeks/year.
+ * Jan/Mar/Jul/Oct = 5 weeks; all others = 4 weeks.
+ *   Jan  1-5   Feb  6-9   Mar 10-14  Apr 15-18
+ *   May 19-22  Jun 23-26  Jul 27-31  Aug 32-35
+ *   Sep 36-39  Oct 40-44  Nov 45-48  Dec 49-52
+ */
+const MONTH_STARTS = [1, 6, 10, 15, 19, 23, 27, 32, 36, 40, 45, 49];
+const MONTH_NAMES  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/**
+ * Map game week (1-52) to { monthIndex (1-12), monthName, weekInMonth }.
+ */
+export function weekToGameDate(week) {
+  const w = Math.max(1, Math.min(52, week));
+  let mi = 11; // 0-indexed month
+  for (let i = 0; i < 12; i++) {
+    if (w < (MONTH_STARTS[i + 1] ?? 53)) { mi = i; break; }
+  }
+  return {
+    monthIndex:   mi + 1,
+    monthName:    MONTH_NAMES[mi],
+    weekInMonth:  w - MONTH_STARTS[mi] + 1,
+  };
+}
+
+/**
+ * Format game state as "Week N Mon Year Y".
+ */
+export function formatGameDate(state) {
+  const { monthName, weekInMonth } = weekToGameDate(state.week);
+  return `Week ${weekInMonth} ${monthName} Year ${state.year}`;
+}
+
+/**
  * Derive the current game date object from game state.
  * month is 1-indexed (1 = Jan, 12 = Dec).
  */
 export function currentGameDate(state) {
-  const month = Math.max(1, Math.min(12, Math.round(((state.week - 1) / 52) * 12) + 1));
-  return { week: state.week, month };
+  const { monthIndex } = weekToGameDate(state.week);
+  return { week: state.week, month: monthIndex };
 }
 
 export function ageLabel(ageWeeks) {
@@ -386,8 +424,15 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   const market       = buildRouteMarket(route.origin, route.destination, gameDate, maturity);
   // Resolve per-class prices: use route.classPrices when set, fall back to ticketPrice × multiplier
   const cp = route.classPrices ?? {};
-  const economyPrice   = cp.economy        ?? route.ticketPrice;
-  const businessPrice  = cp.businessClass  ?? null; // null = no business cabin priced yet
+  // Supersonic aircraft (e.g. Concorde) command a ticket premium.
+  // Applying it here — before the demand model — means higher prices feed through
+  // elasticity to reduce demand, while revenue per passenger is also higher.
+  const ticketPremium  = type.ticketPremium ?? 1;
+  // Clamp to a positive fare: a 0/negative/NaN price would feed Math.pow(ref/price,…)
+  // in the elasticity model and yield Infinity/NaN, which cascades into NaN cash and
+  // permanently corrupts the save. Reducer actions also clamp, but guard here too.
+  const economyPrice   = Math.max(1, (cp.economy ?? route.ticketPrice ?? 1) * ticketPremium);
+  const businessPrice  = cp.businessClass  != null ? Math.max(1, cp.businessClass * ticketPremium) : null;
 
   // Economy capacity = economy-only seats × frequency (not total seats, which includes premium cabins)
   const economySeats = (config.economy ?? type.seats) * route.weeklyFrequency;
@@ -448,11 +493,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // Demand that couldn't be served in this premium class spills to economy
     if (cls !== 'economy') spilledToEconomy += unsatisfied;
 
-    // Use per-class price if explicitly set by the player.
-    // Without explicit pricing, premium cabin passengers pay the economy fare —
-    // the player hasn't unlocked that revenue stream yet. (Revenue comes from seat
-    // differentiation only when you actively price each cabin.)
-    const fare = cp[cls] != null ? cp[cls] : economyPrice;
+    // Use per-class price if explicitly set by the player, scaled by any supersonic
+    // ticket premium.  Without explicit pricing, premium cabin passengers pay the
+    // economy fare (already premium-adjusted above).
+    const fare = cp[cls] != null ? cp[cls] * ticketPremium : economyPrice;
     // Revenue = both directions (paxOneWay × 2 × fare); passengers stored one-way.
     const clsRevenue = paxOneWay * 2 * fare;
 
@@ -543,6 +587,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     seasonality:     market.seasonalityFactor,
     competitorCount: competitorOffers.length,
     capacityCapped:  demandResult.capacityCapped,
+    ticketPremium,   // >1 for supersonic aircraft (e.g. Concorde = 2.5)
   };
 }
 

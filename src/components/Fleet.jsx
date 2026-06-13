@@ -6,7 +6,7 @@ import {
   formatMoney, formatPercent,
   maintenanceMultiplier, ageLabel,
   simulateRoute, weeklyBlockHours, currentGameDate,
-  MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm,
+  MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import FleetConfig from './FleetConfig.jsx';
@@ -388,7 +388,7 @@ const CATEGORY_ORDER = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body']
 // ─── By Type view ─────────────────────────────────────────────────────────────
 
 function FleetByType({ fleet, routes }) {
-  const gd = { year: 2026, week: 1 }; // just for label purposes
+  const gd = { year: 1, week: 1 }; // just for label purposes
   // Group by typeId
   const groups = {};
   for (const aircraft of fleet) {
@@ -973,8 +973,9 @@ export default function Fleet() {
                 const weeksLeft  = order.deliverAbsWeek - currentAbsWeek;
                 const lead       = DELIVERY_LEAD[type?.category] ?? 2;
                 const progress   = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));
-                const deliverY   = Math.floor((order.deliverAbsWeek - 1) / 52) + 2026;
-                const deliverW   = ((order.deliverAbsWeek - 1) % 52) + 1;
+                const deliverY   = Math.floor((order.deliverAbsWeek - 1) / 52) + 1;
+                const _dWIY      = ((order.deliverAbsWeek - 1) % 52) + 1;
+                const { monthName: deliverMon, weekInMonth: deliverWIM } = weekToGameDate(_dWIY);
                 return (
                   <tr key={order.id}>
                     <td>
@@ -1002,7 +1003,7 @@ export default function Fleet() {
                         {weeksLeft <= 0 ? 'Arriving…' : `${weeksLeft}w`}
                       </span>
                       <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
-                        Wk {deliverW}/{deliverY}
+                        Wk {deliverWIM} {deliverMon} Y{deliverY}
                       </div>
                     </td>
                     <td style={{ minWidth: 100 }}>

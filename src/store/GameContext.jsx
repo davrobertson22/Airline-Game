@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
-  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm,
+  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
@@ -54,7 +54,7 @@ function freshState() {
     showDebrief:   false, // show weekly debrief modal
     pendingToasts: [],    // toast configs waiting to be shown
     week: 1,
-    year: 2026,
+    year: 1,
     fleet: [],         // { id, typeId, name, status, ageWeeks, config, ownershipType, fuelMod, rangeMod, maintMod, engineId, engineLabel, hasWingtips }
     pendingOrders: [], // { id, typeId, ownershipType, name, engineId, engineLabel, hasWingtips, fuelMod, rangeMod, maintMod, deliverAbsWeek, totalPrice }
     routes: [],      // { id, origin, destination, aircraftId, ticketPrice, weeklyFrequency, hub }
@@ -172,7 +172,7 @@ function reducer(state, action) {
         weeksRemaining:    STARTUP_TERM,
         totalInterestPaid: 0,
         takenWeek:         1,
-        takenYear:         2026,
+        takenYear:         1,
         label:             'Startup Capital',
       };
       return {
@@ -416,6 +416,12 @@ function reducer(state, action) {
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
       if (!aircraft || !type) return state;
 
+      // Reject a same-airport route: distance 0 → ~zero cost but full gravity-model
+      // demand, which would be an exploit. (The UI excludes this, but guard anyway.)
+      if (action.origin === action.destination) return state;
+      // Frequency must be a positive integer.
+      const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
+
       const dist = routeDistanceKm(action.origin, action.destination);
 
       // ── Range check (engine/wingtip rangeMod + cabin-payload bonus) ─────────
@@ -423,13 +429,13 @@ function reducer(state, action) {
       if (dist > effectiveRange) return state;
 
       // ── Regulatory restriction check (perimeter rules, slot caps, aircraft size) ─
-      if (checkRouteRestrictions(action.origin, action.destination, dist, action.weeklyFrequency, type.category)) return state;
+      if (checkRouteRestrictions(action.origin, action.destination, dist, weeklyFrequency, type.category)) return state;
 
       // ── Block-hours check: cumulative across ALL routes on this aircraft ───────
       const existingBlockHrs = state.routes
         .filter(r => r.aircraftId === action.aircraftId)
         .reduce((sum, r) => sum + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0);
-      const newBlockHrs = weeklyBlockHours(dist, action.weeklyFrequency, type);
+      const newBlockHrs = weeklyBlockHours(dist, weeklyFrequency, type);
       if (existingBlockHrs + newBlockHrs > MAX_WEEKLY_BLOCK_HOURS) return state;
 
       // ── Gate checks ──────────────────────────────────────────────────────────
@@ -441,8 +447,8 @@ function reducer(state, action) {
       const slotsAt = (code) => state.routes
         .filter(r => r.origin === code || r.destination === code)
         .reduce((s, r) => s + r.weeklyFrequency, 0);
-      if (slotsAt(action.origin)      + action.weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
-      if (slotsAt(action.destination) + action.weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
+      if (slotsAt(action.origin)      + weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
+      if (slotsAt(action.destination) + weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
 
       // ── Consolidate: if this aircraft already flies this exact route, merge ──
       const existingRoute = state.routes.find(r =>
@@ -455,7 +461,7 @@ function reducer(state, action) {
           ...state,
           routes: state.routes.map(r =>
             r.id === existingRoute.id
-              ? { ...r, weeklyFrequency: r.weeklyFrequency + action.weeklyFrequency }
+              ? { ...r, weeklyFrequency: r.weeklyFrequency + weeklyFrequency }
               : r
           ),
         };
@@ -465,14 +471,14 @@ function reducer(state, action) {
       const launchCost = routeLaunchCost(dist);
       if (state.cash < launchCost) return state;   // can't afford to open route
 
-      const basePrice = action.ticketPrice;
+      const basePrice = Math.max(1, Math.round(Number(action.ticketPrice) || 0));
       const newRoute = {
         id:              uid(),
         origin:          action.origin,
         destination:     action.destination,
         aircraftId:      action.aircraftId,
         ticketPrice:     basePrice,
-        weeklyFrequency: action.weeklyFrequency,
+        weeklyFrequency: weeklyFrequency,
         weeksOpen:       0,
         launchCost,
         hub:             state.hub,
@@ -579,13 +585,17 @@ function reducer(state, action) {
     // ──────────────────────────────────────────────────────────────────────────
 
     case 'UPDATE_TICKET_PRICE': {
-      // Legacy: update economy price only, keep other classes in sync
+      // Legacy: update economy price only, keep other classes in sync.
+      // Clamp to a sane positive fare: a 0 or negative price feeds the elasticity
+      // model Math.pow(ref/price, …), producing Infinity/NaN that poisons the
+      // whole weekly tick (revenue → cashDelta → cash all become NaN).
+      const price = Math.max(1, Math.round(Number(action.ticketPrice) || 0));
       return {
         ...state,
         routes: state.routes.map(r =>
           r.id === action.routeId
-            ? { ...r, ticketPrice: action.ticketPrice,
-                classPrices: { ...r.classPrices, economy: action.ticketPrice } }
+            ? { ...r, ticketPrice: price,
+                classPrices: { ...r.classPrices, economy: price } }
             : r
         ),
       };
@@ -594,11 +604,16 @@ function reducer(state, action) {
     // Set individual class prices without touching others
     case 'UPDATE_CLASS_PRICES': {
       // action: { routeId, updates: { economy?, premiumEconomy?, businessClass?, firstClass? } }
+      // Sanitize each provided fare to a positive integer (see UPDATE_TICKET_PRICE).
+      const cleanUpdates = {};
+      for (const [k, v] of Object.entries(action.updates ?? {})) {
+        cleanUpdates[k] = Math.max(1, Math.round(Number(v) || 0));
+      }
       return {
         ...state,
         routes: state.routes.map(r => {
           if (r.id !== action.routeId) return r;
-          const merged = { ...r.classPrices, ...action.updates };
+          const merged = { ...r.classPrices, ...cleanUpdates };
           return {
             ...r,
             classPrices: merged,
@@ -733,7 +748,12 @@ function reducer(state, action) {
       const target = (state.competitors ?? []).find(c => c.id === action.competitorId);
       if (!target) return state;
 
-      const acquisitionCost = Math.round((target.marketCap ?? 0) * 1.25);
+      // Value the target. marketCap is only populated after the first weekly tick;
+      // fall back to a computed valuation so a fresh-game competitor can never be
+      // acquired for $0 (which would also hand the player their cash for free).
+      const targetValue = target.marketCap
+        ?? computeMarketCap(target.profitHistory ?? [], target.cash ?? 0, target.baseQualityScore ?? 50).marketCap;
+      const acquisitionCost = Math.round(targetValue * 1.25);
       if (state.cash < acquisitionCost) return state;  // can't afford — ignore
 
       // ── Inherit the competitor's REAL fleet ────────────────────────────────
@@ -898,7 +918,14 @@ function reducer(state, action) {
         return { ...a, groundedWeeksLeft: weeksLeft };
       });
 
-      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty });
+      // Current in-game month (1-12) drives seasonal demand. Must match the
+      // weekToMonth() formula used by the RoutePlanner/RouteDetail previews so the
+      // forecast the player sees agrees with the actual weekly result. Without this,
+      // weeklyTick falls back to its { month: 6 } default and seasonality is inert.
+      const gameMonth = weekToGameDate(state.week).monthIndex;
+      const gameDate  = { week: state.week, month: gameMonth };
+
+      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate });
 
       // ── Loyalty program: grow/decay member base ──────────────────────────
       const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
@@ -1021,8 +1048,12 @@ function reducer(state, action) {
         duration: 8000,
       }));
 
-      // 5. Build recovery toasts (aircraft that just came back from grounding)
-      const recoveredAircraft = tickedFleet
+      // 5. Build recovery toasts (aircraft that just came back from grounding).
+      //    Detect from the PRE-tick fleet (state.fleet): an aircraft recovers this
+      //    week if it was grounded with ≤1 week left, since tickedFleetPre has
+      //    already flipped it back to assigned/idle. Reading tickedFleet here would
+      //    instead match aircraft that are STILL grounded for one more week.
+      const recoveredAircraft = state.fleet
         .filter(a => a.status === 'grounded' && (a.groundedWeeksLeft ?? 1) <= 1)
         .filter(a => !failedIds.has(a.id)); // don't re-announce ones that just failed again
       const recoveryToasts = recoveredAircraft.map(a => ({
@@ -1081,14 +1112,14 @@ function reducer(state, action) {
       // Advance competitor networks (graceful fallback for old saves missing competitors)
       const currentCompetitors = state.competitors
         ?? initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} })));
-      const weekNumber = (state.year - 2026) * 52 + state.week;
+      const weekNumber = (state.year - 1) * 52 + state.week;
       const { competitors: grownCompetitors, events: competitorEvents } =
         tickCompetitorGrowth(currentCompetitors, weekNumber);
       // Competitors react to player pricing on shared routes
       const reactedCompetitors = tickCompetitorPricing(grownCompetitors, state.routes);
 
       // Simulate competitor networks, accumulate cash, and track profit history for market cap
-      const approxMonth = Math.max(1, Math.ceil(state.week * 12 / 52));
+      const approxMonth = gameMonth;
       const updatedCompetitors = reactedCompetitors.map(c => {
         const stats            = computeCompetitorWeeklyStats(c, approxMonth);
         const newCompCash      = (c.cash ?? 0) + stats.weeklyProfit;
@@ -1158,7 +1189,7 @@ function reducer(state, action) {
       }
 
       const historyEntry = {
-        label:       `W${state.week}/${state.year}`,
+        label:       (() => { const d = weekToGameDate(state.week); return `${d.monthName} W${d.weekInMonth} Y${state.year}`; })(),
         week:        state.week,
         year:        state.year,
         cash:        newCash,
@@ -1364,6 +1395,8 @@ function reducer(state, action) {
     case 'TAKE_LOAN': {
       // action: { principal, interestRate (annual), termWeeks }
       const { principal, interestRate, termWeeks } = action;
+      // Reject degenerate loans regardless of UI path.
+      if (!(principal > 0) || !(termWeeks > 0) || !(interestRate >= 0)) return state;
       const weeklyRate = interestRate / 52;
       // Amortized weekly payment: P * r * (1+r)^n / ((1+r)^n - 1)
       const weeklyPayment = weeklyRate > 0

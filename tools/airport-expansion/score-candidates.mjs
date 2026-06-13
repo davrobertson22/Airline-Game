@@ -57,6 +57,10 @@ const multForExisting = code => {
 // Candidate multiplier mirrors the game's tier defaults: leisure dest vs plain regional.
 const multForCandidate = isLeisure =>
   isLeisure ? (15 + 90) / 100 : (32 + 55) / 100; // 1.05 vs 0.87
+// Mirrors market.js getDemandMass(): population + tourism + gateway, effectivePop overrides.
+const TOURISM_VISITOR_WEIGHT = 1.5, GATEWAY_WEIGHT = 1.0;
+const demandMass = ap => ap.effectivePop != null ? ap.effectivePop
+  : (ap.population ?? 0) + (ap.visitors ?? 0) * TOURISM_VISITOR_WEIGHT + (ap.gateway ?? 0) * GATEWAY_WEIGHT;
 function pairDemand(popA, multA, popB, multB, dist) {
   return Math.round((Math.sqrt(popA * multA * popB * multB) * 1054) / Math.pow(1 + dist / 3000, 1.1));
 }
@@ -72,6 +76,8 @@ const candidates = lines.map(l => {
     code: c[idx.code], name: c[idx.name], city: c[idx.city], country: c[idx.country],
     lat: +c[idx.lat], lon: +c[idx.lon], population: +c[idx.population],
     leisure: +c[idx.leisure] === 1,
+    visitors: idx.visitors != null ? +c[idx.visitors] || 0 : 0, // optional column
+    gateway:  idx.gateway  != null ? +c[idx.gateway]  || 0 : 0, // optional column
   };
 });
 
@@ -81,7 +87,7 @@ const results = candidates.map(cand => {
     return { ...cand, verdict: 'EXISTS', nearestKm: 0, nearest: cand.code, bestDemand: 0, bestPartner: '', feederDemand: 0, feederHub: '' };
   }
   const cm = multForCandidate(cand.leisure);
-  const cpop = cand.population;
+  const cpop = demandMass(cand); // honours optional visitors/gateway columns if present
 
   let nearestKm = Infinity, nearest = '';
   let bestDemand = 0, bestPartner = '', bestKm = 0;
@@ -90,7 +96,7 @@ const results = candidates.map(cand => {
   for (const ex of AIRPORTS) {
     const dist = distanceKm(cand, ex);
     if (dist < nearestKm) { nearestKm = dist; nearest = ex.code; }
-    const epop = ex.effectivePop ?? ex.population;
+    const epop = demandMass(ex);
     const d = pairDemand(cpop, cm, epop, multForExisting(ex.code), dist);
     if (d > bestDemand) { bestDemand = d; bestPartner = ex.code; bestKm = Math.round(dist); }
     if (dist <= FEEDER_MAX_KM && d > feederDemand) { feederDemand = d; feederHub = ex.code; feederKm = Math.round(dist); }

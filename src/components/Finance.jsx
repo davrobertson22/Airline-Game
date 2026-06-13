@@ -4,7 +4,7 @@ import {
   formatMoney, formatPercent,
   simulateRoute, maintenanceMultiplier, blockTimeHours,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS,
-  weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm,
+  weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee } from '../data/airports.js';
@@ -60,7 +60,9 @@ const CLASS_COLORS = { firstClass: '#bc8cff', businessClass: '#ffb43d', premiumE
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function currentGameDate(state) {
-  const month = Math.max(1, Math.min(12, Math.round(((state.week - 1) / 52) * 12) + 1));
+  // Must match weekToMonth() used by the reducer's weekly tick and the RoutePlanner/
+  // RouteDetail previews (ceil), so the projected P&L agrees with the actual result.
+  const month = Math.min(12, Math.max(1, Math.ceil(state.week * 12 / 52)));
   return { week: state.week, month };
 }
 
@@ -125,11 +127,11 @@ function calcUnitEconomics(route, aircraft, type, result, fleet, routes) {
   return { ASK, RPK, RASK, CASKop, CASKfull, yield: yieldVal, breakEvenLF, allocatedFleet };
 }
 
-/** Future month (1-12) from an absolute week offset from game start (week 1 = 2026-W01) */
+/** Future month (1-12) from an absolute week offset from game start */
 function futureMonth(currentAbsWeek, offsetWeeks) {
   const absWeek    = currentAbsWeek + offsetWeeks;
   const weekInYear = ((absWeek - 1) % 52) + 1;
-  return Math.max(1, Math.min(12, Math.ceil(weekInYear / 52 * 12)));
+  return weekToGameDate(weekInYear).monthIndex;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -2194,7 +2196,7 @@ function Forecast() {
   };
 
   const currentSeasonal = fleetSeasonalAt(gd.month);
-  const absWeekBase     = (state.year - 2026) * 52 + state.week;
+  const absWeekBase     = (state.year - 1) * 52 + state.week;
 
   let runningCash = cash;
   const forecastWeeks = Array.from({ length: 12 }, (_, i) => {

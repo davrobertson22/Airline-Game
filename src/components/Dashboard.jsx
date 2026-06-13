@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm } from '../utils/simulation.js';
+import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate, formatGameDate } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
@@ -195,8 +195,9 @@ export default function Dashboard() {
           sub={`${countries.length} countries`}
         />
         <KpiBox
-          label="Week"
-          value={`${week} / ${year}`}
+          label="Date"
+          value={formatGameDate({ week, year })}
+          valueStyle={{ fontSize: 13 }}
           sub={lastReport ? (lastReport.cashDelta >= 0 ? `+${formatMoney(lastReport.cashDelta)} last wk` : `${formatMoney(lastReport.cashDelta)} last wk`) : 'No data yet'}
           subColor={lastReport ? (lastReport.cashDelta >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)'}
         />
@@ -603,7 +604,7 @@ function SeasonalityBar({ route, week }) {
   // getSeasonalProfile returns [null, Jan, Feb, ..., Dec] (1-indexed)
   const profile     = getSeasonalProfile(route.origin, route.destination);
   const values      = profile.slice(1);  // [Jan..Dec], length 12
-  const currentMonth = Math.max(0, Math.min(11, Math.round(((week - 1) / 52) * 12) % 12));
+  const currentMonth = weekToGameDate(week).monthIndex - 1; // 0-indexed
   const currentVal  = values[currentMonth] ?? 1;
   const label       = currentVal >= 1.1 ? 'peak' : currentVal <= 0.85 ? 'off-peak' : '';
   return (

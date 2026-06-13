@@ -9,14 +9,14 @@ import {
 } from '../models/demand.js';
 import { getAlliance } from '../data/alliances.js';
 import {
-  simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent,
+  simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
 function weekToMonth(week) {
-  return Math.min(12, Math.max(1, Math.ceil(week * 12 / 52)));
+  return weekToGameDate(week).monthIndex;
 }
 
 const TIER_COLOR = { budget: 'var(--yellow)', legacy: 'var(--accent)', premium: 'var(--purple)' };

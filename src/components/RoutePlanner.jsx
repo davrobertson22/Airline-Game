@@ -4,7 +4,7 @@ import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import {
   baseCityPairDemand, referencePrice, distanceKm,
-  simulateRoute, formatMoney, formatPercent,
+  simulateRoute, formatMoney, formatPercent, weekToGameDate,
 } from '../utils/simulation.js';
 import {
   buildRouteMarket, computeMarketShare,
@@ -15,7 +15,7 @@ import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 
 function weekToMonth(week) {
-  return Math.min(12, Math.max(1, Math.ceil(week * 12 / 52)));
+  return weekToGameDate(week).monthIndex;
 }
 
 // ─── Airport search dropdown ──────────────────────────────────────────────────

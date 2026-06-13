@@ -9,7 +9,7 @@ import {
   efficiencyScore,
   seatEfficiency,
 } from '../data/aircraft.js';
-import { formatMoney } from '../utils/simulation.js';
+import { formatMoney, weekToGameDate } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
 
@@ -98,8 +98,9 @@ function PendingOrdersBar({ pendingOrders, year, week, onCancel }) {
           const type          = getAircraftType(order.typeId);
           const catColor      = CAT_COLORS[type?.category] || '#93a4ba';
           const weeksLeft     = order.deliverAbsWeek - currentAbsWeek;
-          const deliverYear   = Math.floor((order.deliverAbsWeek - 1) / 52) + 2026;
-          const deliverWeek   = ((order.deliverAbsWeek - 1) % 52) + 1;
+          const deliverYear   = Math.floor((order.deliverAbsWeek - 1) / 52) + 1;
+          const _deliverWIY   = ((order.deliverAbsWeek - 1) % 52) + 1;
+          const { monthName: deliverMon, weekInMonth: deliverWIM } = weekToGameDate(_deliverWIY);
           const lead          = DELIVERY_LEAD[type?.category] ?? 2;
           const progress      = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));
 
@@ -139,7 +140,7 @@ function PendingOrdersBar({ pendingOrders, year, week, onCancel }) {
                   {weeksLeft <= 0 ? 'Arriving…' : `${weeksLeft}w left`}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
-                  Wk {deliverWeek}/{deliverYear}
+                  Wk {deliverWIM} {deliverMon} Y{deliverYear}
                 </div>
                 <div style={{ height: 3, width: 80, background: 'var(--surface3)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${progress * 100}%`, background: catColor, borderRadius: 2, transition: 'width 0.3s' }} />

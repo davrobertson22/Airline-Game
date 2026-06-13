@@ -252,6 +252,139 @@ export const AIRLINE_LOGOS = [
       );
     },
   },
+  {
+    id: 'jet',
+    name: 'Jet',
+    render(gid, r, color = '#ffffff') {
+      return (
+        <>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stopColor="#10243f" />
+              <stop offset="100%" stopColor="#163a63" />
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx={r} fill={`url(#${gid})`} />
+          <path d="M 7 30 L 31 9 L 27 19 L 33 17 L 18 31 L 21 22 Z" fill={color} />
+          <path d="M 7 30 L 18 31 L 14 34 Z" fill={color} opacity="0.45" />
+        </>
+      );
+    },
+  },
+  {
+    id: 'orbit',
+    name: 'Orbit',
+    render(gid, r, color = '#7fd4ff') {
+      return (
+        <>
+          <rect width="40" height="40" rx={r} fill="#0a0f1f" />
+          <circle cx="20" cy="20" r="4" fill={color} />
+          <ellipse cx="20" cy="20" rx="13" ry="6" fill="none" stroke={color} strokeWidth="1.6" opacity="0.85" />
+          <ellipse cx="20" cy="20" rx="13" ry="6" fill="none" stroke={color} strokeWidth="1.2" opacity="0.4"
+            transform="rotate(60 20 20)" />
+          <ellipse cx="20" cy="20" rx="13" ry="6" fill="none" stroke={color} strokeWidth="1.2" opacity="0.4"
+            transform="rotate(120 20 20)" />
+          <circle cx="33" cy="20" r="1.8" fill={color} />
+        </>
+      );
+    },
+  },
+  {
+    id: 'delta',
+    name: 'Delta',
+    render(gid, r, color = '#ffffff') {
+      return (
+        <>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#2a0d3f" />
+              <stop offset="100%" stopColor="#4a1163" />
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx={r} fill={`url(#${gid})`} />
+          <polygon points="20,8 31,30 20,24 9,30" fill={color} />
+          <polygon points="20,8 25.5,19 20,17 14.5,19" fill={color} opacity="0.45" />
+        </>
+      );
+    },
+  },
+  {
+    id: 'sunburst',
+    name: 'Sunburst',
+    render(gid, r, color = '#ffb300') {
+      const rays = Array.from({ length: 12 }, (_, i) => {
+        const a = (i * 30 * Math.PI) / 180;
+        return (
+          <line key={i}
+            x1={20 + Math.cos(a) * 9}  y1={20 + Math.sin(a) * 9}
+            x2={20 + Math.cos(a) * 15} y2={20 + Math.sin(a) * 15}
+            stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+        );
+      });
+      return (
+        <>
+          <rect width="40" height="40" rx={r} fill="#101418" />
+          {rays}
+          <circle cx="20" cy="20" r="6.5" fill={color} />
+        </>
+      );
+    },
+  },
+  {
+    id: 'globe',
+    name: 'Globe',
+    render(gid, r, color = '#4fc3f7') {
+      return (
+        <>
+          <rect width="40" height="40" rx={r} fill="#08151f" />
+          <circle cx="20" cy="20" r="13" fill="none" stroke={color} strokeWidth="1.8" />
+          <ellipse cx="20" cy="20" rx="5" ry="13" fill="none" stroke={color} strokeWidth="1.1" opacity="0.7" />
+          <line x1="7" y1="20" x2="33" y2="20" stroke={color} strokeWidth="1.1" opacity="0.7" />
+          <path d="M 8.5 14 H 31.5" stroke={color} strokeWidth="1" opacity="0.5" />
+          <path d="M 8.5 26 H 31.5" stroke={color} strokeWidth="1" opacity="0.5" />
+        </>
+      );
+    },
+  },
+  {
+    id: 'wing',
+    name: 'Wing',
+    render(gid, r, color = '#ffffff') {
+      return (
+        <>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stopColor="#0c2233" />
+              <stop offset="100%" stopColor="#0f3550" />
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx={r} fill={`url(#${gid})`} />
+          <path d="M 6 28 C 18 27 27 22 34 11" fill="none" stroke={color} strokeWidth="2.8" strokeLinecap="round" />
+          <path d="M 9 31 C 19 30 26 26 31 19" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" opacity="0.55" />
+          <path d="M 12 33 C 20 33 25 30 29 25" fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" opacity="0.3" />
+        </>
+      );
+    },
+  },
+  {
+    id: 'star',
+    name: 'Star',
+    render(gid, r, color = '#ffd54f') {
+      return (
+        <>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#1a1340" />
+              <stop offset="100%" stopColor="#0c0a24" />
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx={r} fill={`url(#${gid})`} />
+          <polygon points="20,6 23.5,16 34,16 25.5,22.5 28.8,33 20,26.5 11.2,33 14.5,22.5 6,16 16.5,16"
+            fill={color} />
+        </>
+      );
+    },
+  },
 ];
 
 export const LOGO_MAP = Object.fromEntries(AIRLINE_LOGOS.map(l => [l.id, l]));

@@ -142,5 +142,5 @@ export function fuelIndexDelta(index) {
  * Used for hedge expiry comparisons.
  */
 export function absoluteWeek(year, week) {
-  return (year - 2026) * 52 + week;
+  return (year - 1) * 52 + week;
 }

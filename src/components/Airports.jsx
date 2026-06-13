@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import AirportDetail from './AirportDetail.jsx';
-import { AIRPORTS, getAirport, gateMonthlyFee, totalGateMonthlyFee, REGIONS, getRegion } from '../data/airports.js';
+import { AIRPORTS, getAirport, gateMonthlyFee, totalGateMonthlyFee, REGIONS, getRegion, getCountryName } from '../data/airports.js';
 import { SLOTS_PER_GATE } from '../utils/simulation.js';
 import { formatMoney } from '../utils/simulation.js';
 
@@ -70,36 +70,49 @@ export default function Airports() {
     s + Math.round(totalGateMonthlyFee(airport, count) / 4), 0);
 
   const TIER_ORDER = { mega: 0, major: 1, regional: 2 };
-  const filtered = AIRPORTS.filter(a => {
+
+  // Build sorted, filtered list then group by country name
+  const filteredAirports = AIRPORTS.filter(a => {
     if (regionFilter && getRegion(a.country) !== regionFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     return a.code.toLowerCase().includes(q) ||
            a.city.toLowerCase().includes(q) ||
-           a.name.toLowerCase().includes(q);
-  }).sort((a, b) => {
-    // 1. Region (when no filter active)
-    if (!regionFilter) {
-      const ra = REGIONS.indexOf(getRegion(a.country));
-      const rb = REGIONS.indexOf(getRegion(b.country));
-      if (ra !== rb) return ra - rb;
-    }
-    // 2. Country alphabetically
-    const cc = a.country.localeCompare(b.country);
-    if (cc !== 0) return cc;
-    // 3. Airports you already hold first (so you can add more gates easily)
-    const aHeld = (gates[a.code] ?? 0) > 0;
-    const bHeld = (gates[b.code] ?? 0) > 0;
-    if (aHeld !== bHeld) return aHeld ? -1 : 1;
-    // 4. Tier: mega → major → regional
-    const ta = TIER_ORDER[a.tier] ?? 99;
-    const tb = TIER_ORDER[b.tier] ?? 99;
-    if (ta !== tb) return ta - tb;
-    // 5. Population descending (bigger markets first)
-    if (a.population !== b.population) return b.population - a.population;
-    // 6. Alphabetical
-    return a.code.localeCompare(b.code);
+           a.name.toLowerCase().includes(q) ||
+           getCountryName(a.country).toLowerCase().includes(q);
   });
+
+  // Group by country name, sort countries A-Z, airports within by tier then population
+  const browseGroups = (() => {
+    const groups = {};
+    for (const a of filteredAirports) {
+      const name = getCountryName(a.country);
+      if (!groups[name]) groups[name] = { airports: [], region: getRegion(a.country) };
+      groups[name].airports.push(a);
+    }
+    // Sort airports within each country: held first, then mega→major→regional, then pop desc
+    for (const g of Object.values(groups)) {
+      g.airports.sort((a, b) => {
+        const aHeld = (gates[a.code] ?? 0) > 0;
+        const bHeld = (gates[b.code] ?? 0) > 0;
+        if (aHeld !== bHeld) return aHeld ? -1 : 1;
+        const ta = TIER_ORDER[a.tier] ?? 99;
+        const tb = TIER_ORDER[b.tier] ?? 99;
+        if (ta !== tb) return ta - tb;
+        return b.population - a.population;
+      });
+    }
+    // Sort countries: if a region filter is active keep region-natural order, else A-Z
+    return Object.entries(groups)
+      .sort(([nameA, gA], [nameB, gB]) => {
+        if (regionFilter) return nameA.localeCompare(nameB);
+        const ra = REGIONS.indexOf(gA.region);
+        const rb = REGIONS.indexOf(gB.region);
+        if (ra !== rb) return ra - rb;
+        return nameA.localeCompare(nameB);
+      })
+      .map(([name, g]) => ({ name, region: g.region, airports: g.airports }));
+  })();
 
   return (
     <div>
@@ -265,61 +278,90 @@ export default function Airports() {
 
         <input
           className="form-input"
-          placeholder="Search by code or city…"
+          placeholder="Search by code, city or country…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{ marginBottom: 12, maxWidth: 320 }}
         />
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: 6,
-        }}>
-          {filtered.map(airport => {
-            const count      = gates[airport.code] ?? 0;
-            // Show the marginal cost of the NEXT gate (count + 1), so the player sees what they're about to pay
-            const weeklyCost = Math.round(gateMonthlyFee(airport, count + 1) / 4);
-            const held       = count > 0;
+        {browseGroups.length === 0 ? (
+          <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+            No airports match "{search}"
+          </div>
+        ) : browseGroups.map(({ name, airports: groupAirports }) => (
+          <div key={name} style={{ marginBottom: 4 }}>
+            {/* Country subheading */}
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '.7px',
+              textTransform: 'uppercase', color: 'var(--accent)',
+              padding: '8px 0 4px',
+              borderBottom: '1px solid var(--border)',
+              marginBottom: 4,
+              position: 'sticky', top: 0,
+              background: 'var(--surface)',
+              zIndex: 1,
+            }}>
+              {name}
+            </div>
 
-            return (
-              <div
-                key={airport.code}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 12px', borderRadius: 'var(--radius)',
-                  background: held ? 'var(--surface2)' : 'var(--surface)',
-                  border: `1px solid ${held ? 'var(--accent-dim)' : 'var(--border)'}`,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700 }}>{airport.code}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
-                      {airport.city}
-                    </span>
-                    <TierBadge tier={airport.tier} />
+            {/* Airport rows */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {groupAirports.map(airport => {
+                const count      = gates[airport.code] ?? 0;
+                const weeklyCost = Math.round(gateMonthlyFee(airport, count + 1) / 4);
+                const held       = count > 0;
+
+                return (
+                  <div
+                    key={airport.code}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '7px 10px', borderRadius: 'var(--radius)',
+                      background: held ? 'var(--surface2)' : 'var(--surface)',
+                      border: `1px solid ${held ? 'var(--accent-dim)' : 'var(--border)'}`,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, minWidth: 36 }}>
+                          {airport.code}
+                        </span>
+                        <span style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {airport.city}
+                        </span>
+                        <TierBadge tier={airport.tier} />
+                        {held && (
+                          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            ✓ {count} gate{count > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, paddingLeft: 42 }}>
+                        {formatMoney(weeklyCost)}/wk · {SLOTS_PER_GATE} slots/gate
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 10 }}>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: '3px 8px', fontSize: 11 }}
+                        onClick={() => setSelectedAirport(airport.code)}
+                      >
+                        Details
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: '3px 10px', fontSize: 12 }}
+                        onClick={() => dispatch({ type: 'ADD_GATE', airportCode: airport.code })}
+                      >
+                        + Gate
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
-                    {formatMoney(weeklyCost)}/wk · {SLOTS_PER_GATE} slots/gate
-                    {held && (
-                      <span style={{ color: 'var(--accent)', marginLeft: 6 }}>
-                        {count} gate{count > 1 ? 's' : ''} held
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: '4px 10px', fontSize: 12, flexShrink: 0, marginLeft: 8 }}
-                  onClick={() => dispatch({ type: 'ADD_GATE', airportCode: airport.code })}
-                >
-                  + Gate
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </section>
     </div>
   );
