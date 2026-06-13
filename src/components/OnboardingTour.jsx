@@ -42,7 +42,7 @@ const STEPS = [
   {
     icon: '🏆',
     title: "You're Ready to Fly",
-    body: "That's everything you need to know. Good luck — the skies are competitive.\n\nYou can reopen this guide anytime with the ? button in the top bar.",
+    body: "That's everything you need to know. Good luck — the skies are competitive.\n\nOne more thing: every playthrough is different. Fuel prices fluctuate, random events fire at different times and intensities, aircraft failures are unpredictable, and regional booms or downturns can hit different parts of the world each run — so the same strategy won't always produce the same result.\n\nYou can reopen this guide anytime with the ? button in the top bar.",
     highlight: null,
     last: true,
   },

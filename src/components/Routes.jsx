@@ -72,12 +72,8 @@ export default function Routes() {
     const totalProfit  = sims.reduce((s, { result }) => s + (result?.profit    ?? 0), 0);
     const totalRevenue = sims.reduce((s, { result }) => s + (result?.revenue   ?? 0), 0);
     const totalPax     = sims.reduce((s, { result }) => s + (result?.passengers ?? 0), 0);
-    const totalSeats   = group.routes.reduce((s, r) => {
-      const ac   = fleet.find(a => a.id === r.aircraftId);
-      const type = ac ? getAircraftType(ac.typeId) : null;
-      return s + (type?.seats ?? 0) * r.weeklyFrequency;
-    }, 0);
-    const avgLoad = totalSeats > 0 ? totalPax / totalSeats : 0;  // totalPax is one-way; totalSeats is one-way capacity
+    const totalSeats   = sims.reduce((s, { result }) => s + (result?.configuredSeatsOneWay ?? 0), 0);
+    const avgLoad = totalSeats > 0 ? totalPax / totalSeats : 0;  // totalPax is one-way; totalSeats is configured one-way capacity
     const distance = sims[0]?.result?.distance ?? 0;
     return { ...group, totalProfit, totalRevenue, avgLoad, distance };
   }), [routes, fleet, state.week]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -446,9 +442,8 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
   const totalPax    = sims.reduce((s, { result }) => s + (result?.passengers  ?? 0), 0);
   const totalProfit = totalRev - totalOp;
 
-  // Blended load factor: one-way pax / one-way seat capacity
-  const totalSeatsOneWay = sims.reduce((s, { type, route }) =>
-    s + (type?.seats ?? 0) * route.weeklyFrequency, 0);
+  // Blended load factor: one-way pax / configured one-way seat capacity
+  const totalSeatsOneWay = sims.reduce((s, { result }) => s + (result?.configuredSeatsOneWay ?? 0), 0);
   const blendedLoad = totalSeatsOneWay > 0 ? totalPax / totalSeatsOneWay : 0;  // totalPax is already one-way
 
   const profitColor = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
@@ -928,9 +923,13 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
                 const used = usedBlockHrsFor(a);
                 const rem  = MAX_WEEKLY_BLOCK_HOURS - used;
                 const full = rem <= 0;
+                const cfg  = a.config;
+                const seats = cfg
+                  ? (cfg.firstClass ?? 0) + (cfg.businessClass ?? 0) + (cfg.premiumEconomy ?? 0) + (cfg.economy ?? 0)
+                  : (t?.seats ?? '?');
                 return (
                   <option key={a.id} value={a.id} disabled={full}>
-                    {a.name} ({t?.seats ?? '?'} seats) — {full ? 'full' : `${rem.toFixed(0)}h free`}
+                    {a.name} ({seats} seats) — {full ? 'full' : `${rem.toFixed(0)}h free`}
                   </option>
                 );
               })}

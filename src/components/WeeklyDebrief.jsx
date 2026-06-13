@@ -89,7 +89,7 @@ export default function WeeklyDebrief() {
         {/* Header */}
         <div style={{ marginBottom: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>
-            Week {week > 1 ? week - 1 : 52} · {year} complete
+            Week {week > 1 ? week - 1 : 52} · Year {year} complete
           </div>
           <div style={{ fontSize: 48, fontWeight: 800, color: profColor, letterSpacing: '-2px', lineHeight: 1 }}>
             {displayed >= 0 ? '+' : ''}{formatMoney(displayed)}

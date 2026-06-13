@@ -8,6 +8,7 @@ import {
   SEAT_QUALITY_COST_PER_ROUTE,
   SERVICE_QUALITY_COST_PER_ROUTE,
   weekToGameDate,
+  configRangeMod,
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 
@@ -152,30 +153,48 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const [quantity, setQuantity] = useState(1);
 
   // ── Cabin configuration ───────────────────────────────────────────────────
-  const [first, setFirst] = useState(0);
-  const [biz,   setBiz]   = useState(0);
-  const [prem,  setPrem]  = useState(0);
-  const [seatQ, setSeatQ] = useState('standard');
-  const [servQ, setServQ] = useState('standard');
+  const [first, setFirstRaw] = useState(0);
+  const [biz,   setBizRaw]   = useState(0);
+  const [prem,  setPremRaw]  = useState(0);
+  const [eco,   setEcoRaw]   = useState(maxSeats);   // ← now user-controlled
+  const [seatQ, setSeatQ]    = useState('standard');
+  const [servQ, setServQ]    = useState('standard');
+
+  // Clamp economy whenever premium classes change to avoid over-allocation
+  function clampEco(f, b, p, currentEco) {
+    const premUnits = f * CLASS_SPACE_MULTIPLIERS.firstClass
+                    + b * CLASS_SPACE_MULTIPLIERS.businessClass
+                    + p * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
+    const maxE = Math.max(0, Math.floor((maxSeats - premUnits) / CLASS_SPACE_MULTIPLIERS.economy));
+    return Math.min(currentEco, maxE);
+  }
+  function setFirst(v) { setFirstRaw(v); setEcoRaw(e => clampEco(v,   biz,  prem, e)); }
+  function setBiz(v)   { setBizRaw(v);   setEcoRaw(e => clampEco(first, v,   prem, e)); }
+  function setPrem(v)  { setPremRaw(v);  setEcoRaw(e => clampEco(first, biz,  v,   e)); }
+  function setEco(v)   { setEcoRaw(v); }
 
   const usedUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
                   + biz   * CLASS_SPACE_MULTIPLIERS.businessClass
-                  + prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
-  const eco       = Math.max(0, Math.floor(maxSeats - usedUnits));
-  const over      = usedUnits > maxSeats;
+                  + prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy
+                  + eco   * CLASS_SPACE_MULTIPLIERS.economy;
+  const over = usedUnits > maxSeats;
 
   const maxFirst = Math.floor(
-    (maxSeats - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy)
+    (maxSeats - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy - eco * CLASS_SPACE_MULTIPLIERS.economy)
     / CLASS_SPACE_MULTIPLIERS.firstClass
   );
   const maxBiz = Math.floor(
-    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy)
+    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy - eco * CLASS_SPACE_MULTIPLIERS.economy)
     / CLASS_SPACE_MULTIPLIERS.businessClass
   );
   const maxPrem = Math.floor(
-    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass)
+    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass - eco * CLASS_SPACE_MULTIPLIERS.economy)
     / CLASS_SPACE_MULTIPLIERS.premiumEconomy
   );
+  const maxEco = Math.max(0, Math.floor(
+    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy)
+    / CLASS_SPACE_MULTIPLIERS.economy
+  ));
 
   // Revenue index vs all-economy
   const totalPhysical = first + biz + prem + eco;
@@ -212,6 +231,12 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const rangePctGain      = Math.round((wingtipRangeMod - 1) * 100);
   const maintPctChange    = Math.round((engineMaintMod - 1) * 100);
   const effectiveRange    = Math.round(type.range * wingtipRangeMod);
+  // Cabin-density range bonus (fewer passengers = more range)
+  const cabinForRange     = { firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco };
+  const cabinRangeMod     = configRangeMod(cabinForRange, type);
+  const effectiveRangeFull = Math.round(type.range * wingtipRangeMod * cabinRangeMod);
+  const cabinRangePctGain  = Math.round((cabinRangeMod - 1) * 100);
+  const isSparse           = eco < maxEco || (first + biz + prem + eco) < maxSeats;
 
   // ── Delivery schedule ─────────────────────────────────────────────────────
   const lead           = DELIVERY_LEAD[type.category] ?? 2;
@@ -407,7 +432,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                   <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, flexWrap: 'wrap' }}>
                     <span style={{ color: 'var(--green)', fontWeight: 600 }}>↓ {Math.abs(Math.round((wingtipDef.fuelMod - 1) * 100))}% fuel</span>
                     {wingtipDef.rangeMod && wingtipDef.rangeMod !== 1.0 && (
-                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>↑ {Math.round((wingtipDef.rangeMod - 1) * 100)}% range ({type.range.toLocaleString()} → {Math.round(type.range * wingtipDef.rangeMod).toLocaleString()} km)</span>
+                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>↑ {Math.round((wingtipDef.rangeMod - 1) * 100)}% range ({type.range.toLocaleString()} → {effectiveRangeFull.toLocaleString()} km)</span>
                     )}
                     {mode === 'buy' && <span style={{ color: 'var(--text-muted)' }}>+{formatMoney(wingtipDef.cost ?? 0)} per aircraft</span>}
                     {mode === 'lease' && wingtipLeaseAdj > 0 && <span style={{ color: 'var(--text-muted)' }}>+{formatMoney(wingtipLeaseAdj)}/wk per aircraft</span>}
@@ -461,18 +486,30 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               value={prem} max={maxPrem} onChange={setPrem}
             />
 
-            {/* Economy row (auto-fill) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, background: CLASS_COLORS.economy, flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>Economy</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                  1× fare · 1× space
-                </div>
+            <ClassRow
+              label="Economy" color={CLASS_COLORS.economy}
+              fareLabel={`${CLASS_FARE_MULTIPLIERS.economy}× fare`}
+              spaceLabel={`${CLASS_SPACE_MULTIPLIERS.economy}× space`}
+              value={eco} max={maxEco} onChange={setEco}
+            />
+            {/* Sparse-cabin range callout */}
+            {isSparse && (
+              <div style={{
+                marginTop: 6, padding: '6px 10px',
+                background: 'rgba(56,139,253,0.08)', borderRadius: 5,
+                fontSize: 11, color: 'var(--accent)',
+                border: '1px solid rgba(56,139,253,0.2)',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <span>✈</span>
+                <span>
+                  Sparse cabin — effective range{' '}
+                  <strong>{effectiveRangeFull.toLocaleString()} km</strong>
+                  {cabinRangePctGain > 0 && <span style={{ color: 'var(--green)', marginLeft: 4 }}>(+{cabinRangePctGain}% vs full load)</span>}
+                  {' · '}{first + biz + prem + eco} seats / {maxSeats} capacity
+                </span>
               </div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: over ? 'var(--red)' : 'var(--text)', minWidth: 40, textAlign: 'right' }}>{eco}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', width: 30, textAlign: 'right' }}>auto</div>
-            </div>
+            )}
 
             {/* Seat & service quality */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
@@ -641,7 +678,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             )}
 
             {/* Cabin summary callout */}
-            {(first + biz + prem > 0 || seatQ !== 'standard' || servQ !== 'standard') && (
+            {(first + biz + prem > 0 || eco < maxEco || seatQ !== 'standard' || servQ !== 'standard') && (
               <div style={{ marginTop: 8, padding: '7px 10px', background: 'rgba(163,113,247,0.1)', borderRadius: 5, fontSize: 12, color: '#a98bff', border: '1px solid rgba(163,113,247,0.25)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span>💺</span>
                 <span>

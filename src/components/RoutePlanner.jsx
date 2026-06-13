@@ -182,8 +182,15 @@ export default function RoutePlanner() {
     if (!routeData) return null;
     const selectedType = getAircraftType(selectedTypeId);
     const category = selectedType?.category ?? null;
-    return checkRouteRestrictions(origin, dest, routeData.dist, frequency, category);
-  }, [origin, dest, routeData, frequency, selectedTypeId]);
+    // Total proposed weekly frequency on this pair (existing routes + this assignment),
+    // plus route context so DCA's perimeter exemption-slot / 7-per-week caps evaluate.
+    const pairKey = [origin, dest].sort().join('-');
+    const existingPairFreq = (state.routes ?? [])
+      .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
+      .reduce((s, r) => s + r.weeklyFrequency, 0);
+    return checkRouteRestrictions(origin, dest, routeData.dist, existingPairFreq + frequency, category,
+      { routes: state.routes, excludeKey: pairKey });
+  }, [origin, dest, routeData, frequency, selectedTypeId, state.routes]);
 
   // Competitors on this route (use live state.competitors)
   const competitorsOnRoute = useMemo(() => {

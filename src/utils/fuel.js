@@ -17,6 +17,38 @@
  *                         + (1 − hedgedFraction) × marketIndex
  */
 
+// ── Reference price ───────────────────────────────────────────────────────────
+
+/**
+ * Reference (base) jet-fuel price in $ per litre, at index 1.0.
+ * This is the single world-fuel knob: change it once to make fuel globally
+ * cheaper/dearer. The market index below is a dimensionless multiplier on top
+ * of it, so the price an airline actually pays is FUEL_PRICE_PER_LITRE × index.
+ *
+ * Each aircraft stores its own physical burn (litres/100km), independent of
+ * this price. Effective $/km for a type = (burnPer100km / 100) × pricePerLitre.
+ */
+export const FUEL_PRICE_PER_LITRE = 0.80;
+
+/**
+ * Market fuel price ($/litre) for a given index (defaults to base, index 1.0).
+ */
+export function fuelPricePerLitre(index = 1.0) {
+  return parseFloat((FUEL_PRICE_PER_LITRE * index).toFixed(4));
+}
+
+/**
+ * Effective fuel cost per km ($) for an aircraft type at base price (index 1.0).
+ * Burn is the stable physical property; multiply by the live market multiplier
+ * at the call site to get the real per-km cost.
+ *
+ * @param {object} type   - aircraft type with fuelBurnPer100km (litres/100km)
+ * @returns {number}      - $ per km at base fuel price
+ */
+export function fuelCostPerKm(type) {
+  return ((type?.fuelBurnPer100km ?? 0) / 100) * FUEL_PRICE_PER_LITRE;
+}
+
 // ── Price model constants ─────────────────────────────────────────────────────
 
 export const FUEL_BASE_INDEX    = 1.00;   // long-run equilibrium multiplier

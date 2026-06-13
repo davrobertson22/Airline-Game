@@ -3,14 +3,14 @@ import { useGame } from '../store/GameContext.jsx';
 import {
   formatMoney, formatPercent,
   simulateRoute, maintenanceMultiplier, blockTimeHours,
-  CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS,
-  weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate,
+  CLASS_FARE_MULTIPLIERS,
+  weeklyBlockHours, routeDistanceKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
-import { getAirport, gateMonthlyFee } from '../data/airports.js';
-import { getSeasonalProfile, HUB_TIERS } from '../models/demand.js';
+import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
+import { getSeasonalProfile } from '../models/demand.js';
 import { LABOR_GROUPS, DEFAULT_LABOR_STATE, laborEffects } from '../data/labor.js';
-import { weeklyFamilyBaseCost, FAMILY_INFO, AIRCRAFT_FAMILY, activeFamilies as getActiveFamilies } from '../data/families.js';
+import { FAMILY_INFO, AIRCRAFT_FAMILY, activeFamilies as getActiveFamilies } from '../data/families.js';
 import {
   fuelIndexStatus, fuelIndexDelta, absoluteWeek,
   HEDGE_DURATIONS, HEDGE_COVERAGES,
@@ -18,14 +18,15 @@ import {
   FUEL_MIN_INDEX, FUEL_MAX_INDEX,
 } from '../utils/fuel.js';
 import {
-  calcHQCost, hqBracket,
-  weeklyInsuranceCost, weeklyLandingFee,
-  marketingDemandMultiplier, MARKETING_MAX_BOOST,
+  hqBracket,
+  marketingDemandMultiplier,
   weeklyCateringCost, weeklyLayoverCost, weeklyPassengerCompensation,
-  weeklyGroundHandlingCost,
-  CATERING_COST_PER_PAX, GROUND_HANDLING_COST_PER_PAX, LAYOVER_BLOCK_HOURS_THRESHOLD,
+  CATERING_COST_PER_PAX, GROUND_HANDLING_COST_PER_PAX,
   DISTRIBUTION_COST_PCT,
+  HULL_INSURANCE_ANNUAL_RATE, LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT,
+  DEPRECIATION_YEARS,
 } from '../data/overhead.js';
+import { projectWeek } from '../utils/financeProjection.js';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class FinanceErrorBoundary extends Component {
@@ -60,16 +61,18 @@ const CLASS_COLORS = { firstClass: '#bc8cff', businessClass: '#ffb43d', premiumE
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function currentGameDate(state) {
-  // Must match weekToMonth() used by the reducer's weekly tick and the RoutePlanner/
-  // RouteDetail previews (ceil), so the projected P&L agrees with the actual result.
-  const month = Math.min(12, Math.max(1, Math.ceil(state.week * 12 / 52)));
+  // Must match the reducer's weekly tick (weekToGameDate) so detail re-simulations
+  // use the SAME seasonality month as the canonical projection / actual result.
+  // (Previously this used Math.ceil(week*12/52), which disagrees with the engine for
+  // many weeks because game months are 4–5 weeks long, not an even 52/12.)
+  const month = weekToGameDate(state.week).monthIndex;
   return { week: state.week, month };
 }
 
 function aircraftBookValue(aircraft, type) {
   if (aircraft?.ownershipType !== 'owned' || !type?.purchasePrice) return 0;
   const ageYears = (aircraft.ageWeeks ?? 0) / 52;
-  const remaining = Math.max(0, 1 - ageYears / 20);
+  const remaining = Math.max(0, 1 - ageYears / DEPRECIATION_YEARS);
   return Math.round(type.purchasePrice * remaining);
 }
 
@@ -138,6 +141,11 @@ function futureMonth(currentAbsWeek, offsetWeeks) {
 
 function FinanceInner() {
   const [view, setView] = useState('pl');
+  const { state } = useGame();
+  // Compute the canonical weekly projection ONCE and share it across tabs (runs a
+  // full engine tick incl. network/connection enumeration, so we don't want each
+  // tab recomputing it on every render / tab switch).
+  const proj = useMemo(() => projectWeek(state), [state]);
 
   const VIEWS = [
     { id: 'pl',        label: '📋 P&L'           },
@@ -167,16 +175,16 @@ function FinanceInner() {
         ))}
       </div>
 
-      {view === 'pl'       && <PLStatement />}
-      {view === 'cashflow' && <CashFlow />}
-      {view === 'uniteco'  && <UnitEconomics />}
-      {view === 'forecast' && <Forecast />}
+      {view === 'pl'       && <PLStatement proj={proj} />}
+      {view === 'cashflow' && <CashFlow proj={proj} />}
+      {view === 'uniteco'  && <UnitEconomics proj={proj} />}
+      {view === 'forecast' && <Forecast proj={proj} />}
       {view === 'trends'   && <Trends />}
       {view === 'bs'       && <BalanceSheet />}
-      {view === 'loans'    && <Loans />}
+      {view === 'loans'    && <Loans proj={proj} />}
       {view === 'fuel'     && <FuelHedging />}
-      {view === 'routes'   && <RouteBreakdown />}
-      {view === 'airports' && <AirportBreakdown />}
+      {view === 'routes'   && <RouteBreakdown proj={proj} />}
+      {view === 'airports' && <AirportBreakdown proj={proj} />}
     </div>
   );
 }
@@ -189,9 +197,93 @@ export default function Finance() {
   );
 }
 
+// ─── Profit Waterfall ─────────────────────────────────────────────────────────
+// Decomposes the week from revenue down to the actual cash change, so the player
+// can see exactly which cost bucket is driving the outcome. Every figure comes
+// from the canonical projection, so it ties out to the P&L bottom line.
+function ProfitWaterfall({ proj, report }) {
+  const r = report;
+  const steps = [
+    { label: 'Revenue (booked)', value: proj.effectiveRevenue, kind: 'start' },
+    { label: 'Fuel & oil',                value: -(r.totalFuel), kind: 'neg' },
+    { label: 'Flight ops (crew, landing, quality)', value: -((r.totalCrew) + (r.totalLandingFees) + (r.totalQuality)), kind: 'neg' },
+    { label: 'Passenger services',        value: -((r.totalCatering) + (r.totalGroundHandling) + (r.totalLounge) + (r.totalLayover) + (r.totalCompensation)), kind: 'neg' },
+    { label: 'Aircraft & fleet',          value: -((r.totalLeases) + (r.totalMaintenance) + (r.totalInsurance)), kind: 'neg' },
+    { label: 'People & labour',           value: -((r.totalLaborCosts) + (r.totalFamilyBaseCosts)), kind: 'neg' },
+    { label: 'Commercial (mktg + distrib)', value: -((r.totalMarketingSpend) + (r.totalDistributionCost)), kind: 'neg' },
+    { label: 'G&A, gates & partners',     value: -((r.totalHQCost) + (r.totalHubInvestment) + (r.totalGateFees) + (r.totalLoyaltyCost) + (r.totalPartnerFees)), kind: 'neg' },
+    { label: 'EBITDA',                    value: proj.ebitda, kind: 'subtotal' },
+    { label: 'Interest',                  value: -(proj.interest), kind: 'neg' },
+    { label: 'Corporate tax',             value: -(proj.corporateTax), kind: 'neg' },
+    { label: 'Loan principal',            value: -(proj.principal), kind: 'neg' },
+    { label: 'Δ Cash this week',          value: proj.netCash, kind: 'end' },
+  ].filter(s => s.kind === 'start' || s.kind === 'subtotal' || s.kind === 'end' || Math.abs(s.value) >= 1);
+
+  // Scale: largest absolute running value or step.
+  let running = 0;
+  const rows = steps.map(s => {
+    if (s.kind === 'start' || s.kind === 'subtotal' || s.kind === 'end') {
+      running = (s.kind === 'start') ? s.value : (s.kind === 'subtotal' ? proj.ebitda : proj.netCash);
+      return { ...s, from: 0, to: running, total: true };
+    }
+    const from = running;
+    running += s.value;
+    return { ...s, from, to: running, total: false };
+  });
+  const maxAbs = Math.max(1, ...rows.flatMap(r => [Math.abs(r.from), Math.abs(r.to)]));
+
+  const BarFor = ({ row }) => {
+    const lo = Math.min(row.from, row.to), hi = Math.max(row.from, row.to);
+    // Map [-maxAbs, maxAbs] → [0,100]%. Zero at the 50% midline.
+    const pct = v => 50 + (v / maxAbs) * 50;
+    const a = pct(lo), b = pct(hi);
+    const color = row.total
+      ? (row.to >= 0 ? 'var(--green)' : 'var(--red)')
+      : (row.value >= 0 ? 'var(--green)' : 'var(--red)');
+    return (
+      <div style={{ position: 'relative', height: 14, background: 'rgba(255,255,255,.03)', borderRadius: 3 }}>
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--border)' }} />
+        <div style={{ position: 'absolute', left: `${a}%`, width: `${Math.max(0.6, b - a)}%`, top: 2, bottom: 2, background: color, borderRadius: 2, opacity: row.total ? 0.95 : 0.8 }} />
+      </div>
+    );
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card-title">Profit Waterfall — revenue to weekly cash</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 110px', gap: '4px 12px', alignItems: 'center', fontSize: 12 }}>
+        {rows.map((row, i) => (
+          <Fragment key={i}>
+            <div style={{ color: row.total ? 'var(--text)' : 'var(--text-muted)', fontWeight: row.total ? 700 : 400 }}>{row.label}</div>
+            <BarFor row={row} />
+            <div style={{ textAlign: 'right', fontWeight: row.total ? 700 : 500,
+              color: row.total ? ((row.to >= 0) ? 'var(--green)' : 'var(--red)') : (row.value >= 0 ? 'var(--green)' : 'var(--red)') }}>
+              {row.total
+                ? `${row.to >= 0 ? '' : ''}${formatMoney(row.to)}`
+                : `${row.value >= 0 ? '+' : ''}${formatMoney(row.value)}`}
+            </div>
+          </Fragment>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+        <span style={{ color: 'var(--text-dim)' }}>Revenue drivers:</span>
+        <span>Awareness <strong>{(report.awarenessMultiplier ?? 1).toFixed(2)}×</strong></span>
+        <span>Marketing <strong>{(report.mktMultiplier ?? 1).toFixed(2)}×</strong></span>
+        <span>Loyalty <strong>{(report.loyaltyMultiplier ?? 1).toFixed(2)}×</strong></span>
+        {proj.globalDemandMult !== 1 && <span>Events <strong>{proj.globalDemandMult.toFixed(2)}×</strong></span>}
+        {(report.totalConnecting ?? 0) > 0 && <span>Connecting feed <strong>{formatMoney(report.totalConnecting)}</strong></span>}
+        {(report.totalPartnerRevenue ?? 0) > 0 && <span>Partner O&amp;D <strong>{formatMoney(report.totalPartnerRevenue)}</strong></span>}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
+        Bars show the running balance; green/red = step adds/subtracts. Depreciation is non-cash and excluded from the cash result.
+      </div>
+    </div>
+  );
+}
+
 // ─── P&L Statement ────────────────────────────────────────────────────────────
 
-function PLStatement() {
+function PLStatement({ proj }) {
   const { state } = useGame();
   const fleet = state.fleet ?? [];
   const routes = state.routes ?? [];
@@ -213,54 +305,61 @@ function PLStatement() {
 
   const toggleRow = id => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
-  // Route projections
-  const routeData = useMemo(() => routes.map(route => {
-    const aircraft = fleet.find(a => a.id === route.aircraftId);
-    if (!aircraft) return null;
-    const result = simulateRoute(route, aircraft, gd);
-    return result ? { route, aircraft, result } : null;
-  }).filter(Boolean), [routes, fleet, state.week]);
-
-  const totRev  = routeData.reduce((s, r) => s + r.result.revenue, 0);
-  const totFuel = routeData.reduce((s, r) => s + r.result.fuelCost, 0);
-  const totCrew = routeData.reduce((s, r) => s + r.result.crewCost, 0);
-  const totQual = routeData.reduce((s, r) => s + r.result.qualityCost, 0);
+  // ── Single source of truth ──────────────────────────────────────────────────
+  // All headline totals come from the canonical engine projection (passed down
+  // from FinanceInner) so the P&L agrees with Cash Flow, Forecast, Unit Economics
+  // — and with what advancing the week actually produces.
+  const report = proj.report;
 
   // Labor state and maintenance adjustments
   const labor             = state.labor ?? DEFAULT_LABOR_STATE;
   const maintenanceBudget = state.maintenanceBudget ?? 1.0;
   const { maintenanceCostMultiplier } = laborEffects(labor);
 
+  // Route projections — simulate WITH the same labor + fuel multiplier the engine
+  // used, so per-route operating-cost detail rows reconcile to the report totals.
+  // Per-route REVENUE for display uses the engine's boosted figure (proj.revById),
+  // which includes connecting feed + awareness/marketing/loyalty/alliance lifts.
+  const routeData = useMemo(() => routes.map(route => {
+    const aircraft = fleet.find(a => a.id === route.aircraftId);
+    if (!aircraft) return null;
+    const result = simulateRoute(route, aircraft, gd, labor, proj.fuelMultiplier);
+    if (!result) return null;
+    const bookedRevenue = proj.revById[route.id] ?? result.revenue;
+    return { route, aircraft, result, bookedRevenue };
+  }).filter(Boolean), [routes, fleet, state.week, proj]);
+
+  // Canonical cost buckets (from the engine report, not re-derived)
+  const totFuel = report.totalFuel;
+  const totCrew = report.totalCrew;
+  const totQual = report.totalQuality;
+
+  // Per-aircraft detail rows (totals come from the engine report below).
   const fleetData = fleet.map(a => {
     const type    = getAircraftType(a.typeId);
     const isOwned = a.ownershipType === 'owned';
-    const lease   = isOwned ? 0 : (type?.weeklyLease ?? 0);
-    // Match what weeklyTick actually charges: budget × morale multiplier
+    const lease   = isOwned ? 0 : (a.weeklyLease ?? type?.weeklyLease ?? 0);
+    // Match what weeklyTick actually charges: budget × morale multiplier × per-tail mod
     const maint   = Math.round((type?.baseMaintenancePerWk ?? 0)
-      * maintenanceMultiplier(a.ageWeeks) * maintenanceBudget * maintenanceCostMultiplier);
+      * maintenanceMultiplier(a.ageWeeks) * maintenanceBudget * maintenanceCostMultiplier * (a.maintMod ?? 1.0));
     return { aircraft: a, type, lease, maint, isOwned };
   });
-  const totLeases = fleetData.reduce((s, f) => s + f.lease, 0);
-  const totMaint  = fleetData.reduce((s, f) => s + f.maint, 0);
+  // Canonical fleet costs from the engine.
+  const totLeases = report.totalLeases;
+  const totMaint  = report.totalMaintenance;
   const totFleet  = totLeases + totMaint;
 
+  // Gate detail rows use the same bulk pricing / weekly proration the engine uses.
   const gatesData = Object.entries(state.gates ?? {}).map(([code, count]) => {
     const airport   = getAirport(code);
-    const weeklyFee = Math.round(gateMonthlyFee(airport) * count / 4.33);
+    const weeklyFee = airport ? Math.round(totalGateMonthlyFee(airport, count) / 4) : 0;
     return { code, airport, count, weeklyFee };
   });
-  const totGates = gatesData.reduce((s, g) => s + g.weeklyFee, 0);
+  const totGates = report.totalGateFees;
 
-  // Labor overhead (fixed per aircraft per group, scaled by pay multiplier)
-  const totalLaborWeekly = fleet.length > 0
-    ? LABOR_GROUPS.reduce((sum, g) => {
-        const payMult = labor[g.id]?.payMultiplier ?? 1.0;
-        return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleet.length);
-      }, 0)
-    : 0;
-
-  // Fleet family MRO base costs
-  const totalFamilyCosts = weeklyFamilyBaseCost(fleet);
+  // Labor overhead + family MRO (canonical totals; per-group detail kept for display)
+  const totalLaborWeekly = report.totalLaborCosts;
+  const totalFamilyCosts = report.totalFamilyBaseCosts;
   const familySet   = getActiveFamilies(fleet);
   const familyCount = {};
   for (const a of fleet) {
@@ -268,61 +367,46 @@ function PLStatement() {
     if (fam) familyCount[fam] = (familyCount[fam] ?? 0) + 1;
   }
 
-  // ── All cost lines ────────────────────────────────────────────────────────
+  // ── All cost lines (canonical from engine report) ───────────────────────────
 
   const activeLoans      = state.loans ?? [];
-  const totLoanPayments  = activeLoans.reduce((s, l) => s + l.weeklyPayment, 0);
-  const ytdLoanPayments  = ytd(financialHistory, 'loanPayments');
+  const totInterestExpense    = proj.interest;
+  const totPrincipalRepayment = proj.principal;
 
-  // Interest vs principal split on loans this week
-  const totInterestExpense = activeLoans.reduce((s, loan) => {
-    const r = loan.interestRate / 52;
-    const n = loan.weeksRemaining;
-    const bal = r > 0 ? Math.round(loan.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : loan.weeklyPayment * n;
-    return s + Math.round(bal * r);
-  }, 0);
-  const totPrincipalRepayment = totLoanPayments - totInterestExpense;
-
-  // Landing fees
-  const totLandingFees = routeData.reduce((s, { route, aircraft }) => {
-    const type     = getAircraftType(aircraft.typeId);
-    const originAp = getAirport(route.origin);
-    const destAp   = getAirport(route.destination);
-    return s + weeklyLandingFee(
-      type?.category ?? 'Narrow Body',
-      route.weeklyFrequency,
-      originAp?.tier ?? 'major',
-      destAp?.tier   ?? 'major',
-    );
-  }, 0);
+  const totLandingFees = report.totalLandingFees;
   const ytdLandingFees = ytd(financialHistory, 'landingFees');
 
   // HQ
-  const totHQCost = calcHQCost(fleet.length);
+  const totHQCost = report.totalHQCost;
   const hqInfo    = hqBracket(fleet.length);
   const ytdHQCost = ytd(financialHistory, 'hqCost');
 
   // Hub investment
   const hubs = state.hubs ?? {};
-  const totHubInvestment = Object.values(hubs).reduce((s, h) => s + (HUB_TIERS[h.tier]?.weeklyInvestment ?? 0), 0);
+  const totHubInvestment = report.totalHubInvestment;
 
-  // Insurance (totals only — hull for owned, liability for all)
-  const totInsurance  = fleet.reduce((s, a) => s + weeklyInsuranceCost(a, getAircraftType(a.typeId)), 0);
+  // Insurance — total from engine; breakdown uses the REAL rates (0.8% p.a. hull,
+  // $18k/wk liability) so the sub-lines reconcile to the total.
+  const totInsurance  = report.totalInsurance;
   const totHullIns    = fleet.filter(a => a.ownershipType === 'owned').reduce((s, a) => {
     const t = getAircraftType(a.typeId);
     const ageYrs = (a.ageWeeks ?? 0) / 52;
-    const bv = (t?.purchasePrice ?? 0) * Math.max(0.1, 1 - ageYrs / 20);
-    return s + Math.round(bv * 0.005 / 52);
+    const bv = (t?.purchasePrice ?? 0) * Math.max(0.1, 1 - ageYrs / DEPRECIATION_YEARS);
+    return s + Math.round(bv * HULL_INSURANCE_ANNUAL_RATE / 52);
   }, 0);
-  const totLiabilityIns = fleet.length * 3_000;
+  const totLiabilityIns = fleet.length * LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT;
   const ytdInsurance  = ytd(financialHistory, 'insurance');
 
   // Marketing
-  const marketingBudgetVal = state.marketingBudget ?? 0;
+  const marketingBudgetVal = report.totalMarketingSpend;
   const ytdMarketing  = ytd(financialHistory, 'marketing');
-  const mktMultiplier = marketingDemandMultiplier(marketingBudgetVal, Math.max(totRev, 1));
+  const mktMultiplier = report.mktMultiplier ?? 1;
 
-  // Catering — derive from route data (classSummary available in result)
+  // Revenue — canonical, including connecting feed + partner O&D + all demand lifts.
+  const totRev          = proj.effectiveRevenue;
+  const totPartnerRev   = report.totalPartnerRevenue ?? 0;
+
+  // Catering / layover / compensation — canonical totals; per-route detail for display.
   const { onTimeRate } = laborEffects(labor);
   const cateringByRoute = routeData.map(({ route, aircraft, result }) => {
     const type = getAircraftType(aircraft.typeId);
@@ -330,57 +414,46 @@ function PLStatement() {
     const dist         = result.distance ?? routeDistanceKm(route.origin, route.destination);
     const blockHrs     = type ? blockTimeHours(dist, type) : 0;
     const layover      = result.layoverCost      ?? weeklyLayoverCost(blockHrs, type?.seats ?? 150, type?.category ?? 'Narrow Body', route.weeklyFrequency);
-    const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers * 2, onTimeRate, dist);  // ×2: compensation covers all boarded pax both directions
+    const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers * 2, onTimeRate, dist);
     return { route, aircraft, type, catering, layover, compensation, dist, blockHrs };
   });
-  const totCatering     = cateringByRoute.reduce((s, r) => s + r.catering, 0);
-  const totLayover      = cateringByRoute.reduce((s, r) => s + r.layover, 0);
-  const totCompensation = cateringByRoute.reduce((s, r) => s + r.compensation, 0);
+  const totCatering     = report.totalCatering;
+  const totLayover      = report.totalLayover;
+  const totCompensation = report.totalCompensation;
   const ytdCatering     = ytd(financialHistory, 'catering');
   const ytdLayover      = ytd(financialHistory, 'layover');
   const ytdCompensation = ytd(financialHistory, 'compensation');
 
-  // Ground handling — per boarded passenger, by cabin class
-  const totGroundHandling = routeData.reduce((s, { result }) => {
-    return s + weeklyGroundHandlingCost(result.classSummary ?? {});
-  }, 0);
+  const totGroundHandling = report.totalGroundHandling;
   const ytdGroundHandling = ytd(financialHistory, 'groundHandling');
 
   // Distribution: GDS fees, OTA commissions, credit-card processing
-  const totDistribution = Math.round(totRev * DISTRIBUTION_COST_PCT);
+  const totDistribution = report.totalDistributionCost;
   const ytdDistribution = ytd(financialHistory, 'distribution');
 
   // Depreciation (non-cash, owned aircraft only)
-  const totDepreciation = fleet.filter(a => a.ownershipType === 'owned').reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    return t?.purchasePrice ? s + Math.round(t.purchasePrice / (20 * 52)) : s;
-  }, 0);
+  const totDepreciation = proj.depreciation;
 
   // ── Grouping for display ───────────────────────────────────────────────────
-  // Flight Operations = crew variable + landing fees + quality (in-flight services)
   const totFlightOps  = totCrew + totLandingFees + totQual;
-  // Passenger Services = catering + ground handling
   const totPassengerServices = totCatering + totGroundHandling;
-  // Other costs = layover + compensation
   const totOtherCosts = totLayover + totCompensation;
-  // Aircraft & Fleet = leases + maint + insurance
   const totAircraftCosts = totFleet + totInsurance;
-  // People & Labor = labor overhead + family MRO
   const totPeopleLabor = totalLaborWeekly + totalFamilyCosts;
-  // G&A = HQ + hub investment
   const totGA = totHQCost + totHubInvestment;
 
-  // Total opex (before depreciation, before financing)
-  const totOpex = totFuel + totFlightOps + totPassengerServices + totOtherCosts + totAircraftCosts + totGates + totPeopleLabor + marketingBudgetVal + totDistribution + totGA;
-  const ebitda  = totRev - totOpex;
-  const ebit    = ebitda - totDepreciation;
+  // Total opex == engine totalCost (so EBITDA reconciles exactly to the engine).
+  const totOpex = report.totalCost;
+  const ebitda  = proj.ebitda;        // effective revenue − totalCost
+  const ebit    = proj.ebit;          // ebitda − depreciation
   const margin  = totRev > 0 ? ebit / totRev : 0;
-  // Corporate tax: 21% on positive EBIT (applied before interest for game simplicity)
-  const CORPORATE_TAX_RATE = 0.21;
-  const corporateTax = Math.round(Math.max(0, ebit) * CORPORATE_TAX_RATE);
+  const corporateTax = proj.corporateTax;       // tax base matches the engine (EBT)
   const ytdCorporateTax = ytd(financialHistory, 'corporateTax');
-  const netIncome = ebit - corporateTax - totInterestExpense - totPrincipalRepayment;
-  const totCosts = totOpex + totDepreciation + corporateTax + totInterestExpense + totPrincipalRepayment;
+  // Bottom line = the actual weekly cash change (matches the `profit` stored in
+  // history): EBITDA − loan payments − tax. Depreciation is non-cash and shown
+  // as a memo, NOT deducted (the engine never deducts it from cash).
+  const netIncome = proj.netCash;
+  const netIncomeAccrual = proj.netIncomeAccrual;
 
   // ── YTD ───────────────────────────────────────────────────────────────────
   const ytdRev    = ytd(financialHistory, 'revenue');
@@ -403,14 +476,6 @@ function PLStatement() {
     - (h.leases ?? 0) - (h.maintenance ?? 0) - (h.familyCosts ?? 0)
     - (h.insurance ?? 0) - (h.labor ?? 0) - (h.gates ?? 0)
     - (h.marketing ?? 0) - (h.distribution ?? 0) - (h.hqCost ?? 0) - (h.hubInvestment ?? 0);
-
-  // Historical net income = EBITDA − depreciation − tax − interest − principal
-  const histNetIncome = h =>
-    histEbitda(h)
-    - (h.depreciation ?? 0)
-    - (h.corporateTax ?? 0)
-    - (h.interest ?? 0)
-    - (h.principalRepayment ?? 0);
 
   const recentWeeks = financialHistory.slice(-3);   // up to 3 actual weeks
 
@@ -442,9 +507,11 @@ function PLStatement() {
         {ytdWeeks > 0 && <StatBox label={`YTD Net (${ytdWeeks}wk)`} value={(ytdNet >= 0 ? '+' : '') + formatMoney(ytdNet)} color={ytdNet >= 0 ? 'green' : 'red'} />}
       </div>
 
+      {/* ── Profit Waterfall — what drives this week's cash result ── */}
+      <ProfitWaterfall proj={proj} report={report} />
+
       {/* ── Weekly P&L Comparison ── */}
       {recentWeeks.length > 0 && (() => {
-        const lastActual = recentWeeks[recentWeeks.length - 1];
         const rows = [
           {
             label: 'Revenue',
@@ -528,8 +595,8 @@ function PLStatement() {
             cost: true,
           },
           {
-            label: 'Net Income',
-            vals: recentWeeks.map(h => histNetIncome(h)),
+            label: 'Net Cash Δ',
+            vals: recentWeeks.map(h => h.profit ?? 0),
             proj: netIncome,
             color: null,
             sign: '',
@@ -652,9 +719,14 @@ function PLStatement() {
                       pairGroups[key].entries.push(d);
                     });
                     return Object.values(pairGroups).map(({ key, origin, destination, entries }) => {
-                      const groupRev  = entries.reduce((s, e) => s + e.result.revenue, 0);
+                      // Booked revenue per route (incl. connecting feed + demand lifts) from the engine
+                      const groupRev  = entries.reduce((s, e) => s + (e.bookedRevenue ?? e.result.revenue), 0);
                       const groupPax  = entries.reduce((s, e) => s + e.result.passengers, 0);
                       const totalFreq = entries.reduce((s, e) => s + e.route.weeklyFrequency, 0);
+                      // Prior week per-route revenue (stored in routeRevenues map since fix)
+                      const pwGroupRev = pw?.routeRevenues
+                        ? entries.reduce((s, e) => s + (pw.routeRevenues[e.route.id] ?? 0), 0)
+                        : null;
                       const isExp = expanded[key];
                       const multi = entries.length > 1;
                       return (
@@ -674,19 +746,26 @@ function PLStatement() {
                                 {' · '}{groupPax.toLocaleString()} pax total
                               </div>
                             </td>
-                            {pw && <td />}
+                            {pw && (
+                              <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>
+                                {pwGroupRev != null && pwGroupRev > 0 ? `+${formatMoney(pwGroupRev)}` : '—'}
+                              </td>
+                            )}
                             <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(groupRev)}</td>
                             <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
                           </tr>
-                          {isExp && entries.map(({ route, aircraft, result }) => {
+                          {isExp && entries.map(({ route, aircraft, result, bookedRevenue }) => {
                             const type = getAircraftType(aircraft.typeId);
+                            const projRouteRev = bookedRevenue ?? result.revenue;
+                            // Scale per-class revenue so the class rows sum to the booked route revenue.
+                            const boost = result.revenue > 0 ? projRouteRev / result.revenue : 1;
                             return (
                               <Fragment key={route.id}>
                                 {multi && (
                                   <tr style={{ background: 'rgba(0,0,0,.1)' }}>
                                     <td colSpan={pw ? 4 : 3} style={{ paddingLeft: 48, fontSize: 11, color: 'var(--text-dim)', fontWeight: 600 }}>
                                       {aircraft.name} ({type?.name}) — {route.weeklyFrequency}×/wk · {result.passengers.toLocaleString()} pax · {formatPercent(result.loadFactor)} load
-                                      <span style={{ float: 'right', color: 'var(--green)', marginRight: 8 }}>+{formatMoney(result.revenue)}</span>
+                                      <span style={{ float: 'right', color: 'var(--green)', marginRight: 8 }}>+{formatMoney(projRouteRev)}</span>
                                     </td>
                                   </tr>
                                 )}
@@ -700,8 +779,8 @@ function PLStatement() {
                                         {CLASS_LABELS[cls]}: {data.passengers.toLocaleString()} pax × {formatMoney(fare)}
                                         <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>({formatPercent(data.loadFactor)} load)</span>
                                       </td>
-                                      {pw && <td />}
-                                      <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--green)' }}>+{formatMoney(data.revenue)}</td>
+                                      {pw && <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>—</td>}
+                                      <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--green)' }}>+{formatMoney(Math.round(data.revenue * boost))}</td>
                                       <td />
                                     </tr>
                                   );
@@ -714,6 +793,28 @@ function PLStatement() {
                     });
                   })()
               }
+              {totPartnerRev > 0 && (
+                <tr>
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    Codeshare &amp; alliance partner revenue
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>O&amp;D mileage-prorated share of partner itineraries</span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.partnerRevenue ? '+' + formatMoney(pw.partnerRevenue) : '—'}</td>}
+                  <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totPartnerRev)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
+              {Math.abs(proj.eventDemandAdj) >= 1 && (
+                <tr>
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    Active-event demand adjustment
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>{proj.globalDemandMult > 1 ? '+' : ''}{formatPercent(proj.globalDemandMult - 1)} from current events</span>
+                  </td>
+                  {pw && <td />}
+                  <td style={{ textAlign: 'right', color: proj.eventDemandAdj >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 500 }}>{proj.eventDemandAdj >= 0 ? '+' : ''}{formatMoney(proj.eventDemandAdj)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
               <TotalRow label="Total Revenue" prior={pw ? pw.revenue : undefined} weekly={totRev} ytd={ytdRev} positive />
             </CollapsibleSection>
 
@@ -906,7 +1007,7 @@ function PLStatement() {
                       <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
                         Hull insurance
                         <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-                          {fleet.filter(a => a.ownershipType === 'owned').length} owned aircraft · 0.5% p.a. of book value
+                          {fleet.filter(a => a.ownershipType === 'owned').length} owned aircraft · {(HULL_INSURANCE_ANNUAL_RATE * 100).toFixed(1)}% p.a. of book value
                         </span>
                       </td>
                       {pw && <td />}
@@ -918,7 +1019,7 @@ function PLStatement() {
                     <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
                       Liability insurance
                       <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-                        {fleet.length} aircraft × $3,000/wk
+                        {fleet.length} aircraft × {formatMoney(LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT)}/wk
                       </span>
                     </td>
                     {pw && <td />}
@@ -1106,7 +1207,7 @@ function PLStatement() {
                 <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
                   Depreciation — owned aircraft
                   <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
-                    {fleet.filter(a => a.ownershipType === 'owned').length} aircraft · straight-line 20yr · non-cash
+                    {fleet.filter(a => a.ownershipType === 'owned').length} aircraft · straight-line {DEPRECIATION_YEARS}yr · non-cash
                   </span>
                 </td>
                 {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-totDepreciation)}</td>}
@@ -1122,64 +1223,82 @@ function PLStatement() {
               <td style={{ textAlign: 'right', padding: '10px 16px', fontWeight: 700, fontSize: 13, color: ebit >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {ebit >= 0 ? '+' : ''}{formatMoney(ebit)}
               </td>
-              <td style={{ textAlign: 'right', padding: '10px 16px', fontSize: 12, color: 'var(--text-dim)' }}>
-                {ytdWeeks > 0 ? (ytdNet >= 0 ? '+' : '') + formatMoney(ytdNet) : '—'}
-              </td>
+              <td style={{ textAlign: 'right', padding: '10px 16px', fontSize: 12, color: 'var(--text-dim)' }}>—</td>
             </tr>
 
-            {/* Corporate Tax */}
+            {/* Interest expense (the only financing item that hits the P&L; principal is
+                a balance-sheet repayment, shown in the cash reconciliation below). */}
+            {totInterestExpense > 0 && (
+              <CollapsibleSection
+                label="Interest expense"
+                count={activeLoans.length}
+                colSpan={pw ? 4 : 3}
+                expanded={sections.debt ?? true}
+                onToggle={() => toggleSection('debt')}
+                summary={<TotalRow label="Interest expense (collapsed)" prior={pw ? -(pw.loanInterest ?? 0) : undefined} weekly={-totInterestExpense} ytd={null} />}
+              >
+                {activeLoans.map(loan => {
+                  const r = loan.interestRate / 52;
+                  const n = loan.weeksRemaining;
+                  const bal = r > 0 ? Math.round(loan.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : loan.weeklyPayment * n;
+                  const int = Math.round(bal * r);
+                  return (
+                    <tr key={loan.id} style={{ background: 'rgba(0,0,0,.1)' }}>
+                      <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 11 }}>
+                        {loan.label ? `${loan.label} · ` : ''}{loan.termWeeks}-wk loan · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
+                        <span style={{ marginLeft: 8 }}>interest {formatMoney(int)} · principal {formatMoney(loan.weeklyPayment - int)} (in cash recon)</span>
+                      </td>
+                      {pw && <td />}
+                      <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>{formatMoney(-int)}</td>
+                      <td />
+                    </tr>
+                  );
+                })}
+                <TotalRow label="Total interest expense" prior={pw ? -(pw.loanInterest ?? 0) : undefined} weekly={-totInterestExpense} ytd={null} />
+              </CollapsibleSection>
+            )}
+
+            {/* Corporate Tax — matches the engine's base (21% of positive pre-tax profit) */}
             {corporateTax > 0 && (
               <tr>
                 <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
                   Corporate Tax (21%)
-                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>21% of positive EBIT</span>
+                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>21% of positive pre-tax profit</span>
                 </td>
-                {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-Math.round(Math.max(0, pwEbit ?? 0) * 0.21))}</td>}
+                {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-(pw.corporateTax ?? 0))}</td>}
                 <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{formatMoney(-corporateTax)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{ytdCorporateTax > 0 ? formatMoney(-ytdCorporateTax) : '—'}</td>
               </tr>
             )}
 
-            {/* ══ FINANCING ══ */}
-            {totLoanPayments > 0 && (
-              <>
-                <PLCategoryHeader label="Financing" />
-                <CollapsibleSection
-                  label="Debt Service"
-                  count={activeLoans.length}
-                  colSpan={pw ? 4 : 3}
-                  expanded={sections.debt ?? true}
-                  onToggle={() => toggleSection('debt')}
-                  summary={<TotalRow label="Debt Service (collapsed)" prior={pw ? -(pw.loanPayments ?? 0) : undefined} weekly={-totLoanPayments} ytd={-ytdLoanPayments} />}
-                >
-                  <LineItem label="Interest expense"    prior={pw ? -(pw.loanInterest ?? 0) : undefined} weekly={-totInterestExpense}    ytd={null} />
-                  <LineItem label="Principal repayment" prior={pw ? -((pw.loanPayments ?? 0) - (pw.loanInterest ?? 0)) : undefined} weekly={-totPrincipalRepayment} ytd={null} />
-                  {activeLoans.map(loan => {
-                    const r = loan.interestRate / 52;
-                    const n = loan.weeksRemaining;
-                    const bal = r > 0 ? Math.round(loan.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : loan.weeklyPayment * n;
-                    const int = Math.round(bal * r);
-                    return (
-                      <tr key={loan.id} style={{ background: 'rgba(0,0,0,.1)' }}>
-                        <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 11 }}>
-                          {loan.label ? `${loan.label} · ` : ''}{loan.termWeeks}-wk loan · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
-                          <span style={{ marginLeft: 8 }}>int {formatMoney(int)} + principal {formatMoney(loan.weeklyPayment - int)}</span>
-                        </td>
-                        {pw && <td />}
-                        <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>{formatMoney(-loan.weeklyPayment)}</td>
-                        <td />
-                      </tr>
-                    );
-                  })}
-                  <TotalRow label="Total Financing" prior={pw ? -(pw.loanPayments ?? 0) : undefined} weekly={-totLoanPayments} ytd={-ytdLoanPayments} />
-                </CollapsibleSection>
-              </>
-            )}
-
-            {/* ── NET INCOME ── */}
+            {/* ── NET INCOME (accrual) ── */}
             <Spacer colSpan={pw ? 4 : 3} />
             <tr style={{ background: 'var(--surface2)', borderTop: '2px solid var(--border)' }}>
-              <td style={{ padding: '14px 16px', fontWeight: 800, fontSize: 15, letterSpacing: '.3px' }}>NET INCOME</td>
+              <td style={{ padding: '12px 16px', fontWeight: 800, fontSize: 14, letterSpacing: '.3px' }}>
+                NET INCOME <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 6 }}>accrual (EBIT − interest − tax)</span>
+              </td>
+              {pw && <td style={{ textAlign: 'right', padding: '12px 16px', fontSize: 12, color: 'var(--text-dim)' }}>—</td>}
+              <td style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 800, fontSize: 14, color: netIncomeAccrual >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {netIncomeAccrual >= 0 ? '+' : ''}{formatMoney(netIncomeAccrual)}
+              </td>
+              <td style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 700, fontSize: 13, color: ytdNet >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {ytdWeeks > 0 ? (ytdNet >= 0 ? '+' : '') + formatMoney(ytdNet) : '—'}
+              </td>
+            </tr>
+
+            {/* ── Reconciliation: accrual net income → actual weekly cash change ── */}
+            <PLCategoryHeader label="Reconciliation to Cash" />
+            <LineItem label="Net income (accrual)" weekly={netIncomeAccrual} ytd={null} prior={undefined} />
+            {totDepreciation > 0 && (
+              <LineItem label="+ Depreciation (non-cash add-back)" weekly={totDepreciation} ytd={null} prior={undefined} />
+            )}
+            {totPrincipalRepayment > 0 && (
+              <LineItem label="− Loan principal repayment (financing)" weekly={-totPrincipalRepayment} ytd={null} prior={undefined} />
+            )}
+            <tr style={{ background: 'var(--surface2)', borderTop: '2px solid var(--border)' }}>
+              <td style={{ padding: '14px 16px', fontWeight: 800, fontSize: 15, letterSpacing: '.3px' }}>
+                Δ CASH THIS WEEK <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 6 }}>actual bank-balance change</span>
+              </td>
               {pw && <td style={{ textAlign: 'right', padding: '14px 16px', fontWeight: 600, fontSize: 13, color: (pw.profit ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>{(pw.profit ?? 0) >= 0 ? '+' : ''}{formatMoney(pw.profit ?? 0)}</td>}
               <td style={{ textAlign: 'right', padding: '14px 16px', fontWeight: 800, fontSize: 15, color: netIncome >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {netIncome >= 0 ? '+' : ''}{formatMoney(netIncome)}
@@ -1208,7 +1327,9 @@ function PLStatement() {
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, lineHeight: 1.6 }}>
         {financialHistory.length > 0 ? `Wk ${financialHistory[financialHistory.length - 1].week} = last completed week · ` : ''}Projected = current week estimate · YTD = sum of {ytdWeeks} actuals ·
         EBITDA excludes depreciation (non-cash) and financing ·
-        Variable crew pay = flight-duty wages only; fixed crew overhead is in People &amp; Labour
+        Variable crew pay = flight-duty wages only; fixed crew overhead is in People &amp; Labour ·
+        Revenue is the engine's booked figure: includes connecting feed, partner O&amp;D, and brand-awareness, marketing &amp; loyalty demand lifts ·
+        "Δ Cash this week" matches the actual bank-balance change (last week shown for comparison)
       </div>
     </div>
   );
@@ -1259,14 +1380,6 @@ function BalanceSheet() {
   const totalFleetValue = ownedFleet.reduce((s, f) => s + f.bookValue, 0);
   const totalAssets = cash + totalFleetValue;
 
-  // Liabilities — 52-week lease obligations
-  const leasedFleet = fleet.filter(a => a.ownershipType !== 'owned').map(a => {
-    const type = getAircraftType(a.typeId);
-    const annualObligation = (type?.weeklyLease ?? 0) * 52;
-    return { aircraft: a, type, annualObligation };
-  });
-  const totalLeaseObligations = leasedFleet.reduce((s, f) => s + f.annualObligation, 0);
-
   // Loan liabilities — outstanding balance on each active loan
   const activeLoans = state.loans ?? [];
   const loanLiabilities = activeLoans.map(loan => {
@@ -1278,19 +1391,29 @@ function BalanceSheet() {
     return { loan, balance };
   });
   const totalLoanLiabilities = loanLiabilities.reduce((s, l) => s + l.balance, 0);
-  const totalLiabilities = totalLeaseObligations + totalLoanLiabilities;
+  // Operating leases are an off-balance-sheet COMMITMENT (rent), not a borrowing —
+  // shown as a footnote, not a liability. (Booking 52× rent as a liability with no
+  // offsetting right-of-use asset is what previously made the sheet fail to balance.)
+  const leasedFleet = fleet.filter(a => a.ownershipType !== 'owned').map(a => {
+    const type = getAircraftType(a.typeId);
+    return { aircraft: a, type, weekly: (a.weeklyLease ?? type?.weeklyLease ?? 0) };
+  });
+  const annualLeaseCommitment = leasedFleet.reduce((s, f) => s + f.weekly * 52, 0);
 
-  // Equity
-  const retainedEarnings = ytd(financialHistory, 'profit');
-  const totalEquity = STARTING_CAPITAL + retainedEarnings;
+  const totalLiabilities = totalLoanLiabilities;
+
+  // Equity = net assets (assets − liabilities). This balances by construction, and
+  // because every cash flow is matched on the balance sheet (capex ↔ book value,
+  // loan proceeds ↔ loan balance), the weekly change in equity equals accrual net
+  // income. Retained earnings is therefore the accumulated accrual earnings.
+  const totalEquity = totalAssets - totalLiabilities;
+  const retainedEarnings = totalEquity - STARTING_CAPITAL;
   const totalLiabPlusEquity = totalLiabilities + totalEquity;
 
-  // Key ratios
-  const currentRatio = totalLiabilities > 0 ? cash / totalLiabilities : Infinity;
-  const debtToEquity = totalEquity !== 0 ? totalLiabilities / totalEquity : 0;
-  const returnOnEquity = totalEquity > 0 && financialHistory.length > 0
-    ? (ytd(financialHistory, 'profit') / financialHistory.length * 52) / totalEquity
-    : 0;
+  // Key ratios — leverage uses loans + capitalised lease commitment for realism.
+  const totalDebtForRatio = totalLoanLiabilities + annualLeaseCommitment;
+  const currentRatio = totalDebtForRatio > 0 ? cash / totalDebtForRatio : Infinity;
+  const debtToEquity = totalEquity > 0 ? totalDebtForRatio / totalEquity : 0;
 
   return (
     <div>
@@ -1320,7 +1443,7 @@ function BalanceSheet() {
                     <BSSectionHeader label="Non-Current Assets — Fleet" />
                     {ownedFleet.map(({ aircraft, type, bookValue }) => {
                       const ageYrs = (aircraft.ageWeeks ?? 0) / 52;
-                      const depPct = ageYrs / 20;
+                      const depPct = ageYrs / DEPRECIATION_YEARS;
                       return (
                         <BSRow
                           key={aircraft.id}
@@ -1351,34 +1474,18 @@ function BalanceSheet() {
             <table>
               <tbody>
 
-                <BSSectionHeader label="Liabilities — Operating Leases (52-wk)" />
-                {leasedFleet.length === 0 && <EmptyRow text="No leased aircraft" />}
-                {leasedFleet.map(({ aircraft, type, annualObligation }) => (
+                <BSSectionHeader label="Liabilities — Loans (outstanding principal)" />
+                {loanLiabilities.length === 0 && <EmptyRow text="No debt outstanding" />}
+                {loanLiabilities.map(({ loan, balance }) => (
                   <BSRow
-                    key={aircraft.id}
-                    label={aircraft.name}
-                    sublabel={`${formatMoney(type?.weeklyLease ?? 0)}/wk × 52`}
-                    value={annualObligation}
+                    key={loan.id}
+                    label={loan.label ?? `${loan.termWeeks}-week loan`}
+                    sublabel={`${(loan.interestRate * 100).toFixed(1)}% APR · ${loan.weeksRemaining} wks remaining · ${formatMoney(loan.weeklyPayment)}/wk`}
+                    value={balance}
                     indent={1}
                     negative
                   />
                 ))}
-
-                {loanLiabilities.length > 0 && (
-                  <>
-                    <BSSectionHeader label="Liabilities — Loans (outstanding principal)" />
-                    {loanLiabilities.map(({ loan, balance }) => (
-                      <BSRow
-                        key={loan.id}
-                        label={loan.label ?? `${loan.termWeeks}-week loan`}
-                        sublabel={`${(loan.interestRate * 100).toFixed(1)}% APR · ${loan.weeksRemaining} wks remaining · ${formatMoney(loan.weeklyPayment)}/wk`}
-                        value={balance}
-                        indent={1}
-                        negative
-                      />
-                    ))}
-                  </>
-                )}
 
                 <BSTotalRow label="Total Liabilities" value={totalLiabilities} negative />
 
@@ -1386,7 +1493,7 @@ function BalanceSheet() {
                 <BSRow label="Paid-in capital"     value={STARTING_CAPITAL}  indent={1} />
                 <BSRow
                   label="Retained earnings"
-                  sublabel={`${financialHistory.length} weeks of operations`}
+                  sublabel={`accumulated net income · ${financialHistory.length} weeks`}
                   value={retainedEarnings}
                   indent={1}
                   signed
@@ -1402,7 +1509,7 @@ function BalanceSheet() {
             </table>
           </div>
 
-          {/* Balance check */}
+          {/* Balance check — balances by construction (equity = net assets) */}
           <div style={{
             marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12,
             background: Math.abs(totalAssets - totalLiabPlusEquity) < 1 ? 'rgba(63,185,80,.08)' : 'rgba(248,81,73,.08)',
@@ -1410,15 +1517,22 @@ function BalanceSheet() {
           }}>
             {Math.abs(totalAssets - totalLiabPlusEquity) < 1
               ? '✓ Balance sheet balances'
-              : `⚠ Imbalance of ${formatMoney(Math.abs(totalAssets - totalLiabPlusEquity))} — due to one-time purchases`
+              : `⚠ Imbalance of ${formatMoney(Math.abs(totalAssets - totalLiabPlusEquity))}`
             }
           </div>
 
+          {/* Off-balance-sheet commitments */}
+          {annualLeaseCommitment > 0 && (
+            <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: 'var(--surface2)', color: 'var(--text-muted)' }}>
+              <strong>Lease commitments (off balance sheet):</strong> {leasedFleet.length} leased aircraft · {formatMoney(annualLeaseCommitment)}/yr in future rent. Counted as debt for the leverage ratio below.
+            </div>
+          )}
+
           {/* Ratio notes */}
           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <strong>Current Ratio</strong> (cash ÷ annual lease obligations): {isFinite(currentRatio) ? currentRatio.toFixed(2) : '∞'} — {currentRatio >= 1 ? 'solvent' : 'at risk'}<br />
-            <strong>Retained earnings</strong> = sum of all weekly net income since game start.<br />
-            <strong>Fleet book value</strong> = purchase price × remaining life (straight-line, 20yr).
+            <strong>Current Ratio</strong> (cash ÷ loans + annual lease commitment): {isFinite(currentRatio) ? currentRatio.toFixed(2) : '∞'} — {currentRatio >= 1 ? 'solvent' : 'at risk'}<br />
+            <strong>Equity</strong> = total assets − liabilities (net book value); <strong>retained earnings</strong> = equity − paid-in capital = accumulated net income.<br />
+            <strong>Fleet book value</strong> = purchase price × remaining life (straight-line, {DEPRECIATION_YEARS}yr). Operating leases are rent (a commitment), not a balance-sheet liability.
           </div>
         </div>
       </div>
@@ -1428,19 +1542,25 @@ function BalanceSheet() {
 
 // ─── By Route ─────────────────────────────────────────────────────────────────
 
-function RouteBreakdown() {
+function RouteBreakdown({ proj }) {
   const { state } = useGame();
   const { fleet, routes } = state;
   const [expanded, setExpanded]   = useState({});  // keyed by "ORG→DST"
   const [sections, setSections]   = useState({ profitable: true, losing: true });
   const toggleSection = key => setSections(s => ({ ...s, [key]: !s[key] }));
-  const gd = currentGameDate(state);
+  // Use the engine's per-route results: BOOKED revenue (incl. connecting + lifts)
+  // and ALL directly-attributable costs (operating cost + landing fees).
+  const rrById = {};
+  for (const rr of proj.report.routeResults ?? []) rrById[rr.routeId] = rr;
 
   const routeData = routes.map(route => {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) return null;
-    const result = simulateRoute(route, aircraft, gd);
-    return result ? { route, aircraft, type: getAircraftType(aircraft.typeId), result } : null;
+    const rr = rrById[route.id];
+    if (!rr) return null;
+    // rr spreads the full simulateRoute result + boosted revenue + landingFee.
+    const result = { ...rr, directCost: (rr.totalOpCost ?? 0) + (rr.landingFee ?? 0) };
+    return { route, aircraft, type: getAircraftType(aircraft.typeId), result };
   }).filter(Boolean);
 
   if (routeData.length === 0) {
@@ -1456,7 +1576,7 @@ function RouteBreakdown() {
   });
   const consolidated = Object.values(groupMap).map(g => {
     const totalRev  = g.entries.reduce((s, e) => s + e.result.revenue, 0);
-    const totalCost = g.entries.reduce((s, e) => s + e.result.totalOpCost, 0);
+    const totalCost = g.entries.reduce((s, e) => s + e.result.directCost, 0);
     const totalPax  = g.entries.reduce((s, e) => s + e.result.passengers, 0);
     const totalFreq = g.entries.reduce((s, e) => s + e.route.weeklyFrequency, 0);
     const wLF       = g.entries.reduce((s, e) => s + e.result.loadFactor * e.route.weeklyFrequency, 0);
@@ -1552,8 +1672,9 @@ function RouteBreakdown() {
                       <CostLine label="Fuel"  value={result.fuelCost} />
                       <CostLine label="Crew"  value={result.crewCost} />
                       {result.qualityCost > 0 && <CostLine label="Quality" value={result.qualityCost} />}
+                      {result.landingFee > 0 && <CostLine label="Landing &amp; nav fees" value={result.landingFee} />}
                       <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <strong>Total Op Cost</strong><strong style={{ color: 'var(--red)' }}>{formatMoney(result.totalOpCost)}</strong>
+                        <strong>Total Direct Cost</strong><strong style={{ color: 'var(--red)' }}>{formatMoney(result.directCost)}</strong>
                       </div>
                     </div>
                     {(!multi || i === 0) && (
@@ -1599,7 +1720,7 @@ function RouteBreakdown() {
       <div className="stat-grid" style={{ marginBottom: 16 }}>
         <StatBox label="Routes"            value={consolidated.length}           color="blue"  />
         <StatBox label="Total Revenue/wk"  value={formatMoney(totRev)}           color="green" />
-        <StatBox label="Total Op Cost/wk"  value={formatMoney(totCost)}          color="red"   />
+        <StatBox label="Direct Cost/wk"    value={formatMoney(totCost)}          color="red"   />
         <StatBox label="Contribution/wk"   value={formatMoney(totRev - totCost)} color={(totRev - totCost) >= 0 ? 'green' : 'red'} />
       </div>
 
@@ -1612,7 +1733,7 @@ function RouteBreakdown() {
               <th style={{ textAlign: 'right' }}>Pax/wk</th>
               <th style={{ textAlign: 'right' }}>Load</th>
               <th style={{ textAlign: 'right' }}>Revenue</th>
-              <th style={{ textAlign: 'right' }}>Op Cost</th>
+              <th style={{ textAlign: 'right' }}>Direct Cost</th>
               <th style={{ textAlign: 'right' }}>Contribution</th>
               <th style={{ textAlign: 'right' }}>Margin</th>
             </tr>
@@ -1654,15 +1775,16 @@ function RouteBreakdown() {
 
 // ─── By Airport ───────────────────────────────────────────────────────────────
 
-function AirportBreakdown() {
+function AirportBreakdown({ proj }) {
   const { state } = useGame();
   const { fleet, routes } = state;
-  const gd = currentGameDate(state);
+  const rrById = {};
+  for (const rr of proj.report.routeResults ?? []) rrById[rr.routeId] = rr;
 
   const routeData = routes.map(route => {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) return null;
-    const result = simulateRoute(route, aircraft, gd);
+    const result = rrById[route.id];   // booked revenue (incl. connecting + lifts)
     return result ? { route, result } : null;
   }).filter(Boolean);
 
@@ -1766,77 +1888,40 @@ function AirportBreakdown() {
 
 // ─── Cash Flow Statement ─────────────────────────────────────────────────────
 
-function CashFlow() {
+function CashFlow({ proj }) {
   const { state } = useGame();
-  const { fleet, routes, cash, financialHistory } = state;
-  const gd = currentGameDate(state);
+  const { cash, financialHistory } = state;
 
-  const routeData = routes.map(r => {
-    const a = fleet.find(x => x.id === r.aircraftId);
-    return a ? simulateRoute(r, a, gd) : null;
-  }).filter(Boolean);
+  // Single source of truth (same figures as P&L / Forecast / Unit Economics).
+  const report = proj.report;
 
-  const projRevenue = routeData.reduce((s, r) => s + r.revenue, 0);
-  const projOpCost  = routeData.reduce((s, r) => s + r.totalOpCost, 0);
-  const cfLaborState = state.labor ?? DEFAULT_LABOR_STATE;
-  const { maintenanceCostMultiplier: cfMaintMult } = laborEffects(cfLaborState);
-  const cfMaintBudget = state.maintenanceBudget ?? 1.0;
-  const projLeases  = fleet.reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    return s + (a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0));
-  }, 0);
-  const projMaint   = fleet.reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    return s + Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks) * cfMaintBudget * cfMaintMult);
-  }, 0);
-  const projInsurance = fleet.reduce((s, a) => s + weeklyInsuranceCost(a, getAircraftType(a.typeId)), 0);
-  const projGates   = Object.entries(state.gates ?? {}).reduce((s, [code, n]) => {
-    return s + Math.round(gateMonthlyFee(getAirport(code)) * n / 4.33);
-  }, 0);
-  const projLandingFees = routes.reduce((s, r) => {
-    const aircraft = fleet.find(a => a.id === r.aircraftId);
-    const type = aircraft ? getAircraftType(aircraft.typeId) : null;
-    return s + weeklyLandingFee(
-      type?.category ?? 'Narrow Body', r.weeklyFrequency,
-      getAirport(r.origin)?.tier ?? 'major', getAirport(r.destination)?.tier ?? 'major',
-    );
-  }, 0);
-  const projDistribution = Math.round(projRevenue * DISTRIBUTION_COST_PCT);
-  const projMarketing  = state.marketingBudget ?? 0;
-  const projHQ         = calcHQCost(fleet.length);
-  const projHubInvest  = Object.values(state.hubs ?? {}).reduce((s, h) => s + (HUB_TIERS[h.tier]?.weeklyInvestment ?? 0), 0);
+  // Cost buckets, straight from the engine report (so the cost mix sums to total).
+  const projOpCost       = report.totalOpCost;
+  const projLeases       = report.totalLeases;
+  const projMaint        = report.totalMaintenance;
+  const projInsurance    = report.totalInsurance;
+  const projGates        = report.totalGateFees;
+  const projLandingFees  = report.totalLandingFees;
+  const projDistribution = report.totalDistributionCost;
+  const projMarketing    = report.totalMarketingSpend;
+  const projHQ           = report.totalHQCost;
+  const projHubInvest    = report.totalHubInvestment;
+  const cfLabor          = report.totalLaborCosts;
+  const cfFamily         = report.totalFamilyBaseCosts;
+  const cfLoyalty        = report.totalLoyaltyCost;
+  const cfPartnerFees    = report.totalPartnerFees;
 
-  // Labor overhead
-  const cfLabor = fleet.length > 0
-    ? LABOR_GROUPS.reduce((sum, g) => {
-        const payMult = cfLaborState[g.id]?.payMultiplier ?? 1.0;
-        return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleet.length);
-      }, 0)
-    : 0;
+  // Loan figures + depreciation from the canonical projection.
+  const cfActiveLoans  = (state.loans ?? []).filter(l => (l.weeksRemaining ?? 0) > 0);
+  const cfLoanPayments = proj.loanPayments;
+  const cfLoanInterest = proj.interest;
+  const cfPrincipal    = proj.principal;
+  const projDepreciation = proj.depreciation;
 
-  // Fleet family MRO
-  const cfFamily = weeklyFamilyBaseCost(fleet);
-
-  // Loan payments (financing outflows)
-  const cfActiveLoans = state.loans ?? [];
-  const cfLoanPayments = cfActiveLoans.reduce((s, l) => s + l.weeklyPayment, 0);
-  const cfLoanInterest = cfActiveLoans.reduce((s, l) => {
-    const r = l.interestRate / 52;
-    const n = l.weeksRemaining;
-    const bal = r > 0 ? Math.round(l.weeklyPayment * (1 - Math.pow(1+r,-n)) / r) : l.weeklyPayment * n;
-    return s + Math.round(bal * r);
-  }, 0);
-
-  // Non-cash depreciation on owned aircraft (add back for operating CF)
-  const projDepreciation = fleet.filter(a => a.ownershipType === 'owned').reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    return t?.purchasePrice ? s + Math.round(t.purchasePrice / (20 * 52)) : s;
-  }, 0);
-
-  const projNetIncome   = projRevenue - projOpCost - projLeases - projMaint - projInsurance
-    - projGates - projLandingFees - projDistribution - projMarketing - projHQ - projHubInvest
-    - cfLabor - cfFamily;
-  const projOperatingCF = projNetIncome + projDepreciation;
+  // Indirect method: start from accrual net income (interest + tax already in it),
+  // add back non-cash depreciation → operating CF. Financing = principal only.
+  const projNetIncome   = proj.netIncomeAccrual;
+  const projOperatingCF = projNetIncome + projDepreciation;   // = EBITDA − interest − tax
 
   // Investing CF — estimated from cash reconciliation
   const ytdNet         = ytd(financialHistory, 'profit');
@@ -1845,11 +1930,12 @@ function CashFlow() {
   const ytdWeeks        = financialHistory.length;
   const avgWeeklyInvesting = ytdWeeks > 0 ? investingOutflow / ytdWeeks : 0;
 
-  const runway = projNetIncome < 0 && cash > 0 ? Math.floor(cash / -projNetIncome) : Infinity;
+  // Runway based on the true weekly cash burn (matches the engine).
+  const runway = proj.netCash < 0 && cash > 0 ? Math.floor(cash / -proj.netCash) : Infinity;
 
   const totalCosts = projOpCost + projLeases + projMaint + projInsurance + projGates
     + projLandingFees + projDistribution + projMarketing + projHQ + projHubInvest
-    + cfLabor + cfFamily;
+    + cfLabor + cfFamily + cfLoyalty + cfPartnerFees;
 
   return (
     <div>
@@ -1871,7 +1957,8 @@ function CashFlow() {
             <thead><tr><th>Cash Flow Statement (Weekly)</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
             <tbody>
               <SectionHeader label="Operating Activities" />
-              <CFRow label="Net income"                     value={projNetIncome}    />
+              <CFRow label="Net income (accrual)"           value={projNetIncome}    />
+              {cfLoanInterest > 0 && <CFRow label="  (incl. interest expense)" value={-cfLoanInterest} />}
               <CFRow label="+ Depreciation (non-cash)"      value={projDepreciation} positive />
               <CFTotalRow label="Net Operating Cash Flow"   value={projOperatingCF} />
               <Spacer />
@@ -1882,8 +1969,7 @@ function CashFlow() {
               <SectionHeader label="Financing Activities" />
               {cfLoanPayments > 0 ? (
                 <>
-                  <CFRow label="Interest expense"    value={-cfLoanInterest} />
-                  <CFRow label="Principal repayment" value={-(cfLoanPayments - cfLoanInterest)} />
+                  <CFRow label="Loan principal repayment" value={-cfPrincipal} />
                   {cfActiveLoans.map(loan => {
                     const r = loan.interestRate / 52;
                     const n = loan.weeksRemaining;
@@ -1893,9 +1979,9 @@ function CashFlow() {
                       <tr key={loan.id}>
                         <td style={{ paddingLeft: 40, color: 'var(--text-dim)', fontSize: 11 }}>
                           {loan.label ?? `${loan.termWeeks}-wk loan`} · {loan.weeksRemaining} wks left · {(loan.interestRate*100).toFixed(1)}% APR
-                          <span style={{ marginLeft: 8 }}>int {formatMoney(int)} + principal {formatMoney(loan.weeklyPayment - int)}</span>
+                          <span style={{ marginLeft: 8 }}>principal {formatMoney(loan.weeklyPayment - int)} (interest {formatMoney(int)} in operating)</span>
                         </td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>{formatMoney(-loan.weeklyPayment)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>{formatMoney(-(loan.weeklyPayment - int))}</td>
                       </tr>
                     );
                   })}
@@ -1903,10 +1989,10 @@ function CashFlow() {
               ) : (
                 <tr><td style={{ paddingLeft: 28, color: 'var(--text-dim)', fontSize: 13 }}>No active loans</td><td style={{ textAlign: 'right', color: 'var(--text-dim)' }}>—</td></tr>
               )}
-              <CFTotalRow label="Net Financing Cash Flow"   value={-cfLoanPayments} />
+              <CFTotalRow label="Net Financing Cash Flow"   value={-cfPrincipal} />
               <Spacer />
               {(() => {
-                const netChange = projOperatingCF - cfLoanPayments;
+                const netChange = projOperatingCF - cfPrincipal;
                 return (
                   <tr style={{ background: 'var(--surface2)', fontWeight: 700 }}>
                     <td style={{ padding: '12px 16px', fontSize: 14 }}>NET CHANGE IN CASH</td>
@@ -1951,7 +2037,7 @@ function CashFlow() {
                   { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
                   { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
                   { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
-                  { v: projHQ + projHubInvest, c: '#93a4ba', l: 'G&A'  },
+                  { v: projHQ + projHubInvest + cfLoyalty + cfPartnerFees, c: '#93a4ba', l: 'G&A & Other'  },
                 ].map((s, i) => s.v > 0 && (
                   <div key={i} style={{ width: `${(s.v/totalCosts)*100}%`, background: s.c }} title={`${s.l}: ${formatMoney(s.v)}`} />
                 ))}
@@ -1968,7 +2054,7 @@ function CashFlow() {
                   { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
                   { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
                   { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
-                  { v: projHQ + projHubInvest, c: '#93a4ba', l: 'G&A'  },
+                  { v: projHQ + projHubInvest + cfLoyalty + cfPartnerFees, c: '#93a4ba', l: 'G&A & Other'  },
                 ].filter(s => s.v > 0).map((s, i) => (
                   <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: s.c, display: 'inline-block' }} />
@@ -1998,22 +2084,26 @@ function routeGrade(spread) {
   return GRADE_CONFIG.find(g => spread >= g.min) ?? GRADE_CONFIG[GRADE_CONFIG.length - 1];
 }
 
-function UnitEconomics() {
+function UnitEconomics({ proj }) {
   const { state } = useGame();
   const { fleet, routes } = state;
   const [sortKey, setSortKey] = useState('spread');
   const [sortDir, setSortDir] = useState(-1);
   const gd = currentGameDate(state);
+  const labor = state.labor ?? DEFAULT_LABOR_STATE;
 
   const routeData = useMemo(() => routes.map(route => {
     const a    = fleet.find(x => x.id === route.aircraftId);
     const type = a ? getAircraftType(a.typeId) : null;
     if (!a || !type) return null;
-    const result = simulateRoute(route, a, gd);
-    if (!result) return null;
+    // Simulate with the engine's labor + fuel multiplier so costs match; use the
+    // engine's BOOKED revenue (incl. connecting feed + demand lifts) for RASK/yield.
+    const raw = simulateRoute(route, a, gd, labor, proj.fuelMultiplier);
+    if (!raw) return null;
+    const result = { ...raw, revenue: proj.revById[route.id] ?? raw.revenue };
     const ue = calcUnitEconomics(route, a, type, result, fleet, routes);
     return { route, aircraft: a, type, result, ue };
-  }).filter(Boolean), [routes, fleet, state.week]);
+  }).filter(Boolean), [routes, fleet, state.week, proj]);
 
   const totASK    = routeData.reduce((s, r) => s + r.ue.ASK, 0);
   const totRPK    = routeData.reduce((s, r) => s + r.ue.RPK, 0);
@@ -2134,51 +2224,38 @@ function UnitEconomics() {
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function Forecast() {
+function Forecast({ proj }) {
   const { state } = useGame();
   const { fleet, routes, cash } = state;
   const gd = currentGameDate(state);
 
+  // Demand multipliers shown in the "revenue multipliers applied" banner below.
+  // (baseRevenue itself already bakes these in via the engine projection.)
+  const awarenessMultiplier = 0.4 + ((state.awareness ?? 5) / 100) * 0.6;
+  const lastRevEstimate = state.financialHistory?.at(-1)?.revenue ?? 1;
+  const mktMultiplier   = marketingDemandMultiplier(state.marketingBudget ?? 0, Math.max(lastRevEstimate, 1));
+  const globalDemandMult = (state.activeEvents ?? []).reduce((m, ev) => {
+    const fx = ev.effects ?? {};
+    return fx.globalDemandMult ? m * fx.globalDemandMult : m;
+  }, 1.0);
+
+  // Current fuel multiplier (from fuel index + hedging)
+  const fuelMultiplier = state.fuelMultiplier ?? 1.0;
+
+  const fcLaborState  = state.labor ?? DEFAULT_LABOR_STATE;
   const routeData = routes.map(r => {
     const a = fleet.find(x => x.id === r.aircraftId);
-    return a ? simulateRoute(r, a, gd) : null;
+    return a ? simulateRoute(r, a, gd, fcLaborState, fuelMultiplier) : null;
   }).filter(Boolean);
 
-  const baseRevenue  = routeData.reduce((s, r) => s + r.revenue, 0);
-  const baseOpCost   = routeData.reduce((s, r) => s + r.totalOpCost, 0);
-  const fcLaborState = state.labor ?? DEFAULT_LABOR_STATE;
-  const { maintenanceCostMultiplier: fcMaintMult } = laborEffects(fcLaborState);
-  const fcMaintBudget = state.maintenanceBudget ?? 1.0;
-  const baseFixed    = fleet.reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    const lease = a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0);
-    const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks) * fcMaintBudget * fcMaintMult);
-    const ins   = weeklyInsuranceCost(a, t);
-    return s + lease + maint + ins;
-  }, 0)
-  + weeklyFamilyBaseCost(fleet)
-  + Object.entries(state.gates ?? {}).reduce((s, [code, n]) => {
-    return s + Math.round(gateMonthlyFee(getAirport(code)) * n / 4.33);
-  }, 0)
-  + (fleet.length > 0 ? LABOR_GROUPS.reduce((sum, g) => {
-      const payMult = fcLaborState[g.id]?.payMultiplier ?? 1.0;
-      return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleet.length);
-    }, 0) : 0)
-  + calcHQCost(fleet.length)
-  + Object.values(state.hubs ?? {}).reduce((s, h) => s + (HUB_TIERS[h.tier]?.weeklyInvestment ?? 0), 0)
-  + (state.marketingBudget ?? 0)
-  + routes.reduce((s, r) => {
-      const aircraft = fleet.find(a => a.id === r.aircraftId);
-      const type = aircraft ? getAircraftType(aircraft.typeId) : null;
-      const originAp = getAirport(r.origin);
-      const destAp   = getAirport(r.destination);
-      return s + weeklyLandingFee(
-        type?.category ?? 'Narrow Body',
-        r.weeklyFrequency,
-        originAp?.tier ?? 'major',
-        destAp?.tier   ?? 'major',
-      );
-    }, 0);
+  // ── Canonical current-week baseline (same engine the other tabs use) ───────
+  // baseRevenue includes connecting feed + partner O&D + all demand lifts/events.
+  // baseFixed = everything in the engine's weekly cost EXCEPT variable op-cost and
+  // distribution (those are recomputed per forecast week so they scale with revenue).
+  const fcReport    = proj.report;
+  const baseRevenue = proj.effectiveRevenue;
+  const baseOpCost  = fcReport.totalOpCost;
+  const baseFixed   = fcReport.totalCost - fcReport.totalOpCost - fcReport.totalDistributionCost;
 
   // Revenue-weighted fleet seasonal factor for a given month.
   // Each route contributes its own seasonal profile, weighted by its current-month revenue.
@@ -2198,7 +2275,13 @@ function Forecast() {
   const currentSeasonal = fleetSeasonalAt(gd.month);
   const absWeekBase     = (state.year - 1) * 52 + state.week;
 
+  // Weekly loan payments (fixed schedule — decrement weeksRemaining each forecast week)
+  const CORPORATE_TAX_RATE = 0.21;
+  const activeLoansSnapshot = (state.loans ?? []).filter(l => l.weeksRemaining > 0);
+
+  const fcDepreciation = proj.depreciation;   // non-cash, constant across the horizon
   let runningCash = cash;
+  let runningLoans = activeLoansSnapshot.map(l => ({ ...l }));
   const forecastWeeks = Array.from({ length: 12 }, (_, i) => {
     const offset       = i + 1;
     const month        = futureMonth(absWeekBase, offset);
@@ -2207,9 +2290,22 @@ function Forecast() {
     const adjOpCost    = Math.round(baseOpCost  * (seasonal / currentSeasonal));
     const distribution = Math.round(adjRev * DISTRIBUTION_COST_PCT);
     const totalCost    = adjOpCost + baseFixed + distribution;
-    const net          = adjRev - totalCost;
+    // Loan payments due this week, split into interest (deductible) vs principal.
+    let loanPayments = 0, loanInterest = 0;
+    for (const l of runningLoans) {
+      if (l.weeksRemaining <= 0) continue;
+      const r = l.interestRate / 52;
+      const bal = r > 0 ? Math.round(l.weeklyPayment * (1 - Math.pow(1 + r, -l.weeksRemaining)) / r) : l.weeklyPayment * l.weeksRemaining;
+      loanPayments += l.weeklyPayment;
+      loanInterest += Math.round(bal * r);
+    }
+    runningLoans = runningLoans.map(l => ({ ...l, weeksRemaining: Math.max(0, l.weeksRemaining - 1) }));
+    // Tax on EBT (− depreciation − interest); cash net subtracts the full payment.
+    const taxBase      = adjRev - totalCost - fcDepreciation - loanInterest;
+    const tax          = Math.round(Math.max(0, taxBase) * CORPORATE_TAX_RATE);
+    const net          = adjRev - totalCost - loanPayments - tax;
     runningCash       += net;
-    return { offset, month, seasonal, adjRev, totalCost, net, cash: runningCash };
+    return { offset, month, seasonal, adjRev, totalCost, loanPayments, tax, net, cash: runningCash };
   });
 
   const firstNeg  = forecastWeeks.find(w => w.cash < 0);
@@ -2234,6 +2330,16 @@ function Forecast() {
       ) : baseRevenue > 0 && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(63,185,80,.08)', border: '1px solid rgba(63,185,80,.2)', marginBottom: 14, fontSize: 13, color: 'var(--green)' }}>
           ✓ Cash stays positive across all 12 forecast weeks.
+        </div>
+      )}
+
+      {(globalDemandMult !== 1 || awarenessMultiplier < 0.95) && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(210,153,34,.08)', border: '1px solid rgba(210,153,34,.25)', marginBottom: 14, fontSize: 12, color: 'var(--yellow)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span>⚡ Revenue multipliers applied to this forecast:</span>
+          {globalDemandMult !== 1 && <span>Events {globalDemandMult > 1 ? '+' : ''}{formatPercent(globalDemandMult - 1)}</span>}
+          {awarenessMultiplier < 0.95 && <span>Awareness {formatPercent(awarenessMultiplier)} of max</span>}
+          {mktMultiplier > 1 && <span>Marketing +{formatPercent(mktMultiplier - 1)}</span>}
+          <span style={{ color: 'var(--text-dim)' }}>Events end when they expire — future weeks may differ.</span>
         </div>
       )}
 
@@ -2267,7 +2373,9 @@ function Forecast() {
               <th>Week</th><th>Month</th>
               <th style={{ textAlign: 'right' }}>Seasonality</th>
               <th style={{ textAlign: 'right' }}>Revenue</th>
-              <th style={{ textAlign: 'right' }}>Costs</th>
+              <th style={{ textAlign: 'right' }}>Op Costs</th>
+              {activeLoansSnapshot.length > 0 && <th style={{ textAlign: 'right' }}>Loans</th>}
+              <th style={{ textAlign: 'right' }}>Tax</th>
               <th style={{ textAlign: 'right' }}>Net</th>
               <th style={{ textAlign: 'right' }}>Cash</th>
             </tr>
@@ -2282,6 +2390,10 @@ function Forecast() {
                 </td>
                 <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 13 }}>{formatMoney(w.adjRev)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--red)',   fontSize: 13 }}>{formatMoney(w.totalCost)}</td>
+                {activeLoansSnapshot.length > 0 && (
+                  <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{w.loanPayments > 0 ? formatMoney(w.loanPayments) : '—'}</td>
+                )}
+                <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{w.tax > 0 ? formatMoney(w.tax) : '—'}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 13, color: w.net>=0?'var(--green)':'var(--red)' }}>
                   {w.net>=0?'+':''}{formatMoney(w.net)}
                 </td>
@@ -2537,30 +2649,17 @@ function outstandingBalance(loan) {
     : loan.weeklyPayment * n;
 }
 
-function Loans() {
+function Loans({ proj }) {
   const { state, dispatch } = useGame();
-  const { cash, financialHistory, fleet, routes } = state;
+  const { cash } = state;
   const activeLoans = state.loans ?? [];
-  const gd = currentGameDate(state);
 
-  // Compute current weekly revenue and net income for credit scoring
-  const routeData = routes.map(r => {
-    const a = fleet.find(x => x.id === r.aircraftId);
-    return a ? simulateRoute(r, a, gd) : null;
-  }).filter(Boolean);
-  const weeklyRevenue = routeData.reduce((s, r) => s + r.revenue, 0);
-  const labor = state.labor ?? DEFAULT_LABOR_STATE;
-  const { maintenanceCostMultiplier } = laborEffects(labor);
-  const maintenanceBudget = state.maintenanceBudget ?? 1.0;
-  const weeklyFixed = fleet.reduce((s, a) => {
-    const t = getAircraftType(a.typeId);
-    const lease = a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0);
-    const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks) * maintenanceBudget * maintenanceCostMultiplier);
-    return s + lease + maint;
-  }, 0);
-  const weeklyOpCost = routeData.reduce((s, r) => s + r.totalOpCost, 0);
-  const weeklyLoanPayments = activeLoans.reduce((s, l) => s + l.weeklyPayment, 0);
-  const weeklyNetIncome = weeklyRevenue - weeklyFixed - weeklyOpCost - weeklyLoanPayments;
+  // Credit scoring uses the canonical projection so revenue and net income reflect
+  // ALL costs (labor, gates, HQ, insurance, distribution, loyalty, partner fees …),
+  // not just leases + maintenance + op-cost as before.
+  const weeklyRevenue   = proj.effectiveRevenue;
+  const weeklyNetIncome = proj.netCash;   // after all costs, loans and tax
+  const weeklyLoanPayments = proj.loanPayments;
 
   const credit = creditRating(state, weeklyRevenue, weeklyNetIncome);
 

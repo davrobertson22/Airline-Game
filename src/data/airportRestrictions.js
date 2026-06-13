@@ -8,7 +8,29 @@
 // The registry maps airport code → array of restrictions (all are checked;
 // the first violation wins).
 
+import { getAirport } from './airports.js';
+import { distanceKm } from '../utils/market.js';
+
 const MILES_TO_KM = 1.60934;
+
+/**
+ * Counts the player's DISTINCT city-pair routes that touch `airportCode` and
+ * exceed `maxDistanceKm` (i.e. routes that "break" that airport's perimeter rule).
+ * `excludeKey` (an unordered "A-B" route key) is skipped so editing an existing
+ * beyond-perimeter route doesn't count against itself.
+ */
+function countBeyondPerimeterRoutes(routes, airportCode, maxDistanceKm, excludeKey) {
+  const keys = new Set();
+  for (const r of routes ?? []) {
+    if (r.origin !== airportCode && r.destination !== airportCode) continue;
+    const key = [r.origin, r.destination].sort().join('-');
+    if (key === excludeKey) continue;
+    const o = getAirport(r.origin), d = getAirport(r.destination);
+    if (!o || !d) continue;
+    if (distanceKm(o, d) > maxDistanceKm) keys.add(key);
+  }
+  return keys.size;
+}
 
 // ─── Perimeter rules ──────────────────────────────────────────────────────────
 
@@ -47,18 +69,39 @@ const DCA_PERIMETER = {
   description:
     'Federal law (49 U.S.C. § 49109) restricts Reagan National to destinations within ' +
     '1,250 statute miles. Enacted in 1966 to steer long-haul traffic to Dulles (IAD). ' +
-    'A small number of beyond-perimeter exemption slots exist but are held by legacy carriers.',
+    'A limited number of beyond-perimeter exemption slots exist — modeled here as up to ' +
+    '5 beyond-perimeter routes, each capped at 1 daily departure (7/week).',
   type: 'perimeter',
   maxDistanceKm: Math.round(1250 * MILES_TO_KM), // 2,012 km
-  exceptions: [],
-  check(distKm, otherCode) {
+  exceptions: [],                 // hard-coded always-allowed destinations (none)
+  exemptionSlots: 5,              // max simultaneous beyond-perimeter routes
+  exemptionMaxWeeklyFrequency: 7, // each exemption route limited to 1 daily
+  check(distKm, otherCode, weeklyFreq, aircraftCategory, ctx = {}) {
     if (this.exceptions.includes(otherCode)) return null;
-    if (distKm > this.maxDistanceKm) {
-      const miles = Math.round(distKm / MILES_TO_KM);
+    if (distKm <= this.maxDistanceKm) return null; // within perimeter — always fine
+
+    const miles = Math.round(distKm / MILES_TO_KM);
+    const over  = (miles - 1250).toLocaleString();
+    const slots = this.exemptionSlots ?? 0;
+    if (slots <= 0) {
       return `DCA Perimeter Rule: DCA serves destinations within 1,250 mi only. ` +
-             `This route is ${miles.toLocaleString()} mi — ${(miles - 1250).toLocaleString()} mi over the limit.`;
+             `This route is ${miles.toLocaleString()} mi — ${over} mi over the limit.`;
     }
-    return null;
+
+    // Beyond perimeter: only allowed if a slot is free (excluding this route itself).
+    const used = countBeyondPerimeterRoutes(ctx.routes, ctx.restrictedAirport ?? 'DCA', this.maxDistanceKm, ctx.excludeKey);
+    if (used >= slots) {
+      return `DCA Perimeter Rule: all ${slots} beyond-perimeter exemption slots are in use ` +
+             `(this route is ${miles.toLocaleString()} mi, ${over} mi over the 1,250-mi limit). ` +
+             `Drop an existing beyond-perimeter DCA route to free a slot.`;
+    }
+    // Slot available — but exemption routes are capped at 1 daily (7/week).
+    const fcap = this.exemptionMaxWeeklyFrequency ?? Infinity;
+    if (weeklyFreq != null && weeklyFreq > fcap) {
+      return `DCA Perimeter Rule: beyond-perimeter exemption routes are limited to ` +
+             `${fcap} departures/week (1 daily). Reduce frequency to ${fcap} or fewer.`;
+    }
+    return null; // permitted under an exemption slot
   },
 };
 
@@ -240,17 +283,21 @@ export const AIRPORT_RESTRICTIONS = {
  * @param {string} originCode
  * @param {string} destCode
  * @param {number} distKm            great-circle distance in km
- * @param {number} weeklyFreq        proposed weekly departure frequency
+ * @param {number} weeklyFreq        proposed TOTAL weekly departures on this city-pair
  * @param {string} [aircraftCategory] e.g. 'Wide Body', 'Narrow Body', 'Regional Jet', 'Turboprop'
+ * @param {object} [context]         { routes, excludeKey } — the player's current routes and the
+ *                                   unordered "A-B" key of the route being edited (so slot/freq
+ *                                   caps that depend on existing routes can be evaluated)
  * @returns {{ restriction, reason } | null}
  */
-export function checkRouteRestrictions(originCode, destCode, distKm, weeklyFreq, aircraftCategory) {
+export function checkRouteRestrictions(originCode, destCode, distKm, weeklyFreq, aircraftCategory, context = {}) {
   for (const code of [originCode, destCode]) {
     const list = AIRPORT_RESTRICTIONS[code];
     if (!list) continue;
     const other = code === originCode ? destCode : originCode;
+    const ctx = { ...context, restrictedAirport: code };
     for (const r of list) {
-      const reason = r.check(distKm, other, weeklyFreq, aircraftCategory ?? null);
+      const reason = r.check(distKm, other, weeklyFreq, aircraftCategory ?? null, ctx);
       if (reason) return { restriction: r, reason };
     }
   }
@@ -262,4 +309,20 @@ export function checkRouteRestrictions(originCode, destCode, distKm, weeklyFreq,
  */
 export function getAirportRestrictions(code) {
   return AIRPORT_RESTRICTIONS[code] ?? [];
+}
+
+/**
+ * UI helper: how many beyond-perimeter exemption slots are used / available at an
+ * airport. Returns null if the airport has no slot-limited perimeter rule.
+ * @returns {{ used:number, total:number, maxWeeklyFrequency:number|null } | null}
+ */
+export function getPerimeterExemptionStatus(routes, airportCode, excludeKey) {
+  const rule = (AIRPORT_RESTRICTIONS[airportCode] ?? [])
+    .find(r => r.type === 'perimeter' && (r.exemptionSlots ?? 0) > 0);
+  if (!rule) return null;
+  return {
+    used: countBeyondPerimeterRoutes(routes, airportCode, rule.maxDistanceKm, excludeKey),
+    total: rule.exemptionSlots,
+    maxWeeklyFrequency: rule.exemptionMaxWeeklyFrequency ?? null,
+  };
 }

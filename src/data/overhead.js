@@ -70,6 +70,14 @@ export function nextHQThreshold(_fleetSize) {
 /** Annual hull insurance rate as a fraction of aircraft purchase price. */
 export const HULL_INSURANCE_ANNUAL_RATE = 0.008;   // 0.8 % p.a.
 
+/**
+ * Useful life for straight-line depreciation AND book value, in years.
+ * Single source of truth: drives the depreciation tax shield, balance-sheet book
+ * value, and hull-insurance book value. Defined here (a dependency-free leaf
+ * module) so every layer imports the same number with no import cycles.
+ */
+export const DEPRECIATION_YEARS = 30;
+
 /** Weekly liability premium per aircraft (owned or leased). */
 export const LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT = 18_000;
 
@@ -83,9 +91,10 @@ export function weeklyInsuranceCost(aircraft, aircraftType) {
   if (aircraft.ownershipType !== 'owned' || !aircraftType?.purchasePrice) {
     return liability;
   }
-  // Hull: book value declines linearly over 20 years
+  // Hull: book value declines linearly over the useful life (same schedule as
+  // depreciation and the balance sheet — one definition of "book value").
   const ageYears   = (aircraft.ageWeeks ?? 0) / 52;
-  const remaining  = Math.max(0.1, 1 - ageYears / 20);   // never below 10 % of new value
+  const remaining  = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);   // never below 10 % of new value
   const bookValue  = aircraftType.purchasePrice * remaining;
   const hullAnnual = bookValue * HULL_INSURANCE_ANNUAL_RATE;
   const hullWeekly = Math.round(hullAnnual / 52);

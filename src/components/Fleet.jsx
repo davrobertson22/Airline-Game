@@ -169,7 +169,7 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire }) {
           <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
             <span>⟣ {type?.seats ?? '?'} seats max</span>
             <span>↔ {type?.range?.toLocaleString() ?? '?'} km range</span>
-            <span>⛽ ${type?.fuelCostPerKm?.toFixed(1)}/km fuel</span>
+            <span>⛽ {type?.fuelBurnPer100km?.toFixed(0)} L/100km fuel burn</span>
             {aircraft.engineLabel && <span>🔧 {aircraft.engineLabel}</span>}
             {aircraft.hasWingtips  && <span style={{ color: 'var(--green)' }}>◇ Wingtips</span>}
             {aircraft.fuelMod && aircraft.fuelMod !== 1.0 && (

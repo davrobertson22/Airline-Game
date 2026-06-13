@@ -1,5 +1,5 @@
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
-import { getAircraftType } from '../data/aircraft.js';
+import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 export { baseCityPairDemand } from './market.js';
 import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO } from '../data/families.js';
@@ -540,7 +540,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // Operating costs
   const flights     = route.weeklyFrequency * 2;
   const aircraftFuelMod = aircraft.fuelMod ?? 1.0;  // from engine/wingtip config at order time
-  const fuelCost    = Math.round(dist * type.fuelCostPerKm * flights * fuelMultiplier * aircraftFuelMod);
+  const fuelCost    = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod);
   const crewCost    = Math.round(dist * type.crewCostPerKm * flights);
   const qualityCost =
     (SEAT_QUALITY_COST_PER_ROUTE[config.seatQuality ?? 'standard'] ?? 0) +
@@ -578,7 +578,8 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     compensationCost,
     totalOpCost,
     profit:       Math.round(totalRevenue - totalOpCost),
-    passengers:   totalPaxOneWay,  // one-way pax (per direction); revenue already covers both directions
+    passengers:        totalPaxOneWay,  // one-way pax (per direction); revenue already covers both directions
+    configuredSeatsOneWay: totalCapOneWay, // configured cabin seats × frequency (excludes unassigned physical seats)
     loadFactor,
     distance:     Math.round(dist),
     classSummary,

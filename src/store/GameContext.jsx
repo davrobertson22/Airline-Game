@@ -5,6 +5,7 @@ import {
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
+import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
@@ -429,7 +430,16 @@ function reducer(state, action) {
       if (dist > effectiveRange) return state;
 
       // ── Regulatory restriction check (perimeter rules, slot caps, aircraft size) ─
-      if (checkRouteRestrictions(action.origin, action.destination, dist, weeklyFrequency, type.category)) return state;
+      // Pass the TOTAL proposed weekly frequency on this city-pair (existing + new) and
+      // the player's routes, so perimeter exemption-slot and per-route frequency caps
+      // (e.g. DCA's 5 beyond-perimeter slots, each ≤7/wk) can be evaluated.
+      const pairKey = [action.origin, action.destination].sort().join('-');
+      const existingPairFreq = state.routes
+        .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
+        .reduce((s, r) => s + r.weeklyFrequency, 0);
+      const proposedPairFreq = existingPairFreq + weeklyFrequency;
+      if (checkRouteRestrictions(action.origin, action.destination, dist, proposedPairFreq, type.category,
+            { routes: state.routes, excludeKey: pairKey })) return state;
 
       // ── Block-hours check: cumulative across ALL routes on this aircraft ───────
       const existingBlockHrs = state.routes
@@ -1100,10 +1110,17 @@ function reducer(state, action) {
         .filter(Boolean)
         .filter(l => l.weeksRemaining > 0);
 
-      // Corporate income tax — 21% on positive weekly pre-tax profit
+      // Corporate income tax — 21% on positive EBT (earnings before tax).
+      // EBT = operating profit − depreciation − loan INTEREST. Loan principal is a
+      // balance-sheet repayment, NOT a deductible expense, so it is excluded from the
+      // tax base (previously the full loan payment was deducted, which under-taxed
+      // leveraged airlines and turned debt into a tax shelter).
       const CORPORATE_TAX_RATE = 0.21;
+      const weeklyDepreciation = fleetWeeklyDepreciation(state.fleet);
+      const taxableIncome   = adjustedCashDelta - weeklyDepreciation - totalLoanInterest - leaseRedeliveryCost;
+      const corporateTax    = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
+      // Cash movement is unchanged in form: operating cash − full loan payment − tax.
       const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost;
-      const corporateTax    = Math.round(Math.max(0, preTaxProfit) * CORPORATE_TAX_RATE);
       const newCash = state.cash + preTaxProfit - corporateTax;
       let newWeek = state.week + 1;
       let newYear = state.year;
@@ -1219,10 +1236,15 @@ function reducer(state, action) {
         loanInterest:       totalLoanInterest,
         leaseRedelivery:    leaseRedeliveryCost,
         corporateTax:       corporateTax,
+        depreciation:       weeklyDepreciation,
         totalCost:          report.totalCost + totalLoanPayments + leaseRedeliveryCost,
         // profit = actual cash change this week (after tax, matches newCash delta)
         profit:             preTaxProfit - corporateTax,
         fuelIndex:          currentFuelIndex,
+        // Per-route revenue breakdown for Finance page prior-week column
+        routeRevenues:      Object.fromEntries(
+          (report.routeResults ?? []).map(r => [r.routeId, r.revenue])
+        ),
       };
       const newHistory = [...state.financialHistory, historyEntry].slice(-52);
 

@@ -8,6 +8,7 @@ import {
   effectivePurchasePrice,
   efficiencyScore,
   seatEfficiency,
+  fuelCostPerKm,
 } from '../data/aircraft.js';
 import { formatMoney, weekToGameDate } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
@@ -365,8 +366,8 @@ export default function Marketplace() {
                     <span className="aircraft-stat-pill-value">{type.range.toLocaleString()} km</span>
                   </div>
                   <div className="aircraft-stat-pill">
-                    <span className="aircraft-stat-pill-label">Fuel/km</span>
-                    <span className="aircraft-stat-pill-value">${type.fuelCostPerKm.toFixed(1)}</span>
+                    <span className="aircraft-stat-pill-label">Fuel burn</span>
+                    <span className="aircraft-stat-pill-value">{type.fuelBurnPer100km.toFixed(0)} L/100km</span>
                   </div>
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">Maint/wk</span>

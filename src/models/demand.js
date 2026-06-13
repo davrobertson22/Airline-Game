@@ -31,7 +31,7 @@
 
 import { baseCityPairDemand, referencePrice, routeDistance } from '../utils/market.js';
 import { getAirport, getAirportScores } from '../data/airports.js';
-import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
+import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1387,7 +1387,7 @@ export function computeCompetitorWeeklyStats(competitor, month = 1) {
     // tier-average so legacy saves without fleets still compute.
     const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
     const seats  = type?.seats ?? ac.seats;
-    const opPerKm = type ? ((type.fuelCostPerKm ?? 0) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
+    const opPerKm = type ? (fuelCostPerKm(type) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
     const tails  = cfg.tails ?? 1;
 
     const seasonal      = getSeasonalProfile(a, b)[month] ?? 1;
