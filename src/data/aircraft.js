@@ -37,7 +37,7 @@ export const AIRCRAFT_TYPES = [
     supersonic: true,
     ticketPremium: 2.75,
     description: 'The supersonic icon. Mach 2 transatlantic crossing in under 3.5 hours. Ticket premiums of 2.5× partially offset the extraordinary fuel burn — prestige over profit.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Concorde_sst_b_afp.jpg/960px-Concorde_sst_b_afp.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/British_Airways_Concorde_G-BOAC_03.jpg/960px-British_Airways_Concorde_G-BOAC_03.jpg',
   },
 
   // ── AIRBUS ──────────────────────────────────────────────────────────────────
@@ -279,7 +279,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 1.75,
     baseMaintenancePerWk: 145_000,
     description: 'Shorter A330 with excellent long-haul range. Ideal for thinner intercontinental routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Finnair_Airbus_A330-200_OH-LTO_at_Helsinki_Airport.jpg/960px-Finnair_Airbus_A330-200_OH-LTO_at_Helsinki_Airport.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Bmi.a330-200.g-wwbb.arp.jpg/960px-Bmi.a330-200.g-wwbb.arp.jpg',
     configOptions: {
       engines: [
         { id: 'cf6',    label: 'GE CF6-80E1', description: 'Standard fitment. Widely available MRO network worldwide.', fuelMod: 1.00, priceMod: 1.00, default: true },
@@ -536,7 +536,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.88,
     baseMaintenancePerWk: 45_000,
     description: 'The original 737. Very cheap on the second-hand market but thirsty and requires a flight engineer as a third crew member. Still flying on budget carriers worldwide.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Boeing_737-200_N7332F_Pacific_Western_Airlines.jpg/960px-Boeing_737-200_N7332F_Pacific_Western_Airlines.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Pacific_Western_Airlines_-_Boeing_737-200_%2850445370143%29.jpg/960px-Pacific_Western_Airlines_-_Boeing_737-200_%2850445370143%29.jpg',
   },
   {
     id: 'b717',
@@ -611,7 +611,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.72,
     baseMaintenancePerWk: 45_000,
     description: 'Smaller Classic 737 variant, great for medium-haul routes with moderate demand.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Southwest_Airlines_737-700_N955WN_LAX_1_12.jpg/960px-Southwest_Airlines_737-700_N955WN_LAX_1_12.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Boeing_737-700_of_Southwest_Airlines_preparing_to_Takeoff_KCMH_1.jpg/960px-Boeing_737-700_of_Southwest_Airlines_preparing_to_Takeoff_KCMH_1.jpg',
   },
   {
     id: 'b737400',
@@ -641,7 +641,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 1.1,
     baseMaintenancePerWk: 68_000,
     description: 'The aircraft that launched the jet age. Remarkable intercontinental range for its era. Four thirsty JT3D engines and a required flight engineer, but available for a fraction of modern prices.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Boeing_707-321B%2C_Pan_American_World_Airways_%28Pan_Am%29_JP6966800.jpg/960px-Boeing_707-321B%2C_Pan_American_World_Airways_%28Pan_Am%29_JP6966800.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Boeing_707-331B%2C_Trans_World_Airlines_-_TWA_AN0108467.jpg/960px-Boeing_707-331B%2C_Trans_World_Airlines_-_TWA_AN0108467.jpg',
   },
   {
     id: 'b737max7',
@@ -704,7 +704,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.81,
     baseMaintenancePerWk: 65_000,
     description: 'Largest classic 737 variant. High capacity for busy domestic trunk routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Alaska_Airlines_Boeing_737-900ER_N316AS_at_SEA_%28cropped%29.jpg/960px-Alaska_Airlines_Boeing_737-900ER_N316AS_at_SEA_%28cropped%29.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/United_Boeing_737-900ER_N75435_Continental_retro_BWI_MD3.jpg/960px-United_Boeing_737-900ER_N75435_Continental_retro_BWI_MD3.jpg',
   },
   {
     id: 'b737max9',
@@ -961,7 +961,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2.3,
     baseMaintenancePerWk: 265_000,
     description: 'The shortened long-ranger. Fewer seats than a standard 747 but extraordinary range. The first aircraft to operate true nonstop ultra-long-haul polar routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Boeing_747SP_22_Pan_Am_N532PA.jpg/960px-Boeing_747SP_22_Pan_Am_N532PA.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Kazakhstan_Airlines_Boeing_747SP_Maiwald.jpg/960px-Kazakhstan_Airlines_Boeing_747SP_Maiwald.jpg',
   },
   {
     id: 'b777300er',
@@ -1213,7 +1213,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.74,
     baseMaintenancePerWk: 11_200,
     description: 'The classic Dash 8 in its most popular variant. Cheap, reliable, and widely supported. A workhorse of thin short-haul routes worldwide.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Air_Canada_Jazz_Bombardier_DHC-8-311_C-FPNG.jpg/960px-Air_Canada_Jazz_Bombardier_DHC-8-311_C-FPNG.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Bombardier_DHC-8-315Q_Dash_8_-_Provincial_Airlines_-_PAL_%282012.03%29.jpg/960px-Bombardier_DHC-8-315Q_Dash_8_-_Provincial_Airlines_-_PAL_%282012.03%29.jpg',
   },
   {
     id: 'q400',
@@ -1457,7 +1457,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2.0,
     baseMaintenancePerWk: 155_000,
     description: 'The DC-10\'s technically superior rival. Rolls-Royce RB.211 engines delivered better fuel economy. Lost the market battle but earned a loyal following for its smooth ride and reliability.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Lockheed_L-1011_TriStar_Delta_Air_Lines_N726DA.jpg/960px-Lockheed_L-1011_TriStar_Delta_Air_Lines_N726DA.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Lockheed_L-1011-1_Tristar%2C_Eastern_Air_Lines_JP7713944.jpg/960px-Lockheed_L-1011-1_Tristar%2C_Eastern_Air_Lines_JP7713944.jpg',
   },
 
   // ── MCDONNELL DOUGLAS ───────────────────────────────────────────────────────

@@ -1329,16 +1329,6 @@ function PLStatement({ proj }) {
         );
       })()}
 
-      {/* Missing cost lines callout */}
-      <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 8, background: 'rgba(210,153,34,.06)', border: '1px solid rgba(210,153,34,.2)', fontSize: 12 }}>
-        <strong style={{ color: 'var(--yellow)' }}>📋 Not yet modelled:</strong>
-        <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>
-          Ancillary revenue (bag fees, seat selection, upgrades) ·
-          Cargo revenue (belly freight) ·
-          Carbon / emissions trading costs ·
-          Per-passenger airport facility charges
-        </span>
-      </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, lineHeight: 1.6 }}>
         {financialHistory.length > 0 ? `Wk ${financialHistory[financialHistory.length - 1].week} = last completed week · ` : ''}Projected = current week estimate · YTD = sum of {ytdWeeks} actuals ·
