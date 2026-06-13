@@ -119,7 +119,7 @@ export default function SetupScreen() {
   return (
     <div className="setup-screen">
       <div className="setup-card" style={{ maxWidth: 600 }}>
-        <div className="setup-title">✈ Bastian Boys Airline Empires</div>
+        <div className="setup-title">✈ Tailwinds - Airline Manager</div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
           You have $10,000,000 to get started.

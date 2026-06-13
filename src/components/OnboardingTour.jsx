@@ -5,7 +5,7 @@ export const TOUR_KEY = 'bbae_tour_seen_v1';
 const STEPS = [
   {
     icon: '✈️',
-    title: 'Welcome to Bastian Boys Airline Empires',
+    title: 'Welcome to Tailwinds - Airline Manager',
     body: "You've founded your airline with $10 million in startup capital — but that's a loan, not a gift. Your mission: build a profitable route network before the debt catches up.",
     highlight: null,
   },

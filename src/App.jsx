@@ -179,7 +179,7 @@ function AppInner() {
       <div className="topbar">
         <div className="topbar-logo">
           <span className="topbar-logo-icon">✈</span>
-          Bastian Boys Airline Empires
+          Tailwinds - Airline Manager
         </div>
         <div className="topbar-sep" />
         <AirlineLogo id={state.logoId} size={28} radius={6} accentColor={state.logoColor} />
