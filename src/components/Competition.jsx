@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
-import { referencePrice, formatMoney, formatPercent } from '../utils/simulation.js';
+import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE } from '../utils/simulation.js';
 import { computeQualityScore } from '../models/demand.js';
+import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
 
 const ACQUISITION_PREMIUM = 1.25;
@@ -578,6 +579,7 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
                 <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>Price</th>
                 <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>vs ref</th>
                 <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>Freq</th>
+                <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 500 }}>Aircraft</th>
                 <th style={{ padding: '6px 14px' }} />
               </tr>
             </thead>
@@ -613,6 +615,11 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
                       {Math.round(cfg.priceMultiplier * 100)}%
                     </td>
                     <td style={{ textAlign: 'right', padding: '7px 12px' }}>{cfg.frequency}×/wk</td>
+                    <td style={{ padding: '7px 12px', color: 'var(--text-muted)', fontSize: 11 }}>
+                      {cfg.aircraftType
+                        ? `${cfg.tails ?? 1}× ${getAircraftType(cfg.aircraftType)?.name ?? cfg.aircraftType}`
+                        : '—'}
+                    </td>
                     <td style={{ padding: '7px 14px' }} />
                   </tr>
                 );
@@ -633,6 +640,18 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
   const canAfford       = playerCash >= acquisitionCost;
   const routeCount      = Object.keys(target.routes ?? {}).length;
   const tier            = TIER_META[target.tier] ?? { label: target.tier, color: 'var(--text-muted)' };
+
+  // Preview the fleet + gates that transfer with the airline.
+  const slotsByAirport = {};
+  Object.entries(target.routes ?? {}).forEach(([key, cfg]) => {
+    const [a, b] = key.split('-');
+    const f = cfg.frequency ?? 7;
+    slotsByAirport[a] = (slotsByAirport[a] ?? 0) + f;
+    slotsByAirport[b] = (slotsByAirport[b] ?? 0) + f;
+  });
+  const gatesGained    = Object.values(slotsByAirport)
+    .reduce((s, sl) => s + Math.max(1, Math.ceil(sl / SLOTS_PER_GATE)), 0);
+  const aircraftGained = (target.fleet ?? []).length;  // the carrier's real fleet
 
   return (
     <div style={{
@@ -664,8 +683,9 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
           <DealRow label="Total acquisition cost" value={formatMoney(acquisitionCost)} bold />
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
           <DealRow label="You receive — their cash" value={`+${formatMoney(target.cash ?? 0)}`} color="var(--green)" />
-          <DealRow label={`You receive — ${routeCount} routes (unassigned)`}
-                   value={`${routeCount} routes`} color="var(--green)" />
+          <DealRow label="You receive — routes" value={`+${routeCount}`} color="var(--green)" />
+          <DealRow label="You receive — aircraft" value={`+${aircraftGained}`} color="var(--green)" />
+          <DealRow label="You receive — gate slots" value={`+${gatesGained}`} color="var(--green)" />
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
           <DealRow label="Net cash outlay" value={formatMoney(netCost)} bold color={netCost > 0 ? '#f87171' : 'var(--green)'} />
           <DealRow label="Your cash after" value={formatMoney(playerCash - acquisitionCost + (target.cash ?? 0))}
@@ -675,7 +695,7 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
         {/* Routes you'll absorb */}
         {routeCount > 0 && (
           <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: '10px 12px', marginBottom: 16, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)' }}>Routes to absorb (need aircraft assigned)</div>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)' }}>Routes to absorb (fleet & gates come with them)</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {Object.keys(target.routes).slice(0, 12).map(key => {
                 const [a, b] = key.split('-');

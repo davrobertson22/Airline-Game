@@ -5,6 +5,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
 import { getSeasonalProfile } from '../models/demand.js';
+import BoardObjectives from './BoardObjectives.jsx';
 
 export default function Dashboard() {
   const { state } = useGame();
@@ -200,6 +201,9 @@ export default function Dashboard() {
           subColor={lastReport ? (lastReport.cashDelta >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)'}
         />
       </div>
+
+      {/* ── Board objectives ─────────────────────────────────────────────── */}
+      <BoardObjectives />
 
       {/* ── Cost breakdown ───────────────────────────────────────────────── */}
       {totalWeeklyCosts > 0 && (

@@ -349,7 +349,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A350-900ULR',
     manufacturer: 'Airbus',
     category: 'Wide Body',
-    seats: 161,
+    seats: 369,   // same airframe as the A350-900; carriers configure capacity down
     range: 18_000,
     weeklyLease:      345_000,
     purchasePrice: 86_250_000,

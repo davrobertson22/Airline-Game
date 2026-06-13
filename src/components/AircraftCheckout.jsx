@@ -38,12 +38,6 @@ const CLASS_COLORS = {
   economy:        '#38d39f',
 };
 
-const CLASS_DEMAND_PCT = {
-  firstClass:     '~2% of demand',
-  businessClass:  '~15% of demand',
-  premiumEconomy: '~18% of demand',
-  economy:        '~65% of demand',
-};
 
 function absWeekToDisplay(absWeek) {
   return {
@@ -76,7 +70,7 @@ function AircraftPhoto({ src, alt, category }) {
 }
 
 // ── Compact class row with inline +/- ────────────────────────────────────────
-function ClassRow({ label, color, fareLabel, spaceLabel, demandLabel, value, max, onChange }) {
+function ClassRow({ label, color, fareLabel, spaceLabel, value, max, onChange }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -87,7 +81,7 @@ function ClassRow({ label, color, fareLabel, spaceLabel, demandLabel, value, max
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-          {fareLabel} · {spaceLabel} · {demandLabel}
+          {fareLabel} · {spaceLabel}
         </div>
       </div>
       {/* − / value / + */}
@@ -291,7 +285,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        background: 'var(--surface1)', borderRadius: 10,
+        background: 'var(--surface2)', borderRadius: 10,
         maxWidth: 540, width: '100%', maxHeight: '92vh', overflowY: 'auto',
         border: '1px solid var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
       }}>
@@ -451,21 +445,18 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               label="First Class" color={CLASS_COLORS.firstClass}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.firstClass}× fare`}
               spaceLabel={`${CLASS_SPACE_MULTIPLIERS.firstClass}× space`}
-              demandLabel={CLASS_DEMAND_PCT.firstClass}
               value={first} max={maxFirst} onChange={setFirst}
             />
             <ClassRow
               label="Business Class" color={CLASS_COLORS.businessClass}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.businessClass}× fare`}
               spaceLabel={`${CLASS_SPACE_MULTIPLIERS.businessClass}× space`}
-              demandLabel={CLASS_DEMAND_PCT.businessClass}
               value={biz} max={maxBiz} onChange={setBiz}
             />
             <ClassRow
               label="Premium Economy" color={CLASS_COLORS.premiumEconomy}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.premiumEconomy}× fare`}
               spaceLabel={`${CLASS_SPACE_MULTIPLIERS.premiumEconomy}× space`}
-              demandLabel={CLASS_DEMAND_PCT.premiumEconomy}
               value={prem} max={maxPrem} onChange={setPrem}
             />
 
@@ -475,7 +466,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>Economy</div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                  1× fare · 1× space · {CLASS_DEMAND_PCT.economy}
+                  1× fare · 1× space
                 </div>
               </div>
               <div style={{ fontWeight: 700, fontSize: 16, color: over ? 'var(--red)' : 'var(--text)', minWidth: 40, textAlign: 'right' }}>{eco}</div>

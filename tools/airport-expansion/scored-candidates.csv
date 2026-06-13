@@ -1,0 +1,146 @@
+verdict,code,name,city,country,population,leisure,bestDemand,bestPartner,bestKm,feederDemand,feederHub,feederKm,nearestKm,nearest
+ADD,BDO,Husein Sastranegara,Bandung,ID,8.5,0,16835,CGK,133,16835,CGK,133,133,CGK
+ADD,NTG,Nantong Xingdong,Nantong,CN,7.7,0,15458,PVG,129,15458,PVG,129,103,SHA
+ADD,WUX,Sunan Shuofang,Wuxi,CN,7.5,0,15221,PVG,136,15221,PVG,136,92,SHA
+ADD,ZHA,Zhanjiang,Zhanjiang,CN,7,0,11428,HKG,386,11428,HKG,386,274,NNG
+ADD,SWA,Jieyang Chaoshan,Shantou,CN,5.6,0,10520,HKG,299,10520,HKG,299,199,XMN
+ADD,DYG,Zhangjiajie Hehua,Zhangjiajie,CN,1.5,1,5545,PVG,1115,5545,PVG,1115,164,ENH
+ADD,UDR,Udaipur Maharana Pratap,Udaipur,IN,0.9,1,5136,DEL,541,5136,DEL,541,215,AMD
+ADD,PNK,Supadio,Pontianak,ID,1,0,4764,CGK,731,4764,CGK,731,209,KCH
+ADD,JHG,Xishuangbanna Gasa,Jinghong,CN,1.3,1,4205,DAC,1081,4205,DAC,1081,402,CNX
+ADD,URT,Surat Thani,Surat Thani,TH,1,0,3957,SIN,1017,3957,SIN,1017,111,USM
+ADD,RAK,Marrakesh Menara,Marrakesh,MA,1.5,1,3888,LHR,2294,3888,LHR,2294,200,CMN
+ADD,SKD,Samarkand Intl,Samarkand,UZ,0.6,1,3185,DEL,1548,3185,DEL,1548,205,DYU
+ADD,CGY,Laguindingan,Cagayan de Oro,PH,0.9,0,2912,CGK,2565,2899,MNL,755,135,TAG
+ADD,CXR,Cam Ranh,Nha Trang,VN,0.5,1,2841,SIN,1315,2841,SIN,1315,141,BMV
+ADD,KOE,El Tari,Kupang,ID,0.5,0,2482,CGK,1925,2482,CGK,1925,727,UPG
+ADD,AMQ,Pattimura,Ambon,ID,0.4,0,2011,CGK,2389,2011,CGK,2389,682,MDC
+ADD,DJJ,Sentani,Jayapura,ID,0.4,0,1670,HND,4241,525,CEB,2325,1063,POM
+ADD,LPQ,Luang Prabang,Luang Prabang,LA,0.1,1,1213,BKK,707,1213,BKK,707,217,VTE
+ADD,AUA,Queen Beatrix,Oranjestad,AW,0.1,1,870,BOG,979,870,BOG,979,119,CUR
+DUPLICATE,KBV,Krabi,Krabi,TH,0.5,1,3148,SIN,932,3148,SIN,932,74,HKT
+DUPLICATE,BCD,Bacolod-Silay,Bacolod,PH,0.8,0,2984,MNL,468,2984,MNL,468,57,ILO
+DUPLICATE,IGU,Foz do Iguacu,Foz do Iguacu,BR,0.4,1,2661,GRU,846,2661,GRU,846,16,IGR
+DUPLICATE,MPH,Caticlan Boracay,Malay,PH,0.2,1,1728,MNL,305,1728,MNL,305,54,KLO
+EXISTS,TNA,Jinan Yaoqiang,Jinan,CN,9.2,0,0,,,0,,,0,TNA
+EXISTS,KWE,Guiyang Longdongbao,Guiyang,CN,6,0,0,,,0,,,0,KWE
+EXISTS,NNG,Nanning Wuxu,Nanning,CN,8.7,0,0,,,0,,,0,NNG
+EXISTS,KHN,Nanchang Changbei,Nanchang,CN,6.3,0,0,,,0,,,0,KHN
+EXISTS,HFE,Hefei Xinqiao,Hefei,CN,9.4,0,0,,,0,,,0,HFE
+EXISTS,TYN,Taiyuan Wusu,Taiyuan,CN,5.4,0,0,,,0,,,0,TYN
+EXISTS,SJW,Shijiazhuang Zhengding,Shijiazhuang,CN,11,0,0,,,0,,,0,SJW
+EXISTS,YNT,Yantai Penglai,Yantai,CN,7.1,0,0,,,0,,,0,YNT
+EXISTS,LJG,Lijiang Sanyi,Lijiang,CN,1.3,1,0,,,0,,,0,LJG
+EXISTS,PNQ,Pune,Pune,IN,7.4,0,0,,,0,,,0,PNQ
+EXISTS,NAG,Nagpur Ambedkar,Nagpur,IN,2.9,0,0,,,0,,,0,NAG
+EXISTS,LKO,Lucknow Chaudhary Charan,Lucknow,IN,3.7,0,0,,,0,,,0,LKO
+EXISTS,PAT,Patna Jay Prakash,Patna,IN,2.5,0,0,,,0,,,0,PAT
+EXISTS,VTZ,Visakhapatnam,Visakhapatnam,IN,2.4,0,0,,,0,,,0,VTZ
+EXISTS,CJB,Coimbatore,Coimbatore,IN,2.5,0,0,,,0,,,0,CJB
+EXISTS,IXC,Chandigarh,Chandigarh,IN,1.6,0,0,,,0,,,0,IXC
+EXISTS,IDR,Indore Devi Ahilyabai,Indore,IN,3,0,0,,,0,,,0,IDR
+EXISTS,BHO,Bhopal Raja Bhoj,Bhopal,IN,2.4,0,0,,,0,,,0,BHO
+EXISTS,VNS,Varanasi Lal Bahadur,Varanasi,IN,1.6,1,0,,,0,,,0,VNS
+EXISTS,ATQ,Amritsar Ram Dass,Amritsar,IN,1.6,1,0,,,0,,,0,ATQ
+EXISTS,IXZ,Port Blair Savarkar,Port Blair,IN,0.4,1,0,,,0,,,0,IXZ
+EXISTS,GAU,Guwahati Lokpriya,Guwahati,IN,1.1,0,0,,,0,,,0,GAU
+EXISTS,BBI,Bhubaneswar Biju Patnaik,Bhubaneswar,IN,1.2,0,0,,,0,,,0,BBI
+EXISTS,UPG,Sultan Hasanuddin,Makassar,ID,1.7,0,0,,,0,,,0,UPG
+EXISTS,BPN,Sultan Aji Muhammad,Balikpapan,ID,1,0,0,,,0,,,0,BPN
+EXISTS,PLM,Sultan Mahmud Badaruddin,Palembang,ID,1.7,0,0,,,0,,,0,PLM
+EXISTS,SRG,Achmad Yani,Semarang,ID,2,0,0,,,0,,,0,SRG
+EXISTS,BTH,Hang Nadim,Batam,ID,1.2,0,0,,,0,,,0,BTH
+EXISTS,MDC,Sam Ratulangi,Manado,ID,0.7,1,0,,,0,,,0,MDC
+EXISTS,LOP,Lombok Intl,Praya,ID,0.9,1,0,,,0,,,0,LOP
+EXISTS,CEB,Mactan-Cebu,Cebu,PH,3,0,0,,,0,,,0,CEB
+EXISTS,DVO,Francisco Bangoy,Davao,PH,1.8,0,0,,,0,,,0,DVO
+EXISTS,ILO,Iloilo,Iloilo,PH,1,0,0,,,0,,,0,ILO
+EXISTS,CRK,Clark Intl,Angeles,PH,2.4,0,0,,,0,,,0,CRK
+EXISTS,KLO,Kalibo Boracay,Kalibo,PH,0.5,1,0,,,0,,,0,KLO
+EXISTS,PPS,Puerto Princesa,Puerto Princesa,PH,0.3,1,0,,,0,,,0,PPS
+EXISTS,TAG,Bohol-Panglao,Tagbilaran,PH,0.4,1,0,,,0,,,0,TAG
+EXISTS,ZAM,Zamboanga,Zamboanga,PH,1,0,0,,,0,,,0,ZAM
+EXISTS,HPH,Cat Bi,Hai Phong,VN,2.1,0,0,,,0,,,0,HPH
+EXISTS,VCA,Can Tho,Can Tho,VN,1.6,0,0,,,0,,,0,VCA
+EXISTS,PQC,Phu Quoc,Phu Quoc,VN,0.2,1,0,,,0,,,0,PQC
+EXISTS,USM,Samui,Koh Samui,TH,0.2,1,0,,,0,,,0,USM
+EXISTS,HDY,Hat Yai,Hat Yai,TH,0.8,0,0,,,0,,,0,HDY
+EXISTS,REP,Siem Reap Angkor,Siem Reap,KH,0.3,1,0,,,0,,,0,REP
+EXISTS,MDL,Mandalay,Mandalay,MM,1.7,0,0,,,0,,,0,MDL
+EXISTS,CWB,Afonso Pena,Curitiba,BR,3.7,0,0,,,0,,,0,CWB
+EXISTS,POA,Salgado Filho,Porto Alegre,BR,4.3,0,0,,,0,,,0,POA
+EXISTS,REC,Guararapes,Recife,BR,4.1,0,0,,,0,,,0,REC
+EXISTS,FOR,Pinto Martins,Fortaleza,BR,4.1,0,0,,,0,,,0,FOR
+EXISTS,SSA,Luis Eduardo Magalhaes,Salvador,BR,4,0,0,,,0,,,0,SSA
+EXISTS,BEL,Val de Cans,Belem,BR,2.5,0,0,,,0,,,0,BEL
+EXISTS,MAO,Eduardo Gomes,Manaus,BR,2.7,0,0,,,0,,,0,MAO
+EXISTS,GYN,Santa Genoveva,Goiania,BR,2.8,0,0,,,0,,,0,GYN
+EXISTS,FLN,Hercilio Luz,Florianopolis,BR,1.2,1,0,,,0,,,0,FLN
+EXISTS,NAT,Sao Goncalo,Natal,BR,1.6,1,0,,,0,,,0,NAT
+EXISTS,KAN,Mallam Aminu Kano,Kano,NG,4,0,0,,,0,,,0,KAN
+EXISTS,PHC,Port Harcourt,Port Harcourt,NG,3,0,0,,,0,,,0,PHC
+EXISTS,ABJ,Felix-Houphouet-Boigny,Abidjan,CI,5.5,0,0,,,0,,,0,ABJ
+EXISTS,DAR,Julius Nyerere,Dar es Salaam,TZ,7,0,0,,,0,,,0,DAR
+EXISTS,EBB,Entebbe Intl,Kampala,UG,3.6,0,0,,,0,,,0,EBB
+EXISTS,KGL,Kigali Intl,Kigali,RW,1.3,0,0,,,0,,,0,KGL
+EXISTS,LAD,Quatro de Fevereiro,Luanda,AO,8.3,0,0,,,0,,,0,LAD
+EXISTS,LUN,Kenneth Kaunda,Lusaka,ZM,3.3,0,0,,,0,,,0,LUN
+EXISTS,TNR,Ivato,Antananarivo,MG,3.2,0,0,,,0,,,0,TNR
+EXISTS,ZNZ,Abeid Amani Karume,Zanzibar,TZ,0.7,1,0,,,0,,,0,ZNZ
+EXISTS,JRO,Kilimanjaro,Arusha,TZ,0.9,1,0,,,0,,,0,JRO
+EXISTS,MBA,Moi Intl,Mombasa,KE,1.3,1,0,,,0,,,0,MBA
+EXISTS,TAS,Tashkent Intl,Tashkent,UZ,2.9,0,0,,,0,,,0,TAS
+EXISTS,GYD,Heydar Aliyev,Baku,AZ,2.3,0,0,,,0,,,0,GYD
+EXISTS,EVN,Zvartnots,Yerevan,AM,1.1,0,0,,,0,,,0,EVN
+EXISTS,TBS,Tbilisi Intl,Tbilisi,GE,1.2,0,0,,,0,,,0,TBS
+EXISTS,FRU,Manas,Bishkek,KG,1.1,0,0,,,0,,,0,FRU
+EXISTS,AYT,Antalya,Antalya,TR,2.5,1,0,,,0,,,0,AYT
+EXISTS,ADB,Izmir Adnan Menderes,Izmir,TR,4.4,0,0,,,0,,,0,ADB
+EXISTS,ESB,Ankara Esenboga,Ankara,TR,5.7,0,0,,,0,,,0,ESB
+EXISTS,DMM,King Fahd Intl,Dammam,SA,1.5,0,0,,,0,,,0,DMM
+EXISTS,MED,Prince Mohammad Madinah,Medina,SA,1.5,1,0,,,0,,,0,MED
+EXISTS,EBL,Erbil Intl,Erbil,IQ,1.5,0,0,,,0,,,0,EBL
+EXISTS,BGW,Baghdad Intl,Baghdad,IQ,7.5,0,0,,,0,,,0,BGW
+EXISTS,MCT,Muscat Intl,Muscat,OM,1.6,0,0,,,0,,,0,MCT
+EXISTS,SLL,Salalah,Salalah,OM,0.4,1,0,,,0,,,0,SLL
+EXISTS,NAP,Naples Intl,Naples,IT,3.1,0,0,,,0,,,0,NAP
+EXISTS,CTA,Catania Fontanarossa,Catania,IT,1,1,0,,,0,,,0,CTA
+EXISTS,BLQ,Bologna Marconi,Bologna,IT,1,0,0,,,0,,,0,BLQ
+EXISTS,PSA,Pisa Galilei,Pisa,IT,0.5,1,0,,,0,,,0,PSA
+EXISTS,OPO,Porto Sa Carneiro,Porto,PT,1.7,0,0,,,0,,,0,OPO
+EXISTS,FAO,Faro,Faro,PT,0.5,1,0,,,0,,,0,FAO
+EXISTS,AGP,Malaga Costa del Sol,Malaga,ES,1.6,1,0,,,0,,,0,AGP
+EXISTS,PMI,Palma de Mallorca,Palma,ES,1,1,0,,,0,,,0,PMI
+EXISTS,VLC,Valencia,Valencia,ES,1.6,0,0,,,0,,,0,VLC
+EXISTS,SVQ,Seville,Seville,ES,1.5,1,0,,,0,,,0,SVQ
+EXISTS,BIO,Bilbao,Bilbao,ES,1.1,0,0,,,0,,,0,BIO
+EXISTS,LYS,Lyon-Saint Exupery,Lyon,FR,1.7,0,0,,,0,,,0,LYS
+EXISTS,NCE,Nice Cote d'Azur,Nice,FR,1,1,0,,,0,,,0,NCE
+EXISTS,MRS,Marseille Provence,Marseille,FR,1.6,0,0,,,0,,,0,MRS
+EXISTS,STR,Stuttgart,Stuttgart,DE,2.7,0,0,,,0,,,0,STR
+EXISTS,CGN,Cologne Bonn,Cologne,DE,2,0,0,,,0,,,0,CGN
+EXISTS,KRK,Krakow John Paul II,Krakow,PL,1,1,0,,,0,,,0,KRK
+EXISTS,GDN,Gdansk Lech Walesa,Gdansk,PL,1.1,0,0,,,0,,,0,GDN
+EXISTS,SPU,Split,Split,HR,0.4,1,0,,,0,,,0,SPU
+EXISTS,DBV,Dubrovnik,Dubrovnik,HR,0.2,1,0,,,0,,,0,DBV
+EXISTS,SOF,Sofia,Sofia,BG,1.3,0,0,,,0,,,0,SOF
+EXISTS,RIX,Riga,Riga,LV,1,0,0,,,0,,,0,RIX
+EXISTS,TLL,Tallinn Lennart Meri,Tallinn,EE,0.6,0,0,,,0,,,0,TLL
+EXISTS,FNC,Madeira,Funchal,PT,0.3,1,0,,,0,,,0,FNC
+EXISTS,SDQ,Las Americas,Santo Domingo,DO,3.3,0,0,,,0,,,0,SDQ
+EXISTS,PUJ,Punta Cana,Punta Cana,DO,0.3,1,0,,,0,,,0,PUJ
+EXISTS,HAV,Jose Marti,Havana,CU,2.1,0,0,,,0,,,0,HAV
+EXISTS,MBJ,Sangster,Montego Bay,JM,0.7,1,0,,,0,,,0,MBJ
+EXISTS,NAS,Lynden Pindling,Nassau,BS,0.3,1,0,,,0,,,0,NAS
+EXISTS,CUR,Curacao Intl,Willemstad,CW,0.2,1,0,,,0,,,0,CUR
+EXISTS,BGI,Grantley Adams,Bridgetown,BB,0.3,1,0,,,0,,,0,BGI
+EXISTS,POS,Piarco,Port of Spain,TT,0.5,0,0,,,0,,,0,POS
+EXISTS,KIN,Norman Manley,Kingston,JM,1.2,0,0,,,0,,,0,KIN
+EXISTS,GUM,Antonio B Won Pat,Hagatna,GU,0.2,1,0,,,0,,,0,GUM
+EXISTS,NAN,Nadi Intl,Nadi,FJ,0.2,1,0,,,0,,,0,NAN
+EXISTS,PPT,Faaa Intl,Papeete,PF,0.2,1,0,,,0,,,0,PPT
+EXISTS,NOU,La Tontouta,Noumea,NC,0.2,0,0,,,0,,,0,NOU
+EXISTS,POM,Jacksons Intl,Port Moresby,PG,0.4,0,0,,,0,,,0,POM
+EXISTS,RAR,Rarotonga,Avarua,CK,0.02,1,0,,,0,,,0,RAR
+EXISTS,VLI,Bauerfield,Port Vila,VU,0.05,1,0,,,0,,,0,VLI
+EXISTS,APW,Faleolo,Apia,WS,0.04,1,0,,,0,,,0,APW

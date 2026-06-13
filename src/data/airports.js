@@ -1048,6 +1048,33 @@ export const AIRPORTS = [
   { code: 'LSI', name: 'Sumburgh Airport', city: 'Lerwick Shetland', country: 'GB', lat: 59.88, lon: -1.3, population: 0.02, tier: 'regional' },
   { code: 'KOI', name: 'Kirkwall Airport', city: 'Kirkwall Orkney', country: 'GB', lat: 58.96, lon: -2.9, population: 0.02, tier: 'regional' },
   { code: 'IOM', name: 'Isle of Man Airport', city: 'Castletown', country: 'IM', lat: 54.08, lon: -4.62, population: 0.08, tier: 'regional' },
+
+  // ── EXPANSION: scored additions (tools/airport-expansion) ────────────────────
+  // Passed both gates (distinct >=90km from existing, viable >=150 pax/wk) on the
+  // game's own gravity model. See tools/airport-expansion/scored-candidates.csv.
+  // East Asia (Chinese secondary metros)
+  { code: 'NTG', name: 'Nantong Xingdong',         city: 'Nantong',        country: 'CN', lat: 32.07, lon: 120.98, population: 7.7, tier: 'regional' },
+  { code: 'WUX', name: 'Sunan Shuofang Intl',      city: 'Wuxi',           country: 'CN', lat: 31.49, lon: 120.43, population: 7.5, tier: 'regional' },
+  { code: 'ZHA', name: 'Zhanjiang Wuchuan',        city: 'Zhanjiang',      country: 'CN', lat: 21.21, lon: 110.36, population: 7.0, tier: 'major'    },
+  { code: 'SWA', name: 'Jieyang Chaoshan Intl',    city: 'Shantou',        country: 'CN', lat: 23.55, lon: 116.50, population: 5.6, tier: 'major'    },
+  { code: 'DYG', name: 'Zhangjiajie Hehua Intl',   city: 'Zhangjiajie',    country: 'CN', lat: 29.10, lon: 110.44, population: 1.5, tier: 'regional' },
+  { code: 'JHG', name: 'Xishuangbanna Gasa',       city: 'Jinghong',       country: 'CN', lat: 21.97, lon: 100.76, population: 1.3, tier: 'regional' },
+  // South & Southeast Asia
+  { code: 'UDR', name: 'Maharana Pratap',          city: 'Udaipur',        country: 'IN', lat: 24.62, lon: 73.90,  population: 0.9, tier: 'regional' },
+  { code: 'URT', name: 'Surat Thani Intl',         city: 'Surat Thani',    country: 'TH', lat: 9.13,  lon: 99.14,  population: 1.0, tier: 'regional' },
+  { code: 'CXR', name: 'Cam Ranh Intl',            city: 'Nha Trang',      country: 'VN', lat: 11.99, lon: 109.22, population: 0.5, tier: 'regional' },
+  { code: 'LPQ', name: 'Luang Prabang Intl',       city: 'Luang Prabang',  country: 'LA', lat: 19.90, lon: 102.16, population: 0.1, tier: 'regional' },
+  { code: 'CGY', name: 'Laguindingan',             city: 'Cagayan de Oro', country: 'PH', lat: 8.61,  lon: 124.46, population: 0.9, tier: 'regional' },
+  // Indonesia (archipelago)
+  { code: 'BDO', name: 'Husein Sastranegara',      city: 'Bandung',        country: 'ID', lat: -6.90, lon: 107.58, population: 8.5, tier: 'major'    },
+  { code: 'PNK', name: 'Supadio',                  city: 'Pontianak',      country: 'ID', lat: -0.15, lon: 109.40, population: 1.0, tier: 'regional' },
+  { code: 'KOE', name: 'El Tari',                  city: 'Kupang',         country: 'ID', lat: -10.17,lon: 123.67, population: 0.5, tier: 'regional' },
+  { code: 'AMQ', name: 'Pattimura',                city: 'Ambon',          country: 'ID', lat: -3.71, lon: 128.09, population: 0.4, tier: 'regional' },
+  { code: 'DJJ', name: 'Sentani',                  city: 'Jayapura',       country: 'ID', lat: -2.58, lon: 140.52, population: 0.4, tier: 'regional' },
+  // Middle East / Central Asia / Caribbean
+  { code: 'RAK', name: 'Marrakesh Menara',         city: 'Marrakesh',      country: 'MA', lat: 31.61, lon: -8.04,  population: 1.5, tier: 'regional' },
+  { code: 'SKD', name: 'Samarkand Intl',           city: 'Samarkand',      country: 'UZ', lat: 39.70, lon: 66.98,  population: 0.6, tier: 'regional' },
+  { code: 'AUA', name: 'Queen Beatrix Intl',       city: 'Oranjestad',     country: 'AW', lat: 12.50, lon: -70.01, population: 0.1, tier: 'regional' },
 ];
 
 export function getAirport(code) {
@@ -1276,6 +1303,27 @@ export const AIRPORT_SCORES = {
   MEL: { businessScore: 65, leisureScore: 65 },
   BNE: { businessScore: 55, leisureScore: 65 },
   AKL: { businessScore: 58, leisureScore: 68 },
+
+  // ── Expansion: scored additions ──────────────────────────────────────────────
+  NTG: { businessScore: 48, leisureScore: 38 },   // Nantong – Yangtze industrial
+  WUX: { businessScore: 52, leisureScore: 42 },   // Wuxi – tech/manufacturing
+  ZHA: { businessScore: 42, leisureScore: 45 },   // Zhanjiang – port city
+  SWA: { businessScore: 45, leisureScore: 45 },   // Shantou – SEZ
+  DYG: { businessScore: 10, leisureScore: 92 },   // Zhangjiajie – scenery tourism
+  JHG: { businessScore: 12, leisureScore: 85 },   // Xishuangbanna – tropical tourism
+  UDR: { businessScore: 18, leisureScore: 85 },   // Udaipur – heritage tourism
+  URT: { businessScore: 30, leisureScore: 60 },   // Surat Thani – Samui gateway
+  CXR: { businessScore: 15, leisureScore: 88 },   // Nha Trang – beach resort
+  LPQ: { businessScore: 10, leisureScore: 88 },   // Luang Prabang – heritage tourism
+  CGY: { businessScore: 38, leisureScore: 48 },   // Cagayan de Oro
+  BDO: { businessScore: 45, leisureScore: 50 },   // Bandung – diversified metro
+  PNK: { businessScore: 35, leisureScore: 45 },   // Pontianak
+  KOE: { businessScore: 30, leisureScore: 45 },   // Kupang
+  AMQ: { businessScore: 28, leisureScore: 50 },   // Ambon
+  DJJ: { businessScore: 32, leisureScore: 40 },   // Jayapura
+  RAK: { businessScore: 25, leisureScore: 88 },   // Marrakesh – tourism
+  SKD: { businessScore: 15, leisureScore: 85 },   // Samarkand – Silk Road tourism
+  AUA: { businessScore: 12, leisureScore: 92 },   // Aruba – beach resort
 };
 
 // ── Region mapping ────────────────────────────────────────────────────────────
@@ -1294,6 +1342,7 @@ export const COUNTRY_REGION = {
   CO: 'South America', PE: 'South America', EC: 'South America',
   PY: 'South America', UY: 'South America', VE: 'South America',
   BO: 'South America', CW: 'South America', SR: 'South America',
+  AW: 'South America',
   GY: 'South America',
   // Europe
   GB: 'Europe', FR: 'Europe', DE: 'Europe', NL: 'Europe',

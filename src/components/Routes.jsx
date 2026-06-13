@@ -47,6 +47,9 @@ export default function Routes() {
   const [sortBy,    setSortBy]    = useState('profit');
   const [filterTab, setFilterTab] = useState('all');
 
+  // View mode: 'cards' | 'compare'
+  const [viewMode, setViewMode] = useState('cards');
+
   const usedHrsFor = (a) => {
     const t = getAircraftType(a.typeId);
     if (!t) return 0;
@@ -162,7 +165,7 @@ export default function Routes() {
   return (
     <div>
       {/* Header bar */}
-      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
           {routeGroups.length} city pair{routeGroups.length !== 1 ? 's' : ''}
           {' · '}
@@ -178,14 +181,31 @@ export default function Routes() {
             </span>
           )}
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={showForm && !isAddingFlights ? closeForm : openNewRoute}
-          disabled={fleet.length === 0 || availableFleet.length === 0}
-          title={fleet.length === 0 ? 'Lease an aircraft first' : availableFleet.length === 0 ? 'All aircraft at full utilisation' : 'Open a new route'}
-        >
-          {showForm && !isAddingFlights ? '✕ Cancel' : '+ Open Route'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* View mode toggle — only shown when routes exist */}
+          {routeGroups.length > 0 && (
+            <div style={{ display: 'flex', gap: 2, background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 2 }}>
+              {[{ id: 'cards', label: '⊞ Cards' }, { id: 'compare', label: '⊟ Compare' }].map(v => (
+                <button
+                  key={v.id}
+                  className={`btn ${viewMode === v.id ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setViewMode(v.id)}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={showForm && !isAddingFlights ? closeForm : openNewRoute}
+            disabled={fleet.length === 0 || availableFleet.length === 0}
+            title={fleet.length === 0 ? 'Lease an aircraft first' : availableFleet.length === 0 ? 'All aircraft at full utilisation' : 'Open a new route'}
+          >
+            {showForm && !isAddingFlights ? '✕ Cancel' : '+ Open Route'}
+          </button>
+        </div>
       </div>
 
       {/* Search / filter / sort controls — only when routes exist */}
@@ -242,7 +262,7 @@ export default function Routes() {
         />
       )}
 
-      {/* Route groups */}
+      {/* Route groups / compare table */}
       {routeGroups.length === 0 && !showForm ? (
         <div className="empty-state">
           <div className="empty-state-icon">🗺️</div>
@@ -263,6 +283,11 @@ export default function Routes() {
             </button>
           </div>
         </div>
+      ) : viewMode === 'compare' ? (
+        <RouteCompareTable
+          groups={visibleGroups}
+          onViewDetail={(g) => setDetailPair({ origin: g.origin, destination: g.destination })}
+        />
       ) : (
         visibleGroups.map(group => (
           <RouteGroupCard
@@ -275,6 +300,120 @@ export default function Routes() {
           />
         ))
       )}
+    </div>
+  );
+}
+
+// ─── Route comparison table ───────────────────────────────────────────────────
+
+function RouteCompareTable({ groups, onViewDetail }) {
+  const totalRev    = groups.reduce((s, g) => s + g.totalRevenue, 0);
+  const totalProfit = groups.reduce((s, g) => s + g.totalProfit,  0);
+  const totalPax    = groups.reduce((s, g) => s + (g.totalPax ?? 0), 0);
+
+  const COL_HEADER = { padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid var(--border)' };
+  const COL_RIGHT  = { ...COL_HEADER, textAlign: 'right' };
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Totals row */}
+      <div style={{
+        display: 'flex', gap: 24, padding: '10px 14px',
+        background: 'var(--surface2)', borderBottom: '1px solid var(--border)',
+        fontSize: 12, flexWrap: 'wrap',
+      }}>
+        <span style={{ color: 'var(--text-muted)' }}>{groups.length} city pairs</span>
+        <span style={{ color: 'var(--green)', fontWeight: 600 }}>Total revenue: +{formatMoney(totalRev)}/wk</span>
+        <span style={{ color: totalProfit >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+          Op profit: {totalProfit >= 0 ? '+' : ''}{formatMoney(totalProfit)}/wk
+        </span>
+        {totalRev > 0 && (
+          <span style={{ color: 'var(--text-muted)' }}>
+            Margin: {Math.round((totalProfit / totalRev) * 100)}%
+          </span>
+        )}
+        <span style={{ color: 'var(--text-muted)' }}>Pax: {totalPax.toLocaleString()}/wk</span>
+      </div>
+
+      {/* Table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr>
+              <th style={COL_HEADER}>Route</th>
+              <th style={COL_HEADER}>Cities</th>
+              <th style={COL_RIGHT}>Dist</th>
+              <th style={COL_RIGHT}>Freq</th>
+              <th style={COL_RIGHT}>Load</th>
+              <th style={COL_RIGHT}>Pax/wk</th>
+              <th style={COL_RIGHT}>Revenue/wk</th>
+              <th style={COL_RIGHT}>Op Profit/wk</th>
+              <th style={COL_RIGHT}>Margin</th>
+              <th style={COL_RIGHT}>Rev/km</th>
+              <th style={{ ...COL_HEADER, textAlign: 'center' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g, i) => {
+              const oa = getAirport(g.origin);
+              const da = getAirport(g.destination);
+              const margin = g.totalRevenue > 0 ? g.totalProfit / g.totalRevenue : 0;
+              const revPerKm = g.distance > 0 ? g.totalRevenue / g.distance : 0;
+              const totalFreq = g.routes.reduce((s, r) => s + r.weeklyFrequency, 0);
+
+              const profColor  = g.totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
+              const loadColor  = g.avgLoad > 0.7 ? 'var(--green)' : g.avgLoad > 0.4 ? 'var(--yellow)' : 'var(--red)';
+              const margColor  = margin > 0.15 ? 'var(--green)' : margin > 0 ? 'var(--yellow)' : 'var(--red)';
+
+              return (
+                <tr
+                  key={g.key}
+                  style={{
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: i % 2 === 1 ? 'var(--surface2)' : undefined,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => onViewDetail(g)}
+                >
+                  <td style={{ padding: '8px 10px', fontWeight: 700, fontFamily: 'monospace', fontSize: 13, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                    {g.origin} → {g.destination}
+                  </td>
+                  <td style={{ padding: '8px 10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {oa?.city} → {da?.city}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    {g.distance ? `${g.distance.toLocaleString()} km` : '—'}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    {totalFreq}×/wk
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: loadColor }}>
+                    {formatPercent(g.avgLoad)}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    {(g.totalPax ?? 0).toLocaleString()}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>
+                    +{formatMoney(g.totalRevenue)}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: profColor }}>
+                    {g.totalProfit >= 0 ? '+' : ''}{formatMoney(g.totalProfit)}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: margColor }}>
+                    {Math.round(margin * 100)}%
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    {revPerKm > 0 ? `$${revPerKm.toFixed(0)}` : '—'}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>→</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

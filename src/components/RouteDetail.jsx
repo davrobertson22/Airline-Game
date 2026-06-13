@@ -416,7 +416,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
               <thead>
                 <tr style={{ background: 'var(--surface2)' }}>
-                  {['Airline', 'Tier', 'Freq/wk', 'Seats/wk (one-way)', 'Est. Price', 'Quality', 'Est. Pax (one-way)'].map(h => (
+                  {['Airline', 'Tier', 'Aircraft', 'Freq/wk', 'Seats/wk (one-way)', 'Est. Price', 'Quality', 'Est. Pax (one-way)'].map(h => (
                     <th key={h} style={{ padding: '7px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -433,6 +433,11 @@ export default function RouteDetail({ origin, dest, onBack }) {
                     <tr key={c.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                       <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name}</td>
                       <td style={{ padding: '8px 12px' }}><TierBadge tier={c.tier} /></td>
+                      <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {cfg.aircraftType
+                          ? `${cfg.tails ?? 1}× ${getAircraftType(cfg.aircraftType)?.name ?? cfg.aircraftType}`
+                          : '—'}
+                      </td>
                       <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{cfg.frequency}× each way</td>
                       <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{estSeats.toLocaleString()}</td>
                       <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>

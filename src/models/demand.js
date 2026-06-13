@@ -31,6 +31,7 @@
 
 import { baseCityPairDemand, referencePrice, routeDistance } from '../utils/market.js';
 import { getAirport, getAirportScores } from '../data/airports.js';
+import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -965,21 +966,96 @@ const COMPETITOR_DEFAULT_ROUTES = {
   },
 };
 
+// ─── Competitor fleets ───────────────────────────────────────────────────────
+//
+// Competitors own real aircraft. Each route is flown by a concrete aircraft TYPE
+// (range-constrained, sized to the carrier's tier) operated by a number of tails
+// derived from the route's distance and weekly frequency. The fleet array is the
+// inventory you can inspect before buying the carrier and inherit when you do.
+
+/** Seat size a carrier of each tier prefers when choosing aircraft for a route. */
+const TIER_SEAT_TARGET = { budget: 160, legacy: 250, premium: 330 };
+
+/** Approx one-way block time (hours): ~820 km/h cruise + 0.5h taxi/turn. */
+function blockTimeOneWay(distKm) { return distKm / 820 + 0.5; }
+
 /**
- * Populate each competitor's `routes` map with their starting network.
- * Pass a deep-copied array — this mutates routes in place.
+ * Pick the aircraft type a `tier` carrier would fly on a route of `distKm`.
+ * Only types with enough range qualify; among those we take the one whose seat
+ * count is closest to the tier's preferred size. Returns null if nothing fits
+ * (the route is then simply not served — the range constraint in action).
+ */
+export function pickCompetitorAircraftType(distKm, tier) {
+  const target  = TIER_SEAT_TARGET[tier] ?? 200;
+  const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm);
+  if (capable.length === 0) return null;
+
+  // Score each capable aircraft: seat misfit vs the tier's preferred size, plus a
+  // mild penalty for range far in excess of the mission. This favours a properly
+  // sized airframe for the stage length — a widebody on transatlantic routes, a
+  // narrowbody on short hops — instead of an ultra-long-range jet flown short or a
+  // marginal small jet stretched across an ocean.
+  const need = distKm * 1.25;   // reserve allowance
+  const score = (t) =>
+    Math.abs((t.seats ?? 0) - target) + Math.max(0, (t.range ?? 0) - need) * 0.005;
+  return capable.slice().sort((a, b) => score(a) - score(b))[0];
+}
+
+/** Tails needed to fly `frequency` weekly departures over `distKm`, assuming ~98 utilisable block-h/tail/wk. */
+export function tailsForRoute(distKm, frequency) {
+  const WEEKLY_BLOCK_PER_TAIL = 14 * 7;   // 98h
+  const blockPerWeek = blockTimeOneWay(distKm) * frequency * 2;  // round trips
+  return Math.max(1, Math.ceil(blockPerWeek / WEEKLY_BLOCK_PER_TAIL));
+}
+
+let _tailSeq = 0;
+function newTailId(airlineId) { return `${airlineId}-t${(++_tailSeq).toString(36)}`; }
+
+/**
+ * Build a tail for a competitor route. `aged` true gives a used airframe (start
+ * of game); false gives a fresh delivery (mid-game expansion).
+ */
+function makeCompetitorTail(airlineId, typeId, routeKey, aged) {
+  return {
+    id:       newTailId(airlineId),
+    typeId,
+    routeKey,
+    ageWeeks: aged ? 40 + Math.floor(Math.random() * 260) : 0,
+  };
+}
+
+/**
+ * Annotate a carrier's routes with their assigned aircraft type + tail count and
+ * build the matching `fleet` inventory. Returns a NEW carrier object.
+ */
+export function buildCompetitorFleet(airline) {
+  const routes = {};
+  const fleet  = [];
+  for (const [routeKey, cfg] of Object.entries(airline.routes ?? {})) {
+    const [a, b] = routeKey.split('-');
+    const dist   = routeDistance(a, b);
+    const type   = pickCompetitorAircraftType(dist, airline.tier);
+    if (!type) { routes[routeKey] = cfg; continue; }   // no in-range type — leave unflown
+    const tails  = tailsForRoute(dist, cfg.frequency ?? 7);
+    routes[routeKey] = { ...cfg, aircraftType: type.id, tails };
+    for (let i = 0; i < tails; i++) fleet.push(makeCompetitorTail(airline.id, type.id, routeKey, true));
+  }
+  return { ...airline, routes, fleet };
+}
+
+/**
+ * Populate each competitor's `routes` map with their starting network, then
+ * build their owned fleet. Mutates routes in place and attaches `fleet`.
  *
  * @param {CompetitorAirline[]} [competitors]  defaults to COMPETITOR_AIRLINES
- * @returns {CompetitorAirline[]}  same array, routes mutated in place
+ * @returns {CompetitorAirline[]}  carriers with routes + fleet populated
  */
 export function initializeCompetitorRoutes(competitors = COMPETITOR_AIRLINES) {
-  for (const airline of competitors) {
+  return competitors.map(airline => {
     const defaults = COMPETITOR_DEFAULT_ROUTES[airline.id];
-    if (defaults) {
-      Object.assign(airline.routes, defaults);
-    }
-  }
-  return competitors;
+    if (defaults) Object.assign(airline.routes, defaults);
+    return buildCompetitorFleet(airline);
+  });
 }
 
 /**
@@ -1153,12 +1229,39 @@ export function tickCompetitorGrowth(competitors, weekNumber) {
     if (mine.length === 0) return airline;
 
     const newRoutes = { ...airline.routes };
+    let   newFleet  = [...(airline.fleet ?? [])];
+    let   cashDelta = 0;
+
     for (const entry of mine) {
+      const [a, b] = entry.routeKey.split('-');
+      const dist   = routeDistance(a, b);
+      const type   = pickCompetitorAircraftType(dist, airline.tier);
+      if (!type) continue;   // no in-range aircraft → carrier can't open this route
+
       const isUpgrade = entry.routeKey in newRoutes;
-      newRoutes[entry.routeKey] = { frequency: entry.frequency, priceMultiplier: entry.priceMultiplier };
-      events.push({ airlineId: airline.id, routeKey: entry.routeKey, isUpgrade });
+      const tails     = tailsForRoute(dist, entry.frequency);
+
+      // Replace this route's tails with the new requirement (fresh deliveries).
+      const keptFleet = isUpgrade ? newFleet.filter(f => f.routeKey !== entry.routeKey) : newFleet;
+      const addedTails = [];
+      for (let i = 0; i < tails; i++) addedTails.push(makeCompetitorTail(airline.id, type.id, entry.routeKey, false));
+      newFleet = [...keptFleet, ...addedTails];
+
+      newRoutes[entry.routeKey] = {
+        frequency:       entry.frequency,
+        priceMultiplier: entry.priceMultiplier,
+        aircraftType:    type.id,
+        tails,
+      };
+
+      // Capital outlay for fleet growth: a security deposit (~4 weeks lease) per
+      // newly delivered tail. Drains cash, so aggressive expanders get cheaper to buy.
+      cashDelta -= addedTails.length * (type.weeklyLease ?? 0) * 4;
+
+      events.push({ airlineId: airline.id, routeKey: entry.routeKey, isUpgrade, aircraftType: type.id, tails });
     }
-    return { ...airline, routes: newRoutes };
+
+    return { ...airline, routes: newRoutes, fleet: newFleet, cash: (airline.cash ?? 0) + cashDelta };
   });
 
   return { competitors: updated, events };
@@ -1271,6 +1374,7 @@ export function computeCompetitorWeeklyStats(competitor, month = 1) {
   let totalPax     = 0;
   let totalRevenue = 0;
   let totalOpCost  = 0;
+  let fixedCosts   = 0;
 
   for (const [routeKey, cfg] of Object.entries(competitor.routes)) {
     const [a, b] = routeKey.split('-');
@@ -1279,10 +1383,17 @@ export function computeCompetitorWeeklyStats(competitor, month = 1) {
     const baseD = baseCityPairDemand(a, b);
     if (!dist || !refP || !baseD) continue;
 
+    // Use the route's real assigned aircraft if present; else fall back to the
+    // tier-average so legacy saves without fleets still compute.
+    const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
+    const seats  = type?.seats ?? ac.seats;
+    const opPerKm = type ? ((type.fuelCostPerKm ?? 0) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
+    const tails  = cfg.tails ?? 1;
+
     const seasonal      = getSeasonalProfile(a, b)[month] ?? 1;
     const price         = Math.round(refP * cfg.priceMultiplier);
     const flightsPerWk  = cfg.frequency * 2;                          // bidirectional
-    const capOneWay     = ac.seats * cfg.frequency;
+    const capOneWay     = seats * cfg.frequency;
     const priceRatio    = refP / Math.max(price, 1);
     const demandOneWay  = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal);
     const paxOneWay     = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
@@ -1291,11 +1402,11 @@ export function computeCompetitorWeeklyStats(competitor, month = 1) {
     totalFlights += flightsPerWk;
     totalPax     += weeklyPax;
     totalRevenue += weeklyPax * price;
-    totalOpCost  += dist * ac.costPerKm * flightsPerWk;
+    totalOpCost  += dist * opPerKm * flightsPerWk;
+    // Fixed cost = per-tail weekly lease + maintenance (real fleet), else tier flat.
+    fixedCosts   += type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
   }
 
-  const routeCount  = Object.keys(competitor.routes).length;
-  const fixedCosts  = routeCount * fixedPR;
   const totalCost   = Math.round(totalOpCost + fixedCosts);
   const weeklyProfit = Math.round(totalRevenue) - totalCost;
 
@@ -1327,9 +1438,10 @@ export function buildCompetitorOffer(competitor, market) {
     ? Math.round(economyPrice * BUSINESS_PRICE_MULTIPLIER)
     : null;
 
-  // Assume mid-size aircraft for competitors (TODO: give them fleet)
-  const seatsPerFlight  = 150;
-  const businessPerFlight = hasBusinessClass ? 20 : 0;
+  // Use the route's real assigned aircraft for capacity; fall back to mid-size.
+  const acType          = config.aircraftType ? getAircraftType(config.aircraftType) : null;
+  const seatsPerFlight  = acType?.seats ?? 150;
+  const businessPerFlight = hasBusinessClass ? Math.round(seatsPerFlight * 0.13) : 0;
 
   return {
     airlineId:         competitor.id,

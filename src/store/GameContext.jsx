@@ -2,10 +2,10 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
-  CLASS_FARE_MULTIPLIERS,
+  CLASS_FARE_MULTIPLIERS, maxFrequency,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
-import { getAircraftType, effectivePurchasePrice, buyDiscount } from '../data/aircraft.js';
+import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
@@ -34,6 +34,7 @@ import {
   MAX_CODESHARE_AGREEMENTS,
 } from '../data/alliances.js';
 import { routeLaunchCost } from '../data/overhead.js';
+import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective } from '../data/objectives.js';
 
 // ─────────────────────────────────────────────
 // STATE SHAPE
@@ -81,8 +82,10 @@ function freshState() {
     missedLoanPayments:       0,   // total weeks where loans were due and cash went negative
     consecutiveNegativeWeeks: 0,   // weeks in a row ending with negative cash (resets on recovery)
     bankruptcyReason:         null, // 'missed_loans' | 'consecutive_negative' | null
-    marketCap:   STARTING_CASH * 1.5,  // player market cap ($), updated each week
-    sharePrice:  STARTING_CASH * 1.5 / TOTAL_SHARES,  // player share price ($)
+    marketCap:         STARTING_CASH * 1.5,  // player market cap ($), updated each week
+    sharePrice:        STARTING_CASH * 1.5 / TOTAL_SHARES,  // player share price ($)
+    objectives:        [],   // [{ id, completed, completedWeek, completedYear }]
+    objectivesEnabled: true, // can be disabled at setup
   };
 }
 
@@ -182,7 +185,9 @@ function reducer(state, action) {
         gates:       { [action.hub]: 1 },
         hubs:        { [action.hub]: { tier: 1 } },
         loans:       [startupLoan],
-        phase:       'playing',
+        phase:             'playing',
+        objectives:        action.enableObjectives !== false ? initialObjectives() : [],
+        objectivesEnabled: action.enableObjectives !== false,
       };
     }
 
@@ -731,33 +736,118 @@ function reducer(state, action) {
       const acquisitionCost = Math.round((target.marketCap ?? 0) * 1.25);
       if (state.cash < acquisitionCost) return state;  // can't afford — ignore
 
-      // Convert competitor routes to unassigned player routes
+      // ── Inherit the competitor's REAL fleet ────────────────────────────────
+      // Each competitor tail becomes an owned player aircraft (kept aged, flagged
+      // `acquired`). We remember oldTailId → new player id so routes can be wired
+      // to the correct airframe.
+      const usedTails    = state.fleet.map(a => a.tailNumber).filter(Boolean);
+      const tailIdMap    = {};        // competitor tail id → new player aircraft id
+      const tailsByRoute = {};        // routeKey → [new player aircraft ids]
+      const acquiredFleet = (target.fleet ?? []).map(tail => {
+        const type       = getAircraftType(tail.typeId);
+        const newId      = uid();
+        const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
+        usedTails.push(tailNumber);
+        tailIdMap[tail.id] = newId;
+        (tailsByRoute[tail.routeKey] ??= []).push(newId);
+        return {
+          id:            newId,
+          typeId:        tail.typeId,
+          name:          `${type?.name ?? tail.typeId} (ex-${target.name})`,
+          tailNumber,
+          status:        'idle',   // set to 'assigned' below if it takes a route
+          ageWeeks:      tail.ageWeeks ?? 0,
+          config:        defaultConfig(type?.seats ?? 150),
+          ownershipType: 'owned',
+          acquired:      true,
+        };
+      });
+
+      // ── Inherit routes, assigning ONE tail each (player model = 1 aircraft/route).
+      // Frequency is capped to what a single airframe can fly; surplus tails stay
+      // idle in the fleet, ready to redeploy.
+      const assignedIds    = new Set();
+      const slotsByAirport = {};
       const inheritedRoutes = Object.entries(target.routes ?? {}).map(([key, cfg]) => {
         const [a, b] = key.split('-');
-        const refP = mktReferencePrice(a, b);
+        const refP   = mktReferencePrice(a, b);
+        const dist   = routeDistanceKm(a, b);
+
+        // Take the first available inherited tail on this route as the operator.
+        const poolIds   = tailsByRoute[key] ?? [];
+        const opId      = poolIds.find(id => !assignedIds.has(id)) ?? null;
+        const opType    = opId ? getAircraftType(acquiredFleet.find(f => f.id === opId)?.typeId) : null;
+        if (opId) assignedIds.add(opId);
+
+        // Cap frequency to a single tail's block-hour limit.
+        const cap  = opType ? Math.max(1, maxFrequency(dist, opType)) : (cfg.frequency ?? 7);
+        const freq = Math.min(cfg.frequency ?? 7, cap);
+
+        slotsByAirport[a] = (slotsByAirport[a] ?? 0) + freq;
+        slotsByAirport[b] = (slotsByAirport[b] ?? 0) + freq;
+
+        const basePrice = Math.round(refP * (cfg.priceMultiplier ?? 1));
         return {
           id:              uid(),
           origin:          a,
           destination:     b,
-          aircraftId:      null,   // unassigned — player must assign fleet
-          ticketPrice:     Math.round(refP * (cfg.priceMultiplier ?? 1)),
-          weeklyFrequency: cfg.frequency ?? 7,
+          aircraftId:      opId,
+          ticketPrice:     basePrice,
+          weeklyFrequency: freq,
           hub:             state.hub,
           weeksOpen:       0,
-          inherited:       true,   // flag so UI can highlight these
+          inherited:       true,
+          classPrices: {
+            economy:        basePrice,
+            premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
+            businessClass:  Math.round(basePrice * CLASS_FARE_MULTIPLIERS.businessClass),
+            firstClass:     Math.round(basePrice * CLASS_FARE_MULTIPLIERS.firstClass),
+          },
         };
       });
 
-      // Cancel any codeshare with the acquired competitor
+      // Mark assigned tails as such.
+      const acquiredFleetFinal = acquiredFleet.map(f =>
+        assignedIds.has(f.id) ? { ...f, status: 'assigned' } : f
+      );
+
+      // Grant gate slots at every airport the competitor served (plus home hub),
+      // sized to cover inherited route slots, merged with existing gates.
+      const newGates = { ...(state.gates ?? {}) };
+      for (const [code, slots] of Object.entries(slotsByAirport)) {
+        newGates[code] = (newGates[code] ?? 0) + Math.max(1, Math.ceil(slots / SLOTS_PER_GATE));
+      }
+      if (target.homeHub) {
+        newGates[target.homeHub] = Math.max(newGates[target.homeHub] ?? 0, 2);
+      }
+      const gatesGained = Object.values(newGates).reduce((s, v) => s + v, 0)
+                        - Object.values(state.gates ?? {}).reduce((s, v) => s + v, 0);
+
+      // Cancel any codeshare with the acquired competitor.
       const cleanedCodeshares = (state.codeshareAgreements ?? [])
         .filter(a => a.competitorId !== target.id);
+
+      const surplus = acquiredFleetFinal.length - assignedIds.size;
 
       return {
         ...state,
         cash:                state.cash - acquisitionCost + (target.cash ?? 0),
         routes:              [...state.routes, ...inheritedRoutes],
+        fleet:               [...state.fleet, ...acquiredFleetFinal],
+        gates:               newGates,
         competitors:         (state.competitors ?? []).filter(c => c.id !== target.id),
         codeshareAgreements: cleanedCodeshares,
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type: 'success',
+            icon: '🤝',
+            title: `Acquired ${target.name}`,
+            message: `+${inheritedRoutes.length} routes · +${acquiredFleetFinal.length} aircraft`
+                   + `${surplus > 0 ? ` (${surplus} spare)` : ''} · +${gatesGained} gates`,
+            duration: 8000,
+          },
+        ],
       };
     }
 
@@ -1110,6 +1200,48 @@ function reducer(state, action) {
       const { marketCap: newMarketCap, sharePrice: newSharePrice } =
         computeMarketCap(playerProfitHistory, newCash, state.awareness ?? 5);
 
+      // ── Board objectives check ───────────────────────────────────────────────
+      const objectivesEnabled = state.objectivesEnabled ?? true;
+
+      const objectiveSnap = {
+        routes:           state.routes,   // current routes (weeksOpen not yet incremented — fine for checks)
+        fleet:            agedFleet,      // fleet after aging tick, before deliveries
+        gates:            state.gates ?? {},
+        financialHistory: newHistory,
+        lastReport:       report,
+        weekProfit:       preTaxProfit - corporateTax,
+        year:             newYear,
+        week:             newWeek,
+      };
+
+      // For old saves that pre-date objectives: silently pre-mark already-met
+      // objectives so the player only earns credit for future achievements.
+      const currentObjectives = !objectivesEnabled
+        ? []
+        : state.objectives?.length
+          ? state.objectives
+          : initialObjectivesForState(objectiveSnap);
+
+      let objectiveCashBonus = 0;
+      let updatedObjectives = currentObjectives;
+
+      if (objectivesEnabled && currentObjectives.length > 0) {
+        const { newlyCompleted } = checkObjectives(currentObjectives, objectiveSnap);
+        updatedObjectives = currentObjectives.map(obj => {
+          if (!newlyCompleted.includes(obj.id)) return obj;
+          const tmpl = getObjective(obj.id);
+          objectiveCashBonus += tmpl?.reward ?? 0;
+          newToasts.push({
+            type:     'success',
+            title:    `🏅 Objective Complete — ${tmpl?.title ?? obj.id}`,
+            message:  `${tmpl?.desc ?? ''} · Board reward: +${(tmpl?.reward ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}`,
+            icon:     tmpl?.icon ?? '🏅',
+            duration: 9000,
+          });
+          return { ...obj, completed: true, completedWeek: state.week, completedYear: state.year };
+        });
+      }
+
       // ── Deliver pending aircraft orders ──────────────────────────────────────
       const newAbsWeek      = absoluteWeek(newYear, newWeek);
       const allPending      = state.pendingOrders ?? [];
@@ -1168,7 +1300,7 @@ function reducer(state, action) {
 
       return {
         ...state,
-        cash:              newCash,
+        cash:              newCash + objectiveCashBonus,
         week:              newWeek,
         year:              newYear,
         fleet:             finalFleet,
@@ -1186,6 +1318,8 @@ function reducer(state, action) {
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
+        objectives:               updatedObjectives,
+        objectivesEnabled,
         showDebrief:              true,
         pendingToasts:            newToasts,
         phase:                    newPhase,

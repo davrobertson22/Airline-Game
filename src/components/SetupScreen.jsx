@@ -96,20 +96,22 @@ function groupedAirports() {
 
 export default function SetupScreen() {
   const { dispatch } = useGame();
-  const [airlineName,  setAirlineName]  = useState('');
-  const [hub,          setHub]          = useState('JFK');
-  const [logoId,       setLogoId]       = useState(AIRLINE_LOGOS[0].id);
-  const [accentColor,  setAccentColor]  = useState(ACCENT_COLORS[0].hex);
+  const [airlineName,       setAirlineName]       = useState('');
+  const [hub,               setHub]               = useState('JFK');
+  const [logoId,            setLogoId]            = useState(AIRLINE_LOGOS[0].id);
+  const [accentColor,       setAccentColor]       = useState(ACCENT_COLORS[0].hex);
+  const [enableObjectives,  setEnableObjectives]  = useState(true);
 
   function handleStart(e) {
     e.preventDefault();
     if (!airlineName.trim()) return;
     dispatch({
-      type: 'START_GAME',
-      airlineName: airlineName.trim(),
+      type:             'START_GAME',
+      airlineName:      airlineName.trim(),
       hub,
       logoId,
-      logoColor: accentColor,
+      logoColor:        accentColor,
+      enableObjectives,
     });
   }
 
@@ -285,6 +287,59 @@ export default function SetupScreen() {
                 </span>
               </div>
             )}
+          </div>
+
+          {/* ── Board Objectives toggle ── */}
+          <div className="form-group">
+            <label className="form-label">Game Options</label>
+            <button
+              type="button"
+              onClick={() => setEnableObjectives(v => !v)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                width: '100%',
+                padding: '12px 14px',
+                background: 'var(--surface2)',
+                border: `1px solid ${enableObjectives ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              {/* Toggle pill */}
+              <div style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                background: enableObjectives ? 'var(--accent)' : 'var(--surface3)',
+                position: 'relative',
+                flexShrink: 0,
+                transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: enableObjectives ? 18 : 2,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                  🏅 Board Objectives
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {enableObjectives
+                    ? 'Earn cash rewards by hitting strategic milestones and financial targets'
+                    : 'Sandbox mode — no objectives, play freely'}
+                </div>
+              </div>
+            </button>
           </div>
 
           {/* ── How to play ── */}
