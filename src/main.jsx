@@ -5,8 +5,9 @@ import { GameProvider } from './store/GameContext.jsx';
 import { Analytics } from '@vercel/analytics/react';
 import './index.css';
 
-// Hide the static SEO landing page now that JS has loaded
-document.getElementById('seo-landing')?.remove();
+// The static landing page stays in place as the front door for every visit.
+// It is dismissed only when the user clicks "Play Free Now" (sets display:none),
+// so there's no flash/flicker from JS removing it on load.
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

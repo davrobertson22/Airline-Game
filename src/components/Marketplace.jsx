@@ -301,8 +301,8 @@ export default function Marketplace() {
           const discount      = buyDiscount(alreadyOwned);
           const buyPrice      = effectivePurchasePrice(type, alreadyOwned);
           const discPct       = Math.round(discount * 100);
-          const effScore      = efficiencyScore(type);
-          const effRaw        = seatEfficiency(type).toFixed(2);
+          const effScore      = efficiencyScore(type) ?? 0;
+          const effRaw        = (seatEfficiency(type) ?? 0).toFixed(2);
           const canAffordBuy  = cash >= buyPrice;
           const effColor      = effScore >= 70 ? 'var(--green)' : effScore >= 40 ? 'var(--yellow)' : 'var(--red)';
 
@@ -358,8 +358,8 @@ export default function Marketplace() {
                 {/* Stat pills */}
                 <div className="aircraft-stat-row">
                   <div className="aircraft-stat-pill">
-                    <span className="aircraft-stat-pill-label">Seats</span>
-                    <span className="aircraft-stat-pill-value">{type.seats}</span>
+                    <span className="aircraft-stat-pill-label">{type.freighter ? 'Payload' : 'Seats'}</span>
+                    <span className="aircraft-stat-pill-value">{type.freighter ? `${type.payloadTonnes}t` : type.seats}</span>
                   </div>
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">Range</span>
@@ -368,6 +368,14 @@ export default function Marketplace() {
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">Fuel burn</span>
                     <span className="aircraft-stat-pill-value">{type.fuelBurnPer100km.toFixed(0)} L/100km</span>
+                  </div>
+                  <div className="aircraft-stat-pill">
+                    <span className="aircraft-stat-pill-label">{type.freighter ? 'L/t/100km' : 'L/seat/100km'}</span>
+                    <span className="aircraft-stat-pill-value">
+                      {type.freighter
+                        ? (type.fuelBurnPer100km / type.payloadTonnes).toFixed(2)
+                        : (type.fuelBurnPer100km / type.seats).toFixed(2)}
+                    </span>
                   </div>
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">Maint/wk</span>

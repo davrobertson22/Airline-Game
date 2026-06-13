@@ -3,6 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Skip the static landing for anyone who already has a session (including
+      mid-signup). Runs in <head> before the body is parsed/painted, and hides
+      via CSS so the landing is never rendered for returning visitors — no flash.
+      Brand-new visitors (no save) still see the landing as the front door.
+    -->
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem('bbae_save_v2')) {
+            document.documentElement.setAttribute('data-skip-landing', '1');
+          }
+        } catch (e) { /* show landing on any error */ }
+      })();
+    </script>
+    <style>
+      html[data-skip-landing="1"] #seo-landing { display: none !important; }
+    </style>
     <title>Tailwinds — Free Browser Airline Management Game</title>
     <meta name="description" content="Build and manage your own airline empire in Tailwinds — the free browser strategy game. Lease aircraft, open routes, manage hubs, crush competitors, and grow from a regional carrier to a global airline." />
     <meta name="keywords" content="airline management game, browser strategy game, airline simulator, free online game, airline tycoon, flight management game" />
