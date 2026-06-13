@@ -37,7 +37,7 @@ export const AIRCRAFT_TYPES = [
     supersonic: true,
     ticketPremium: 2.75,
     description: 'The supersonic icon. Mach 2 transatlantic crossing in under 3.5 hours. Ticket premiums of 2.5× partially offset the extraordinary fuel burn — prestige over profit.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Concorde_at_Filton.jpg/960px-Concorde_at_Filton.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Concorde_sst_b_afp.jpg/960px-Concorde_sst_b_afp.jpg',
   },
 
   // ── AIRBUS ──────────────────────────────────────────────────────────────────
