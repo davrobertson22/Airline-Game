@@ -590,8 +590,11 @@ export function weeklyTick(state) {
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier);
     if (!result) continue;
 
-    // Connecting passengers: additional revenue from hub-feed and partner agreements
-    const connecting = computeConnectingDemand(
+    // Connecting passengers: additional revenue from hub-feed and partner agreements.
+    // The cannibalizationMap factor reduces connecting demand on routes where a
+    // direct flight (own or competitor) siphons off O&D passengers that previously
+    // connected through the player's hubs.
+    const connectingRaw = computeConnectingDemand(
       route.origin,
       route.destination,
       hubs,
@@ -600,6 +603,17 @@ export function weeklyTick(state) {
       route.ticketPrice,
       { weeklyFrequency: route.weeklyFrequency ?? 7, partnerHubCodes },
     );
+    const cannibFactor = cannibalizationMap[routeKey] ?? 1.0;
+    const connecting   = cannibFactor < 1.0
+      ? {
+          ...connectingRaw,
+          totalPax:     Math.round(connectingRaw.totalPax     * cannibFactor),
+          totalRevenue: Math.round(connectingRaw.totalRevenue * cannibFactor),
+          origin:       { ...connectingRaw.origin,      pax: Math.round((connectingRaw.origin?.pax      ?? 0) * cannibFactor), revenue: Math.round((connectingRaw.origin?.revenue      ?? 0) * cannibFactor) },
+          destination:  { ...connectingRaw.destination, pax: Math.round((connectingRaw.destination?.pax ?? 0) * cannibFactor), revenue: Math.round((connectingRaw.destination?.revenue ?? 0) * cannibFactor) },
+          cannibalizationFactor: +cannibFactor.toFixed(3),
+        }
+      : connectingRaw;
 
     // Apply marketing + loyalty + alliance demand boosts to passenger revenue
     const routeKey       = [route.origin, route.destination].sort().join('-');
@@ -721,30 +735,16 @@ export function weeklyTick(state) {
   const totalLoyaltyCost  = loyaltyInvestment + loyaltyPointsCost;
 
   // 11. Alliance & codeshare partnerships
-  // — Interline revenue from alliance members
-  let totalAllianceRevenue = 0;
-  if (allianceDef) {
-    for (const memberId of allianceDef.memberIds) {
-      const comp = competitors.find(c => c.id === memberId);
-      if (!comp) continue;
-      totalAllianceRevenue += partnerInterlineRevenue(
-        comp, servedAirports, allianceDef.interlineFraction ?? 0.65
-      );
-    }
-  }
-  const totalAllianceFee = allianceMembership ? (allianceDef?.weeklyFee ?? 0) : 0;
+  // O&D-based partner revenue (replaces the old flat per-adjacent-route model).
+  // Computed by network.js: for each mixed-leg connection (player leg + partner leg),
+  // the player earns a mileage-prorated share of the itinerary fare.
+  const totalAllianceRevenue  = 0;   // now folded into partnerODRevenue
+  const totalCodeshareRevenue = partnerODRevenue.totalRevenue;
+  const totalPartnerRevenue   = partnerODRevenue.totalRevenue;
 
-  // — Interline revenue from bilateral codeshare partners
-  let totalCodeshareRevenue = 0;
-  for (const agreement of codeshareAgreements) {
-    const comp = competitors.find(c => c.id === agreement.competitorId);
-    if (!comp) continue;
-    totalCodeshareRevenue += partnerInterlineRevenue(comp, servedAirports, 1.0);
-  }
+  const totalAllianceFee   = allianceMembership ? (allianceDef?.weeklyFee ?? 0) : 0;
   const totalCodeshareFees = codeshareAgreements.reduce((s, a) => s + (a.weeklyFee ?? 0), 0);
-
-  const totalPartnerRevenue = totalAllianceRevenue + totalCodeshareRevenue;
-  const totalPartnerFees    = totalAllianceFee + totalCodeshareFees;
+  const totalPartnerFees   = totalAllianceFee + totalCodeshareFees;
 
   // Distribution: GDS fees, OTA commissions, credit-card processing (~2.5% of revenue)
   const totalDistributionCost = Math.round((totalRevenue + totalPartnerRevenue) * DISTRIBUTION_COST_PCT);
@@ -786,6 +786,10 @@ export function weeklyTick(state) {
     totalAllianceFee:       Math.round(totalAllianceFee),
     totalCodeshareFees:     Math.round(totalCodeshareFees),
     totalPartnerFees:       Math.round(totalPartnerFees),
+    // Network / O&D data for the UI and GameContext
+    partnerODRevenue,        // { totalRevenue, entries[] } — detailed O&D breakdown
+    partnerHealthDecay,      // { [competitorId]: hpLost } — for partnership state updates
+    networkConnections:      networkTick.connections, // full Connection[] for debugging/UI
     loyaltyMultiplier,
     awarenessMultiplier,
     totalPassengers,
