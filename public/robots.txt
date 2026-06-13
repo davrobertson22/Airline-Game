@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://tailwindsairlinegame.com/sitemap.xml
+Sitemap: https://www.tailwindsairlinegame.com/sitemap.xml
