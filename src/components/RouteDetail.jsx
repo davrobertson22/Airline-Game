@@ -12,6 +12,8 @@ import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
+import { normalizeCateringLevel } from '../data/catering.js';
+import CateringSelector from './CateringSelector.jsx';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -110,7 +112,7 @@ function MarketSharePie({ slices }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function RouteDetail({ origin, dest, onBack }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const gameDate  = { week: state.week, month: weekToMonth(state.week) };
   const hubs      = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
 
@@ -195,6 +197,14 @@ export default function RouteDetail({ origin, dest, onBack }) {
     return s + result.totalOpCost + lf;
   }, 0);
   const avgLoad      = playerSims.length ? playerSims.reduce((s, {result}) => s + result.loadFactor, 0) / playerSims.length : 0;
+
+  // Catering — per-route setting, edited here for the whole pair
+  const catRev    = playerSims.reduce((s, { result }) => s + (result.cateringRevenue ?? 0), 0);
+  const catCost   = playerSims.reduce((s, { result }) => s + (result.cateringCost    ?? 0), 0);
+  const catLevels = [...new Set(playerRoutes.map(r => normalizeCateringLevel(r.cateringLevel)))];
+  const catLevel  = catLevels.length === 1 ? catLevels[0] : null;
+  const setRouteCatering = (level) =>
+    dispatch({ type: 'SET_ROUTE_CATERING', routeIds: playerRoutes.map(r => r.id), level });
 
   // Aggregate class summary across all player sims
   const CABIN_ORDER = ['firstClass', 'businessClass', 'premiumEconomy', 'economy'];
@@ -346,6 +356,21 @@ export default function RouteDetail({ origin, dest, onBack }) {
             <Stat label="Revenue/wk"   value={formatMoney(totalRev)} color="var(--green)" />
             <Stat label="Op Cost/wk"   value={formatMoney(totalOpCost)} color="var(--red)" />
             <Stat label="Op Profit/wk" value={(totalRev - totalOpCost >= 0 ? '+' : '') + formatMoney(totalRev - totalOpCost)} color={totalRev - totalOpCost >= 0 ? 'var(--green)' : 'var(--red)'} />
+            <Stat
+              label="Catering net/wk"
+              value={(catRev - catCost >= 0 ? '+' : '') + formatMoney(catRev - catCost)}
+              sub={`+${formatMoney(catRev)} rev · −${formatMoney(catCost)} cost`}
+              color={catRev - catCost >= 0 ? 'var(--green)' : 'var(--red)'}
+            />
+          </div>
+          {/* Catering service level */}
+          <div style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
+            <CateringSelector
+              value={catLevel ?? 'full'}
+              onChange={setRouteCatering}
+              distKm={dist}
+              label={catLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
+            />
           </div>
           {/* Load factor by class */}
           {activeClasses.length > 0 && (

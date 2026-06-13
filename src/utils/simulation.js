@@ -8,13 +8,13 @@ import {
   weeklyInsuranceCost,
   weeklyLandingFee,
   marketingDemandMultiplier,
-  weeklyCateringCost,
   weeklyLayoverCost,
   weeklyPassengerCompensation,
   weeklyGroundHandlingCost,
   weeklyLoungeCost,
   DISTRIBUTION_COST_PCT,
 } from '../data/overhead.js';
+import { routeCatering, cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
 import {
   buildRouteMarket,
   computeMarketShare,
@@ -413,8 +413,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   });
   // Space bonus: floor left empty (lower density) gives passengers more room.
   const spaceQualityBonus = configSpaceQualityBonus(config, type);
+  // Catering quality: the route's catering level moves perceived quality up or
+  // down, amplified by distance (food matters more on long flights). Stacks with
+  // the per-aircraft service quality already baked into rawQualityScore.
+  const cateringLevel    = normalizeCateringLevel(route.cateringLevel);
+  const cateringQuality  = cateringQualityBonus(cateringLevel, dist);
   // Hub quality bonus: routes through a player-designated hub get a quality boost from hub investment
-  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + spaceQualityBonus + (route.hubQualityBonus ?? 0)));
+  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + spaceQualityBonus + cateringQuality + (route.hubQualityBonus ?? 0)));
 
   // Hub connectivity bonus (mirrors old hubBonus but expressed as 0–0.25 for the utility model)
   const connectivityBonus = (route.origin === route.hub || route.destination === route.hub) ? 0.20 : 0;
@@ -546,8 +551,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     (SEAT_QUALITY_COST_PER_ROUTE[config.seatQuality ?? 'standard'] ?? 0) +
     (SERVICE_QUALITY_COST_PER_ROUTE[config.serviceQuality ?? 'standard'] ?? 0);
 
-  // Catering — per boarded passenger, by cabin class
-  const cateringCost = weeklyCateringCost(classSummary);
+  // Catering — driven by the route's chosen service level. Cost AND ancillary
+  // revenue both scale with distance; revenue only on the paid/hybrid levels.
+  const catering        = routeCatering(cateringLevel, classSummary, dist);
+  const cateringCost    = catering.cost;
+  const cateringRevenue = catering.revenue;
+  // Ancillary catering income folds straight into route revenue.
+  totalRevenue += cateringRevenue;
 
   // Ground handling — ramp, baggage, gate agents, pushback; per boarded passenger
   const groundHandlingCost = weeklyGroundHandlingCost(classSummary);
@@ -572,6 +582,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     crewCost,
     qualityCost,
     cateringCost,
+    cateringRevenue,
+    cateringLevel,
+    cateringQuality,
+    cateringByClass: catering.byClass,
     groundHandlingCost,
     loungeCost,
     layoverCost,
@@ -686,7 +700,8 @@ export function weeklyTick(state) {
   let totalFuel           = 0;
   let totalCrew           = 0;
   let totalQuality        = 0;
-  let totalCatering       = 0;
+  let totalCatering       = 0;   // catering COST
+  let totalCateringRevenue = 0;  // ancillary catering REVENUE
   let totalGroundHandling = 0;
   let totalLounge         = 0;
   let totalLayover        = 0;
@@ -752,7 +767,12 @@ export function weeklyTick(state) {
     const marketingLift  = mktMultiplier - 1;
     const loyaltyLift    = loyaltyMultiplier - 1;
     const combinedMult   = awarenessMultiplier * mktMultiplier * loyaltyMultiplier * (1 + allianceLift);
-    const boostedRevenue = Math.round(result.revenue * combinedMult);
+    // Ancillary catering revenue is per-actual-passenger income — it should NOT be
+    // amplified by the marketing/awareness/loyalty demand multipliers (those proxy
+    // for attracting MORE passengers, which catering income would then double-count).
+    // Strip it out before boosting, then add it back unscaled.
+    const cateringRev    = result.cateringRevenue ?? 0;
+    const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
     const routeRevenue   = boostedRevenue + connecting.totalRevenue;
 
     // Landing & navigation fees for this route
@@ -771,7 +791,8 @@ export function weeklyTick(state) {
     totalFuel           += result.fuelCost;
     totalCrew           += result.crewCost;
     totalQuality        += result.qualityCost;
-    totalCatering       += result.cateringCost        ?? 0;
+    totalCatering        += result.cateringCost       ?? 0;
+    totalCateringRevenue += cateringRev;
     totalGroundHandling += result.groundHandlingCost  ?? 0;
     totalLounge         += result.loungeCost          ?? 0;
     totalLayover        += result.layoverCost         ?? 0;
@@ -898,6 +919,7 @@ export function weeklyTick(state) {
     totalQuality:           Math.round(totalQuality),
     totalLandingFees:       Math.round(totalLandingFees),
     totalCatering:          Math.round(totalCatering),
+    totalCateringRevenue:   Math.round(totalCateringRevenue),
     totalGroundHandling:    Math.round(totalGroundHandling),
     totalLounge:            Math.round(totalLounge),
     totalDistributionCost:  Math.round(totalDistributionCost),

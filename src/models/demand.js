@@ -551,6 +551,42 @@ export const COMPETITOR_AIRLINES = [
   { id: 'orientprestige',name: 'Orient Prestige',      homeHub: 'HKG', tier: 'premium', logoId: 'compass', baseQualityScore: 80, cash: 65_000_000, weeklyStats: null, routes: {} },
   { id: 'nordicelite',   name: 'Nordic Elite',         homeHub: 'ARN', tier: 'premium', logoId: 'arctic',  baseQualityScore: 78, cash: 35_000_000, weeklyStats: null, routes: {} },
   { id: 'pampapremium',  name: 'Pampa Premium',        homeHub: 'GRU', tier: 'premium', logoId: 'summit',  baseQualityScore: 76, cash: 42_000_000, weeklyStats: null, routes: {} },
+
+  // ── Legacy (new) ──────────────────────────────────────────────────────────
+  { id: 'transafrica',      name: 'TransAfrica Airways', homeHub: 'NBO', tier: 'legacy',  logoId: 'comet',   baseQualityScore: 63, cash: 28_000_000, weeklyStats: null, routes: {} },
+  { id: 'indiastar',        name: 'India Star',           homeHub: 'BOM', tier: 'legacy',  logoId: 'horizon', baseQualityScore: 67, cash: 42_000_000, weeklyStats: null, routes: {} },
+  { id: 'canadianpride',    name: 'Canadian Pride',       homeHub: 'YYZ', tier: 'legacy',  logoId: 'eagle',   baseQualityScore: 66, cash: 38_000_000, weeklyStats: null, routes: {} },
+  { id: 'bosphorusair',     name: 'Bosphorus Air',        homeHub: 'IST', tier: 'legacy',  logoId: 'compass', baseQualityScore: 65, cash: 36_000_000, weeklyStats: null, routes: {} },
+  { id: 'dragoneast',       name: 'Dragon East',          homeHub: 'PVG', tier: 'legacy',  logoId: 'jade',    baseQualityScore: 68, cash: 44_000_000, weeklyStats: null, routes: {} },
+  { id: 'aztecair',         name: 'Aztec Air',            homeHub: 'MEX', tier: 'legacy',  logoId: 'phoenix', baseQualityScore: 62, cash: 30_000_000, weeklyStats: null, routes: {} },
+  { id: 'norseman',         name: 'Norseman Airlines',    homeHub: 'CPH', tier: 'legacy',  logoId: 'arctic',  baseQualityScore: 67, cash: 40_000_000, weeklyStats: null, routes: {} },
+  { id: 'romaair',          name: 'Roma Air',             homeHub: 'FCO', tier: 'legacy',  logoId: 'summit',  baseQualityScore: 63, cash: 32_000_000, weeklyStats: null, routes: {} },
+  { id: 'savannahair',      name: 'Savannah Air',         homeHub: 'JNB', tier: 'legacy',  logoId: 'horizon', baseQualityScore: 61, cash: 26_000_000, weeklyStats: null, routes: {} },
+  { id: 'hellenicair',      name: 'Hellenic Air',         homeHub: 'ATH', tier: 'legacy',  logoId: 'compass', baseQualityScore: 60, cash: 24_000_000, weeklyStats: null, routes: {} },
+  { id: 'maplecross',       name: 'Maple Cross Air',      homeHub: 'YVR', tier: 'legacy',  logoId: 'comet',   baseQualityScore: 64, cash: 34_000_000, weeklyStats: null, routes: {} },
+  { id: 'cariocaair',       name: 'Carioca Air',          homeHub: 'GIG', tier: 'legacy',  logoId: 'phoenix', baseQualityScore: 61, cash: 28_000_000, weeklyStats: null, routes: {} },
+
+  // ── Budget (new) ───────────────────────────────────────────────────────────
+  { id: 'wingit',           name: 'WingIt',               homeHub: 'DUB', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 37, cash:  9_000_000, weeklyStats: null, routes: {} },
+  { id: 'frugalfly',        name: 'FrugalFly',            homeHub: 'BER', tier: 'budget',  logoId: 'prism',   baseQualityScore: 36, cash:  7_000_000, weeklyStats: null, routes: {} },
+  { id: 'bargainbird',      name: 'BargainBird',          homeHub: 'PHX', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 39, cash: 11_000_000, weeklyStats: null, routes: {} },
+  { id: 'bahtjet',          name: 'BahtJet',              homeHub: 'KUL', tier: 'budget',  logoId: 'prism',   baseQualityScore: 37, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'rupeefly',         name: 'RupeeFly',             homeHub: 'DEL', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 35, cash:  7_000_000, weeklyStats: null, routes: {} },
+  { id: 'pesojet',          name: 'PesoJet',              homeHub: 'MEX', tier: 'budget',  logoId: 'prism',   baseQualityScore: 38, cash:  9_000_000, weeklyStats: null, routes: {} },
+  { id: 'suncoast',         name: 'Suncoast Air',         homeHub: 'MCO', tier: 'budget',  logoId: 'phoenix', baseQualityScore: 40, cash: 10_000_000, weeklyStats: null, routes: {} },
+  { id: 'pampalow',         name: 'Pampa Low',            homeHub: 'EZE', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 36, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'saharafly',        name: 'SaharaFly',            homeHub: 'CAI', tier: 'budget',  logoId: 'prism',   baseQualityScore: 35, cash:  6_000_000, weeklyStats: null, routes: {} },
+  { id: 'balticjet',        name: 'Baltic Jet',           homeHub: 'RIX', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 34, cash:  6_000_000, weeklyStats: null, routes: {} },
+
+  // ── Premium (new) ──────────────────────────────────────────────────────────
+  { id: 'tokyoprestige',    name: 'Tokyo Prestige',       homeHub: 'NRT', tier: 'premium', logoId: 'crown',   baseQualityScore: 87, cash: 72_000_000, weeklyStats: null, routes: {} },
+  { id: 'zuerichfirst',     name: 'Zürich First',         homeHub: 'ZRH', tier: 'premium', logoId: 'sapphire',baseQualityScore: 84, cash: 68_000_000, weeklyStats: null, routes: {} },
+  { id: 'mumbaiselect',     name: 'Mumbai Select',        homeHub: 'BOM', tier: 'premium', logoId: 'crown',   baseQualityScore: 80, cash: 62_000_000, weeklyStats: null, routes: {} },
+  { id: 'shanghailux',      name: 'Shanghai Lux',         homeHub: 'PVG', tier: 'premium', logoId: 'jade',    baseQualityScore: 82, cash: 66_000_000, weeklyStats: null, routes: {} },
+  { id: 'istanbulprestige', name: 'Istanbul Prestige',    homeHub: 'IST', tier: 'premium', logoId: 'sapphire',baseQualityScore: 79, cash: 58_000_000, weeklyStats: null, routes: {} },
+  { id: 'patagoniafirst',   name: 'Patagonia First',      homeHub: 'SCL', tier: 'premium', logoId: 'crown',   baseQualityScore: 76, cash: 48_000_000, weeklyStats: null, routes: {} },
+  { id: 'oceaniaprestige',  name: 'Oceania Prestige',     homeHub: 'AKL', tier: 'premium', logoId: 'compass', baseQualityScore: 78, cash: 52_000_000, weeklyStats: null, routes: {} },
+  { id: 'capediamonds',     name: 'Cape Diamonds',        homeHub: 'CPT', tier: 'premium', logoId: 'sapphire',baseQualityScore: 77, cash: 50_000_000, weeklyStats: null, routes: {} },
 ];
 
 // ─── Hub tiers ────────────────────────────────────────────────────────────────
@@ -964,6 +1000,262 @@ const COMPETITOR_DEFAULT_ROUTES = {
     'GRU-MIA': { frequency:  5, priceMultiplier: 1.40 }, // São Paulo–Miami
     'GRU-SCL': { frequency:  7, priceMultiplier: 1.32 }, // São Paulo–Santiago
   },
+  // ── Legacy (new) ──────────────────────────────────────────────────────────
+  transafrica: {
+    'JNB-NBO': { frequency:  7, priceMultiplier: 1.02 }, // Nairobi–Johannesburg
+    'DXB-NBO': { frequency:  7, priceMultiplier: 1.04 }, // Nairobi–Dubai
+    'LHR-NBO': { frequency:  5, priceMultiplier: 1.07 }, // Nairobi–London
+    'CDG-NBO': { frequency:  3, priceMultiplier: 1.06 }, // Nairobi–Paris
+    'BOM-NBO': { frequency:  4, priceMultiplier: 1.05 }, // Nairobi–Mumbai
+    'NBO-SIN': { frequency:  4, priceMultiplier: 1.06 }, // Nairobi–Singapore
+  },
+  indiastar: {
+    'BOM-DEL': { frequency: 21, priceMultiplier: 1.02 }, // Mumbai–Delhi domestic
+    'BOM-DXB': { frequency: 14, priceMultiplier: 1.04 }, // Mumbai–Dubai
+    'BOM-LHR': { frequency:  7, priceMultiplier: 1.07 }, // Mumbai–London
+    'BOM-SIN': { frequency:  7, priceMultiplier: 1.05 }, // Mumbai–Singapore
+    'BOM-CDG': { frequency:  4, priceMultiplier: 1.06 }, // Mumbai–Paris
+    'BOM-NRT': { frequency:  4, priceMultiplier: 1.07 }, // Mumbai–Tokyo
+  },
+  canadianpride: {
+    'JFK-YYZ': { frequency: 14, priceMultiplier: 1.04 }, // Toronto–New York
+    'LHR-YYZ': { frequency:  7, priceMultiplier: 1.06 }, // Toronto–London
+    'LAX-YYZ': { frequency:  7, priceMultiplier: 1.05 }, // Toronto–LA
+    'CDG-YYZ': { frequency:  4, priceMultiplier: 1.06 }, // Toronto–Paris
+    'NRT-YYZ': { frequency:  4, priceMultiplier: 1.07 }, // Toronto–Tokyo
+    'YVR-YYZ': { frequency: 14, priceMultiplier: 1.03 }, // Toronto–Vancouver
+  },
+  bosphorusair: {
+    'IST-LHR': { frequency: 10, priceMultiplier: 1.04 }, // Istanbul–London
+    'FRA-IST': { frequency:  7, priceMultiplier: 1.03 }, // Istanbul–Frankfurt
+    'CDG-IST': { frequency:  7, priceMultiplier: 1.04 }, // Istanbul–Paris
+    'IST-JFK': { frequency:  5, priceMultiplier: 1.07 }, // Istanbul–New York
+    'DXB-IST': { frequency:  7, priceMultiplier: 1.05 }, // Istanbul–Dubai
+    'DEL-IST': { frequency:  5, priceMultiplier: 1.05 }, // Istanbul–Delhi
+    'BKK-IST': { frequency:  4, priceMultiplier: 1.06 }, // Istanbul–Bangkok
+  },
+  dragoneast: {
+    'NRT-PVG': { frequency: 14, priceMultiplier: 1.05 }, // Shanghai–Tokyo
+    'HKG-PVG': { frequency: 14, priceMultiplier: 1.04 }, // Shanghai–Hong Kong
+    'PVG-SIN': { frequency:  7, priceMultiplier: 1.05 }, // Shanghai–Singapore
+    'LHR-PVG': { frequency:  5, priceMultiplier: 1.08 }, // Shanghai–London
+    'FRA-PVG': { frequency:  4, priceMultiplier: 1.07 }, // Shanghai–Frankfurt
+    'LAX-PVG': { frequency:  5, priceMultiplier: 1.08 }, // Shanghai–LA
+  },
+  aztecair: {
+    'JFK-MEX': { frequency: 10, priceMultiplier: 1.05 }, // Mexico City–New York
+    'LAX-MEX': { frequency: 14, priceMultiplier: 1.04 }, // Mexico City–LA
+    'MEX-MIA': { frequency: 10, priceMultiplier: 1.04 }, // Mexico City–Miami
+    'MAD-MEX': { frequency:  5, priceMultiplier: 1.06 }, // Mexico City–Madrid
+    'BOG-MEX': { frequency:  7, priceMultiplier: 1.05 }, // Mexico City–Bogotá
+    'MEX-ORD': { frequency:  7, priceMultiplier: 1.04 }, // Mexico City–Chicago
+  },
+  norseman: {
+    'CPH-LHR': { frequency:  7, priceMultiplier: 1.04 }, // Copenhagen–London
+    'CPH-FRA': { frequency:  7, priceMultiplier: 1.03 }, // Copenhagen–Frankfurt
+    'CDG-CPH': { frequency:  7, priceMultiplier: 1.04 }, // Copenhagen–Paris
+    'CPH-JFK': { frequency:  5, priceMultiplier: 1.07 }, // Copenhagen–New York
+    'CPH-DXB': { frequency:  5, priceMultiplier: 1.06 }, // Copenhagen–Dubai
+    'ARN-CPH': { frequency: 10, priceMultiplier: 1.02 }, // Copenhagen–Stockholm
+  },
+  romaair: {
+    'FCO-LHR': { frequency:  7, priceMultiplier: 1.04 }, // Rome–London
+    'CDG-FCO': { frequency: 10, priceMultiplier: 1.03 }, // Rome–Paris
+    'FCO-FRA': { frequency:  7, priceMultiplier: 1.03 }, // Rome–Frankfurt
+    'FCO-JFK': { frequency:  5, priceMultiplier: 1.07 }, // Rome–New York
+    'DXB-FCO': { frequency:  5, priceMultiplier: 1.06 }, // Rome–Dubai
+    'FCO-MAD': { frequency:  7, priceMultiplier: 1.03 }, // Rome–Madrid
+  },
+  savannahair: {
+    'JNB-LHR': { frequency:  5, priceMultiplier: 1.06 }, // Johannesburg–London
+    'DXB-JNB': { frequency:  7, priceMultiplier: 1.05 }, // Johannesburg–Dubai
+    'JNB-NBO': { frequency:  7, priceMultiplier: 1.02 }, // Johannesburg–Nairobi
+    'CDG-JNB': { frequency:  3, priceMultiplier: 1.06 }, // Johannesburg–Paris
+    'GRU-JNB': { frequency:  3, priceMultiplier: 1.06 }, // Johannesburg–São Paulo
+    'JNB-SIN': { frequency:  4, priceMultiplier: 1.07 }, // Johannesburg–Singapore
+  },
+  hellenicair: {
+    'ATH-LHR': { frequency:  7, priceMultiplier: 1.04 }, // Athens–London
+    'ATH-CDG': { frequency:  7, priceMultiplier: 1.03 }, // Athens–Paris
+    'ATH-FRA': { frequency:  7, priceMultiplier: 1.03 }, // Athens–Frankfurt
+    'ATH-DXB': { frequency:  5, priceMultiplier: 1.05 }, // Athens–Dubai
+    'ATH-JFK': { frequency:  4, priceMultiplier: 1.07 }, // Athens–New York
+    'AMS-ATH': { frequency: 10, priceMultiplier: 1.02 }, // Athens–Amsterdam
+  },
+  maplecross: {
+    'LAX-YVR': { frequency: 14, priceMultiplier: 1.04 }, // Vancouver–LA
+    'NRT-YVR': { frequency:  5, priceMultiplier: 1.07 }, // Vancouver–Tokyo
+    'LHR-YVR': { frequency:  5, priceMultiplier: 1.06 }, // Vancouver–London
+    'SFO-YVR': { frequency: 10, priceMultiplier: 1.03 }, // Vancouver–San Francisco
+    'YVR-YYZ': { frequency: 10, priceMultiplier: 1.04 }, // Vancouver–Toronto
+    'HKG-YVR': { frequency:  4, priceMultiplier: 1.07 }, // Vancouver–Hong Kong
+  },
+  cariocaair: {
+    'EZE-GIG': { frequency:  7, priceMultiplier: 1.03 }, // Rio–Buenos Aires
+    'GIG-GRU': { frequency: 14, priceMultiplier: 1.02 }, // Rio–São Paulo
+    'GIG-LHR': { frequency:  4, priceMultiplier: 1.07 }, // Rio–London
+    'CDG-GIG': { frequency:  3, priceMultiplier: 1.07 }, // Rio–Paris
+    'GIG-MIA': { frequency:  5, priceMultiplier: 1.05 }, // Rio–Miami
+    'GIG-LAX': { frequency:  3, priceMultiplier: 1.08 }, // Rio–LA
+  },
+
+  // ── Budget (new) ───────────────────────────────────────────────────────────
+  wingit: {
+    'DUB-LHR': { frequency: 21, priceMultiplier: 0.72 }, // Dublin–London
+    'BCN-DUB': { frequency: 10, priceMultiplier: 0.74 }, // Dublin–Barcelona
+    'CDG-DUB': { frequency: 14, priceMultiplier: 0.73 }, // Dublin–Paris
+    'DUB-FCO': { frequency:  7, priceMultiplier: 0.75 }, // Dublin–Rome
+    'AMS-DUB': { frequency: 10, priceMultiplier: 0.73 }, // Dublin–Amsterdam
+    'DUB-MAD': { frequency:  7, priceMultiplier: 0.74 }, // Dublin–Madrid
+    'DUB-LIS': { frequency:  7, priceMultiplier: 0.73 }, // Dublin–Lisbon
+  },
+  frugalfly: {
+    'BER-LHR': { frequency: 14, priceMultiplier: 0.73 }, // Berlin–London
+    'BCN-BER': { frequency: 10, priceMultiplier: 0.74 }, // Berlin–Barcelona
+    'BER-FCO': { frequency:  7, priceMultiplier: 0.74 }, // Berlin–Rome
+    'BER-MAD': { frequency:  7, priceMultiplier: 0.74 }, // Berlin–Madrid
+    'AMS-BER': { frequency: 14, priceMultiplier: 0.72 }, // Berlin–Amsterdam
+    'ATH-BER': { frequency:  7, priceMultiplier: 0.75 }, // Berlin–Athens
+    'BER-DUB': { frequency:  7, priceMultiplier: 0.73 }, // Berlin–Dublin
+  },
+  bargainbird: {
+    'LAX-PHX': { frequency: 28, priceMultiplier: 0.74 }, // Phoenix–LA
+    'LAS-PHX': { frequency: 14, priceMultiplier: 0.73 }, // Phoenix–Vegas
+    'DEN-PHX': { frequency: 14, priceMultiplier: 0.74 }, // Phoenix–Denver
+    'ORD-PHX': { frequency: 14, priceMultiplier: 0.76 }, // Phoenix–Chicago
+    'DFW-PHX': { frequency: 10, priceMultiplier: 0.75 }, // Phoenix–Dallas
+    'PHX-SFO': { frequency: 14, priceMultiplier: 0.75 }, // Phoenix–San Francisco
+    'PHX-SEA': { frequency:  7, priceMultiplier: 0.76 }, // Phoenix–Seattle
+  },
+  bahtjet: {
+    'KUL-SIN': { frequency: 28, priceMultiplier: 0.72 }, // KL–Singapore
+    'BKK-KUL': { frequency: 21, priceMultiplier: 0.73 }, // KL–Bangkok
+    'CGK-KUL': { frequency: 14, priceMultiplier: 0.73 }, // KL–Jakarta
+    'KUL-MNL': { frequency: 10, priceMultiplier: 0.74 }, // KL–Manila
+    'HKG-KUL': { frequency:  7, priceMultiplier: 0.75 }, // KL–Hong Kong
+    'DEL-KUL': { frequency:  7, priceMultiplier: 0.76 }, // KL–Delhi
+    'BOM-KUL': { frequency:  7, priceMultiplier: 0.76 }, // KL–Mumbai
+  },
+  rupeefly: {
+    'BOM-DEL': { frequency: 28, priceMultiplier: 0.72 }, // Delhi–Mumbai
+    'DEL-DXB': { frequency: 21, priceMultiplier: 0.74 }, // Delhi–Dubai
+    'DEL-SIN': { frequency: 14, priceMultiplier: 0.74 }, // Delhi–Singapore
+    'BKK-DEL': { frequency:  7, priceMultiplier: 0.75 }, // Delhi–Bangkok
+    'DEL-KUL': { frequency:  7, priceMultiplier: 0.75 }, // Delhi–KL
+    'DEL-LHR': { frequency:  7, priceMultiplier: 0.78 }, // Delhi–London
+    'DEL-ICN': { frequency:  5, priceMultiplier: 0.77 }, // Delhi–Seoul
+  },
+  pesojet: {
+    'LAX-MEX': { frequency: 21, priceMultiplier: 0.76 }, // Mexico City–LA
+    'MEX-ORD': { frequency: 14, priceMultiplier: 0.77 }, // Mexico City–Chicago
+    'MEX-MIA': { frequency: 14, priceMultiplier: 0.76 }, // Mexico City–Miami
+    'DFW-MEX': { frequency: 10, priceMultiplier: 0.76 }, // Mexico City–Dallas
+    'BOG-MEX': { frequency:  7, priceMultiplier: 0.80 }, // Mexico City–Bogotá
+    'LIM-MEX': { frequency:  5, priceMultiplier: 0.79 }, // Mexico City–Lima
+    'JFK-MEX': { frequency:  7, priceMultiplier: 0.79 }, // Mexico City–New York
+  },
+  suncoast: {
+    'JFK-MCO': { frequency: 21, priceMultiplier: 0.76 }, // Orlando–New York
+    'MCO-ORD': { frequency: 14, priceMultiplier: 0.77 }, // Orlando–Chicago
+    'LAX-MCO': { frequency:  7, priceMultiplier: 0.79 }, // Orlando–LA
+    'MCO-MIA': { frequency: 21, priceMultiplier: 0.74 }, // Orlando–Miami
+    'ATL-MCO': { frequency: 14, priceMultiplier: 0.76 }, // Orlando–Atlanta
+    'BOS-MCO': { frequency: 10, priceMultiplier: 0.77 }, // Orlando–Boston
+    'DFW-MCO': { frequency:  7, priceMultiplier: 0.77 }, // Orlando–Dallas
+  },
+  pampalow: {
+    'EZE-GRU': { frequency: 14, priceMultiplier: 0.76 }, // Buenos Aires–São Paulo
+    'EZE-SCL': { frequency: 21, priceMultiplier: 0.73 }, // Buenos Aires–Santiago
+    'BOG-EZE': { frequency:  7, priceMultiplier: 0.78 }, // Buenos Aires–Bogotá
+    'EZE-LIM': { frequency:  7, priceMultiplier: 0.76 }, // Buenos Aires–Lima
+    'EZE-MIA': { frequency:  5, priceMultiplier: 0.81 }, // Buenos Aires–Miami
+    'EZE-MAD': { frequency:  4, priceMultiplier: 0.82 }, // Buenos Aires–Madrid
+    'EZE-GIG': { frequency:  7, priceMultiplier: 0.76 }, // Buenos Aires–Rio
+  },
+  saharafly: {
+    'AMS-CAI': { frequency: 10, priceMultiplier: 0.74 }, // Cairo–Amsterdam
+    'CAI-CDG': { frequency:  7, priceMultiplier: 0.75 }, // Cairo–Paris
+    'CAI-FRA': { frequency:  7, priceMultiplier: 0.74 }, // Cairo–Frankfurt
+    'CAI-LHR': { frequency:  7, priceMultiplier: 0.75 }, // Cairo–London
+    'CAI-IST': { frequency: 10, priceMultiplier: 0.73 }, // Cairo–Istanbul
+    'CAI-DXB': { frequency: 14, priceMultiplier: 0.74 }, // Cairo–Dubai
+    'CAI-NBO': { frequency:  5, priceMultiplier: 0.76 }, // Cairo–Nairobi
+  },
+  balticjet: {
+    'LHR-RIX': { frequency:  7, priceMultiplier: 0.73 }, // Riga–London
+    'AMS-RIX': { frequency:  7, priceMultiplier: 0.72 }, // Riga–Amsterdam
+    'CDG-RIX': { frequency:  7, priceMultiplier: 0.73 }, // Riga–Paris
+    'BCN-RIX': { frequency:  5, priceMultiplier: 0.74 }, // Riga–Barcelona
+    'FCO-RIX': { frequency:  5, priceMultiplier: 0.74 }, // Riga–Rome
+    'DUB-RIX': { frequency:  5, priceMultiplier: 0.73 }, // Riga–Dublin
+    'FRA-RIX': { frequency:  7, priceMultiplier: 0.73 }, // Riga–Frankfurt
+  },
+
+  // ── Premium (new) ──────────────────────────────────────────────────────────
+  tokyoprestige: {
+    'HKG-NRT': { frequency:  7, priceMultiplier: 1.42 }, // Tokyo–Hong Kong
+    'NRT-SIN': { frequency:  7, priceMultiplier: 1.45 }, // Tokyo–Singapore
+    'LHR-NRT': { frequency:  5, priceMultiplier: 1.48 }, // Tokyo–London
+    'JFK-NRT': { frequency:  5, priceMultiplier: 1.52 }, // Tokyo–New York
+    'CDG-NRT': { frequency:  4, priceMultiplier: 1.48 }, // Tokyo–Paris
+    'NRT-SYD': { frequency:  5, priceMultiplier: 1.40 }, // Tokyo–Sydney
+  },
+  zuerichfirst: {
+    'LHR-ZRH': { frequency:  7, priceMultiplier: 1.38 }, // Zurich–London
+    'JFK-ZRH': { frequency:  5, priceMultiplier: 1.50 }, // Zurich–New York
+    'DXB-ZRH': { frequency:  5, priceMultiplier: 1.42 }, // Zurich–Dubai
+    'SIN-ZRH': { frequency:  4, priceMultiplier: 1.48 }, // Zurich–Singapore
+    'HKG-ZRH': { frequency:  4, priceMultiplier: 1.48 }, // Zurich–Hong Kong
+    'NRT-ZRH': { frequency:  3, priceMultiplier: 1.50 }, // Zurich–Tokyo
+  },
+  mumbaiselect: {
+    'BOM-DXB': { frequency: 10, priceMultiplier: 1.38 }, // Mumbai–Dubai premium
+    'BOM-LHR': { frequency:  5, priceMultiplier: 1.45 }, // Mumbai–London
+    'BOM-SIN': { frequency:  7, priceMultiplier: 1.40 }, // Mumbai–Singapore
+    'BOM-HKG': { frequency:  5, priceMultiplier: 1.40 }, // Mumbai–Hong Kong
+    'BOM-JFK': { frequency:  3, priceMultiplier: 1.52 }, // Mumbai–New York
+    'BOM-NRT': { frequency:  4, priceMultiplier: 1.45 }, // Mumbai–Tokyo
+  },
+  shanghailux: {
+    'HKG-PVG': { frequency:  7, priceMultiplier: 1.38 }, // Shanghai–Hong Kong
+    'NRT-PVG': { frequency:  7, priceMultiplier: 1.40 }, // Shanghai–Tokyo
+    'PVG-SIN': { frequency:  5, priceMultiplier: 1.42 }, // Shanghai–Singapore
+    'LHR-PVG': { frequency:  4, priceMultiplier: 1.50 }, // Shanghai–London
+    'JFK-PVG': { frequency:  3, priceMultiplier: 1.55 }, // Shanghai–New York
+    'DXB-PVG': { frequency:  4, priceMultiplier: 1.45 }, // Shanghai–Dubai
+  },
+  istanbulprestige: {
+    'IST-LHR': { frequency:  7, priceMultiplier: 1.38 }, // Istanbul–London
+    'IST-JFK': { frequency:  5, priceMultiplier: 1.48 }, // Istanbul–New York
+    'DXB-IST': { frequency:  7, priceMultiplier: 1.40 }, // Istanbul–Dubai
+    'IST-SIN': { frequency:  4, priceMultiplier: 1.45 }, // Istanbul–Singapore
+    'HKG-IST': { frequency:  4, priceMultiplier: 1.45 }, // Istanbul–Hong Kong
+    'IST-NRT': { frequency:  3, priceMultiplier: 1.48 }, // Istanbul–Tokyo
+  },
+  patagoniafirst: {
+    'LHR-SCL': { frequency:  4, priceMultiplier: 1.45 }, // Santiago–London
+    'JFK-SCL': { frequency:  4, priceMultiplier: 1.48 }, // Santiago–New York
+    'MIA-SCL': { frequency:  5, priceMultiplier: 1.40 }, // Santiago–Miami
+    'GRU-SCL': { frequency:  7, priceMultiplier: 1.30 }, // Santiago–São Paulo
+    'MAD-SCL': { frequency:  4, priceMultiplier: 1.42 }, // Santiago–Madrid
+    'BOG-SCL': { frequency:  5, priceMultiplier: 1.35 }, // Santiago–Bogotá
+  },
+  oceaniaprestige: {
+    'AKL-SYD': { frequency:  7, priceMultiplier: 1.38 }, // Auckland–Sydney
+    'AKL-HKG': { frequency:  5, priceMultiplier: 1.42 }, // Auckland–Hong Kong
+    'AKL-SIN': { frequency:  5, priceMultiplier: 1.40 }, // Auckland–Singapore
+    'AKL-NRT': { frequency:  4, priceMultiplier: 1.45 }, // Auckland–Tokyo
+    'AKL-LAX': { frequency:  4, priceMultiplier: 1.48 }, // Auckland–LA
+    'AKL-LHR': { frequency:  3, priceMultiplier: 1.55 }, // Auckland–London
+  },
+  capediamonds: {
+    'CPT-JNB': { frequency:  7, priceMultiplier: 1.30 }, // Cape Town–Johannesburg
+    'CPT-LHR': { frequency:  4, priceMultiplier: 1.48 }, // Cape Town–London
+    'CPT-DXB': { frequency:  5, priceMultiplier: 1.42 }, // Cape Town–Dubai
+    'CDG-CPT': { frequency:  3, priceMultiplier: 1.45 }, // Cape Town–Paris
+    'CPT-SIN': { frequency:  3, priceMultiplier: 1.48 }, // Cape Town–Singapore
+    'AMS-CPT': { frequency:  3, priceMultiplier: 1.45 }, // Cape Town–Amsterdam
+  },
 };
 
 // ─── Competitor fleets ───────────────────────────────────────────────────────
@@ -1206,6 +1498,193 @@ export const COMPETITOR_EXPANSION_SCHEDULE = [
   { airlineId: 'pampapremium', weeksAfterStart: 24, routeKey: 'GRU-LIM',  frequency:  5, priceMultiplier: 1.35 }, // São Paulo–Lima launch
   { airlineId: 'pampapremium', weeksAfterStart: 40, routeKey: 'GRU-NRT',  frequency:  3, priceMultiplier: 1.50 }, // São Paulo–Tokyo launch
   { airlineId: 'pampapremium', weeksAfterStart: 60, routeKey: 'GRU-DXB',  frequency:  4, priceMultiplier: 1.48 }, // São Paulo–Dubai launch
+
+  // ── TransAfrica (NBO, legacy) ─────────────────────────────────────────────
+  { airlineId: 'transafrica', weeksAfterStart: 12, routeKey: 'JNB-NBO',  frequency: 10, priceMultiplier: 1.02 },
+  { airlineId: 'transafrica', weeksAfterStart: 24, routeKey: 'CAI-NBO',  frequency:  5, priceMultiplier: 1.04 },
+  { airlineId: 'transafrica', weeksAfterStart: 40, routeKey: 'LHR-NBO',  frequency:  7, priceMultiplier: 1.07 },
+  { airlineId: 'transafrica', weeksAfterStart: 65, routeKey: 'NBO-SIN',  frequency:  4, priceMultiplier: 1.06 },
+
+  // ── India Star (BOM, legacy) ──────────────────────────────────────────────
+  { airlineId: 'indiastar', weeksAfterStart:  8, routeKey: 'BOM-DEL',  frequency: 28, priceMultiplier: 1.02 },
+  { airlineId: 'indiastar', weeksAfterStart: 20, routeKey: 'BOM-DXB',  frequency: 21, priceMultiplier: 1.04 },
+  { airlineId: 'indiastar', weeksAfterStart: 36, routeKey: 'BOM-SIN',  frequency: 10, priceMultiplier: 1.05 },
+  { airlineId: 'indiastar', weeksAfterStart: 52, routeKey: 'BOM-LHR',  frequency: 10, priceMultiplier: 1.07 },
+  { airlineId: 'indiastar', weeksAfterStart: 72, routeKey: 'BOM-JFK',  frequency:  5, priceMultiplier: 1.08 },
+
+  // ── Canadian Pride (YYZ, legacy) ──────────────────────────────────────────
+  { airlineId: 'canadianpride', weeksAfterStart:  8, routeKey: 'JFK-YYZ',  frequency: 21, priceMultiplier: 1.04 },
+  { airlineId: 'canadianpride', weeksAfterStart: 20, routeKey: 'LAX-YYZ',  frequency: 10, priceMultiplier: 1.05 },
+  { airlineId: 'canadianpride', weeksAfterStart: 36, routeKey: 'LHR-YYZ',  frequency: 10, priceMultiplier: 1.06 },
+  { airlineId: 'canadianpride', weeksAfterStart: 56, routeKey: 'CDG-YYZ',  frequency:  5, priceMultiplier: 1.06 },
+  { airlineId: 'canadianpride', weeksAfterStart: 78, routeKey: 'NRT-YYZ',  frequency:  4, priceMultiplier: 1.07 },
+
+  // ── Bosphorus Air (IST, legacy) ───────────────────────────────────────────
+  { airlineId: 'bosphorusair', weeksAfterStart: 10, routeKey: 'IST-LHR',  frequency: 14, priceMultiplier: 1.04 },
+  { airlineId: 'bosphorusair', weeksAfterStart: 22, routeKey: 'IST-JFK',  frequency:  7, priceMultiplier: 1.07 },
+  { airlineId: 'bosphorusair', weeksAfterStart: 38, routeKey: 'BKK-IST',  frequency:  7, priceMultiplier: 1.06 },
+  { airlineId: 'bosphorusair', weeksAfterStart: 60, routeKey: 'DEL-IST',  frequency:  5, priceMultiplier: 1.06 },
+
+  // ── Dragon East (PVG, legacy) ─────────────────────────────────────────────
+  { airlineId: 'dragoneast', weeksAfterStart:  8, routeKey: 'HKG-PVG',  frequency: 21, priceMultiplier: 1.04 },
+  { airlineId: 'dragoneast', weeksAfterStart: 18, routeKey: 'NRT-PVG',  frequency: 18, priceMultiplier: 1.05 },
+  { airlineId: 'dragoneast', weeksAfterStart: 32, routeKey: 'LHR-PVG',  frequency:  7, priceMultiplier: 1.08 },
+  { airlineId: 'dragoneast', weeksAfterStart: 52, routeKey: 'LAX-PVG',  frequency:  7, priceMultiplier: 1.08 },
+  { airlineId: 'dragoneast', weeksAfterStart: 70, routeKey: 'JFK-PVG',  frequency:  5, priceMultiplier: 1.09 },
+
+  // ── Aztec Air (MEX, legacy) ───────────────────────────────────────────────
+  { airlineId: 'aztecair', weeksAfterStart:  8, routeKey: 'LAX-MEX',  frequency: 21, priceMultiplier: 1.04 },
+  { airlineId: 'aztecair', weeksAfterStart: 20, routeKey: 'JFK-MEX',  frequency: 14, priceMultiplier: 1.05 },
+  { airlineId: 'aztecair', weeksAfterStart: 36, routeKey: 'MAD-MEX',  frequency:  7, priceMultiplier: 1.06 },
+  { airlineId: 'aztecair', weeksAfterStart: 56, routeKey: 'BOG-MEX',  frequency:  7, priceMultiplier: 1.05 },
+
+  // ── Norseman Airlines (CPH, legacy) ──────────────────────────────────────
+  { airlineId: 'norseman', weeksAfterStart: 10, routeKey: 'ARN-CPH',  frequency: 14, priceMultiplier: 1.02 },
+  { airlineId: 'norseman', weeksAfterStart: 24, routeKey: 'CPH-JFK',  frequency:  7, priceMultiplier: 1.07 },
+  { airlineId: 'norseman', weeksAfterStart: 42, routeKey: 'CPH-DXB',  frequency:  7, priceMultiplier: 1.06 },
+  { airlineId: 'norseman', weeksAfterStart: 65, routeKey: 'CPH-NRT',  frequency:  4, priceMultiplier: 1.08 },
+
+  // ── Roma Air (FCO, legacy) ────────────────────────────────────────────────
+  { airlineId: 'romaair', weeksAfterStart: 10, routeKey: 'CDG-FCO',  frequency: 14, priceMultiplier: 1.03 },
+  { airlineId: 'romaair', weeksAfterStart: 22, routeKey: 'FCO-JFK',  frequency:  7, priceMultiplier: 1.07 },
+  { airlineId: 'romaair', weeksAfterStart: 38, routeKey: 'DXB-FCO',  frequency:  7, priceMultiplier: 1.06 },
+  { airlineId: 'romaair', weeksAfterStart: 60, routeKey: 'FCO-NRT',  frequency:  4, priceMultiplier: 1.08 },
+
+  // ── Savannah Air (JNB, legacy) ────────────────────────────────────────────
+  { airlineId: 'savannahair', weeksAfterStart: 12, routeKey: 'DXB-JNB',  frequency: 10, priceMultiplier: 1.05 },
+  { airlineId: 'savannahair', weeksAfterStart: 26, routeKey: 'JNB-SIN',  frequency:  5, priceMultiplier: 1.07 },
+  { airlineId: 'savannahair', weeksAfterStart: 44, routeKey: 'GRU-JNB',  frequency:  4, priceMultiplier: 1.06 },
+  { airlineId: 'savannahair', weeksAfterStart: 65, routeKey: 'JNB-NRT',  frequency:  3, priceMultiplier: 1.08 },
+
+  // ── Hellenic Air (ATH, legacy) ────────────────────────────────────────────
+  { airlineId: 'hellenicair', weeksAfterStart: 10, routeKey: 'AMS-ATH',  frequency: 14, priceMultiplier: 1.02 },
+  { airlineId: 'hellenicair', weeksAfterStart: 24, routeKey: 'ATH-JFK',  frequency:  5, priceMultiplier: 1.07 },
+  { airlineId: 'hellenicair', weeksAfterStart: 42, routeKey: 'ATH-DXB',  frequency:  7, priceMultiplier: 1.05 },
+  { airlineId: 'hellenicair', weeksAfterStart: 65, routeKey: 'ATH-SIN',  frequency:  4, priceMultiplier: 1.07 },
+
+  // ── Maple Cross Air (YVR, legacy) ─────────────────────────────────────────
+  { airlineId: 'maplecross', weeksAfterStart:  8, routeKey: 'LAX-YVR',  frequency: 21, priceMultiplier: 1.04 },
+  { airlineId: 'maplecross', weeksAfterStart: 22, routeKey: 'YVR-YYZ',  frequency: 14, priceMultiplier: 1.03 },
+  { airlineId: 'maplecross', weeksAfterStart: 40, routeKey: 'LHR-YVR',  frequency:  7, priceMultiplier: 1.06 },
+  { airlineId: 'maplecross', weeksAfterStart: 60, routeKey: 'NRT-YVR',  frequency:  7, priceMultiplier: 1.07 },
+
+  // ── Carioca Air (GIG, legacy) ─────────────────────────────────────────────
+  { airlineId: 'cariocaair', weeksAfterStart: 10, routeKey: 'GIG-GRU',  frequency: 21, priceMultiplier: 1.02 },
+  { airlineId: 'cariocaair', weeksAfterStart: 24, routeKey: 'GIG-MIA',  frequency:  7, priceMultiplier: 1.05 },
+  { airlineId: 'cariocaair', weeksAfterStart: 40, routeKey: 'GIG-LHR',  frequency:  5, priceMultiplier: 1.07 },
+  { airlineId: 'cariocaair', weeksAfterStart: 60, routeKey: 'GIG-LAX',  frequency:  4, priceMultiplier: 1.08 },
+
+  // ── WingIt (DUB, budget) ──────────────────────────────────────────────────
+  { airlineId: 'wingit', weeksAfterStart:  6, routeKey: 'DUB-LHR',  frequency: 28, priceMultiplier: 0.72 },
+  { airlineId: 'wingit', weeksAfterStart: 14, routeKey: 'CDG-DUB',  frequency: 14, priceMultiplier: 0.73 },
+  { airlineId: 'wingit', weeksAfterStart: 28, routeKey: 'BCN-DUB',  frequency: 14, priceMultiplier: 0.74 },
+  { airlineId: 'wingit', weeksAfterStart: 48, routeKey: 'DUB-FCO',  frequency: 10, priceMultiplier: 0.75 },
+
+  // ── FrugalFly (BER, budget) ───────────────────────────────────────────────
+  { airlineId: 'frugalfly', weeksAfterStart:  6, routeKey: 'AMS-BER',  frequency: 21, priceMultiplier: 0.72 },
+  { airlineId: 'frugalfly', weeksAfterStart: 15, routeKey: 'BER-LHR',  frequency: 14, priceMultiplier: 0.73 },
+  { airlineId: 'frugalfly', weeksAfterStart: 30, routeKey: 'BCN-BER',  frequency: 14, priceMultiplier: 0.74 },
+  { airlineId: 'frugalfly', weeksAfterStart: 50, routeKey: 'BER-MAD',  frequency:  7, priceMultiplier: 0.74 },
+
+  // ── BargainBird (PHX, budget) ─────────────────────────────────────────────
+  { airlineId: 'bargainbird', weeksAfterStart:  6, routeKey: 'LAX-PHX',  frequency: 35, priceMultiplier: 0.74 },
+  { airlineId: 'bargainbird', weeksAfterStart: 14, routeKey: 'DEN-PHX',  frequency: 21, priceMultiplier: 0.74 },
+  { airlineId: 'bargainbird', weeksAfterStart: 26, routeKey: 'DFW-PHX',  frequency: 14, priceMultiplier: 0.75 },
+  { airlineId: 'bargainbird', weeksAfterStart: 44, routeKey: 'PHX-SEA',  frequency: 14, priceMultiplier: 0.76 },
+  { airlineId: 'bargainbird', weeksAfterStart: 65, routeKey: 'ORD-PHX',  frequency: 14, priceMultiplier: 0.77 },
+
+  // ── BahtJet (KUL, budget) ─────────────────────────────────────────────────
+  { airlineId: 'bahtjet', weeksAfterStart:  6, routeKey: 'KUL-SIN',  frequency: 35, priceMultiplier: 0.72 },
+  { airlineId: 'bahtjet', weeksAfterStart: 14, routeKey: 'BKK-KUL',  frequency: 28, priceMultiplier: 0.73 },
+  { airlineId: 'bahtjet', weeksAfterStart: 28, routeKey: 'CGK-KUL',  frequency: 21, priceMultiplier: 0.73 },
+  { airlineId: 'bahtjet', weeksAfterStart: 48, routeKey: 'HKG-KUL',  frequency: 10, priceMultiplier: 0.75 },
+  { airlineId: 'bahtjet', weeksAfterStart: 70, routeKey: 'DEL-KUL',  frequency:  7, priceMultiplier: 0.76 },
+
+  // ── RupeeFly (DEL, budget) ────────────────────────────────────────────────
+  { airlineId: 'rupeefly', weeksAfterStart:  6, routeKey: 'BOM-DEL',  frequency: 35, priceMultiplier: 0.72 },
+  { airlineId: 'rupeefly', weeksAfterStart: 14, routeKey: 'DEL-DXB',  frequency: 28, priceMultiplier: 0.74 },
+  { airlineId: 'rupeefly', weeksAfterStart: 28, routeKey: 'DEL-SIN',  frequency: 14, priceMultiplier: 0.74 },
+  { airlineId: 'rupeefly', weeksAfterStart: 48, routeKey: 'BKK-DEL',  frequency:  7, priceMultiplier: 0.75 },
+  { airlineId: 'rupeefly', weeksAfterStart: 70, routeKey: 'DEL-LHR',  frequency:  7, priceMultiplier: 0.78 },
+
+  // ── PesoJet (MEX, budget) ─────────────────────────────────────────────────
+  { airlineId: 'pesojet', weeksAfterStart:  6, routeKey: 'LAX-MEX',  frequency: 28, priceMultiplier: 0.76 },
+  { airlineId: 'pesojet', weeksAfterStart: 14, routeKey: 'JFK-MEX',  frequency: 14, priceMultiplier: 0.79 },
+  { airlineId: 'pesojet', weeksAfterStart: 28, routeKey: 'DFW-MEX',  frequency: 14, priceMultiplier: 0.76 },
+  { airlineId: 'pesojet', weeksAfterStart: 48, routeKey: 'BOG-MEX',  frequency:  7, priceMultiplier: 0.80 },
+
+  // ── Suncoast Air (MCO, budget) ────────────────────────────────────────────
+  { airlineId: 'suncoast', weeksAfterStart:  6, routeKey: 'JFK-MCO',  frequency: 28, priceMultiplier: 0.76 },
+  { airlineId: 'suncoast', weeksAfterStart: 14, routeKey: 'MCO-MIA',  frequency: 28, priceMultiplier: 0.74 },
+  { airlineId: 'suncoast', weeksAfterStart: 26, routeKey: 'ATL-MCO',  frequency: 21, priceMultiplier: 0.76 },
+  { airlineId: 'suncoast', weeksAfterStart: 44, routeKey: 'MCO-ORD',  frequency: 14, priceMultiplier: 0.77 },
+  { airlineId: 'suncoast', weeksAfterStart: 65, routeKey: 'LAX-MCO',  frequency:  7, priceMultiplier: 0.79 },
+
+  // ── Pampa Low (EZE, budget) ───────────────────────────────────────────────
+  { airlineId: 'pampalow', weeksAfterStart:  6, routeKey: 'EZE-SCL',  frequency: 28, priceMultiplier: 0.73 },
+  { airlineId: 'pampalow', weeksAfterStart: 16, routeKey: 'EZE-GRU',  frequency: 21, priceMultiplier: 0.76 },
+  { airlineId: 'pampalow', weeksAfterStart: 32, routeKey: 'EZE-LIM',  frequency: 10, priceMultiplier: 0.76 },
+  { airlineId: 'pampalow', weeksAfterStart: 52, routeKey: 'EZE-MIA',  frequency:  5, priceMultiplier: 0.81 },
+
+  // ── SaharaFly (CAI, budget) ───────────────────────────────────────────────
+  { airlineId: 'saharafly', weeksAfterStart:  8, routeKey: 'CAI-DXB',  frequency: 21, priceMultiplier: 0.74 },
+  { airlineId: 'saharafly', weeksAfterStart: 18, routeKey: 'CAI-IST',  frequency: 14, priceMultiplier: 0.73 },
+  { airlineId: 'saharafly', weeksAfterStart: 34, routeKey: 'CAI-LHR',  frequency:  7, priceMultiplier: 0.75 },
+  { airlineId: 'saharafly', weeksAfterStart: 54, routeKey: 'AMS-CAI',  frequency: 10, priceMultiplier: 0.74 },
+
+  // ── Baltic Jet (RIX, budget) ──────────────────────────────────────────────
+  { airlineId: 'balticjet', weeksAfterStart:  8, routeKey: 'AMS-RIX',  frequency: 10, priceMultiplier: 0.72 },
+  { airlineId: 'balticjet', weeksAfterStart: 18, routeKey: 'LHR-RIX',  frequency:  7, priceMultiplier: 0.73 },
+  { airlineId: 'balticjet', weeksAfterStart: 32, routeKey: 'CDG-RIX',  frequency:  7, priceMultiplier: 0.73 },
+  { airlineId: 'balticjet', weeksAfterStart: 50, routeKey: 'FRA-RIX',  frequency:  7, priceMultiplier: 0.73 },
+
+  // ── Tokyo Prestige (NRT, premium) ─────────────────────────────────────────
+  { airlineId: 'tokyoprestige', weeksAfterStart: 12, routeKey: 'NRT-SIN',  frequency: 10, priceMultiplier: 1.45 },
+  { airlineId: 'tokyoprestige', weeksAfterStart: 26, routeKey: 'JFK-NRT',  frequency:  7, priceMultiplier: 1.52 },
+  { airlineId: 'tokyoprestige', weeksAfterStart: 44, routeKey: 'LHR-NRT',  frequency:  7, priceMultiplier: 1.48 },
+  { airlineId: 'tokyoprestige', weeksAfterStart: 65, routeKey: 'NRT-SYD',  frequency:  5, priceMultiplier: 1.40 },
+
+  // ── Zürich First (ZRH, premium) ───────────────────────────────────────────
+  { airlineId: 'zuerichfirst', weeksAfterStart: 12, routeKey: 'LHR-ZRH',  frequency: 10, priceMultiplier: 1.38 },
+  { airlineId: 'zuerichfirst', weeksAfterStart: 26, routeKey: 'JFK-ZRH',  frequency:  7, priceMultiplier: 1.50 },
+  { airlineId: 'zuerichfirst', weeksAfterStart: 44, routeKey: 'DXB-ZRH',  frequency:  5, priceMultiplier: 1.42 },
+  { airlineId: 'zuerichfirst', weeksAfterStart: 65, routeKey: 'SIN-ZRH',  frequency:  4, priceMultiplier: 1.48 },
+
+  // ── Mumbai Select (BOM, premium) ──────────────────────────────────────────
+  { airlineId: 'mumbaiselect', weeksAfterStart: 10, routeKey: 'BOM-DXB',  frequency: 14, priceMultiplier: 1.38 },
+  { airlineId: 'mumbaiselect', weeksAfterStart: 24, routeKey: 'BOM-LHR',  frequency:  7, priceMultiplier: 1.45 },
+  { airlineId: 'mumbaiselect', weeksAfterStart: 40, routeKey: 'BOM-SIN',  frequency:  7, priceMultiplier: 1.40 },
+  { airlineId: 'mumbaiselect', weeksAfterStart: 60, routeKey: 'BOM-JFK',  frequency:  4, priceMultiplier: 1.52 },
+
+  // ── Shanghai Lux (PVG, premium) ───────────────────────────────────────────
+  { airlineId: 'shanghailux', weeksAfterStart: 10, routeKey: 'HKG-PVG',  frequency: 10, priceMultiplier: 1.38 },
+  { airlineId: 'shanghailux', weeksAfterStart: 24, routeKey: 'LHR-PVG',  frequency:  5, priceMultiplier: 1.50 },
+  { airlineId: 'shanghailux', weeksAfterStart: 40, routeKey: 'JFK-PVG',  frequency:  4, priceMultiplier: 1.55 },
+  { airlineId: 'shanghailux', weeksAfterStart: 60, routeKey: 'DXB-PVG',  frequency:  5, priceMultiplier: 1.45 },
+
+  // ── Istanbul Prestige (IST, premium) ──────────────────────────────────────
+  { airlineId: 'istanbulprestige', weeksAfterStart: 12, routeKey: 'IST-LHR',  frequency: 10, priceMultiplier: 1.38 },
+  { airlineId: 'istanbulprestige', weeksAfterStart: 26, routeKey: 'IST-JFK',  frequency:  7, priceMultiplier: 1.48 },
+  { airlineId: 'istanbulprestige', weeksAfterStart: 44, routeKey: 'IST-SIN',  frequency:  5, priceMultiplier: 1.45 },
+  { airlineId: 'istanbulprestige', weeksAfterStart: 65, routeKey: 'IST-NRT',  frequency:  4, priceMultiplier: 1.48 },
+
+  // ── Patagonia First (SCL, premium) ────────────────────────────────────────
+  { airlineId: 'patagoniafirst', weeksAfterStart: 10, routeKey: 'GRU-SCL',  frequency: 10, priceMultiplier: 1.30 },
+  { airlineId: 'patagoniafirst', weeksAfterStart: 24, routeKey: 'MIA-SCL',  frequency:  7, priceMultiplier: 1.40 },
+  { airlineId: 'patagoniafirst', weeksAfterStart: 42, routeKey: 'MAD-SCL',  frequency:  5, priceMultiplier: 1.42 },
+  { airlineId: 'patagoniafirst', weeksAfterStart: 65, routeKey: 'LHR-SCL',  frequency:  4, priceMultiplier: 1.45 },
+
+  // ── Oceania Prestige (AKL, premium) ──────────────────────────────────────
+  { airlineId: 'oceaniaprestige', weeksAfterStart: 12, routeKey: 'AKL-SYD',  frequency: 10, priceMultiplier: 1.38 },
+  { airlineId: 'oceaniaprestige', weeksAfterStart: 26, routeKey: 'AKL-SIN',  frequency:  7, priceMultiplier: 1.40 },
+  { airlineId: 'oceaniaprestige', weeksAfterStart: 44, routeKey: 'AKL-HKG',  frequency:  7, priceMultiplier: 1.42 },
+  { airlineId: 'oceaniaprestige', weeksAfterStart: 65, routeKey: 'AKL-LHR',  frequency:  3, priceMultiplier: 1.55 },
+
+  // ── Cape Diamonds (CPT, premium) ──────────────────────────────────────────
+  { airlineId: 'capediamonds', weeksAfterStart: 10, routeKey: 'CPT-JNB',  frequency: 10, priceMultiplier: 1.30 },
+  { airlineId: 'capediamonds', weeksAfterStart: 24, routeKey: 'CPT-LHR',  frequency:  5, priceMultiplier: 1.48 },
+  { airlineId: 'capediamonds', weeksAfterStart: 42, routeKey: 'CPT-DXB',  frequency:  7, priceMultiplier: 1.42 },
+  { airlineId: 'capediamonds', weeksAfterStart: 65, routeKey: 'CPT-SIN',  frequency:  4, priceMultiplier: 1.48 },
 ];
 
 /**
@@ -1220,12 +1699,12 @@ export const COMPETITOR_EXPANSION_SCHEDULE = [
  * @typedef {{ airlineId: string, routeKey: string, isUpgrade: boolean }} CompetitorEvent
  */
 export function tickCompetitorGrowth(competitors, weekNumber) {
-  const scheduled = COMPETITOR_EXPANSION_SCHEDULE.filter(e => e.weeksAfterStart === weekNumber);
-  if (scheduled.length === 0) return { competitors, events: [] };
-
   const events = [];
   const updated = competitors.map(airline => {
-    const mine = scheduled.filter(e => e.airlineId === airline.id);
+    const offset = airline._weekOffset ?? 0;
+    const mine = COMPETITOR_EXPANSION_SCHEDULE.filter(
+      e => e.airlineId === airline.id && e.weeksAfterStart + offset === weekNumber
+    );
     if (mine.length === 0) return airline;
 
     const newRoutes = { ...airline.routes };
@@ -1297,7 +1776,7 @@ export function tickCompetitorPricing(competitors, playerRoutes) {
   };
 
   return competitors.map(airline => {
-    const cfg = TIER_CONFIG[airline.tier];
+    const cfg = airline._pricing ?? TIER_CONFIG[airline.tier];
     if (!cfg) return airline;
 
     let anyChange = false;
@@ -1331,6 +1810,88 @@ export function tickCompetitorPricing(competitors, playerRoutes) {
 
     return anyChange ? { ...airline, routes: newRoutes } : airline;
   });
+}
+
+// ─── Competitor sampling & per-game personality jitter ───────────────────────
+
+/**
+ * Apply per-game personality jitter to a competitor so each run feels different.
+ * Mutates a shallow copy — never touches the original COMPETITOR_AIRLINES entry.
+ */
+function jitterCompetitor(airline) {
+  const c = { ...airline };
+
+  // Quality perception: ±5 points
+  c.baseQualityScore = Math.round(
+    c.baseQualityScore + (Math.random() * 10 - 5)
+  );
+
+  // Expansion timing: ±3 weeks (stored on the airline; read by tickCompetitorGrowth)
+  c._weekOffset = Math.round(Math.random() * 6 - 3);
+
+  // Pricing personality: jitter tier defaults by small amounts
+  const TIER_DEFAULTS = {
+    budget:  { floor: 0.65, ceiling: 0.90, cutRate: 0.04,  raiseRate: 0.01  },
+    legacy:  { floor: 0.85, ceiling: 1.20, cutRate: 0.025, raiseRate: 0.015 },
+    premium: { floor: 1.25, ceiling: 1.70, cutRate: 0.015, raiseRate: 0.02  },
+  };
+  const base = TIER_DEFAULTS[c.tier] ?? TIER_DEFAULTS.legacy;
+  const r = () => Math.random() * 0.12 - 0.06; // ±0.06
+  c._pricing = {
+    floor:     +(base.floor     + r()).toFixed(3),
+    ceiling:   +(base.ceiling   + r()).toFixed(3),
+    cutRate:   +(base.cutRate   + (Math.random() * 0.02 - 0.01)).toFixed(4),
+    raiseRate: +(base.raiseRate + (Math.random() * 0.01 - 0.005)).toFixed(4),
+  };
+
+  return c;
+}
+
+/**
+ * Stratified random sample of N competitors from the full bank.
+ * Preserves roughly the same legacy/budget/premium ratio as the full bank.
+ * Returns a new array of jittered competitor objects.
+ */
+function sampleCompetitors(n = 15) {
+  const byTier = { legacy: [], budget: [], premium: [] };
+  for (const c of COMPETITOR_AIRLINES) {
+    (byTier[c.tier] ?? (byTier.other = byTier.other ?? [])).push(c);
+  }
+  const total = COMPETITOR_AIRLINES.length;
+  const pick = (arr, k) => {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, k);
+  };
+
+  const counts = {};
+  let remaining = n;
+  const tiers = ['legacy', 'budget', 'premium'];
+  for (const t of tiers) {
+    const share = (byTier[t]?.length ?? 0) / total;
+    counts[t] = Math.min(byTier[t]?.length ?? 0, Math.round(share * n));
+    remaining -= counts[t];
+  }
+  // Assign any rounding remainder to the largest tier
+  if (remaining !== 0) {
+    const largest = tiers.reduce((a, b) =>
+      (byTier[a]?.length ?? 0) >= (byTier[b]?.length ?? 0) ? a : b
+    );
+    counts[largest] = Math.min(byTier[largest]?.length ?? 0, counts[largest] + remaining);
+  }
+
+  return tiers.flatMap(t => pick(byTier[t] ?? [], counts[t]));
+}
+
+/**
+ * Sample 15 competitors, jitter their personalities, and initialize their routes.
+ * Drop-in replacement for the old `initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(...))`.
+ *
+ * @param {number} [count=15]
+ * @returns {CompetitorAirline[]}
+ */
+export function sampleAndInitializeCompetitors(count = 15) {
+  const sampled = sampleCompetitors(count).map(c => jitterCompetitor({ ...c, routes: {} }));
+  return initializeCompetitorRoutes(sampled);
 }
 
 /**

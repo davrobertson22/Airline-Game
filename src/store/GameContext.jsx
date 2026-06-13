@@ -13,6 +13,7 @@ import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import {
   COMPETITOR_AIRLINES,
   initializeCompetitorRoutes,
+  sampleAndInitializeCompetitors,
   tickCompetitorGrowth,
   tickCompetitorPricing,
   computeCompetitorWeeklyStats,
@@ -34,7 +35,8 @@ import {
   CODESHARE_DURATION_WEEKS,
   MAX_CODESHARE_AGREEMENTS,
 } from '../data/alliances.js';
-import { routeLaunchCost } from '../data/overhead.js';
+import { routeLaunchCost, DEPRECIATION_YEARS } from '../data/overhead.js';
+import { normalizeCateringLevel } from '../data/catering.js';
 import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective } from '../data/objectives.js';
 
 // ─────────────────────────────────────────────
@@ -64,6 +66,7 @@ function freshState() {
     labor:             DEFAULT_LABOR_STATE,
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
     marketingBudget:   0,          // weekly marketing spend ($) — 0 = no active marketing
+    defaultCateringLevel: 'full',  // catering service level applied to newly-opened routes
     loyalty: {
       weeklyInvestment: 0,   // weekly $ spend on loyalty program
       members: 0,            // current active members
@@ -74,9 +77,7 @@ function freshState() {
     hedgeContracts: [],                       // active fuel hedge contracts
     loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
     phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
-    competitors: initializeCompetitorRoutes(
-      COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} }))
-    ),
+    competitors: sampleAndInitializeCompetitors(15),
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
     awareness: 5,                // 0–100: how well-known the airline is; gates demand
@@ -391,6 +392,30 @@ function reducer(state, action) {
       };
     }
 
+    case 'SELL_AIRCRAFT': {
+      // Sell an owned aircraft at NAV minus 5% selling & admin fee.
+      const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
+      const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
+      const ageYears      = (aircraft?.ageWeeks ?? 0) / 52;
+      const remaining     = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
+      const nav           = Math.round((type?.purchasePrice ?? 0) * remaining);
+      const fee           = Math.round(nav * 0.05);
+      const proceeds      = nav - fee;
+      const updatedRoutes = state.routes.filter(r => r.aircraftId !== action.aircraftId);
+      const updatedFleet  = state.fleet.filter(a => a.id !== action.aircraftId);
+      const routeAircraftIds = new Set(updatedRoutes.map(r => r.aircraftId));
+      const reStatusFleet = updatedFleet.map(a => ({
+        ...a,
+        status: routeAircraftIds.has(a.id) ? 'assigned' : 'idle',
+      }));
+      return {
+        ...state,
+        cash:   state.cash + proceeds,
+        fleet:  reStatusFleet,
+        routes: updatedRoutes,
+      };
+    }
+
     case 'CONFIGURE_AIRCRAFT': {
       // action: { aircraftId, config, reconfCost }
       const cost = action.reconfCost ?? 0;
@@ -492,6 +517,7 @@ function reducer(state, action) {
         weeksOpen:       0,
         launchCost,
         hub:             state.hub,
+        cateringLevel:   normalizeCateringLevel(action.cateringLevel ?? state.defaultCateringLevel),
         classPrices: {
           economy:        basePrice,
           premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
@@ -641,6 +667,25 @@ function reducer(state, action) {
           r.id === action.routeId ? { ...r, weeklyFrequency: action.weeklyFrequency } : r
         ),
       };
+    }
+
+    // Set the catering service level on one route, or several at once
+    // (e.g. all routes on a city-pair). action: { routeId? , routeIds?, level }
+    case 'SET_ROUTE_CATERING': {
+      const level = normalizeCateringLevel(action.level);
+      const ids = new Set(action.routeIds ?? (action.routeId ? [action.routeId] : []));
+      if (ids.size === 0) return state;
+      return {
+        ...state,
+        routes: state.routes.map(r =>
+          ids.has(r.id) ? { ...r, cateringLevel: level } : r
+        ),
+      };
+    }
+
+    // Airline-wide default catering level applied to newly-opened routes.
+    case 'SET_DEFAULT_CATERING': {
+      return { ...state, defaultCateringLevel: normalizeCateringLevel(action.level) };
     }
 
     case 'SET_LABOR_PAY': {
@@ -827,6 +872,7 @@ function reducer(state, action) {
           hub:             state.hub,
           weeksOpen:       0,
           inherited:       true,
+          cateringLevel:   normalizeCateringLevel(state.defaultCateringLevel),
           classPrices: {
             economy:        basePrice,
             premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
@@ -1128,7 +1174,7 @@ function reducer(state, action) {
 
       // Advance competitor networks (graceful fallback for old saves missing competitors)
       const currentCompetitors = state.competitors
-        ?? initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} })));
+        ?? sampleAndInitializeCompetitors(15);
       const weekNumber = (state.year - 1) * 52 + state.week;
       const { competitors: grownCompetitors, events: competitorEvents } =
         tickCompetitorGrowth(currentCompetitors, weekNumber);
@@ -1218,6 +1264,7 @@ function reducer(state, action) {
         quality:     report.totalQuality,
         landingFees:     report.totalLandingFees    ?? 0,
         catering:        report.totalCatering          ?? 0,
+        cateringRevenue: report.totalCateringRevenue   ?? 0,
         groundHandling:  report.totalGroundHandling    ?? 0,
         distribution:    report.totalDistributionCost  ?? 0,
         layover:         report.totalLayover           ?? 0,
@@ -1529,7 +1576,7 @@ function reconcileState(parsed) {
   // 4. Migrate missing competitors.
   const competitors = (parsed.competitors?.length > 0)
     ? parsed.competitors
-    : initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(c => ({ ...c, routes: {} })));
+    : sampleAndInitializeCompetitors(15);
 
   // 5. Carry through pendingOrders (default to empty array for old saves).
   const pendingOrders = parsed.pendingOrders ?? [];
@@ -1538,7 +1585,10 @@ function reconcileState(parsed) {
   //    Old multipliers: business=3.5×, PE=1.7×, first=8.0×
   //    New multipliers: business=2.5×, PE=1.4×, first=5.0×
   //    Detection: check if businessClass price = economyPrice × 3.5 (within ±1).
-  const migratedRoutes = routes.map(r => {
+  const migratedRoutes = routes.map(rIn => {
+    // Old saves predate per-route catering — default them to Full Service, which
+    // matches the engine's prior "everyone fed" behaviour exactly.
+    const r = rIn.cateringLevel ? rIn : { ...rIn, cateringLevel: 'full' };
     const eco = r.classPrices?.economy ?? r.ticketPrice;
     if (!eco || !r.classPrices) return r;
     const bizRatio = (r.classPrices.businessClass ?? 0) / eco;
@@ -1577,6 +1627,7 @@ function reconcileState(parsed) {
     allianceMembership:       parsed.allianceMembership       ?? null,
     codeshareAgreements:      parsed.codeshareAgreements      ?? [],
     marketingBudget:          parsed.marketingBudget          ?? 0,
+    defaultCateringLevel:     normalizeCateringLevel(parsed.defaultCateringLevel),
     awareness:                parsed.awareness                ?? 5,
     missedLoanPayments:       parsed.missedLoanPayments       ?? 0,
     consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,

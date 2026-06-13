@@ -4,6 +4,8 @@ import RouteDetail from './RouteDetail.jsx';
 import AirportLink from './AirportLink.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { normalizeCateringLevel } from '../data/catering.js';
+import CateringSelector from './CateringSelector.jsx';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
@@ -417,7 +419,7 @@ function RouteCompareTable({ groups, onViewDetail }) {
 // ─── Route group card ─────────────────────────────────────────────────────────
 
 function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDetail }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { fleet } = state;
   const { origin, destination, routes } = group;
   const gd = currentGameDate(state);
@@ -448,6 +450,14 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
 
   const profitColor = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
   const loadColor   = blendedLoad > 0.7 ? 'var(--green)' : blendedLoad > 0.4 ? 'var(--yellow)' : 'var(--red)';
+
+  // ── Catering (per route, shown/edited at the city-pair level) ──────────────
+  const catLevels      = [...new Set(routes.map(r => normalizeCateringLevel(r.cateringLevel)))];
+  const groupCatLevel  = catLevels.length === 1 ? catLevels[0] : null;  // null = mixed
+  const totalCatRev    = sims.reduce((s, { result }) => s + (result?.cateringRevenue ?? 0), 0);
+  const totalCatCost   = sims.reduce((s, { result }) => s + (result?.cateringCost    ?? 0), 0);
+  const setGroupCatering = (level) =>
+    dispatch({ type: 'SET_ROUTE_CATERING', routeIds: routes.map(r => r.id), level });
 
   return (
     <div className="card" style={{ marginBottom: 12 }}>
@@ -517,6 +527,36 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
           <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Op Profit / wk</div>
           <div style={{ fontWeight: 700, color: profitColor }}>
             {totalProfit >= 0 ? '+' : ''}{formatMoney(totalProfit)}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Catering service ──────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+        gap: 12, padding: '10px 14px', marginBottom: 14,
+        background: 'var(--surface2)', borderRadius: 'var(--radius)',
+      }}>
+        <div style={{ minWidth: 220, flex: '1 1 260px' }}>
+          <CateringSelector
+            value={groupCatLevel ?? 'full'}
+            onChange={setGroupCatering}
+            distKm={dist}
+            compact
+            label={groupCatLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
+          />
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 12, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+            Catering net / wk
+          </div>
+          <div>
+            <span style={{ color: 'var(--green)' }}>+{formatMoney(totalCatRev)}</span>
+            <span style={{ color: 'var(--text-dim)', margin: '0 4px' }}>·</span>
+            <span style={{ color: 'var(--red)' }}>−{formatMoney(totalCatCost)}</span>
+          </div>
+          <div style={{ fontWeight: 700, color: (totalCatRev - totalCatCost) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            {(totalCatRev - totalCatCost) >= 0 ? '+' : ''}{formatMoney(totalCatRev - totalCatCost)}
           </div>
         </div>
       </div>

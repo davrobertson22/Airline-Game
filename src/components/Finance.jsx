@@ -21,12 +21,13 @@ import {
   hqBracket,
   marketingDemandMultiplier,
   weeklyCateringCost, weeklyLayoverCost, weeklyPassengerCompensation,
-  CATERING_COST_PER_PAX, GROUND_HANDLING_COST_PER_PAX,
+  GROUND_HANDLING_COST_PER_PAX,
   DISTRIBUTION_COST_PCT,
   HULL_INSURANCE_ANNUAL_RATE, LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT,
   DEPRECIATION_YEARS,
 } from '../data/overhead.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { CATERING_LEVELS, normalizeCateringLevel } from '../data/catering.js';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class FinanceErrorBoundary extends Component {
@@ -273,6 +274,7 @@ function ProfitWaterfall({ proj, report }) {
         {proj.globalDemandMult !== 1 && <span>Events <strong>{proj.globalDemandMult.toFixed(2)}×</strong></span>}
         {(report.totalConnecting ?? 0) > 0 && <span>Connecting feed <strong>{formatMoney(report.totalConnecting)}</strong></span>}
         {(report.totalPartnerRevenue ?? 0) > 0 && <span>Partner O&amp;D <strong>{formatMoney(report.totalPartnerRevenue)}</strong></span>}
+        {(report.totalCateringRevenue ?? 0) > 0 && <span>Catering ancillary <strong>{formatMoney(report.totalCateringRevenue)}</strong></span>}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
         Bars show the running balance; green/red = step adds/subtracts. Depreciation is non-cash and excluded from the cash result.
@@ -411,13 +413,17 @@ function PLStatement({ proj }) {
   const cateringByRoute = routeData.map(({ route, aircraft, result }) => {
     const type = getAircraftType(aircraft.typeId);
     const catering     = result.cateringCost     ?? weeklyCateringCost(result.classSummary ?? {});
+    const cateringRev  = result.cateringRevenue   ?? 0;
+    const cateringLevel = normalizeCateringLevel(route.cateringLevel);
     const dist         = result.distance ?? routeDistanceKm(route.origin, route.destination);
     const blockHrs     = type ? blockTimeHours(dist, type) : 0;
     const layover      = result.layoverCost      ?? weeklyLayoverCost(blockHrs, type?.seats ?? 150, type?.category ?? 'Narrow Body', route.weeklyFrequency);
     const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers * 2, onTimeRate, dist);
-    return { route, aircraft, type, catering, layover, compensation, dist, blockHrs };
+    return { route, aircraft, type, catering, cateringRev, cateringLevel, layover, compensation, dist, blockHrs };
   });
   const totCatering     = report.totalCatering;
+  const totCateringRev  = report.totalCateringRevenue ?? 0;
+  const ytdCateringRev  = ytd(financialHistory, 'cateringRevenue');
   const totLayover      = report.totalLayover;
   const totCompensation = report.totalCompensation;
   const ytdCatering     = ytd(financialHistory, 'catering');
@@ -804,6 +810,17 @@ function PLStatement({ proj }) {
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
                 </tr>
               )}
+              {totCateringRev > 0 && (
+                <tr>
+                  <td style={{ paddingLeft: 28, color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
+                    of which catering ancillary
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>buy-on-board &amp; upgrades (already in passenger revenue above)</span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{pw.cateringRevenue ? formatMoney(pw.cateringRevenue) : '—'}</td>}
+                  <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{formatMoney(totCateringRev)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{ytdCateringRev ? formatMoney(ytdCateringRev) : '—'}</td>
+                </tr>
+              )}
               {Math.abs(proj.eventDemandAdj) >= 1 && (
                 <tr>
                   <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
@@ -857,28 +874,27 @@ function PLStatement({ proj }) {
                 onToggle={() => toggleSection('passengerServices')}
                 summary={<TotalRow label="Passenger Services (collapsed)" prior={pw ? -((pw.catering ?? 0) + (pw.groundHandling ?? 0)) : undefined} weekly={-totPassengerServices} ytd={-(ytdCatering + ytdGroundHandling)} />}
               >
-                {totCatering > 0 && (
+                {(totCatering > 0 || totCateringRev > 0) && (
                   <>
                     <SubSectionHeader label="Catering" />
-                    {Object.entries(CATERING_COST_PER_PAX).map(([cls, rate]) => {
-                      const totalPax = routeData.reduce((s, { result }) => s + (result.classSummary?.[cls]?.passengers ?? 0), 0);
-                      if (totalPax === 0) return null;
-                      const clsLabel = { economy: 'Economy', premiumEconomy: 'Premium Economy', businessClass: 'Business', firstClass: 'First' }[cls];
-                      return (
-                        <tr key={cls}>
+                    {cateringByRoute
+                      .filter(r => r.catering > 0 || r.cateringRev > 0)
+                      .sort((a, b) => (b.catering - b.cateringRev) - (a.catering - a.cateringRev))
+                      .map(({ route, type, catering, cateringRev, cateringLevel }) => (
+                        <tr key={`cat-${route.id}`}>
                           <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
-                            {clsLabel}
+                            {route.origin}–{route.destination}
                             <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-                              {totalPax.toLocaleString()} pax/wk × ${rate}/pax
+                              {type?.name ?? ''} · {CATERING_LEVELS[cateringLevel]?.short ?? cateringLevel}
+                              {cateringRev > 0 && <span style={{ color: 'var(--green)' }}> · +{formatMoney(cateringRev)} ancillary</span>}
                             </span>
                           </td>
                           {pw && <td />}
-                          <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-totalPax * rate)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-catering)}</td>
                           <td />
                         </tr>
-                      );
-                    })}
-                    <LineItem label="  Total catering" prior={pw ? -(pw.catering ?? 0) : undefined} weekly={-totCatering} ytd={-ytdCatering} />
+                      ))}
+                    <LineItem label="  Total catering cost" prior={pw ? -(pw.catering ?? 0) : undefined} weekly={-totCatering} ytd={-ytdCatering} />
                   </>
                 )}
                 {totGroundHandling > 0 && (

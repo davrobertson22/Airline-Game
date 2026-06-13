@@ -13,6 +13,8 @@ import {
   calcHQCost, hqBracket,
   weeklyInsuranceCost, marketingDemandMultiplier, MARKETING_MAX_BOOST,
 } from '../data/overhead.js';
+import { normalizeCateringLevel } from '../data/catering.js';
+import CateringSelector from './CateringSelector.jsx';
 
 // ─── Headcount estimation ─────────────────────────────────────────────────────
 
@@ -525,6 +527,26 @@ export default function Operations() {
         weeklyRevenue={state.lastReport?.totalRevenue ?? 0}
         dispatch={dispatch}
       />
+
+      {/* Default catering section */}
+      <div style={{
+        fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 20, marginBottom: 10,
+      }}>
+        Default Catering Service
+      </div>
+
+      <div className="card" style={{ padding: '14px 18px' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+          The catering level applied to every newly-opened route. You can still override it
+          per route on the Routes page. Existing routes are unaffected.
+        </div>
+        <CateringSelector
+          value={normalizeCateringLevel(state.defaultCateringLevel)}
+          onChange={(level) => dispatch({ type: 'SET_DEFAULT_CATERING', level })}
+          label={null}
+        />
+      </div>
 
       {/* HQ & Corporate overhead section */}
       {fleet.length > 0 && (() => {

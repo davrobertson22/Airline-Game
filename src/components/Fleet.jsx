@@ -9,6 +9,7 @@ import {
   MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate,
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
+import { DEPRECIATION_YEARS } from '../data/overhead.js';
 import FleetConfig from './FleetConfig.jsx';
 
 const CAT_COLORS = {
@@ -72,7 +73,7 @@ function AircraftThumb({ type, size = 'sm' }) {
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 
-function AircraftDetail({ aircraft, onClose, onConfigure, onRetire }) {
+function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const { state } = useGame();
   const { routes } = state;
 
@@ -368,12 +369,21 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire }) {
       {/* ── Actions ───────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
         <button className="btn btn-primary" onClick={onConfigure}>Configure Cabin</button>
+        {aircraft.ownershipType === 'owned' && (
+          <button
+            className="btn"
+            style={{ background: 'rgba(255,180,61,.1)', color: 'var(--yellow)', border: '1px solid rgba(255,180,61,.3)' }}
+            onClick={onSell}
+          >
+            Sell Aircraft
+          </button>
+        )}
         <button
           className="btn"
           style={{ background: 'rgba(248,81,73,.1)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.3)' }}
           onClick={onRetire}
         >
-          Retire Aircraft
+          {aircraft.ownershipType === 'owned' ? 'Scrap / Write Off' : 'Return Aircraft'}
         </button>
       </div>
     </div>
@@ -684,6 +694,31 @@ export default function Fleet() {
   const [filterChip,    setFilterChip]    = useState('all'); // all | idle | grounded | leased | owned
   const [filterTypeId,  setFilterTypeId]  = useState(null); // null = all types, or a typeId string
   const [viewMode,      setViewMode]      = useState('list'); // list | byType | byCategory
+
+  function handleSell(aircraftId) {
+    const aircraft     = fleet.find(a => a.id === aircraftId);
+    const type         = getAircraftType(aircraft?.typeId);
+    const activeRoutes = routes.filter(r => r.aircraftId === aircraftId);
+    const ageYears     = (aircraft?.ageWeeks ?? 0) / 52;
+    const remaining    = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
+    const nav          = Math.round((type?.purchasePrice ?? 0) * remaining);
+    const fee          = Math.round(nav * 0.05);
+    const proceeds     = nav - fee;
+
+    let msg = activeRoutes.length > 0
+      ? `${aircraft.name} is flying ${activeRoutes.length} route${activeRoutes.length > 1 ? 's' : ''} — selling it will close all of them.\n\n`
+      : '';
+
+    msg += `Sale price (NAV):  ${formatMoney(nav)}\n`;
+    msg += `Selling & admin fee (5%):  −${formatMoney(fee)}\n`;
+    msg += `Net proceeds:  ${formatMoney(proceeds)}\n\n`;
+    msg += `Sell ${aircraft.name}?`;
+
+    if (window.confirm(msg)) {
+      dispatch({ type: 'SELL_AIRCRAFT', aircraftId });
+      setSelectedId(null);
+    }
+  }
 
   function handleRetire(aircraftId) {
     const aircraft     = fleet.find(a => a.id === aircraftId);
@@ -1207,6 +1242,7 @@ export default function Fleet() {
             onClose={() => setSelectedId(null)}
             onConfigure={() => setConfiguringId(selectedAircraft.id)}
             onRetire={() => handleRetire(selectedAircraft.id)}
+            onSell={() => handleSell(selectedAircraft.id)}
           />
         </div>
       )}

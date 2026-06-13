@@ -13,6 +13,8 @@ import {
 } from '../models/demand.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import { cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
+import CateringSelector from './CateringSelector.jsx';
 
 function weekToMonth(week) {
   return weekToGameDate(week).monthIndex;
@@ -150,6 +152,7 @@ export default function RoutePlanner() {
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [frequency, setFrequency] = useState(7);
   const [price, setPrice]         = useState(null); // null = auto reference price
+  const [cateringLevel, setCateringLevel] = useState(normalizeCateringLevel(state.defaultCateringLevel));
 
   const gameDate = { week: state.week, month: weekToMonth(state.week) };
 
@@ -244,7 +247,7 @@ export default function RoutePlanner() {
     if (!type || routeData.dist > type.range) return null;
 
     const result = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, hub: state.hub },
+      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, hub: state.hub, cateringLevel },
       { id:'p', typeId: selectedTypeId, ageWeeks: 0 },
       gameDate,
     );
@@ -252,7 +255,7 @@ export default function RoutePlanner() {
 
     // Also simulate week-0 (launch day) so the player sees the maturity ramp effect.
     const resultLaunch = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, hub: state.hub, weeksOpen: 0 },
+      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, hub: state.hub, cateringLevel, weeksOpen: 0 },
       { id:'p', typeId: selectedTypeId, ageWeeks: 0 },
       gameDate,
     );
@@ -278,7 +281,9 @@ export default function RoutePlanner() {
       seatsPerFlight: type.seats,
       economySeats: type.seats * frequency,
       businessSeats: 0,
-      qualityScore: computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: 0, customerRating: 3.5 }),
+      qualityScore: Math.max(0, Math.min(100,
+        computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: 0, customerRating: 3.5 })
+        + cateringQualityBonus(cateringLevel, routeData.dist))),
       connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
     };
     const competitorOffers = competitorsOnRoute.map(c => c.offer).filter(Boolean);
@@ -287,10 +292,10 @@ export default function RoutePlanner() {
     const playerShare  = shareResults.find(s => s.airlineId === 'player');
 
     return { result, resultLaunch, type, netProfit, totalRevenue, connecting, playerOffer, shareResults, playerShare };
-  }, [routeData, selectedTypeId, frequency, effectivePrice, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest]);
+  }, [routeData, selectedTypeId, frequency, effectivePrice, cateringLevel, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest]);
 
   function handleOpenRoute(aircraftId) {
-    dispatch({ type: 'ADD_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, ticketPrice: effectivePrice });
+    dispatch({ type: 'ADD_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, ticketPrice: effectivePrice, cateringLevel });
   }
 
   function handleSwap() {
@@ -522,6 +527,11 @@ export default function RoutePlanner() {
                         <button className="btn btn-ghost" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => setPrice(null)}>Reset</button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Catering */}
+                  <div style={{ flexBasis: '100%' }}>
+                    <CateringSelector value={cateringLevel} onChange={setCateringLevel} distKm={routeData.dist} />
                   </div>
                 </div>
 
