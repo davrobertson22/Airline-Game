@@ -4,6 +4,7 @@ import {
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
+import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
@@ -77,6 +78,11 @@ function freshState() {
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
     awareness: 5,                // 0–100: how well-known the airline is; gates demand
+    missedLoanPayments:       0,   // total weeks where loans were due and cash went negative
+    consecutiveNegativeWeeks: 0,   // weeks in a row ending with negative cash (resets on recovery)
+    bankruptcyReason:         null, // 'missed_loans' | 'consecutive_negative' | null
+    marketCap:   STARTING_CASH * 1.5,  // player market cap ($), updated each week
+    sharePrice:  STARTING_CASH * 1.5 / TOTAL_SHARES,  // player share price ($)
   };
 }
 
@@ -700,7 +706,45 @@ function reducer(state, action) {
       };
     }
 
-    case 'ADVANCE_WEEK': {
+    case 'ACQUIRE_COMPETITOR': {
+      // action: { competitorId }
+      const target = (state.competitors ?? []).find(c => c.id === action.competitorId);
+      if (!target) return state;
+
+      const acquisitionCost = Math.round((target.marketCap ?? 0) * 1.25);
+      if (state.cash < acquisitionCost) return state;  // can't afford — ignore
+
+      // Convert competitor routes to unassigned player routes
+      const inheritedRoutes = Object.entries(target.routes ?? {}).map(([key, cfg]) => {
+        const [a, b] = key.split('-');
+        const refP = mktReferencePrice(a, b);
+        return {
+          id:              uid(),
+          origin:          a,
+          destination:     b,
+          aircraftId:      null,   // unassigned — player must assign fleet
+          ticketPrice:     Math.round(refP * (cfg.priceMultiplier ?? 1)),
+          weeklyFrequency: cfg.frequency ?? 7,
+          hub:             state.hub,
+          weeksOpen:       0,
+          inherited:       true,   // flag so UI can highlight these
+        };
+      });
+
+      // Cancel any codeshare with the acquired competitor
+      const cleanedCodeshares = (state.codeshareAgreements ?? [])
+        .filter(a => a.competitorId !== target.id);
+
+      return {
+        ...state,
+        cash:                state.cash - acquisitionCost + (target.cash ?? 0),
+        routes:              [...state.routes, ...inheritedRoutes],
+        competitors:         (state.competitors ?? []).filter(c => c.id !== target.id),
+        codeshareAgreements: cleanedCodeshares,
+      };
+    }
+
+    case 'ADVANCE_WEEK': { try {
       // ── Events: tick existing, roll for new ──────────────────────────────
       const { updated: survivingEvents, expired: expiredEvents } =
         tickEvents(state.activeEvents ?? []);
@@ -936,11 +980,22 @@ function reducer(state, action) {
       // Competitors react to player pricing on shared routes
       const reactedCompetitors = tickCompetitorPricing(grownCompetitors, state.routes);
 
-      // Simulate competitor networks and accumulate their cash
+      // Simulate competitor networks, accumulate cash, and track profit history for market cap
       const approxMonth = Math.max(1, Math.ceil(state.week * 12 / 52));
       const updatedCompetitors = reactedCompetitors.map(c => {
-        const stats = computeCompetitorWeeklyStats(c, approxMonth);
-        return { ...c, weeklyStats: stats, cash: (c.cash ?? 0) + stats.weeklyProfit };
+        const stats            = computeCompetitorWeeklyStats(c, approxMonth);
+        const newCompCash      = (c.cash ?? 0) + stats.weeklyProfit;
+        const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
+        const { marketCap: compMarketCap, sharePrice: compSharePrice } =
+          computeMarketCap(newProfitHistory, newCompCash, c.baseQualityScore);
+        return {
+          ...c,
+          weeklyStats:   stats,
+          cash:          newCompCash,
+          profitHistory: newProfitHistory,
+          marketCap:     compMarketCap,
+          sharePrice:    compSharePrice,
+        };
       });
 
       // ── Tick codeshare agreement durations (expire old ones) ─────────────
@@ -958,6 +1013,41 @@ function reducer(state, action) {
           icon:    '🤝',
           duration: 6000,
         });
+      }
+
+      // ── Bankruptcy condition tracking ─────────────────────────────────────
+      // Condition 1: missed loan payment = week where loans were due AND cash went negative
+      const missedThisWeek = totalLoanPayments > 0 && newCash < 0;
+      const newMissedLoanPayments = (state.missedLoanPayments ?? 0) + (missedThisWeek ? 1 : 0);
+
+      // Condition 2: consecutive negative weeks (resets on recovery)
+      const newConsecutiveNegativeWeeks = newCash < 0
+        ? (state.consecutiveNegativeWeeks ?? 0) + 1
+        : 0;
+
+      // Warning toasts
+      if (missedThisWeek && newMissedLoanPayments === 1) {
+        newToasts.push({ type: 'danger', title: '⚠️ Missed Loan Payment (1/3)', message: "You missed a loan payment. Miss 2 more and your airline will be declared bankrupt.", duration: 9000 });
+      }
+      if (missedThisWeek && newMissedLoanPayments === 2) {
+        newToasts.push({ type: 'danger', title: '🚨 Missed Loan Payment (2/3)', message: "Critical: one more missed payment and bankruptcy will be triggered.", duration: 10000 });
+      }
+      if (newConsecutiveNegativeWeeks === 3) {
+        newToasts.push({ type: 'warning', title: '⚠️ Cash Warning: 3 Weeks Negative', message: "Your cash has been negative for 3 consecutive weeks. 6 weeks triggers bankruptcy.", duration: 9000 });
+      }
+      if (newConsecutiveNegativeWeeks === 5) {
+        newToasts.push({ type: 'danger', title: '🚨 Final Warning: 5 Weeks Negative', message: "One more week in the red and your airline will be declared bankrupt.", duration: 10000 });
+      }
+
+      // Determine bankruptcy and reason
+      let newPhase = state.phase;
+      let bankruptcyReason = state.bankruptcyReason ?? null;
+      if (newMissedLoanPayments >= 3) {
+        newPhase = 'bankrupt';
+        bankruptcyReason = 'missed_loans';
+      } else if (newConsecutiveNegativeWeeks >= 6) {
+        newPhase = 'bankrupt';
+        bankruptcyReason = 'consecutive_negative';
       }
 
       const historyEntry = {
@@ -997,6 +1087,11 @@ function reducer(state, action) {
         fuelIndex:          currentFuelIndex,
       };
       const newHistory = [...state.financialHistory, historyEntry].slice(-52);
+
+      // ── Player market cap (trailing 12 weeks, using newHistory which includes this week) ──
+      const playerProfitHistory = newHistory.slice(-12).map(h => h.profit);
+      const { marketCap: newMarketCap, sharePrice: newSharePrice } =
+        computeMarketCap(playerProfitHistory, newCash, state.awareness ?? 5);
 
       // ── Deliver pending aircraft orders ──────────────────────────────────────
       const newAbsWeek      = absoluteWeek(newYear, newWeek);
@@ -1074,11 +1169,19 @@ function reducer(state, action) {
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
-        showDebrief:         true,
-        pendingToasts:       newToasts,
-        phase:               newCash <= 0 ? 'bankrupt' : state.phase,
+        showDebrief:              true,
+        pendingToasts:            newToasts,
+        phase:                    newPhase,
+        bankruptcyReason,
+        missedLoanPayments:       newMissedLoanPayments,
+        consecutiveNegativeWeeks: newConsecutiveNegativeWeeks,
+        marketCap:                newMarketCap,
+        sharePrice:               newSharePrice,
       };
-    }
+    } catch (err) {
+      console.error('[ADVANCE_WEEK] reducer threw:', err);
+      return { ...state, advanceWeekError: err?.message ?? String(err) };
+    } }
 
     case 'BUY_HEDGE': {
       // action: { durationId, coverage }
@@ -1160,6 +1263,10 @@ function reducer(state, action) {
 
     case 'CLEAR_TOASTS': {
       return { ...state, pendingToasts: [] };
+    }
+
+    case 'CLEAR_ERROR': {
+      return { ...state, advanceWeekError: null };
     }
 
     case 'RESET': {
@@ -1261,10 +1368,22 @@ function reconcileState(parsed) {
     hedgeContracts:   parsed.hedgeContracts   ?? [],
     loyalty:          parsed.loyalty          ?? { weeklyInvestment: 0, members: 0 },
     fuelPrice:        parsed.fuelPrice        ?? { index: 1.0, history: [] },
-    allianceMembership:  parsed.allianceMembership  ?? null,
-    codeshareAgreements: parsed.codeshareAgreements ?? [],
-    marketingBudget:  parsed.marketingBudget  ?? 0,
-    awareness:        parsed.awareness        ?? 5,
+    allianceMembership:       parsed.allianceMembership       ?? null,
+    codeshareAgreements:      parsed.codeshareAgreements      ?? [],
+    marketingBudget:          parsed.marketingBudget          ?? 0,
+    awareness:                parsed.awareness                ?? 5,
+    missedLoanPayments:       parsed.missedLoanPayments       ?? 0,
+    consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,
+    bankruptcyReason:         parsed.bankruptcyReason         ?? null,
+    // Market cap — compute on load if missing (old saves)
+    marketCap:   parsed.marketCap   ?? (() => {
+      const ph = (parsed.financialHistory ?? []).slice(-12).map(h => h.profit);
+      return computeMarketCap(ph, parsed.cash ?? 0, parsed.awareness ?? 5).marketCap;
+    })(),
+    sharePrice:  parsed.sharePrice  ?? (() => {
+      const ph = (parsed.financialHistory ?? []).slice(-12).map(h => h.profit);
+      return computeMarketCap(ph, parsed.cash ?? 0, parsed.awareness ?? 5).sharePrice;
+    })(),
   };
 }
 

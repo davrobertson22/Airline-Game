@@ -140,7 +140,7 @@ export default function FleetConfig({ aircraftId, onClose }) {
             value={biz}
             max={Math.floor((maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy) / CLASS_SPACE_MULTIPLIERS.businessClass)}
             onChange={v => setBiz(v)}
-            color="#ffb43d"
+            color="#d29922"
           />
           <ClassInput
             label="Premium Economy"
@@ -149,12 +149,12 @@ export default function FleetConfig({ aircraftId, onClose }) {
             value={prem}
             max={Math.floor((maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass) / CLASS_SPACE_MULTIPLIERS.premiumEconomy)}
             onChange={v => setPrem(v)}
-            color="#3ea6ff"
+            color="#388bfd"
           />
 
           {/* Economy (read-only) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#38d39f', flexShrink: 0 }} />
+            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#3fb950', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13 }}>Economy <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>1× fare · 1× space</span></div>
             </div>
@@ -167,9 +167,9 @@ export default function FleetConfig({ aircraftId, onClose }) {
             <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
               {[
                 { units: first * CLASS_SPACE_MULTIPLIERS.firstClass,     color: '#bc8cff' },
-                { units: biz   * CLASS_SPACE_MULTIPLIERS.businessClass,  color: '#ffb43d' },
-                { units: prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy, color: '#3ea6ff' },
-                { units: eco   * CLASS_SPACE_MULTIPLIERS.economy,        color: '#38d39f' },
+                { units: biz   * CLASS_SPACE_MULTIPLIERS.businessClass,  color: '#d29922' },
+                { units: prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy, color: '#388bfd' },
+                { units: eco   * CLASS_SPACE_MULTIPLIERS.economy,        color: '#3fb950' },
               ].map((seg, i) => seg.units > 0 && (
                 <div key={i} style={{ width: `${(seg.units / maxSeats) * 100}%`, background: seg.color }} />
               ))}

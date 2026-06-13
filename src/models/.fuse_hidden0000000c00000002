@@ -569,7 +569,7 @@ export const HUB_TIERS = {
     qualityBonus:     5,
     weeklyInvestment: 25_000,     // dedicated agents, connection management, basic lounge
     minGates:         10,
-    color:            '#3ea6ff',   // var(--accent)
+    color:            '#388bfd',   // var(--accent)
   },
   2: {
     name: 'Major Hub',
@@ -577,7 +577,7 @@ export const HUB_TIERS = {
     qualityBonus:     12,
     weeklyInvestment: 150_000,    // full lounge, fast-connect baggage, connection desk staff
     minGates:         15,         // requires 5 more gates than tier-1 designation
-    color:            '#ffb43d',   // var(--yellow)
+    color:            '#d29922',   // var(--yellow)
   },
   3: {
     name: 'International Gateway',
@@ -585,7 +585,7 @@ export const HUB_TIERS = {
     qualityBonus:     20,
     weeklyInvestment: 500_000,    // premium lounges, dedicated transfer facilities, customs staff
     minGates:         20,
-    color:            '#a98bff',   // var(--purple)
+    color:            '#a371f7',   // var(--purple)
   },
 };
 

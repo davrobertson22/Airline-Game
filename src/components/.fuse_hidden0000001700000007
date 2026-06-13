@@ -605,10 +605,10 @@ export default function Operations() {
             {famEntries.map(({ id, info, count }) => {
               const catLabel = FAMILY_CATEGORY_LABEL[info.category] ?? info.category;
               const catColors = {
-                widebody: '#a98bff', narrowBody: '#3ea6ff',
-                regional: '#38d39f', turboprop: '#ffb43d', utility: '#93a4ba',
+                widebody: '#a371f7', narrowBody: '#388bfd',
+                regional: '#3fb950', turboprop: '#d29922', utility: '#8b949e',
               };
-              const color = catColors[info.category] ?? '#93a4ba';
+              const color = catColors[info.category] ?? '#8b949e';
               return (
                 <div key={id} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',

@@ -12,17 +12,17 @@ import { absoluteWeek } from '../utils/fuel.js';
 import FleetConfig from './FleetConfig.jsx';
 
 const CAT_COLORS = {
-  'Turboprop':    '#ffb43d',
-  'Regional Jet': '#38d39f',
-  'Narrow Body':  '#3ea6ff',
-  'Wide Body':    '#a98bff',
+  'Turboprop':    '#d29922',
+  'Regional Jet': '#3fb950',
+  'Narrow Body':  '#388bfd',
+  'Wide Body':    '#a371f7',
 };
 
 const CABIN_COLORS = {
-  firstClass:     '#a98bff',
-  businessClass:  '#3ea6ff',
-  premiumEconomy: '#ffb43d',
-  economy:        '#38d39f',
+  firstClass:     '#a371f7',
+  businessClass:  '#388bfd',
+  premiumEconomy: '#d29922',
+  economy:        '#3fb950',
 };
 const CABIN_LABELS = {
   firstClass: 'First', businessClass: 'Business',
@@ -31,7 +31,7 @@ const CABIN_LABELS = {
 
 function AircraftThumb({ type, size = 'sm' }) {
   const [failed, setFailed] = useState(false);
-  const color  = CAT_COLORS[type?.category] || '#93a4ba';
+  const color  = CAT_COLORS[type?.category] || '#8b949e';
   const isLarge = size === 'lg';
 
   if (failed || !type?.image) {
@@ -409,7 +409,7 @@ function FleetByType({ fleet, routes }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
       {sorted.map(([typeId, aircraft]) => {
         const type     = getAircraftType(typeId);
-        const catColor = CAT_COLORS[type?.category] || '#93a4ba';
+        const catColor = CAT_COLORS[type?.category] || '#8b949e';
         const count    = aircraft.length;
         const owned    = aircraft.filter(a => a.ownershipType === 'owned').length;
         const leased   = count - owned;
@@ -817,7 +817,7 @@ export default function Fleet() {
           return ac !== bc ? ac - bc : (at?.name ?? '').localeCompare(bt?.name ?? '');
         }).map(([typeId, aircraft]) => {
           const type = getAircraftType(typeId);
-          const catColor = CAT_COLORS[type?.category] || '#93a4ba';
+          const catColor = CAT_COLORS[type?.category] || '#8b949e';
           const count = aircraft.length;
           const avgAgeYrs = aircraft.reduce((s, a) => s + (a.ageWeeks ?? 0), 0) / count / 52;
           const allBH = aircraft.map(a => {
@@ -969,7 +969,7 @@ export default function Fleet() {
             <tbody>
               {pendingOrders.map(order => {
                 const type       = getAircraftType(order.typeId);
-                const catColor   = CAT_COLORS[type?.category] || '#93a4ba';
+                const catColor   = CAT_COLORS[type?.category] || '#8b949e';
                 const weeksLeft  = order.deliverAbsWeek - currentAbsWeek;
                 const lead       = DELIVERY_LEAD[type?.category] ?? 2;
                 const progress   = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));

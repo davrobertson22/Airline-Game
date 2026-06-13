@@ -16,10 +16,10 @@ const INVESTMENT_TIERS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function loyaltyTierLabel(investment) {
-  if (investment <= 0)        return { label: 'None',   color: '#5e7088' };
-  if (investment < 100_000)   return { label: 'Basic',  color: '#38d39f' };
-  if (investment < 250_000)   return { label: 'Silver', color: '#93a4ba' };
-  if (investment < 500_000)   return { label: 'Gold',   color: '#ffb43d' };
+  if (investment <= 0)        return { label: 'None',   color: '#6e7681' };
+  if (investment < 100_000)   return { label: 'Basic',  color: '#3fb950' };
+  if (investment < 250_000)   return { label: 'Silver', color: '#8b949e' };
+  if (investment < 500_000)   return { label: 'Gold',   color: '#d29922' };
   return                             { label: 'Elite',  color: '#bc8cff' };
 }
 
@@ -93,7 +93,7 @@ export default function Loyalty() {
           label="Active Members"
           value={members.toLocaleString()}
           sub={members > 0 ? `${(penetration * 100).toFixed(1)}% monthly pax` : 'No members yet'}
-          color="#3ea6ff"
+          color="#388bfd"
         />
         <StatCard
           label="Program Tier"
@@ -105,13 +105,13 @@ export default function Loyalty() {
           label="Reputation Bonus"
           value={`+${repBonus} pts`}
           sub={members < 12_500 ? 'Grow to 12.5k members for +1' : `${formatMoney(12_500 * (8 - repBonus))} members to max`}
-          color="#ffb43d"
+          color="#d29922"
         />
         <StatCard
           label="Weekly Program Cost"
           value={formatMoney(totalWeeklyCost)}
           sub={`${formatMoney(investment)} invest + ${formatMoney(pointsCost)} points`}
-          color={totalWeeklyCost > 0 ? '#ff5d6c' : '#5e7088'}
+          color={totalWeeklyCost > 0 ? '#f85149' : '#6e7681'}
         />
       </div>
 
@@ -202,28 +202,28 @@ export default function Loyalty() {
             label="Price Sensitivity Reduction"
             value={`−${(sensitivityRed * 100).toFixed(1)}%`}
             desc="Loyal members book with you even when competitors undercut. Reduces churn on competitive routes."
-            color="#38d39f"
+            color="#3fb950"
             active={members > 0}
           />
           <EffectRow
             label="Demand Stability Boost"
             value={`+${(demandBoost * 100).toFixed(1)}%`}
             desc="Retained passengers who might otherwise defect due to price. Applies to all routes."
-            color="#3ea6ff"
+            color="#388bfd"
             active={demandBoost > 0}
           />
           <EffectRow
             label="Points Redemption Cost"
             value={`−2% of revenue`}
             desc="Members redeem points for free/discounted seats. Cost scales with your member base."
-            color="#ff5d6c"
+            color="#f85149"
             active={members > 0}
           />
           <EffectRow
             label="Reputation Bonus"
             value={`+${repBonus} pts`}
             desc="A strong loyalty program builds brand prestige. Boosts your reputation score up to +8."
-            color="#ffb43d"
+            color="#d29922"
             active={repBonus > 0}
           />
 
@@ -253,7 +253,7 @@ export default function Loyalty() {
           </div>
           <div>
             <div style={{ color: 'var(--fg-muted)', fontSize: 12, marginBottom: 4 }}>Monthly Churn</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#ff5d6c' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#f85149' }}>
               −{Math.round(members * (investment > 0 ? 0.02 : 0.05) * 4).toLocaleString()}
             </div>
           </div>
@@ -271,7 +271,7 @@ export default function Loyalty() {
             <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <span style={{
                 width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                background: members >= m ? '#38d39f' : 'var(--border)',
+                background: members >= m ? '#3fb950' : 'var(--border)',
               }} />
               <span style={{ color: members >= m ? 'var(--fg)' : 'var(--fg-muted)' }}>
                 <strong>{m.toLocaleString()} members</strong> — {desc}

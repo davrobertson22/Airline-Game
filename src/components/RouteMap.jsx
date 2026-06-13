@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import { simulateRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
@@ -73,9 +73,13 @@ function loadLeaflet() {
   });
 }
 
-// ── Partner overlay colours ───────────────────────────────────────────────────
-const ALLIANCE_COLOR   = '#a78bfa';  // purple for alliance members
-const CODESHARE_COLOR  = '#38bdf8';  // sky-blue for codeshare partners
+// ── Palette ────────────────────────────────────────────────────────────────────
+const PROFIT_COLOR    = '#2ee6a0';  // bright teal-green
+const LOSS_COLOR      = '#ff5d6c';  // bright coral-red
+const HUB_COLOR       = '#ffcf4d';  // gold
+const SPOKE_COLOR     = '#4da6ff';  // sky blue
+const ALLIANCE_COLOR  = '#b794ff';  // purple for alliance members
+const CODESHARE_COLOR = '#38e1ff';  // cyan for codeshare partners
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function RouteMap() {
@@ -85,13 +89,20 @@ export default function RouteMap() {
   const mapElRef      = useRef(null);   // DOM node
   const mapRef        = useRef(null);   // Leaflet map instance
   const layersRef     = useRef([]);     // Active Leaflet layers (routes + markers)
+  const lineGroupsRef = useRef(new Map()); // routeId -> { halo:[], main:[], color }
   const partnerLayersRef = useRef([]);  // Partner overlay layers (separate so we can toggle)
   const [ready, setReady]       = useState(!!window.L);
   const [mapReady, setMapReady] = useState(false);   // true once L.map() is done
   const [error, setError]       = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [showAlliance,  setShowAlliance]  = useState(true);
   const [showCodeshare, setShowCodeshare] = useState(true);
+
+  // Keep refs of current interaction state so the (rarely-rebuilt) layer effect
+  // can apply correct styling without being a dependency.
+  const selectedIdRef = useRef(null);
+  const hoveredIdRef  = useRef(null);
 
   // 1. Load Leaflet from CDN
   useEffect(() => {
@@ -113,6 +124,7 @@ export default function RouteMap() {
       maxZoom: 10,
       zoomControl: false,
       attributionControl: true,
+      worldCopyJump: true,
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -123,6 +135,9 @@ export default function RouteMap() {
       subdomains: 'abcd',
       maxZoom: 20,
     }).addTo(map);
+
+    // Click empty map → deselect
+    map.on('click', () => setSelectedId(null));
 
     mapRef.current = map;
     setMapReady(true);   // ← signals the layers effect to run
@@ -150,6 +165,32 @@ export default function RouteMap() {
     const codes = new Set([hub, ...routeData.flatMap(d => [d.origin.code, d.dest.code])]);
     return [...codes].map(getAirport).filter(Boolean);
   }, [routeData, hub]);
+
+  // ── Style resolver: highlight selected/hovered, dim the rest ─────────────────
+  const applyStyles = useCallback(() => {
+    const selId = selectedIdRef.current;
+    const hovId = hoveredIdRef.current;
+    const anySel = selId != null;
+
+    lineGroupsRef.current.forEach((group, id) => {
+      const active = id === selId || id === hovId;
+      let mainW, mainO, haloW, haloO;
+      if (active)       { mainW = 4.5; mainO = 1;    haloW = 18; haloO = 0.30; }
+      else if (anySel)  { mainW = 1.8; mainO = 0.18; haloW = 7;  haloO = 0.03; }
+      else              { mainW = 2.5; mainO = 0.85; haloW = 9;  haloO = 0.16; }
+
+      group.halo.forEach(l => l.setStyle({ weight: haloW, opacity: haloO }));
+      group.main.forEach(l => {
+        l.setStyle({
+          weight: mainW,
+          opacity: mainO,
+          dashArray: active ? '10 16' : null,
+        });
+        const el = l.getElement && l.getElement();
+        if (el) el.classList.toggle('flowing', active);
+      });
+    });
+  }, []);
 
   // 4a. Derive partner route data (alliance members + codeshare partners)
   const currentAlliance = allianceMembership ? getAlliance(allianceMembership.allianceId) : null;
@@ -180,6 +221,7 @@ export default function RouteMap() {
     const map = mapRef.current;
     if (!map || !window.L) return;
     const L = window.L;
+    const dim = selectedId != null ? 0.25 : 1;   // fade partners when focusing a route
 
     // Clear previous partner layers
     partnerLayersRef.current.forEach(l => map.removeLayer(l));
@@ -202,13 +244,13 @@ export default function RouteMap() {
         const line = L.polyline(pts, {
           color,
           weight: 1.5,
-          opacity: 0.55,
+          opacity: 0.55 * dim,
           dashArray: '5, 6',
           smoothFactor: 1,
         });
         line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
         line.on('mouseover', () => line.setStyle({ opacity: 0.9, weight: 2.5 }));
-        line.on('mouseout',  () => line.setStyle({ opacity: 0.55, weight: 1.5 }));
+        line.on('mouseout',  () => line.setStyle({ opacity: 0.55 * dim, weight: 1.5 }));
         line.addTo(map);
         partnerLayersRef.current.push(line);
       }
@@ -220,14 +262,14 @@ export default function RouteMap() {
           fillColor: color,
           color: color,
           weight: 1,
-          fillOpacity: 0.7,
+          fillOpacity: 0.7 * dim,
           interactive: false,
         });
         dot.addTo(map);
         partnerLayersRef.current.push(dot);
       }
     }
-  }, [partnerRouteData, showAlliance, showCodeshare, mapReady]);
+  }, [partnerRouteData, showAlliance, showCodeshare, selectedId, mapReady]);
 
   // 4. Sync routes + markers to map
   useEffect(() => {
@@ -238,11 +280,12 @@ export default function RouteMap() {
     // Clear previous layers
     layersRef.current.forEach(l => map.removeLayer(l));
     layersRef.current = [];
+    lineGroupsRef.current = new Map();
 
-    // Route polylines
+    // Route polylines (glow halo underneath + crisp main line on top)
     for (const { r, origin, dest, result } of routeData) {
       const profit   = result?.profit ?? 0;
-      const color    = profit >= 0 ? '#3fb950' : '#f85149';
+      const color    = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
       const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
 
       const lf      = result ? `${(result.loadFactor * 100).toFixed(0)}%` : '—';
@@ -256,62 +299,110 @@ export default function RouteMap() {
           <div class="map-tip-stats">
             <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
             <div><span class="map-tip-lbl">Pax/wk</span><span class="map-tip-val">${pax}</span></div>
-            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:#3fb950">${rev}</span></div>
+            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
             <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
           </div>
+          <div class="map-tip-hint">Click to focus this route</div>
         </div>
       `;
 
-      // One polyline per segment (routes crossing the antimeridian get two)
-      const lines = segments.map(pts => L.polyline(pts, {
-        color,
-        weight: 2.2,
-        opacity: 0.75,
-        smoothFactor: 1,
-      }));
+      const halo = [];
+      const main = [];
 
-      lines.forEach(line => {
-        line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
-        line.on('mouseover', () => {
-          lines.forEach(l => l.setStyle({ weight: 4, opacity: 1 }));
-          setHoveredId(r.id);
+      for (const pts of segments) {
+        // Glow halo (non-interactive, sits beneath the main line)
+        const glow = L.polyline(pts, {
+          color,
+          weight: 9,
+          opacity: 0.16,
+          lineCap: 'round',
+          smoothFactor: 1,
+          interactive: false,
+          className: 'route-glow',
         });
-        line.on('mouseout', () => {
-          lines.forEach(l => l.setStyle({ weight: 2.2, opacity: 0.75 }));
-          setHoveredId(null);
+        glow.addTo(map);
+        halo.push(glow);
+        layersRef.current.push(glow);
+
+        // Crisp main line (interactive)
+        const line = L.polyline(pts, {
+          color,
+          weight: 2.5,
+          opacity: 0.85,
+          lineCap: 'round',
+          smoothFactor: 1,
+          className: 'route-line',
+        });
+        line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
+        line.on('mouseover', () => { setHoveredId(r.id); });
+        line.on('mouseout',  () => { setHoveredId(null); });
+        line.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          setSelectedId(prev => (prev === r.id ? null : r.id));
         });
         line.addTo(map);
+        main.push(line);
         layersRef.current.push(line);
-      });
+      }
+
+      lineGroupsRef.current.set(r.id, { halo, main, color });
     }
 
     // Airport markers
     for (const airport of airportSet) {
       const isHub = airport.code === hub;
 
-      const marker = L.circleMarker([airport.lat, airport.lon], {
-        radius:      isHub ? 8 : 5,
-        fillColor:   isHub ? '#f0c040' : '#388bfd',
-        color:       isHub ? '#fff8dc' : '#6db0ff',
-        weight:      isHub ? 2 : 1.5,
-        fillOpacity: 1,
-        zIndexOffset: isHub ? 1000 : 0,
-      });
+      if (isHub) {
+        // Pulsing hub marker (animated CSS divIcon)
+        const hubMarker = L.marker([airport.lat, airport.lon], {
+          icon: L.divIcon({
+            className: 'hub-marker',
+            html: '<span class="hub-pulse-ring"></span><span class="hub-pulse-core"></span>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          }),
+          zIndexOffset: 1000,
+        });
+        hubMarker.bindTooltip(
+          `<div class="map-tip"><div class="map-tip-title">${airport.code}</div><div class="map-tip-sub">${airport.city}, ${airport.country} <span style="color:${HUB_COLOR}">● HUB</span></div></div>`,
+          { className: 'game-tooltip', offset: [12, 0] },
+        );
+        hubMarker.addTo(map);
+        layersRef.current.push(hubMarker);
+      } else {
+        // Glow halo behind spoke airport
+        const halo = L.circleMarker([airport.lat, airport.lon], {
+          radius: 9,
+          fillColor: SPOKE_COLOR,
+          color: SPOKE_COLOR,
+          weight: 0,
+          fillOpacity: 0.18,
+          interactive: false,
+        });
+        halo.addTo(map);
+        layersRef.current.push(halo);
 
-      marker.bindTooltip(
-        `<div class="map-tip"><div class="map-tip-title">${airport.code}</div><div class="map-tip-sub">${airport.city}, ${airport.country}${isHub ? ' <span style="color:#f0c040">● HUB</span>' : ''}</div></div>`,
-        { className: 'game-tooltip', offset: [10, 0] },
-      );
-
-      marker.addTo(map);
-      layersRef.current.push(marker);
+        const marker = L.circleMarker([airport.lat, airport.lon], {
+          radius: 5,
+          fillColor: SPOKE_COLOR,
+          color: '#bfe0ff',
+          weight: 1.5,
+          fillOpacity: 1,
+        });
+        marker.bindTooltip(
+          `<div class="map-tip"><div class="map-tip-title">${airport.code}</div><div class="map-tip-sub">${airport.city}, ${airport.country}</div></div>`,
+          { className: 'game-tooltip', offset: [10, 0] },
+        );
+        marker.addTo(map);
+        layersRef.current.push(marker);
+      }
 
       // Code label (not shown at low zoom — Leaflet handles that via zoom)
       const label = L.marker([airport.lat, airport.lon], {
         icon: L.divIcon({
           className: 'airport-label',
           html: `<span>${airport.code}</span>`,
-          iconAnchor: [-9, 4],
+          iconAnchor: [-10, 4],
         }),
         interactive: false,
         zIndexOffset: 500,
@@ -325,7 +416,31 @@ export default function RouteMap() {
       const bounds = L.latLngBounds(airportSet.map(a => [a.lat, a.lon]));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 5 });
     }
-  }, [routeData, airportSet, hub, mapReady]); // mapReady ensures this re-runs after L.map() finishes
+
+    applyStyles();
+  }, [routeData, airportSet, hub, mapReady, applyStyles]); // mapReady ensures this re-runs after L.map() finishes
+
+  // Re-style when hover changes
+  useEffect(() => {
+    hoveredIdRef.current = hoveredId;
+    applyStyles();
+  }, [hoveredId, applyStyles]);
+
+  // Re-style + fly to selected route when selection changes
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    applyStyles();
+
+    const map = mapRef.current;
+    if (!map || !window.L || selectedId == null) return;
+    const d = routeData.find(x => x.r.id === selectedId);
+    if (!d) return;
+    const bounds = window.L.latLngBounds([
+      [d.origin.lat, d.origin.lon],
+      [d.dest.lat, d.dest.lon],
+    ]);
+    map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
+  }, [selectedId, routeData, applyStyles]);
 
   if (routes.length === 0) {
     return (
@@ -336,6 +451,8 @@ export default function RouteMap() {
       </div>
     );
   }
+
+  const selectedData = selectedId != null ? routeData.find(x => x.r.id === selectedId) : null;
 
   return (
     <div>
@@ -350,20 +467,31 @@ export default function RouteMap() {
             <span style={{ fontWeight: 600, fontSize: 14 }}>Route Network</span>
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
               {routes.length} route{routes.length !== 1 ? 's' : ''} · {airportSet.length} airports
+              {selectedData && (
+                <span style={{ color: 'var(--accent)' }}> · focused {selectedData.r.origin}→{selectedData.r.destination}</span>
+              )}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
+            {selectedId != null && (
+              <button
+                onClick={() => setSelectedId(null)}
+                className="map-clear-btn"
+              >
+                ✕ Clear focus
+              </button>
+            )}
             {/* Static legend items */}
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 18, height: 2, background: '#3fb950', display: 'inline-block', borderRadius: 1 }} />
+              <span style={{ width: 18, height: 2, background: PROFIT_COLOR, display: 'inline-block', borderRadius: 1 }} />
               Profitable
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 18, height: 2, background: '#f85149', display: 'inline-block', borderRadius: 1 }} />
+              <span style={{ width: 18, height: 2, background: LOSS_COLOR, display: 'inline-block', borderRadius: 1 }} />
               Loss
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f0c040', display: 'inline-block' }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: HUB_COLOR, display: 'inline-block' }} />
               Hub
             </span>
 
@@ -435,6 +563,9 @@ export default function RouteMap() {
           <span style={{ fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--text-muted)' }}>
             All Routes
           </span>
+          <span style={{ marginLeft: 10, fontSize: 11, color: 'var(--text-dim)' }}>
+            click a row to focus it on the map
+          </span>
         </div>
         <table>
           <thead>
@@ -452,10 +583,18 @@ export default function RouteMap() {
               const profit = result?.profit ?? 0;
               const lf = result?.loadFactor ?? 0;
               const isHov = hoveredId === r.id;
+              const isSel = selectedId === r.id;
               return (
                 <tr
                   key={r.id}
-                  style={{ background: isHov ? 'var(--surface2)' : undefined, cursor: 'default' }}
+                  onClick={() => setSelectedId(prev => (prev === r.id ? null : r.id))}
+                  onMouseEnter={() => setHoveredId(r.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  style={{
+                    background: isSel ? 'var(--accent-dim)' : isHov ? 'var(--surface2)' : undefined,
+                    boxShadow: isSel ? 'inset 3px 0 0 var(--accent)' : undefined,
+                    cursor: 'pointer',
+                  }}
                 >
                   <td style={{ paddingRight: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: profit >= 0 ? 'var(--green)' : 'var(--red)' }} />

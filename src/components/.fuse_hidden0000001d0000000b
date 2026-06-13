@@ -519,22 +519,22 @@ function FinancialChart({ history, currentWeek }) {
         ))}
 
         {/* Profit area fill */}
-        <path d={profitArea} fill="#38d39f" opacity="0.07" />
+        <path d={profitArea} fill="#3fb950" opacity="0.07" />
 
         {/* Lines */}
-        {line(revenues, '#3ea6ff')}
-        {line(costs,    '#ff5d6c', '5 3')}
-        {line(profits,  '#38d39f')}
+        {line(revenues, '#388bfd')}
+        {line(costs,    '#f85149', '5 3')}
+        {line(profits,  '#3fb950')}
 
         {/* End dots */}
-        <circle cx={px(n-1).toFixed(1)} cy={py(revenues[n-1]).toFixed(1)} r="3.5" fill="#3ea6ff" />
-        <circle cx={px(n-1).toFixed(1)} cy={py(costs[n-1]).toFixed(1)}    r="3.5" fill="#ff5d6c" />
-        <circle cx={px(n-1).toFixed(1)} cy={py(profits[n-1]).toFixed(1)}  r="3.5" fill="#38d39f" />
+        <circle cx={px(n-1).toFixed(1)} cy={py(revenues[n-1]).toFixed(1)} r="3.5" fill="#388bfd" />
+        <circle cx={px(n-1).toFixed(1)} cy={py(costs[n-1]).toFixed(1)}    r="3.5" fill="#f85149" />
+        <circle cx={px(n-1).toFixed(1)} cy={py(profits[n-1]).toFixed(1)}  r="3.5" fill="#3fb950" />
       </svg>
       <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-        <span><span style={{ color: '#3ea6ff' }}>—</span> Revenue</span>
-        <span><span style={{ color: '#ff5d6c' }}>- -</span> Costs</span>
-        <span><span style={{ color: '#38d39f' }}>—</span> Profit</span>
+        <span><span style={{ color: '#388bfd' }}>—</span> Revenue</span>
+        <span><span style={{ color: '#f85149' }}>- -</span> Costs</span>
+        <span><span style={{ color: '#3fb950' }}>—</span> Profit</span>
         {lastPct && <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>{lastPct}</span>}
       </div>
     </div>
@@ -549,12 +549,12 @@ function CostBreakdownChart({ breakdown }) {
 
   const segments = [
     { label: 'Fuel',         value: fuel,        color: '#f0883e' },
-    { label: 'Crew',         value: crew,        color: '#3ea6ff' },
-    { label: 'Leases',       value: leases,      color: '#ff5d6c' },
-    { label: 'Maintenance',  value: maintenance, color: '#a98bff' },
+    { label: 'Crew',         value: crew,        color: '#388bfd' },
+    { label: 'Leases',       value: leases,      color: '#f85149' },
+    { label: 'Maintenance',  value: maintenance, color: '#a371f7' },
     { label: 'Gates & Fees', value: gates,       color: '#d2a679' },
     { label: 'Service',      value: service,     color: '#79c0ff' },
-    { label: 'Overhead',     value: overhead,    color: '#93a4ba' },
+    { label: 'Overhead',     value: overhead,    color: '#8b949e' },
     { label: 'Growth',       value: growth,      color: '#56d364' },
   ].filter(s => s.value > 0);
 

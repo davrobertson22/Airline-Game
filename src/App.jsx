@@ -20,6 +20,7 @@ import Operations from './components/Operations.jsx';
 import Loyalty from './components/Loyalty.jsx';
 import Alliances from './components/Alliances.jsx';
 import AirlineLogo from './components/AirlineLogo.jsx';
+import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 
 function MapIcon({ size = 15 }) {
   return (
@@ -67,7 +68,15 @@ export default function App() {
 function AppInner() {
   const { state, dispatch } = useGame();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [showTour, setShowTour] = useState(false);
   const addToast = useToast();
+
+  // Show tour automatically the first time a game starts
+  useEffect(() => {
+    if (state.phase === 'playing' && !localStorage.getItem(TOUR_KEY)) {
+      setShowTour(true);
+    }
+  }, [state.phase]);
 
   // Fire pending toasts from the reducer
   useEffect(() => {
@@ -195,6 +204,14 @@ function AppInner() {
         <button
           className="btn btn-ghost"
           style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={() => setShowTour(true)}
+          title="How to play"
+        >
+          ?
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px' }}
           onClick={handleReset}
         >
           New Game
@@ -223,15 +240,58 @@ function AppInner() {
       {/* Weekly debrief modal */}
       <WeeklyDebrief />
 
+      {/* Advance-week error overlay — shows if reducer threw */}
+      {state.advanceWeekError && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+        }}>
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--red)',
+            borderRadius: 12, padding: 32, maxWidth: 500, width: '90%',
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️ Advance Week Error</div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+              An error occurred while advancing the week. Please copy this message and report it:
+            </p>
+            <pre style={{
+              background: 'var(--surface2)', padding: 12, borderRadius: 6,
+              fontSize: 11, overflowX: 'auto', color: 'var(--red)', whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {state.advanceWeekError}
+            </pre>
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: 16, width: '100%' }}
+              onClick={() => dispatch({ type: 'CLEAR_ERROR' })}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bankrupt overlay */}
       {state.phase === 'bankrupt' && (
         <div className="bankrupt-overlay">
           <div className="bankrupt-card">
             <div style={{ fontSize: 48, marginBottom: 16 }}>💸</div>
             <h2 style={{ fontSize: 24, marginBottom: 8 }}>Bankruptcy</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
-              {state.airlineName} has run out of cash.
+            <p style={{ color: 'var(--text-muted)', marginBottom: 8 }}>
+              {state.airlineName} has been declared bankrupt.
             </p>
+            <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>
+              {state.bankruptcyReason === 'missed_loans'
+                ? '3 loan payments were missed. The bank has called in your debt and seized operations.'
+                : state.bankruptcyReason === 'consecutive_negative'
+                ? 'Your cash was negative for 6 consecutive weeks. Unable to sustain operations.'
+                : 'Your airline ran out of cash.'}
+            </p>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 24, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8 }}>
+              Weeks survived: <strong style={{ color: 'var(--text)' }}>{((state.year - 2026) * 52 + state.week)}</strong>
+              {state.missedLoanPayments > 0 && <> · Missed payments: <strong style={{ color: 'var(--red)' }}>{state.missedLoanPayments}</strong></>}
+            </div>
             <button
               className="btn btn-primary"
               style={{ width: '100%', padding: 12 }}
@@ -242,6 +302,9 @@ function AppInner() {
           </div>
         </div>
       )}
+
+      {/* Onboarding tour */}
+      {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
     </div>
   );
 }

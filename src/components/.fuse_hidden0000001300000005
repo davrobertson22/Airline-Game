@@ -12,9 +12,9 @@ const QUALITY_SCORE = { basic: 15, standard: 45, premium: 72, luxury: 100 };
 
 // Competitor brand benchmarks (fixed reference points for positioning map)
 const COMPETITOR_POSITIONS = [
-  { id: 'zoomjet',  name: 'ZoomJet',   x: 0.28, y: 0.12, color: '#ffb43d' },
-  { id: 'globalair',name: 'Global Air', x: 0.58, y: 0.55, color: '#3ea6ff' },
-  { id: 'apexair',  name: 'Apex Air',   x: 0.82, y: 0.88, color: '#a98bff' },
+  { id: 'zoomjet',  name: 'ZoomJet',   x: 0.28, y: 0.12, color: '#d29922' },
+  { id: 'globalair',name: 'Global Air', x: 0.58, y: 0.55, color: '#388bfd' },
+  { id: 'apexair',  name: 'Apex Air',   x: 0.82, y: 0.88, color: '#a371f7' },
 ];
 
 // ─── Pure calculation functions ───────────────────────────────────────────────
@@ -134,11 +134,11 @@ function calcPositioning(state) {
 
 function strategyLabel(pos) {
   const { x, y } = pos;
-  if (y >= 0.6 && x >= 0.55) return { name: 'Premium Full-Service', color: '#a98bff', emoji: '💎', description: 'Positioned for business and premium leisure travel. High revenue per seat, brand commands a price premium. Focus on service consistency and business-friendly routes.' };
-  if (y >= 0.6 && x <  0.55) return { name: 'Luxury Leisure',       color: '#38d39f', emoji: '🌴', description: 'Upscale but leisure-oriented. Sells a premium holiday experience. Strong in resort routes and seasonal markets. Demand is highly seasonal.' };
-  if (y <  0.4 && x >= 0.55) return { name: 'Budget Business',      color: '#3ea6ff', emoji: '💼', description: 'Affordable business travel — think no-frills but reliable on corporate corridors. Works on short-haul business routes with high frequency.' };
-  if (y <  0.4 && x <  0.55) return { name: 'Low-Cost Carrier',     color: '#ffb43d', emoji: '✂️', description: 'Volume over margin. Fill planes at low prices, minimise costs everywhere. Works best with high frequency, large fleets, and dense leisure routes.' };
-  return { name: 'Mid-Market',               color: '#93a4ba', emoji: '🔄', description: 'Sitting in the middle. Not strongly differentiated yet. Consider pushing toward Premium or Low-Cost — the middle is the hardest place to compete.' };
+  if (y >= 0.6 && x >= 0.55) return { name: 'Premium Full-Service', color: '#a371f7', emoji: '💎', description: 'Positioned for business and premium leisure travel. High revenue per seat, brand commands a price premium. Focus on service consistency and business-friendly routes.' };
+  if (y >= 0.6 && x <  0.55) return { name: 'Luxury Leisure',       color: '#3fb950', emoji: '🌴', description: 'Upscale but leisure-oriented. Sells a premium holiday experience. Strong in resort routes and seasonal markets. Demand is highly seasonal.' };
+  if (y <  0.4 && x >= 0.55) return { name: 'Budget Business',      color: '#388bfd', emoji: '💼', description: 'Affordable business travel — think no-frills but reliable on corporate corridors. Works on short-haul business routes with high frequency.' };
+  if (y <  0.4 && x <  0.55) return { name: 'Low-Cost Carrier',     color: '#d29922', emoji: '✂️', description: 'Volume over margin. Fill planes at low prices, minimise costs everywhere. Works best with high frequency, large fleets, and dense leisure routes.' };
+  return { name: 'Mid-Market',               color: '#8b949e', emoji: '🔄', description: 'Sitting in the middle. Not strongly differentiated yet. Consider pushing toward Premium or Low-Cost — the middle is the hardest place to compete.' };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ export default function Reputation() {
           <StrategyCard
             emoji="✂️" name="Low-Cost Carrier"
             active={strategy.name === 'Low-Cost Carrier'}
-            color="#ffb43d"
+            color="#d29922"
             howTo={[
               'Price 15–25% below reference on all routes',
               'Keep all cabins as economy (no premium classes)',
@@ -373,7 +373,7 @@ export default function Reputation() {
           <StrategyCard
             emoji="💎" name="Premium Full-Service"
             active={strategy.name === 'Premium Full-Service'}
-            color="#a98bff"
+            color="#a371f7"
             howTo={[
               'Price 10–30% above reference',
               'Invest in business class and premium economy cabins',
@@ -456,10 +456,10 @@ function PositioningMatrix({ pos, airlineName, strategy }) {
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H }}>
       {/* Background quadrants */}
       {[
-        { x: PAD,         y: PAD,         w: plotW/2, h: plotH/2, label: 'Premium\nLeisure',  color: '#38d39f08' },
-        { x: PAD+plotW/2, y: PAD,         w: plotW/2, h: plotH/2, label: 'Premium\nBusiness', color: '#a98bff08' },
-        { x: PAD,         y: PAD+plotH/2, w: plotW/2, h: plotH/2, label: 'Budget\nLeisure',   color: '#ffb43d08' },
-        { x: PAD+plotW/2, y: PAD+plotH/2, w: plotW/2, h: plotH/2, label: 'Budget\nBusiness',  color: '#3ea6ff08' },
+        { x: PAD,         y: PAD,         w: plotW/2, h: plotH/2, label: 'Premium\nLeisure',  color: '#3fb95008' },
+        { x: PAD+plotW/2, y: PAD,         w: plotW/2, h: plotH/2, label: 'Premium\nBusiness', color: '#a371f708' },
+        { x: PAD,         y: PAD+plotH/2, w: plotW/2, h: plotH/2, label: 'Budget\nLeisure',   color: '#d2992208' },
+        { x: PAD+plotW/2, y: PAD+plotH/2, w: plotW/2, h: plotH/2, label: 'Budget\nBusiness',  color: '#388bfd08' },
       ].map((q, i) => (
         <rect key={i} x={q.x} y={q.y} width={q.w} height={q.h} fill={q.color} />
       ))}

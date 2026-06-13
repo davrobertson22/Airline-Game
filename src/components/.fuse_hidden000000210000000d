@@ -60,10 +60,10 @@ function ToastContainer({ toasts, dispatch }) {
 // ── Individual toast ──────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  success: { color: '#38d39f', icon: '✓' },
-  warning: { color: '#ffb43d', icon: '⚠' },
-  danger:  { color: '#ff5d6c', icon: '✕' },
-  info:    { color: '#3ea6ff', icon: 'ℹ' },
+  success: { color: '#3fb950', icon: '✓' },
+  warning: { color: '#d29922', icon: '⚠' },
+  danger:  { color: '#f85149', icon: '✕' },
+  info:    { color: '#388bfd', icon: 'ℹ' },
 };
 
 function Toast({ toast, onDismiss }) {

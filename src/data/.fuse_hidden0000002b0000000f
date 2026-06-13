@@ -29,7 +29,7 @@ export const EVENT_TEMPLATES = [
     name: 'Fuel Price Spike',
     icon: '⛽',
     description: 'Oil market disruption pushes jet fuel prices up {pct}%.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.04,
     duration: [3, 6],
     generate() {
@@ -46,7 +46,7 @@ export const EVENT_TEMPLATES = [
     name: 'Fuel Prices Fall',
     icon: '⛽',
     description: 'Global oil oversupply drives fuel costs down {pct}%.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.03,
     duration: [4, 8],
     generate() {
@@ -66,7 +66,7 @@ export const EVENT_TEMPLATES = [
     name: 'Global Travel Boom',
     icon: '🌍',
     description: 'Consumer confidence surge drives travel demand up globally.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.025,
     duration: [4, 8],
     generate() {
@@ -83,7 +83,7 @@ export const EVENT_TEMPLATES = [
     name: 'Economic Downturn',
     icon: '📉',
     description: 'Recession fears cause passengers to cut discretionary travel.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.018,
     duration: [8, 16],
     generate() {
@@ -100,7 +100,7 @@ export const EVENT_TEMPLATES = [
     name: 'Holiday Travel Surge',
     icon: '🎄',
     description: 'Seasonal holiday travel drives a short demand spike.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.04,
     duration: [2, 4],
     generate() {
@@ -120,7 +120,7 @@ export const EVENT_TEMPLATES = [
     name: 'Asia-Pacific Travel Surge',
     icon: '🌏',
     description: 'Strong regional growth boosts Asia-Pacific routes.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.03,
     duration: [6, 12],
     generate() {
@@ -140,7 +140,7 @@ export const EVENT_TEMPLATES = [
     name: 'European Summer Rush',
     icon: '☀️',
     description: 'Summer holidays drive a surge across European routes.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.035,
     duration: [6, 10],
     generate() {
@@ -160,7 +160,7 @@ export const EVENT_TEMPLATES = [
     name: 'US Domestic Slowdown',
     icon: '🇺🇸',
     description: 'Economic concerns soften North American travel demand.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.025,
     duration: [4, 8],
     generate() {
@@ -183,7 +183,7 @@ export const EVENT_TEMPLATES = [
     name: 'LHR Ground Staff Strike',
     icon: '✊',
     description: 'London Heathrow ground handlers on strike — capacity severely restricted.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.02,
     duration: [1, 3],
     generate() {
@@ -204,7 +204,7 @@ export const EVENT_TEMPLATES = [
     name: 'Severe US Winter Weather',
     icon: '🌨️',
     description: 'Major winter storm grounds flights across the US northeast.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.03,
     duration: [1, 2],
     generate() {
@@ -224,7 +224,7 @@ export const EVENT_TEMPLATES = [
     name: 'Industry-Wide IT Outage',
     icon: '💻',
     description: 'Global reservation system failure causes booking chaos.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.015,
     duration: [1, 1],
     generate() {
@@ -243,7 +243,7 @@ export const EVENT_TEMPLATES = [
     name: 'Major Sporting Event',
     icon: '🏆',
     description: 'A marquee global sporting event draws massive travel surges to the host region.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.02,
     duration: [3, 5],
     generate() {
@@ -268,7 +268,7 @@ export const EVENT_TEMPLATES = [
     name: 'Pandemic Scare',
     icon: '😷',
     description: 'A new respiratory illness triggers travel advisories and widespread cancellations.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.012,
     duration: [6, 14],
     generate() {
@@ -285,7 +285,7 @@ export const EVENT_TEMPLATES = [
     name: 'Volcanic Ash Cloud',
     icon: '🌋',
     description: 'A major volcanic eruption closes airspace across a region for weeks.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.018,
     duration: [2, 5],
     generate() {
@@ -307,7 +307,7 @@ export const EVENT_TEMPLATES = [
     name: 'Natural Disaster',
     icon: '🌊',
     description: 'A major earthquake, flood, or hurricane devastates a region, halting travel.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.022,
     duration: [3, 7],
     generate() {
@@ -332,7 +332,7 @@ export const EVENT_TEMPLATES = [
     name: 'Political Unrest',
     icon: '🚨',
     description: 'Civil unrest and travel advisories deter visitors from flying to a region.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.025,
     duration: [4, 10],
     generate() {
@@ -356,7 +356,7 @@ export const EVENT_TEMPLATES = [
     name: 'Tourism Boom',
     icon: '🗺️',
     description: 'A high-profile campaign or viral moment sparks a tourism rush to a region.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.03,
     duration: [5, 10],
     generate() {
@@ -380,7 +380,7 @@ export const EVENT_TEMPLATES = [
     name: 'Major Trade Conference',
     icon: '🤝',
     description: 'A global summit draws thousands of business travellers to a single destination.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.03,
     duration: [1, 2],
     generate() {
@@ -397,7 +397,7 @@ export const EVENT_TEMPLATES = [
     name: 'Currency Crisis',
     icon: '💱',
     description: 'A currency collapse makes foreign travel unaffordable for millions in a region.',
-    color: '#ffb43d',
+    color: '#d29922',
     probability: 0.02,
     duration: [6, 12],
     generate() {
@@ -421,7 +421,7 @@ export const EVENT_TEMPLATES = [
     name: 'Heatwave Escape Rush',
     icon: '🌡️',
     description: 'Record temperatures send travellers fleeing to cooler destinations.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.025,
     duration: [3, 6],
     generate() {
@@ -438,7 +438,7 @@ export const EVENT_TEMPLATES = [
     name: 'Low-Cost Carrier Exits Market',
     icon: '📢',
     description: 'A low-cost rival collapses — passengers scramble for alternatives on their routes.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.018,
     duration: [4, 8],
     generate() {
@@ -458,7 +458,7 @@ export const EVENT_TEMPLATES = [
     name: 'Competitor Fare War',
     icon: '⚔️',
     description: 'Rival airlines slash fares across shared routes to grab market share.',
-    color: '#ff5d6c',
+    color: '#f85149',
     probability: 0.03,
     duration: [3, 6],
     generate() {
@@ -475,7 +475,7 @@ export const EVENT_TEMPLATES = [
     name: 'Competitor Airline Crisis',
     icon: '🏚️',
     description: 'A rival airline grounds its fleet — stranded passengers flood the market.',
-    color: '#38d39f',
+    color: '#3fb950',
     probability: 0.015,
     duration: [4, 8],
     generate() {

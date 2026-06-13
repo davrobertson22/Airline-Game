@@ -158,7 +158,7 @@ export const AIRLINE_LOGOS = [
             </linearGradient>
           </defs>
           <rect width="40" height="40" rx={r} fill={`url(#${gid})`} />
-          <polygon points="23,6 12,22 19.5,22 17,34 28,18 20.5,18" fill="#070b14" opacity=".88" />
+          <polygon points="23,6 12,22 19.5,22 17,34 28,18 20.5,18" fill="#0d1117" opacity=".88" />
         </>
       );
     },
@@ -275,8 +275,8 @@ export default function AirlineLogo({ id, size = 40, radius, accentColor, style,
   if (!logo) {
     return (
       <svg width={size} height={size} viewBox="0 0 40 40" style={style} className={className}>
-        <rect width="40" height="40" rx={r} fill="#15202f" />
-        <text x="20" y="26" textAnchor="middle" fill="#93a4ba"
+        <rect width="40" height="40" rx={r} fill="#21262d" />
+        <text x="20" y="26" textAnchor="middle" fill="#8b949e"
           fontSize="20" fontWeight="700" fontFamily="system-ui">
           ?
         </text>

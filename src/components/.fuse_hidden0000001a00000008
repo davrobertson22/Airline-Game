@@ -55,7 +55,7 @@ class FinanceErrorBoundary extends Component {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STARTING_CAPITAL = 10_000_000;
 const CLASS_LABELS = { firstClass: 'First', businessClass: 'Business', premiumEconomy: 'Prem-Eco', economy: 'Economy' };
-const CLASS_COLORS = { firstClass: '#bc8cff', businessClass: '#ffb43d', premiumEconomy: '#3ea6ff', economy: '#38d39f' };
+const CLASS_COLORS = { firstClass: '#bc8cff', businessClass: '#d29922', premiumEconomy: '#388bfd', economy: '#3fb950' };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1718,7 +1718,7 @@ function AirportBreakdown() {
               const monthlyFee = gateMonthlyFee(airport) * gateCount;
               const weeklyFee  = Math.round(monthlyFee / 4.33);
               const net        = revenue - weeklyFee;
-              const tierColor  = { mega: '#a98bff', major: '#3ea6ff', regional: '#38d39f' }[airport?.tier] ?? 'var(--text-muted)';
+              const tierColor  = { mega: '#a371f7', major: '#388bfd', regional: '#3fb950' }[airport?.tier] ?? 'var(--text-muted)';
               const routeList  = [...new Set(aptRoutes.map(r => r.origin === code ? r.destination : r.origin))];
 
               return (
@@ -1939,34 +1939,34 @@ function CashFlow() {
               <div className="card-title">Cost Mix</div>
               <div style={{ display: 'flex', height: 16, borderRadius: 3, overflow: 'hidden', marginBottom: 10 }}>
                 {[
-                  { v: projLeases,      c: '#ff5d6c', l: 'Leases'       },
-                  { v: projMaint,       c: '#ffb43d', l: 'Maint'        },
+                  { v: projLeases,      c: '#f85149', l: 'Leases'       },
+                  { v: projMaint,       c: '#d29922', l: 'Maint'        },
                   { v: projInsurance,   c: '#e07b39', l: 'Insurance'    },
-                  { v: projOpCost,      c: '#3ea6ff', l: 'Op Costs'     },
+                  { v: projOpCost,      c: '#388bfd', l: 'Op Costs'     },
                   { v: projLandingFees, c: '#1f7fc4', l: 'Landing Fees' },
-                  { v: projGates,       c: '#38d39f', l: 'Gates'        },
-                  { v: cfLabor,         c: '#a98bff', l: 'Labor'        },
+                  { v: projGates,       c: '#3fb950', l: 'Gates'        },
+                  { v: cfLabor,         c: '#a371f7', l: 'Labor'        },
                   { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
                   { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
                   { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
-                  { v: projHQ + projHubInvest, c: '#93a4ba', l: 'G&A'  },
+                  { v: projHQ + projHubInvest, c: '#8b949e', l: 'G&A'  },
                 ].map((s, i) => s.v > 0 && (
                   <div key={i} style={{ width: `${(s.v/totalCosts)*100}%`, background: s.c }} title={`${s.l}: ${formatMoney(s.v)}`} />
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
                 {[
-                  { v: projLeases,      c: '#ff5d6c', l: 'Leases'       },
-                  { v: projMaint,       c: '#ffb43d', l: 'Maint'        },
+                  { v: projLeases,      c: '#f85149', l: 'Leases'       },
+                  { v: projMaint,       c: '#d29922', l: 'Maint'        },
                   { v: projInsurance,   c: '#e07b39', l: 'Insurance'    },
-                  { v: projOpCost,      c: '#3ea6ff', l: 'Op Costs'     },
+                  { v: projOpCost,      c: '#388bfd', l: 'Op Costs'     },
                   { v: projLandingFees, c: '#1f7fc4', l: 'Landing Fees' },
-                  { v: projGates,       c: '#38d39f', l: 'Gates'        },
-                  { v: cfLabor,         c: '#a98bff', l: 'Labor'        },
+                  { v: projGates,       c: '#3fb950', l: 'Gates'        },
+                  { v: cfLabor,         c: '#a371f7', l: 'Labor'        },
                   { v: cfFamily,        c: '#4fc3f7', l: 'MRO Base'     },
                   { v: projMarketing,   c: '#ff7eb6', l: 'Marketing'    },
                   { v: projDistribution,c: '#bc8cff', l: 'Distribution' },
-                  { v: projHQ + projHubInvest, c: '#93a4ba', l: 'G&A'  },
+                  { v: projHQ + projHubInvest, c: '#8b949e', l: 'G&A'  },
                 ].filter(s => s.v > 0).map((s, i) => (
                   <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: s.c, display: 'inline-block' }} />
@@ -1987,10 +1987,10 @@ function CashFlow() {
 // ─── Unit Economics ───────────────────────────────────────────────────────────
 
 const GRADE_CONFIG = [
-  { min: 0.020, label: 'A', color: '#38d39f' },
+  { min: 0.020, label: 'A', color: '#3fb950' },
   { min: 0.010, label: 'B', color: '#4fc3f7' },
-  { min: 0.000, label: 'C', color: '#ffb43d' },
-  { min: -Infinity, label: 'D', color: '#ff5d6c' },
+  { min: 0.000, label: 'C', color: '#d29922' },
+  { min: -Infinity, label: 'D', color: '#f85149' },
 ];
 function routeGrade(spread) {
   return GRADE_CONFIG.find(g => spread >= g.min) ?? GRADE_CONFIG[GRADE_CONFIG.length - 1];
@@ -2456,7 +2456,7 @@ const LOAN_PRODUCTS = [
     baseRate: 0.08,
     maxMultiple: 4,   // max = 4× weekly revenue
     description: '13-week term · lowest total interest',
-    color: '#38d39f',
+    color: '#3fb950',
   },
   {
     id: 'medium',
@@ -2465,7 +2465,7 @@ const LOAN_PRODUCTS = [
     baseRate: 0.10,
     maxMultiple: 8,
     description: '26-week term · balanced payments',
-    color: '#3ea6ff',
+    color: '#388bfd',
   },
   {
     id: 'long',
@@ -2474,7 +2474,7 @@ const LOAN_PRODUCTS = [
     baseRate: 0.13,
     maxMultiple: 16,
     description: '52-week term · largest amounts available',
-    color: '#ffb43d',
+    color: '#d29922',
   },
 ];
 
@@ -2512,11 +2512,11 @@ function creditRating(state, weeklyRevenue, weeklyNetIncome) {
   if (weeksOps < 4)  score -= 15;
   else if (weeksOps < 12) score -= 5;
 
-  if      (score >= 85) return { grade: 'A', label: 'Excellent',  color: '#38d39f', rateBonus: -0.02 };
+  if      (score >= 85) return { grade: 'A', label: 'Excellent',  color: '#3fb950', rateBonus: -0.02 };
   else if (score >= 70) return { grade: 'B', label: 'Good',       color: '#4fc3f7', rateBonus: -0.01 };
-  else if (score >= 55) return { grade: 'C', label: 'Fair',       color: '#ffb43d', rateBonus:  0.00 };
+  else if (score >= 55) return { grade: 'C', label: 'Fair',       color: '#d29922', rateBonus:  0.00 };
   else if (score >= 40) return { grade: 'D', label: 'Poor',       color: '#f0883e', rateBonus:  0.02 };
-  else                  return { grade: 'F', label: 'High Risk',  color: '#ff5d6c', rateBonus:  0.05 };
+  else                  return { grade: 'F', label: 'High Risk',  color: '#f85149', rateBonus:  0.05 };
 }
 
 /** Amortized weekly payment */
@@ -3063,7 +3063,7 @@ function FuelHedging() {
 
           {/* Gradient bar */}
           <div style={{ position: 'relative', height: 8, borderRadius: 4, marginBottom: 6,
-            background: 'linear-gradient(to right, #38d39f, #ffb43d, #ff5d6c)' }}>
+            background: 'linear-gradient(to right, #3fb950, #d29922, #f85149)' }}>
             <div style={{
               position: 'absolute', top: -3, width: 14, height: 14, borderRadius: '50%',
               background: status.color, border: '2px solid var(--bg)',

@@ -11,10 +11,10 @@ import {
 import { absoluteWeek } from '../utils/fuel.js';
 
 const CAT_COLORS = {
-  'Turboprop':    '#ffb43d',
-  'Regional Jet': '#38d39f',
-  'Narrow Body':  '#3ea6ff',
-  'Wide Body':    '#a98bff',
+  'Turboprop':    '#d29922',
+  'Regional Jet': '#3fb950',
+  'Narrow Body':  '#388bfd',
+  'Wide Body':    '#a371f7',
 };
 
 const DELIVERY_LEAD = {
@@ -33,9 +33,9 @@ const QUALITY_OPTIONS = [
 
 const CLASS_COLORS = {
   firstClass:     '#bc8cff',
-  businessClass:  '#ffb43d',
-  premiumEconomy: '#3ea6ff',
-  economy:        '#38d39f',
+  businessClass:  '#d29922',
+  premiumEconomy: '#388bfd',
+  economy:        '#3fb950',
 };
 
 const CLASS_DEMAND_PCT = {
@@ -54,7 +54,7 @@ function absWeekToDisplay(absWeek) {
 
 function AircraftPhoto({ src, alt, category }) {
   const [failed, setFailed] = useState(false);
-  const color = CAT_COLORS[category] || '#93a4ba';
+  const color = CAT_COLORS[category] || '#8b949e';
   if (failed || !src) {
     return (
       <div style={{
@@ -142,7 +142,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const type = getAircraftType(typeId);
   if (!type) return null;
 
-  const catColor      = CAT_COLORS[type.category] || '#93a4ba';
+  const catColor      = CAT_COLORS[type.category] || '#8b949e';
   const configOptions = type.configOptions ?? {};
   const engines       = configOptions.engines ?? [];
   const wingtipDef    = configOptions.wingtips ?? null;
@@ -650,7 +650,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
 
             {/* Cabin summary callout */}
             {(first + biz + prem > 0 || seatQ !== 'standard' || servQ !== 'standard') && (
-              <div style={{ marginTop: 8, padding: '7px 10px', background: 'rgba(163,113,247,0.1)', borderRadius: 5, fontSize: 12, color: '#a98bff', border: '1px solid rgba(163,113,247,0.25)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ marginTop: 8, padding: '7px 10px', background: 'rgba(163,113,247,0.1)', borderRadius: 5, fontSize: 12, color: '#a371f7', border: '1px solid rgba(163,113,247,0.25)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span>💺</span>
                 <span>
                   {[

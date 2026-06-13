@@ -106,3 +106,62 @@ export function referencePrice(originCode, destCode) {
   const dist = distanceKm(o, d);
   return Math.round(80 + dist * 0.09);
 }
+
+// ─── Market capitalisation ─────────────────────────────────────────────────────
+
+/** Fixed share count used for all airlines (player + competitors). */
+export const TOTAL_SHARES = 100_000_000;
+
+/**
+ * Compute market capitalisation and share price for an airline.
+ *
+ * @param {number[]} profitHistory  Weekly profit figures, most-recent last (up to last 12 used).
+ * @param {number}   cash           Current cash balance.
+ * @param {number}   [qualityScore] 0–100 quality/reputation score; defaults to 50.
+ * @returns {{ marketCap: number, sharePrice: number, peMultiple: number|null,
+ *             annualizedProfit: number|null, growthRate: number|null }}
+ */
+export function computeMarketCap(profitHistory, cash, qualityScore = 50) {
+  const weeks = (profitHistory ?? []).slice(-12);
+
+  // Not enough history — value purely on cash
+  if (weeks.length < 2) {
+    const marketCap = Math.max(cash * 1.5, 500_000);
+    return { marketCap, sharePrice: marketCap / TOTAL_SHARES, peMultiple: null, annualizedProfit: null, growthRate: null };
+  }
+
+  const trailing12Profit  = weeks.reduce((s, p) => s + p, 0);
+  const annualizedProfit  = Math.round(trailing12Profit * (52 / weeks.length));
+
+  // Growth: compare avg of most-recent 6 weeks vs avg of the prior window
+  const recentSlice = weeks.slice(-6);
+  const priorSlice  = weeks.slice(0, Math.max(0, weeks.length - 6));
+  const recentAvg   = recentSlice.reduce((s, p) => s + p, 0) / recentSlice.length;
+  const priorAvg    = priorSlice.length > 0
+    ? priorSlice.reduce((s, p) => s + p, 0) / priorSlice.length
+    : 0;
+  const growthRate  = priorAvg !== 0
+    ? (recentAvg - priorAvg) / Math.abs(priorAvg)
+    : (recentAvg > 0 ? 0.5 : 0);
+
+  // P/E multiple: base 12, ±growth bonus (−5 to +15), +quality bonus (0–5)
+  const growthBonus     = Math.max(-5, Math.min(15, growthRate * 20));
+  const reputationBonus = (Math.max(0, Math.min(100, qualityScore)) / 100) * 5;
+  const peMultiple      = 12 + growthBonus + reputationBonus;
+
+  // Profitable companies get full P/E; loss-making ones get 5× (distressed)
+  const profitComponent = annualizedProfit >= 0
+    ? annualizedProfit * peMultiple
+    : annualizedProfit * 5;
+
+  const marketCap  = Math.max(profitComponent + cash * 0.8, 500_000);
+  const sharePrice = marketCap / TOTAL_SHARES;
+
+  return {
+    marketCap,
+    sharePrice,
+    peMultiple:       Math.round(peMultiple * 10) / 10,
+    annualizedProfit,
+    growthRate,
+  };
+}

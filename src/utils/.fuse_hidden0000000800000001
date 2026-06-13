@@ -120,11 +120,11 @@ export function totalHedgedCoverage(activeHedges = []) {
  * Human-readable label + colour for a given fuel index.
  */
 export function fuelIndexStatus(index) {
-  if (index < 0.72) return { label: 'Very Low',  color: '#38d39f', bg: '#1a3b1e' };
+  if (index < 0.72) return { label: 'Very Low',  color: '#3fb950', bg: '#1a3b1e' };
   if (index < 0.88) return { label: 'Low',        color: '#6bc46d', bg: '#1e3a20' };
-  if (index < 1.12) return { label: 'Normal',     color: '#ffb43d', bg: '#3b2e0a' };
+  if (index < 1.12) return { label: 'Normal',     color: '#d29922', bg: '#3b2e0a' };
   if (index < 1.32) return { label: 'High',       color: '#f0883e', bg: '#3b2010' };
-  if (index < 1.58) return { label: 'Very High',  color: '#ff5d6c', bg: '#3b1010' };
+  if (index < 1.58) return { label: 'Very High',  color: '#f85149', bg: '#3b1010' };
   return             { label: 'Crisis',    color: '#ff7b72', bg: '#4a0e0e' };
 }
 

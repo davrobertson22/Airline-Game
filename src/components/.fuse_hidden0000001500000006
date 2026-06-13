@@ -15,10 +15,10 @@ import AircraftCheckout from './AircraftCheckout.jsx';
 
 // Category accent colors
 const CAT_COLORS = {
-  'Turboprop':    '#ffb43d',
-  'Regional Jet': '#38d39f',
-  'Narrow Body':  '#3ea6ff',
-  'Wide Body':    '#a98bff',
+  'Turboprop':    '#d29922',
+  'Regional Jet': '#3fb950',
+  'Narrow Body':  '#388bfd',
+  'Wide Body':    '#a371f7',
 };
 
 const CAT_ICONS = {
@@ -39,7 +39,7 @@ function AircraftPhoto({ src, alt, category }) {
   const [failed, setFailed] = useState(false);
   // Reset failed state if the src URL changes
   useEffect(() => { setFailed(false); }, [src]);
-  const color = CAT_COLORS[category] || '#93a4ba';
+  const color = CAT_COLORS[category] || '#8b949e';
 
   if (failed || !src) {
     return (
@@ -96,7 +96,7 @@ function PendingOrdersBar({ pendingOrders, year, week, onCancel }) {
       <div style={{ padding: '8px 8px 4px' }}>
         {pendingOrders.map(order => {
           const type          = getAircraftType(order.typeId);
-          const catColor      = CAT_COLORS[type?.category] || '#93a4ba';
+          const catColor      = CAT_COLORS[type?.category] || '#8b949e';
           const weeksLeft     = order.deliverAbsWeek - currentAbsWeek;
           const deliverYear   = Math.floor((order.deliverAbsWeek - 1) / 52) + 2026;
           const deliverWeek   = ((order.deliverAbsWeek - 1) % 52) + 1;
@@ -291,7 +291,7 @@ export default function Marketplace() {
           const lead           = DELIVERY_LEAD[type.category] ?? 2;
           const newWeeklyTotal = currentWeeklyLease + type.weeklyLease;
           const weeksOfCash    = type.weeklyLease > 0 ? Math.floor(cash / newWeeklyTotal) : Infinity;
-          const catColor       = CAT_COLORS[type.category] || '#93a4ba';
+          const catColor       = CAT_COLORS[type.category] || '#8b949e';
           const cashWarning    = isFinite(weeksOfCash) && weeksOfCash < 4;
 
           const alreadyOwned  = ownedCounts[type.id] || 0;
@@ -391,7 +391,7 @@ export default function Marketplace() {
                   <div style={{ marginTop: 8 }}>
                     <span style={{
                       fontSize: 11, padding: '2px 8px', borderRadius: 4,
-                      background: 'rgba(163,113,247,0.12)', color: '#a98bff',
+                      background: 'rgba(163,113,247,0.12)', color: '#a371f7',
                       border: '1px solid rgba(163,113,247,0.3)',
                     }}>
                       ⚙ Engine &amp; wingtip options available
