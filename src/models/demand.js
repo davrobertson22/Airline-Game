@@ -791,9 +791,17 @@ export function computeConnectingDemand(
   // Compute distance once here and pass to both endpoints
   const distKm = routeDistance(origin, destination);
 
+  // Bug fix: connecting pax have no price elasticity in connectingAtEndpoint — they pay
+  // whatever ticketPrice is passed, regardless of how high. Cap the effective fare at
+  // 4× the market reference price so inflated ticket prices don't produce phantom
+  // revenue from connecting passengers who would never actually pay that fare.
+  // (Direct passengers are already handled by the elasticity model in computeMarketShare.)
+  const refPrice = referencePrice(origin, destination);
+  const cappedTicketPrice = Math.min(ticketPrice, refPrice * 4);
+
   const endpointOpts = { weeklyFrequency, distKm, partnerHubCodes };
-  const originSide = connectingAtEndpoint(origin,      hubsMap, playerRoutesAtOrigin, ticketPrice, endpointOpts);
-  const destSide   = connectingAtEndpoint(destination, hubsMap, playerRoutesAtDest,   ticketPrice, endpointOpts);
+  const originSide = connectingAtEndpoint(origin,      hubsMap, playerRoutesAtOrigin, cappedTicketPrice, endpointOpts);
+  const destSide   = connectingAtEndpoint(destination, hubsMap, playerRoutesAtDest,   cappedTicketPrice, endpointOpts);
   return {
     totalPax:     originSide.pax + destSide.pax,
     totalRevenue: originSide.revenue + destSide.revenue,

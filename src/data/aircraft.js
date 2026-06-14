@@ -1780,13 +1780,64 @@ export const AIRCRAFT_TYPES = [
     description: 'The Queen of the cargo skies. Nose-loading door swallows outsize freight; maximum payload on the densest cargo corridors, at the cost of four thirsty engines.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/B-747_Iberia.jpg/960px-B-747_Iberia.jpg',
   },
+  {
+    id: 'an124',
+    name: 'Antonov An-124-100 Ruslan',
+    manufacturer: 'Antonov',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 120,
+    range: 5_400,
+    weeklyLease:      400_000,
+    purchasePrice: 80_000_000,
+    fuelBurnPer100km: 1400,
+    crewCostPerKm: 2.5,
+    baseMaintenancePerWk: 380_000,
+    description: 'Soviet-era strategic heavylifter. Cheap to acquire and able to swallow outsize loads through its nose and tail doors, but four thirsty D-18T engines and a short max-payload range make it a specialist, not a trunk-route workhorse.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Antonov_An-124-100M-150_Ruslan_Volga-Dnepr_AN1719005.jpg/960px-Antonov_An-124-100M-150_Ruslan_Volga-Dnepr_AN1719005.jpg',
+  },
+  {
+    id: 'b7478f',
+    name: 'Boeing 747-8F',
+    manufacturer: 'Boeing',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 137,
+    range: 8_130,
+    weeklyLease:      430_000,
+    purchasePrice: 118_000_000,
+    fuelBurnPer100km: 1075,
+    crewCostPerKm: 2.3,
+    baseMaintenancePerWk: 360_000,
+    description: 'The largest production freighter in the world. GEnx engines and a stretched upper deck give it more payload than the -400F with markedly better fuel burn per tonne — the modern flagship of dedicated cargo fleets.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Cargolux_Boeing_747-8F_LX-VCC.jpg/960px-Cargolux_Boeing_747-8F_LX-VCC.jpg',
+  },
+  {
+    id: 'an225',
+    name: 'Antonov An-225 Mriya',
+    manufacturer: 'Antonov',
+    category: 'Freighter',
+    freighter: true,
+    seats: 0,
+    payloadTonnes: 250,
+    range: 4_000,
+    weeklyLease:      700_000,
+    purchasePrice: 200_000_000,
+    fuelBurnPer100km: 1850,
+    crewCostPerKm: 3.0,
+    baseMaintenancePerWk: 600_000,
+    description: 'The legend. Six engines, the highest payload of any aircraft ever flown, and a cargo hold built to carry the Buran shuttle. A halo machine for ultra-heavy outsize loads — staggering capability, ruinous economics, and only ever viable on the densest special-cargo corridors.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Antonov_An-225_Mriya_%28UR-82060%29_taxiing.jpg/960px-Antonov_An-225_Mriya_%28UR-82060%29_taxiing.jpg',
+  },
 ];
 
 export function getAircraftType(id) {
   return AIRCRAFT_TYPES.find(a => a.id === id);
 }
 
-export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body', 'Supersonic'];
+export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body', 'Supersonic', 'Freighter'];
 
 // ─── Purchase pricing helpers ─────────────────────────────────────────────────
 

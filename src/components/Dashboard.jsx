@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate, formatGameDate } from '../utils/simulation.js';
+import { projectWeek } from '../utils/financeProjection.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
@@ -9,7 +10,7 @@ import BoardObjectives from './BoardObjectives.jsx';
 
 export default function Dashboard() {
   const { state } = useGame();
-  const { cash, fleet, routes, financialHistory, lastReport, week, year, activeEvents = [] } = state;
+  const { cash, fleet, routes, cargoRoutes = [], financialHistory, lastReport, week, year, activeEvents = [] } = state;
 
   // ── Projections ──────────────────────────────────────────────────────────
   const weeklyLeaseCost = fleet.reduce((sum, a) => {
@@ -23,9 +24,22 @@ export default function Dashboard() {
     return { route, result };
   }), [routes, fleet, state.week]);
 
-  const projectedRevenue = routeResults.reduce((s, { result }) => s + (result?.revenue ?? 0), 0);
-  const projectedOpCost  = routeResults.reduce((s, { result }) => s + (result?.totalCost ?? 0), 0);
-  const projectedProfit  = projectedRevenue - weeklyLeaseCost - projectedOpCost;
+  // Canonical projection — the SAME single-source-of-truth used by the Finance page,
+  // so the Dashboard's revenue/profit always agree with Finance. Runs the real engine
+  // (so cargo, all fixed costs, loan interest and tax are included) rather than a
+  // home-grown estimate.
+  const proj = useMemo(() => projectWeek(state), [state]);
+
+  const projectedRevenue = proj.effectiveRevenue;   // all-in weekly revenue (incl. cargo)
+  const projectedProfit  = proj.netCash;            // fully-loaded weekly cash bottom line
+
+  // Cargo headline figures (from the same engine pass)
+  const cargoRevenue = proj.report.totalCargoRevenue ?? 0;
+  const cargoTonnes  = proj.report.totalCargoTonnes ?? 0;
+
+  // Per-route operating cost — retained only for the cost-breakdown fallback below
+  // (used when there's no lastReport yet). Now reads the real totalOpCost key.
+  const projectedOpCost  = routeResults.reduce((s, { result }) => s + (result?.totalOpCost ?? 0), 0);
   const weeksOfCash      = weeklyLeaseCost > 0 ? Math.floor(cash / weeklyLeaseCost) : Infinity;
   const idleAircraft     = fleet.filter(a => a.status === 'idle').length;
 
@@ -181,11 +195,20 @@ export default function Dashboard() {
           trend={revTrend != null ? revTrend : undefined}
           trendIsPercent
         />
+        {cargoRoutes.length > 0 && (
+          <KpiBox
+            label="Cargo / wk"
+            value={formatMoney(cargoRevenue)}
+            color="green"
+            sub={`📦 ${Math.round(cargoTonnes).toLocaleString()} t/wk · ${cargoRoutes.length} route${cargoRoutes.length !== 1 ? 's' : ''}`}
+            subColor="var(--text-dim)"
+          />
+        )}
         <KpiBox
           label="Fleet"
           value={`${fleet.length} aircraft`}
           color="blue"
-          sub={idleAircraft > 0 ? `${idleAircraft} idle` : `${routes.length} routes`}
+          sub={idleAircraft > 0 ? `${idleAircraft} idle` : `${routes.length + cargoRoutes.length} routes`}
           subColor={idleAircraft > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
         />
         <KpiBox

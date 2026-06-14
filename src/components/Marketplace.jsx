@@ -20,6 +20,8 @@ const CAT_COLORS = {
   'Regional Jet': '#38d39f',
   'Narrow Body':  '#3ea6ff',
   'Wide Body':    '#a98bff',
+  'Supersonic':   '#f778ba',
+  'Freighter':    '#e8833a',
 };
 
 const CAT_ICONS = {
@@ -27,6 +29,8 @@ const CAT_ICONS = {
   'Regional Jet': '✈',
   'Narrow Body':  '✈',
   'Wide Body':    '🛫',
+  'Supersonic':   '💨',
+  'Freighter':    '📦',
 };
 
 const DELIVERY_LEAD = {
@@ -34,6 +38,8 @@ const DELIVERY_LEAD = {
   'Narrow Body':  3,
   'Regional Jet': 2,
   'Turboprop':    1,
+  'Supersonic':   4,
+  'Freighter':    4,
 };
 
 function AircraftPhoto({ src, alt, category }) {
@@ -370,7 +376,7 @@ export default function Marketplace() {
                     <span className="aircraft-stat-pill-value">{type.fuelBurnPer100km.toFixed(0)} L/100km</span>
                   </div>
                   <div className="aircraft-stat-pill">
-                    <span className="aircraft-stat-pill-label">{type.freighter ? 'L/t/100km' : 'L/seat/100km'}</span>
+                    <span className="aircraft-stat-pill-label">{type.freighter ? 'Fuel/tonne' : 'L/seat/100km'}</span>
                     <span className="aircraft-stat-pill-value">
                       {type.freighter
                         ? (type.fuelBurnPer100km / type.payloadTonnes).toFixed(2)
@@ -383,18 +389,20 @@ export default function Marketplace() {
                   </div>
                 </div>
 
-                {/* Fuel efficiency bar */}
-                <div style={{ marginTop: 10, marginBottom: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Seat efficiency</span>
-                    <span style={{ fontSize: 11, color: effColor, fontWeight: 600 }}>
-                      {effScore}/100 · ${effRaw}/seat/100km
-                    </span>
+                {/* Fuel efficiency bar — passenger aircraft only (freighters have no seat metric) */}
+                {!type.freighter && (
+                  <div style={{ marginTop: 10, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Seat efficiency</span>
+                      <span style={{ fontSize: 11, color: effColor, fontWeight: 600 }}>
+                        {effScore}/100 · ${effRaw}/seat/100km
+                      </span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--surface3)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 2, width: `${effScore}%`, background: effColor, transition: 'width 0.3s' }} />
+                    </div>
                   </div>
-                  <div style={{ height: 4, borderRadius: 2, background: 'var(--surface3)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 2, width: `${effScore}%`, background: effColor, transition: 'width 0.3s' }} />
-                  </div>
-                </div>
+                )}
 
                 {/* Config options badge */}
                 {hasOptions && (

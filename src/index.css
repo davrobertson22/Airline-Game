@@ -959,3 +959,218 @@ tr:hover td { background: rgba(62,166,255,.05); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ─────────────────────────────────────────────
+   Save / Load Modal
+───────────────────────────────────────────── */
+.saveload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5,8,14,.80);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.saveload-modal {
+  background: linear-gradient(180deg, var(--surface), var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 28px 24px;
+  width: min(560px, 94vw);
+  box-shadow: var(--shadow-lg);
+}
+
+.saveload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.saveload-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.saveload-close {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+.saveload-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.save-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.save-slot {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color .15s;
+}
+
+.save-slot:hover { border-color: var(--accent); }
+.save-slot-empty { opacity: .65; }
+.save-slot-empty:hover { border-color: var(--border); opacity: 1; }
+
+.save-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.save-slot-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-dim);
+}
+
+.save-slot-delete {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: background .15s, color .15s;
+}
+.save-slot-delete:hover { background: var(--red-glow); color: var(--red); }
+
+.save-slot-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.save-slot-body-empty {
+  justify-content: center;
+  padding: 12px 0;
+  margin-bottom: 12px;
+}
+
+.save-slot-empty-text {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.save-slot-airline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 140px;
+}
+
+.save-slot-airline-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.save-slot-hub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.save-slot-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.save-slot-meta-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.save-slot-meta-label {
+  color: var(--text-dim);
+  min-width: 38px;
+  font-size: 11px;
+}
+
+.save-slot-date {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.save-slot-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.save-slot-btn {
+  font-size: 12px;
+  padding: 5px 14px;
+}
+
+.save-slot-empty-action {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 5px 0;
+}
+
+/* ─────────────────────────────────────────────
+   New Game confirm dialog
+───────────────────────────────────────────── */
+.confirm-modal {
+  background: linear-gradient(180deg, var(--surface), var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 28px 24px;
+  width: min(400px, 90vw);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.confirm-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+.confirm-modal-body {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover { background: #c0392b; }

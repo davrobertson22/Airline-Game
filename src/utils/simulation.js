@@ -1,6 +1,7 @@
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 export { baseCityPairDemand } from './market.js';
+import { cargoCityPairDemand, cargoReferenceYield } from './market.js';
 import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO } from '../data/families.js';
 import {
@@ -116,6 +117,49 @@ export const CLASS_FARE_MULTIPLIERS = {
   premiumEconomy: 1.4,
   economy:        1.0,
 };
+
+// ─────────────────────────────────────────────
+// ROUTE PRICING (single source of truth: state.routePricing, keyed by O&D pair)
+// ─────────────────────────────────────────────
+// Price belongs to the ROUTE (an origin–destination pair), not to an individual
+// aircraft. The store keeps one price set per pair in state.routePricing; route
+// objects carry only aircraft + frequency. hydrateRoute() projects the pair's
+// price onto a route object for the engine and UI to read.
+
+/** Canonical, direction-agnostic key for an O&D pair. */
+export function routePairKey(origin, destination) {
+  return [origin, destination].sort().join('-');
+}
+
+/** Build a full class-price set from an economy fare using the standard multipliers. */
+export function defaultClassPrices(economyFare) {
+  const eco = Math.max(1, Math.round(Number(economyFare) || 1));
+  return {
+    economy:        eco,
+    premiumEconomy: Math.round(eco * CLASS_FARE_MULTIPLIERS.premiumEconomy),
+    businessClass:  Math.round(eco * CLASS_FARE_MULTIPLIERS.businessClass),
+    firstClass:     Math.round(eco * CLASS_FARE_MULTIPLIERS.firstClass),
+  };
+}
+
+/**
+ * Project a route's pair-level settings (price + catering) onto the route object so
+ * existing readers can keep using route.classPrices / route.ticketPrice /
+ * route.cateringLevel unchanged. Both price and catering belong to the O&D pair, not
+ * the aircraft. Prospective/preview routes that already carry their own settings (and
+ * aren't in the maps) pass through untouched.
+ */
+export function hydrateRoute(route, routePricing, routeCatering) {
+  if (!route) return route;
+  const key      = routePairKey(route.origin, route.destination);
+  const pricing  = (routePricing  ?? {})[key];
+  const catering = (routeCatering ?? {})[key];
+  if (!pricing && !catering) return route;
+  const out = { ...route };
+  if (pricing)  { out.classPrices = pricing; out.ticketPrice = pricing.economy; }
+  if (catering) { out.cateringLevel = catering; }
+  return out;
+}
 
 // How many economy-equivalent seat units each class occupies.
 // A 737 has 162 "seat units" — premium classes take more floor space.
@@ -383,7 +427,7 @@ export function defaultConfig(totalSeats) {
  * @param {object} [gameDate={ month: 6 }] - { week, month } — month is 1-indexed
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -456,13 +500,22 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     connectivityBonus,
   };
 
-  // Gather any AI competitors serving this route and compute market share
-  const competitorOffers = COMPETITOR_AIRLINES
-    .map(c => buildCompetitorOffer(c, market))
-    .filter(Boolean);
-  const allOffers = [playerOffer, ...competitorOffers];
-  const shareResults = computeMarketShare(market, allOffers);
-  const [demandResult] = shareResults; // player is always first
+  // Gather any AI competitors serving this route and compute market share.
+  // When multiple player aircraft share the same O&D, weeklyTick pre-computes
+  // aggregated demand and passes a demandOverride so we don't double-count.
+  let demandResult;
+  let competitorOffersCount = 0;
+  if (demandOverride) {
+    demandResult = demandOverride;
+  } else {
+    const competitorOffers = COMPETITOR_AIRLINES
+      .map(c => buildCompetitorOffer(c, market))
+      .filter(Boolean);
+    competitorOffersCount = competitorOffers.length;
+    const allOffers = [playerOffer, ...competitorOffers];
+    const shareResults = computeMarketShare(market, allOffers);
+    [demandResult] = shareResults; // player is always first
+  }
 
   // Fan leisure/business pax across cabin classes using segment preferences.
   // Premium classes are filled first; any demand that can't find a premium seat
@@ -600,9 +653,120 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // Demand model context (for UI / debugging)
     marketDemand:    market.leisureDemand + market.businessDemand,
     seasonality:     market.seasonalityFactor,
-    competitorCount: competitorOffers.length,
+    competitorCount: competitorOffersCount,
     capacityCapped:  demandResult.capacityCapped,
     ticketPremium,   // >1 for supersonic aircraft (e.g. Concorde = 2.5)
+  };
+}
+
+// ─────────────────────────────────────────────
+// CARGO SIMULATION
+// ─────────────────────────────────────────────
+
+/**
+ * Yield (price) elasticity of cargo demand. Forwarders shop on rate, but freight is
+ * less elastic than leisure pax — there's no "drive instead" option on a 9,000 km lane.
+ */
+export const CARGO_YIELD_ELASTICITY = 1.1;
+
+/**
+ * Fraction of the total cargo pool that dedicated freighters can capture. Belly cargo
+ * (freight under passenger flights) is out of scope for v1, so this is 1.0 — freighters
+ * see the whole market. When belly cargo is added later, drop this below 1.0 to reserve
+ * the belly share, with NO other rebalancing needed.
+ */
+export const FREIGHTER_CAPTURE_RATE = 1.0;
+
+/** Cargo terminal handling cost ($ per tonne, charged each way). */
+export const CARGO_HANDLING_PER_TONNE = 85;
+
+/**
+ * Backhaul imbalance: air freight is directional (loaded out of manufacturing hubs,
+ * lighter on the return). Instead of charging both directions at full headhaul, the
+ * return leg earns this fraction. 1.0 = perfectly balanced; lower = more imbalance.
+ * Applied as the revenue multiplier (1 + CARGO_BACKHAUL_FACTOR) on one-way tonnage.
+ */
+export const CARGO_BACKHAUL_FACTOR = 0.65;
+
+/**
+ * Map a freighter's payload to the landing-fee category used by weeklyLandingFee
+ * (the fee table is keyed by passenger body class; freighters pay the equivalent for
+ * their size/weight).
+ */
+export function freighterLandingCategory(payloadTonnes = 0) {
+  if (payloadTonnes >= 50) return 'Wide Body';
+  if (payloadTonnes >= 20) return 'Narrow Body';
+  if (payloadTonnes >= 10) return 'Regional Jet';
+  return 'Turboprop';
+}
+
+/**
+ * Simulate one cargo route for a week. The freighter analogue of simulateRoute():
+ * fills tonnes against the cargo demand pool at the player's chosen yield, applies
+ * yield elasticity, and returns revenue and variable operating costs.
+ *
+ * Cargo route shape: { origin, destination, weeklyFrequency, yieldPrice ($/tonne-km),
+ *                      weeksOpen?, hub? }
+ * Revenue and costs cover BOTH directions (×2), mirroring simulateRoute.
+ * Landing fees are added by the weekly tick (which knows airport tiers).
+ *
+ * @returns {object|null} null if the aircraft isn't a freighter or can't reach the route.
+ */
+export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandMultiplier = 1.0) {
+  const origin = getAirport(route.origin);
+  const dest   = getAirport(route.destination);
+  const type   = getAircraftType(aircraft.typeId);
+  if (!origin || !dest || !type || !type.freighter) return null;
+
+  const dist = distanceKm(origin, dest);
+  const effectiveRange = effectiveRangeKm(aircraft, type);
+  if (dist > effectiveRange) return null;
+
+  // ── Demand (tonnes/week, one-way) ────────────────────────────────────────────
+  // demandMultiplier carries brand awareness from the weekly tick: a new carrier
+  // isn't yet on forwarders' books, so it wins less of the pool until it grows.
+  const maturity   = route.weeksOpen != null ? routeMaturityFactor(route.weeksOpen) : 1;
+  const basePool   = cargoCityPairDemand(route.origin, route.destination) * maturity * FREIGHTER_CAPTURE_RATE * demandMultiplier;
+
+  // Yield elasticity: pricing above the reference rate shrinks the tonnage you win.
+  const refYield   = cargoReferenceYield(route.origin, route.destination);
+  const yieldPrice = Math.max(0.01, route.yieldPrice ?? refYield);
+  const elasticity = Math.min(1.6, Math.pow(refYield / yieldPrice, CARGO_YIELD_ELASTICITY));
+  const demandTonnes = basePool * elasticity;
+
+  // ── Capacity & load ──────────────────────────────────────────────────────────
+  const capacityTonnes = type.payloadTonnes * route.weeklyFrequency;   // one-way
+  const tonnesOneWay   = Math.min(demandTonnes, capacityTonnes);
+  const loadFactor     = capacityTonnes > 0 ? tonnesOneWay / capacityTonnes : 0;
+
+  // Revenue covers both directions, with backhaul imbalance (return leg lighter).
+  // Yield is $/tonne-km; tonnes are one-way (headhaul).
+  const revenue = Math.round(tonnesOneWay * (1 + CARGO_BACKHAUL_FACTOR) * dist * yieldPrice);
+
+  // ── Operating costs ──────────────────────────────────────────────────────────
+  const flights         = route.weeklyFrequency * 2;
+  const aircraftFuelMod = aircraft.fuelMod ?? 1.0;
+  const fuelCost  = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod);
+  const crewCost  = Math.round(dist * type.crewCostPerKm * flights);
+  const groundHandlingCost = Math.round(tonnesOneWay * 2 * CARGO_HANDLING_PER_TONNE);
+
+  const totalOpCost = fuelCost + crewCost + groundHandlingCost;
+
+  return {
+    cargo:        true,
+    revenue,
+    fuelCost,
+    crewCost,
+    groundHandlingCost,
+    totalOpCost,
+    profit:       revenue - totalOpCost,   // before landing fees (added by weeklyTick)
+    tonnes:       Math.round(tonnesOneWay),         // one-way tonnes/week
+    capacityTonnes,
+    loadFactor,
+    distance:     Math.round(dist),
+    yieldPrice,
+    refYield,
+    demandTonnes: Math.round(demandTonnes),
   };
 }
 
@@ -618,12 +782,19 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
  */
 export function weeklyTick(state) {
   const {
-    fleet, routes, gameDate = { month: 6 }, gates = {}, labor,
+    fleet, routes: rawRoutes = [], cargoRoutes = [], gameDate = { month: 6 }, gates = {}, labor,
     maintenanceBudget = 1.0, fuelMultiplier = 1.0,
     marketingBudget = 0,
     loyalty = { weeklyInvestment: 0, members: 0 },
     awareness = 5,
   } = state;
+
+  // Price and catering live on the route (O&D pair) in state.routePricing /
+  // state.routeCatering — hydrate each route object so the engine reads
+  // route.classPrices / route.cateringLevel as before.
+  const routePricing  = state.routePricing  ?? {};
+  const routeCatering = state.routeCatering ?? {};
+  const routes = rawRoutes.map(r => hydrateRoute(r, routePricing, routeCatering));
 
   // Awareness multiplier: new/unknown airlines attract only a fraction of potential demand.
   // Range 0.4 (awareness=0, brand unknown) → 1.0 (awareness=100, household name).
@@ -720,6 +891,110 @@ export function weeklyTick(state) {
   // Build the hubs map, with backward-compat for saves that only have state.hub (a string)
   const hubs = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
 
+  // ── Pre-pass: aggregate player demand per O&D pair ───────────────────────────
+  // When multiple aircraft share the same origin–destination pair each
+  // simulateRoute call would independently claim the full market share,
+  // overcounting passengers by N×.  Instead, build ONE combined player offer
+  // per route group, compute market share once, then split pax proportionally
+  // by each aircraft's seat contribution.
+  const demandAllocations = new Map(); // aircraftId → demandResult override
+
+  {
+    // Group active routes by sorted routeKey
+    const routeGroups = new Map(); // routeKey → [{ route, aircraft }]
+    for (const route of routes) {
+      const aircraft = fleet.find(a => a.id === route.aircraftId);
+      if (!aircraft || aircraft.status === 'grounded') continue;
+      const rk = [route.origin, route.destination].sort().join('-');
+      if (!routeGroups.has(rk)) routeGroups.set(rk, []);
+      routeGroups.get(rk).push({ route, aircraft });
+    }
+
+    for (const [, group] of routeGroups) {
+      if (group.length < 2) continue; // single aircraft — simulateRoute handles it
+
+      const { route: r0 } = group[0];
+      const maturity = r0.weeksOpen != null ? routeMaturityFactor(r0.weeksOpen) : 1;
+      const market   = buildRouteMarket(r0.origin, r0.destination, gameDate, maturity);
+
+      // Aggregate capacity across all aircraft in the group
+      let totalEcoSeats = 0;
+      let totalBizSeats = 0;
+      let totalFreq     = 0;
+      let totalQuality  = 0;
+      let hasBusinessCabin = false;
+
+      for (const { route, aircraft } of group) {
+        const type = getAircraftType(aircraft.typeId);
+        if (!type) continue;
+        const cfg  = aircraft.config ?? defaultConfig(type.seats);
+        const freq = route.weeklyFrequency ?? 7;
+        const eco  = (cfg.economy ?? type.seats) * freq;
+        const biz  = (cfg.businessClass ?? 0) * freq;
+        totalEcoSeats += eco;
+        totalBizSeats += biz;
+        totalFreq     += freq;
+        totalQuality  += computeQualityScore({
+          onTimeRate:    laborEffects(labor).onTimeRate,
+          serviceLevel:  ({ basic: 'economy', standard: 'economy', premium: 'premium', luxury: 'business' })[cfg.seatQuality ?? 'standard'] ?? 'economy',
+          fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52,
+          customerRating: laborEffects(labor).customerRating,
+        });
+        if (biz > 0) hasBusinessCabin = true;
+      }
+
+      const avgQuality = Math.round(totalQuality / group.length);
+      const cp0 = r0.classPrices ?? {};
+      const ecoPrice = Math.max(1, cp0.economy ?? r0.ticketPrice ?? 1);
+      const bizPrice = hasBusinessCabin && cp0.businessClass != null
+        ? Math.max(1, cp0.businessClass)
+        : hasBusinessCabin ? ecoPrice * 3.5 : null;
+      const connBonus = (r0.origin === r0.hub || r0.destination === r0.hub) ? 0.20 : 0;
+
+      const combinedOffer = {
+        airlineId:         'player',
+        origin:            r0.origin,
+        destination:       r0.destination,
+        economyPrice:      ecoPrice,
+        businessPrice:     bizPrice,
+        weeklyFrequency:   totalFreq,
+        seatsPerFlight:    totalFreq > 0 ? Math.round((totalEcoSeats + totalBizSeats) / totalFreq) : 0,
+        economySeats:      totalEcoSeats,
+        businessSeats:     totalBizSeats,
+        qualityScore:      avgQuality,
+        connectivityBonus: connBonus,
+      };
+
+      const competitorOffers = COMPETITOR_AIRLINES
+        .map(c => buildCompetitorOffer(c, market))
+        .filter(Boolean);
+      const [combinedResult] = computeMarketShare(market, [combinedOffer, ...competitorOffers]);
+
+      // Distribute pax to each aircraft proportionally by seat share
+      for (const { route, aircraft } of group) {
+        const type = getAircraftType(aircraft.typeId);
+        if (!type) continue;
+        const cfg  = aircraft.config ?? defaultConfig(type.seats);
+        const freq = route.weeklyFrequency ?? 7;
+        const eco  = (cfg.economy ?? type.seats) * freq;
+        const biz  = (cfg.businessClass ?? 0) * freq;
+        const ecoFrac = totalEcoSeats > 0 ? eco / totalEcoSeats : 1 / group.length;
+        const bizFrac = totalBizSeats > 0 ? biz / totalBizSeats : 1 / group.length;
+
+        demandAllocations.set(aircraft.id, {
+          leisurePax:      Math.round(combinedResult.leisurePax  * ecoFrac),
+          businessPax:     Math.round(combinedResult.businessPax * bizFrac),
+          economyRevenue:  Math.round(combinedResult.economyRevenue  * ecoFrac),
+          businessRevenue: Math.round(combinedResult.businessRevenue * bizFrac),
+          leisureShare:    combinedResult.leisureShare,
+          businessShare:   combinedResult.businessShare,
+          capacityCapped:  combinedResult.capacityCapped,
+        });
+      }
+    }
+  }
+  // ── End pre-pass ─────────────────────────────────────────────────────────────
+
   for (const route of routes) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) continue;
@@ -734,7 +1009,8 @@ export function weeklyTick(state) {
     );
     const routeWithHubBonus = hubQuality > 0 ? { ...route, hubQualityBonus: hubQuality } : route;
 
-    const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier);
+    const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
+      demandAllocations.get(aircraft.id) ?? null);
     if (!result) continue;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
@@ -799,6 +1075,22 @@ export function weeklyTick(state) {
     totalCompensation   += result.compensationCost    ?? 0;
     totalLandingFees    += landingFee;
     totalPassengers   += result.passengers ?? 0;
+    // Aircraft fixed costs — exposed on the route result so the UI can show
+    // a "true profit" (fully loaded) alongside the variable-cost profit.
+    // These are NOT added to the route-level totals (the fleet loop in section 2
+    // handles lease/maint for the overall P&L to avoid double-counting).
+    const acType           = getAircraftType(aircraft.typeId);
+    const { maintenanceCostMultiplier } = laborEffects(labor);
+    const weeklyLeaseCost  = aircraft.ownershipType === 'owned' ? 0
+      : (aircraft.weeklyLease ?? acType?.weeklyLease ?? 0);
+    const weeklyMaintCost  = Math.round(
+      (acType?.baseMaintenancePerWk ?? 0)
+      * maintenanceMultiplier(aircraft.ageWeeks ?? 0)
+      * maintenanceBudget
+      * maintenanceCostMultiplier
+      * (aircraft.maintMod ?? 1.0)
+    );
+
     routeResults.push({
       routeId: route.id,
       ...result,
@@ -808,7 +1100,72 @@ export function weeklyTick(state) {
       allianceLift:     Math.round(result.revenue * allianceLift),
       landingFee,
       profit:           Math.round(routeRevenue - result.totalOpCost - landingFee),
+      weeklyLeaseCost,
+      weeklyMaintCost,
+      trueProfit:       Math.round(routeRevenue - result.totalOpCost - landingFee - weeklyLeaseCost - weeklyMaintCost),
       connecting,
+    });
+  }
+
+  // 1b. Cargo route revenue + variable operating costs
+  // Freighters run a parallel, simpler economics path: tonnes × yield, no cabins,
+  // no catering, no connecting pax. Fixed costs (lease/maint/insurance/labor) are
+  // handled for ALL fleet — including freighters — in the loops below, so here we
+  // only add cargo's variable costs and revenue.
+  let totalCargoRevenue = 0;
+  let totalCargoTonnes  = 0;
+  let totalCargoProfit  = 0;
+  const cargoRouteResults = [];
+
+  for (const route of cargoRoutes) {
+    const aircraft = fleet.find(a => a.id === route.aircraftId);
+    if (!aircraft || aircraft.status === 'grounded') continue;
+
+    const result = simulateCargoRoute(route, aircraft, gameDate, labor, fuelMultiplier, awarenessMultiplier);
+    if (!result) continue;
+
+    const type     = getAircraftType(aircraft.typeId);
+    const originAp = getAirport(route.origin);
+    const destAp   = getAirport(route.destination);
+    const landingFee = weeklyLandingFee(
+      freighterLandingCategory(type?.payloadTonnes ?? 0),
+      route.weeklyFrequency,
+      originAp?.tier ?? 'major',
+      destAp?.tier   ?? 'major',
+    );
+
+    totalRevenue        += result.revenue;
+    totalFuel           += result.fuelCost;
+    totalCrew           += result.crewCost;
+    totalGroundHandling += result.groundHandlingCost;
+    totalLandingFees    += landingFee;
+
+    totalCargoRevenue += result.revenue;
+    totalCargoTonnes  += result.tonnes;
+    const cargoProfit  = result.revenue - result.totalOpCost - landingFee;
+    totalCargoProfit  += cargoProfit;
+
+    // Per-aircraft fixed costs surfaced for the UI's "true profit" (not added to totals
+    // here — the fleet loop handles lease/maint for the overall P&L).
+    const { maintenanceCostMultiplier } = laborEffects(labor);
+    const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
+      : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
+    const weeklyMaintCost = Math.round(
+      (type?.baseMaintenancePerWk ?? 0)
+      * maintenanceMultiplier(aircraft.ageWeeks ?? 0)
+      * maintenanceBudget
+      * maintenanceCostMultiplier
+      * (aircraft.maintMod ?? 1.0)
+    );
+
+    cargoRouteResults.push({
+      routeId: route.id,
+      ...result,
+      landingFee,
+      profit:     cargoProfit,
+      weeklyLeaseCost,
+      weeklyMaintCost,
+      trueProfit: cargoProfit - weeklyLeaseCost - weeklyMaintCost,
     });
   }
 
@@ -951,6 +1308,11 @@ export function weeklyTick(state) {
     totalCost:              Math.round(totalCost),
     routeResults,
     fleetCosts,
+    // Cargo
+    cargoRouteResults,
+    totalCargoRevenue:      Math.round(totalCargoRevenue),
+    totalCargoTonnes:       Math.round(totalCargoTonnes),
+    totalCargoProfit:       Math.round(totalCargoProfit),
   };
 }
 

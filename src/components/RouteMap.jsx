@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
-import { simulateRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
+import { simulateRoute, simulateCargoRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
 import { getAlliance } from '../data/alliances.js';
 
 // ── Great-circle path as a single continuous segment ─────────────────────────
@@ -80,11 +80,12 @@ const HUB_COLOR       = '#ffcf4d';  // gold
 const SPOKE_COLOR     = '#4da6ff';  // sky blue
 const ALLIANCE_COLOR  = '#b794ff';  // purple for alliance members
 const CODESHARE_COLOR = '#38e1ff';  // cyan for codeshare partners
+const CARGO_COLOR     = '#e8833a';  // amber for cargo / freight routes
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function RouteMap() {
   const { state } = useGame();
-  const { fleet, routes, hub, competitors = [], allianceMembership, codeshareAgreements = [] } = state;
+  const { fleet, routes, cargoRoutes = [], hub, competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
   const mapElRef      = useRef(null);   // DOM node
   const mapRef        = useRef(null);   // Leaflet map instance
@@ -98,6 +99,8 @@ export default function RouteMap() {
   const [selectedId, setSelectedId] = useState(null);
   const [showAlliance,  setShowAlliance]  = useState(true);
   const [showCodeshare, setShowCodeshare] = useState(true);
+  const [showCargo,     setShowCargo]     = useState(true);
+  const cargoLayersRef = useRef([]);   // amber cargo route overlay layers
 
   // Keep refs of current interaction state so the (rarely-rebuilt) layer effect
   // can apply correct styling without being a dependency.
@@ -161,10 +164,24 @@ export default function RouteMap() {
     return { r, origin, dest, result };
   }).filter(Boolean), [routes, fleet, state.week]);
 
+  // Cargo route data (mirrors routeData but for freighters / cargo routes)
+  const cargoRouteData = useMemo(() => cargoRoutes.map(r => {
+    const origin   = getAirport(r.origin);
+    const dest     = getAirport(r.destination);
+    if (!origin || !dest) return null;
+    const aircraft = fleet.find(a => a.id === r.aircraftId);
+    const result   = aircraft ? simulateCargoRoute(r, aircraft, gd) : null;
+    return { r, origin, dest, result };
+  }).filter(Boolean), [cargoRoutes, fleet, state.week]);
+
   const airportSet = useMemo(() => {
-    const codes = new Set([hub, ...routeData.flatMap(d => [d.origin.code, d.dest.code])]);
+    const codes = new Set([
+      hub,
+      ...routeData.flatMap(d => [d.origin.code, d.dest.code]),
+      ...cargoRouteData.flatMap(d => [d.origin.code, d.dest.code]),
+    ]);
     return [...codes].map(getAirport).filter(Boolean);
-  }, [routeData, hub]);
+  }, [routeData, cargoRouteData, hub]);
 
   // Group route entries by city pair (direction-agnostic) so multiple aircraft
   // on the same JFK↔ORD pair show as ONE line + ONE row with aggregated stats.
@@ -197,6 +214,34 @@ export default function RouteMap() {
     }
     return arr;
   }, [routeData]);
+
+  // Group cargo route entries by city pair (aggregate tonnes / profit / capacity).
+  const cargoGroups = useMemo(() => {
+    const map = new Map();
+    for (const d of cargoRouteData) {
+      const key = [d.origin.code, d.dest.code].sort().join('~');
+      let g = map.get(key);
+      if (!g) {
+        g = { key, origin: d.origin, dest: d.dest, members: [], profit: 0, revenue: 0, tonnes: 0, capacity: 0, distance: 0 };
+        map.set(key, g);
+      }
+      g.members.push(d);
+      if (d.result) {
+        g.profit   += d.result.profit;
+        g.revenue  += d.result.revenue;
+        g.tonnes   += d.result.tonnes;
+        g.capacity += d.result.capacityTonnes;
+        g.distance  = d.result.distance;
+      }
+    }
+    const arr = [...map.values()];
+    for (const g of arr) {
+      g.loadFactor    = g.capacity > 0 ? g.tonnes / g.capacity : 0;
+      g.aircraftCount = g.members.length;
+      g.hasResult     = g.members.some(m => m.result);
+    }
+    return arr;
+  }, [cargoRouteData]);
 
   // ── Style resolver: highlight selected/hovered, dim the rest ─────────────────
   const applyStyles = useCallback(() => {
@@ -302,6 +347,59 @@ export default function RouteMap() {
       }
     }
   }, [partnerRouteData, showAlliance, showCodeshare, selectedId, mapReady]);
+
+  // 4c. Sync cargo route overlay (amber, distinct from green/red passenger lines)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
+    const dim = selectedId != null ? 0.3 : 1;   // fade cargo when focusing a passenger route
+
+    cargoLayersRef.current.forEach(l => map.removeLayer(l));
+    cargoLayersRef.current = [];
+    if (!showCargo) return;
+
+    for (const g of cargoGroups) {
+      const { origin, dest } = g;
+      const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
+      const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
+      const tonnes  = g.hasResult ? `${Math.round(g.tonnes).toLocaleString()} t` : '—';
+      const profit  = g.hasResult ? g.profit : 0;
+      const profStr = g.hasResult ? `${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk` : '—';
+      const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
+      const tipHtml = `
+        <div class="map-tip">
+          <div class="map-tip-title" style="color:${CARGO_COLOR}">📦 ${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-sub">${origin.city} → ${dest.city} · ${g.aircraftCount} freighter${g.aircraftCount !== 1 ? 's' : ''}</div>
+          <div class="map-tip-stats">
+            <div><span class="map-tip-lbl">Tonnes/wk</span><span class="map-tip-val" style="color:${CARGO_COLOR}">${tonnes}</span></div>
+            <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
+            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
+            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
+          </div>
+        </div>
+      `;
+
+      for (const pts of segments) {
+        const glow = L.polyline(pts, {
+          color: CARGO_COLOR, weight: 9, opacity: 0.14 * dim,
+          lineCap: 'round', smoothFactor: 1, interactive: false, className: 'route-glow',
+        });
+        glow.addTo(map);
+        cargoLayersRef.current.push(glow);
+
+        const line = L.polyline(pts, {
+          color: CARGO_COLOR, weight: 2.5, opacity: 0.9 * dim,
+          lineCap: 'round', smoothFactor: 1,
+        });
+        line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
+        line.on('mouseover', () => line.setStyle({ weight: 4, opacity: 1 }));
+        line.on('mouseout',  () => line.setStyle({ weight: 2.5, opacity: 0.9 * dim }));
+        line.addTo(map);
+        cargoLayersRef.current.push(line);
+      }
+    }
+  }, [cargoGroups, showCargo, selectedId, mapReady]);
 
   // 4. Sync routes + markers to map
   useEffect(() => {
@@ -477,7 +575,7 @@ export default function RouteMap() {
     map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
   }, [selectedId, routeGroups, applyStyles]);
 
-  if (routes.length === 0) {
+  if (routes.length === 0 && cargoRoutes.length === 0) {
     return (
       <div className="empty-state" style={{ paddingTop: 80 }}>
         <div className="empty-state-icon">🗺️</div>
@@ -529,6 +627,23 @@ export default function RouteMap() {
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: HUB_COLOR, display: 'inline-block' }} />
               Hub
             </span>
+
+            {/* Cargo toggle — only when cargo routes exist */}
+            {cargoRoutes.length > 0 && (
+              <button
+                onClick={() => setShowCargo(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  opacity: showCargo ? 1 : 0.4, transition: 'opacity 0.15s',
+                  color: 'var(--text-muted)', fontSize: 11,
+                }}
+                title={showCargo ? 'Hide cargo routes' : 'Show cargo routes'}
+              >
+                <span style={{ width: 18, height: 2, background: CARGO_COLOR, display: 'inline-block', borderRadius: 1 }} />
+                📦 Cargo
+              </button>
+            )}
 
             {/* Divider */}
             <span style={{ width: 1, height: 14, background: 'var(--border)', display: 'inline-block' }} />

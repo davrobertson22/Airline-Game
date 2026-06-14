@@ -1,10 +1,11 @@
-import { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useContext, useReducer, useEffect, useMemo } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
+  routePairKey, defaultClassPrices, hydrateRoute,
 } from '../utils/simulation.js';
-import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES } from '../utils/market.js';
+import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
@@ -60,7 +61,10 @@ function freshState() {
     year: 1,
     fleet: [],         // { id, typeId, name, status, ageWeeks, config, ownershipType, fuelMod, rangeMod, maintMod, engineId, engineLabel, hasWingtips }
     pendingOrders: [], // { id, typeId, ownershipType, name, engineId, engineLabel, hasWingtips, fuelMod, rangeMod, maintMod, deliverAbsWeek, totalPrice }
-    routes: [],      // { id, origin, destination, aircraftId, ticketPrice, weeklyFrequency, hub }
+    routes: [],      // { id, origin, destination, aircraftId, weeklyFrequency, hub } — price lives in routePricing
+    routePricing: {},// { [pairKey]: { economy, premiumEconomy, businessClass, firstClass } } — one price set per O&D pair
+    routeCatering: {},// { [pairKey]: cateringLevel } — one catering level per O&D pair
+    cargoRoutes: [], // { id, origin, destination, aircraftId, yieldPrice ($/tonne-km), weeklyFrequency, weeksOpen, hub, cargo:true }
     gates:             {},    // { [airportCode]: gateCount } — each gate = 50 slots/wk
     hubs:              {},    // { [airportCode]: { tier: 1|2|3 } } — designated hub airports
     labor:             DEFAULT_LABOR_STATE,
@@ -372,8 +376,9 @@ function reducer(state, action) {
     case 'RETIRE_AIRCRAFT': {
       const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
       const updatedRoutes = state.routes.filter(r => r.aircraftId !== action.aircraftId);
+      const updatedCargo  = (state.cargoRoutes ?? []).filter(r => r.aircraftId !== action.aircraftId);
       const updatedFleet  = state.fleet.filter(a => a.id !== action.aircraftId);
-      const routeAircraftIds = new Set(updatedRoutes.map(r => r.aircraftId));
+      const routeAircraftIds = new Set([...updatedRoutes, ...updatedCargo].map(r => r.aircraftId));
       const reStatusFleet = updatedFleet.map(a => ({
         ...a,
         status: routeAircraftIds.has(a.id) ? 'assigned' : 'idle',
@@ -386,9 +391,10 @@ function reducer(state, action) {
         : 0;
       return {
         ...state,
-        cash:   state.cash - penalty,
-        fleet:  reStatusFleet,
-        routes: updatedRoutes,
+        cash:        state.cash - penalty,
+        fleet:       reStatusFleet,
+        routes:      updatedRoutes,
+        cargoRoutes: updatedCargo,
       };
     }
 
@@ -402,17 +408,19 @@ function reducer(state, action) {
       const fee           = Math.round(nav * 0.05);
       const proceeds      = nav - fee;
       const updatedRoutes = state.routes.filter(r => r.aircraftId !== action.aircraftId);
+      const updatedCargo  = (state.cargoRoutes ?? []).filter(r => r.aircraftId !== action.aircraftId);
       const updatedFleet  = state.fleet.filter(a => a.id !== action.aircraftId);
-      const routeAircraftIds = new Set(updatedRoutes.map(r => r.aircraftId));
+      const routeAircraftIds = new Set([...updatedRoutes, ...updatedCargo].map(r => r.aircraftId));
       const reStatusFleet = updatedFleet.map(a => ({
         ...a,
         status: routeAircraftIds.has(a.id) ? 'assigned' : 'idle',
       }));
       return {
         ...state,
-        cash:   state.cash + proceeds,
-        fleet:  reStatusFleet,
-        routes: updatedRoutes,
+        cash:        state.cash + proceeds,
+        fleet:       reStatusFleet,
+        routes:      updatedRoutes,
+        cargoRoutes: updatedCargo,
       };
     }
 
@@ -441,6 +449,8 @@ function reducer(state, action) {
       const aircraft = state.fleet.find(a => a.id === action.aircraftId);
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
       if (!aircraft || !type) return state;
+      // Freighters carry no passengers — they fly cargo routes (ADD_CARGO_ROUTE) only.
+      if (type.freighter) return state;
 
       // Reject a same-airport route: distance 0 → ~zero cost but full gravity-model
       // demand, which would be an exploit. (The UI excludes this, but guard anyway.)
@@ -472,6 +482,15 @@ function reducer(state, action) {
         .reduce((sum, r) => sum + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0);
       const newBlockHrs = weeklyBlockHours(dist, weeklyFrequency, type);
       if (existingBlockHrs + newBlockHrs > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+      // ── Network-connectivity check: a plane that has already flown can only ───
+      // extend its network from airports it already serves — no teleporting.
+      const aircraftRoutes = state.routes.filter(r => r.aircraftId === action.aircraftId);
+      if (aircraftRoutes.length > 0) {
+        const servedAirports = new Set(aircraftRoutes.flatMap(r => [r.origin, r.destination]));
+        const connected = servedAirports.has(action.origin) || servedAirports.has(action.destination);
+        if (!connected) return state;
+      }
 
       // ── Gate checks ──────────────────────────────────────────────────────────
       const gates = state.gates ?? {};
@@ -512,27 +531,31 @@ function reducer(state, action) {
         origin:          action.origin,
         destination:     action.destination,
         aircraftId:      action.aircraftId,
-        ticketPrice:     basePrice,
         weeklyFrequency: weeklyFrequency,
         weeksOpen:       0,
         launchCost,
         hub:             state.hub,
-        cateringLevel:   normalizeCateringLevel(action.cateringLevel ?? state.defaultCateringLevel),
-        classPrices: {
-          economy:        basePrice,
-          premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
-          businessClass:  Math.round(basePrice * CLASS_FARE_MULTIPLIERS.businessClass),
-          firstClass:     Math.round(basePrice * CLASS_FARE_MULTIPLIERS.firstClass),
-        },
       };
       const updatedFleet = state.fleet.map(a =>
         a.id === action.aircraftId ? { ...a, status: 'assigned' } : a
       );
+      // Price and catering are per-route (O&D pair). The first aircraft on a pair sets
+      // them; additional aircraft inherit whatever the route already uses.
+      const routePricing = state.routePricing ?? {};
+      const newRoutePricing = routePricing[pairKey]
+        ? routePricing
+        : { ...routePricing, [pairKey]: defaultClassPrices(basePrice) };
+      const routeCatering = state.routeCatering ?? {};
+      const newRouteCatering = routeCatering[pairKey]
+        ? routeCatering
+        : { ...routeCatering, [pairKey]: normalizeCateringLevel(action.cateringLevel ?? state.defaultCateringLevel) };
       return {
         ...state,
-        cash:   state.cash - launchCost,
-        routes: [...state.routes, newRoute],
-        fleet:  updatedFleet,
+        cash:          state.cash - launchCost,
+        routes:        [...state.routes, newRoute],
+        routePricing:  newRoutePricing,
+        routeCatering: newRouteCatering,
+        fleet:         updatedFleet,
       };
     }
 
@@ -566,11 +589,164 @@ function reducer(state, action) {
       const updatedRoutes = state.routes.filter(r => r.id !== action.routeId);
       const updatedFleet = state.fleet.map(a => {
         if (a.id !== route?.aircraftId) return a;
-        // Only idle the aircraft if it has no remaining routes
-        const stillActive = updatedRoutes.some(r => r.aircraftId === a.id);
+        // Only idle the aircraft if it has no remaining routes (passenger or cargo)
+        const stillActive = updatedRoutes.some(r => r.aircraftId === a.id)
+          || (state.cargoRoutes ?? []).some(r => r.aircraftId === a.id);
         return { ...a, status: stillActive ? 'assigned' : 'idle' };
       });
       return { ...state, routes: updatedRoutes, fleet: updatedFleet };
+    }
+
+    // ─── Cargo routes ───────────────────────────────────────────────────────────
+    // Freighters fly a parallel cargo network. Mirrors ADD_ROUTE's guards (range,
+    // gates, slots, block-hours, regulatory, connectivity) but with no cabins,
+    // pricing in $/tonne-km yield instead of ticket fares, and no catering.
+    case 'ADD_CARGO_ROUTE': {
+      const aircraft = state.fleet.find(a => a.id === action.aircraftId);
+      const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+      if (!aircraft || !type) return state;
+      // Cargo routes require a dedicated freighter.
+      if (!type.freighter) return state;
+      if (action.origin === action.destination) return state;
+
+      const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
+      const dist = routeDistanceKm(action.origin, action.destination);
+
+      // Range (incl. engine/wingtip rangeMod)
+      const effectiveRange = effectiveRangeKm(aircraft, type);
+      if (dist > effectiveRange) return state;
+
+      // Regulatory restrictions (perimeter rules etc. apply to freighters too).
+      const pairKey = [action.origin, action.destination].sort().join('-');
+      const allOps  = [...state.routes, ...(state.cargoRoutes ?? [])];
+      const existingPairFreq = allOps
+        .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
+        .reduce((s, r) => s + r.weeklyFrequency, 0);
+      if (checkRouteRestrictions(action.origin, action.destination, dist, existingPairFreq + weeklyFrequency,
+            type.category, { routes: allOps, excludeKey: pairKey })) return state;
+
+      // Block-hours across this freighter's existing cargo routes.
+      const existingBlockHrs = (state.cargoRoutes ?? [])
+        .filter(r => r.aircraftId === action.aircraftId)
+        .reduce((sum, r) => sum + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0);
+      if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+      // Network connectivity: a freighter already flying can only extend from airports it serves.
+      const acCargoRoutes = (state.cargoRoutes ?? []).filter(r => r.aircraftId === action.aircraftId);
+      if (acCargoRoutes.length > 0) {
+        const served = new Set(acCargoRoutes.flatMap(r => [r.origin, r.destination]));
+        if (!served.has(action.origin) && !served.has(action.destination)) return state;
+      }
+
+      // Gates required at both endpoints; slots counted across passenger + cargo ops.
+      const gates = state.gates ?? {};
+      if (!(gates[action.origin] > 0))      return state;
+      if (!(gates[action.destination] > 0)) return state;
+      const slotsAt = (code) => allOps
+        .filter(r => r.origin === code || r.destination === code)
+        .reduce((s, r) => s + r.weeklyFrequency, 0);
+      if (slotsAt(action.origin)      + weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
+      if (slotsAt(action.destination) + weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
+
+      // Consolidate onto an existing identical cargo route for this freighter.
+      const existingRoute = (state.cargoRoutes ?? []).find(r =>
+        r.aircraftId === action.aircraftId &&
+        ((r.origin === action.origin && r.destination === action.destination) ||
+         (r.origin === action.destination && r.destination === action.origin))
+      );
+      if (existingRoute) {
+        return {
+          ...state,
+          cargoRoutes: state.cargoRoutes.map(r =>
+            r.id === existingRoute.id
+              ? { ...r, weeklyFrequency: r.weeklyFrequency + weeklyFrequency }
+              : r
+          ),
+        };
+      }
+
+      const launchCost = routeLaunchCost(dist);
+      if (state.cash < launchCost) return state;
+
+      const refYield   = cargoReferenceYield(action.origin, action.destination);
+      const yieldPrice = action.yieldPrice != null
+        ? Math.max(0.01, Number(action.yieldPrice))
+        : refYield;
+
+      const newRoute = {
+        id:              uid(),
+        origin:          action.origin,
+        destination:     action.destination,
+        aircraftId:      action.aircraftId,
+        yieldPrice,
+        weeklyFrequency,
+        weeksOpen:       0,
+        launchCost,
+        hub:             state.hub,
+        cargo:           true,
+      };
+      const updatedFleet = state.fleet.map(a =>
+        a.id === action.aircraftId ? { ...a, status: 'assigned' } : a
+      );
+      return {
+        ...state,
+        cash:        state.cash - launchCost,
+        cargoRoutes: [...(state.cargoRoutes ?? []), newRoute],
+        fleet:       updatedFleet,
+      };
+    }
+
+    case 'CLOSE_CARGO_ROUTE': {
+      const route = (state.cargoRoutes ?? []).find(r => r.id === action.routeId);
+      const updatedCargo = (state.cargoRoutes ?? []).filter(r => r.id !== action.routeId);
+      const updatedFleet = state.fleet.map(a => {
+        if (a.id !== route?.aircraftId) return a;
+        const stillActive = updatedCargo.some(r => r.aircraftId === a.id)
+          || state.routes.some(r => r.aircraftId === a.id);
+        return { ...a, status: stillActive ? 'assigned' : 'idle' };
+      });
+      return { ...state, cargoRoutes: updatedCargo, fleet: updatedFleet };
+    }
+
+    case 'UPDATE_CARGO_FREQUENCY': {
+      const targetRoute = (state.cargoRoutes ?? []).find(r => r.id === action.routeId);
+      if (!targetRoute) return state;
+      const ac   = state.fleet.find(a => a.id === targetRoute.aircraftId);
+      const type = ac ? getAircraftType(ac.typeId) : null;
+      const newFreq = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
+
+      if (type) {
+        const otherBlockHrs = (state.cargoRoutes ?? [])
+          .filter(r => r.aircraftId === targetRoute.aircraftId && r.id !== targetRoute.id)
+          .reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0);
+        if (otherBlockHrs + weeklyBlockHours(routeDistanceKm(targetRoute.origin, targetRoute.destination), newFreq, type) > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+        const gates = state.gates ?? {};
+        const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
+        const slotsAt = (code) => allOps
+          .filter(r => r.id !== targetRoute.id && (r.origin === code || r.destination === code))
+          .reduce((s, r) => s + r.weeklyFrequency, 0);
+        if (slotsAt(targetRoute.origin)      + newFreq > (gates[targetRoute.origin]      ?? 0) * SLOTS_PER_GATE) return state;
+        if (slotsAt(targetRoute.destination) + newFreq > (gates[targetRoute.destination] ?? 0) * SLOTS_PER_GATE) return state;
+      }
+
+      return {
+        ...state,
+        cargoRoutes: state.cargoRoutes.map(r =>
+          r.id === action.routeId ? { ...r, weeklyFrequency: newFreq } : r
+        ),
+      };
+    }
+
+    case 'UPDATE_CARGO_YIELD': {
+      // action: { routeId, yieldPrice } — $/tonne-km, clamped positive
+      const yieldPrice = Math.max(0.01, Number(action.yieldPrice) || 0.01);
+      return {
+        ...state,
+        cargoRoutes: (state.cargoRoutes ?? []).map(r =>
+          r.id === action.routeId ? { ...r, yieldPrice } : r
+        ),
+      };
     }
 
     // ── Hub management ────────────────────────────────────────────────────────
@@ -626,14 +802,15 @@ function reducer(state, action) {
       // model Math.pow(ref/price, …), producing Infinity/NaN that poisons the
       // whole weekly tick (revenue → cashDelta → cash all become NaN).
       const price = Math.max(1, Math.round(Number(action.ticketPrice) || 0));
+      // Price belongs to the O&D pair. Resolve the pair from the route, then update
+      // its economy fare in routePricing — every aircraft on the pair shares it.
+      const tpTarget = state.routes.find(r => r.id === action.routeId);
+      if (!tpTarget) return state;
+      const tpKey  = routePairKey(tpTarget.origin, tpTarget.destination);
+      const tpPrev = state.routePricing?.[tpKey] ?? defaultClassPrices(price);
       return {
         ...state,
-        routes: state.routes.map(r =>
-          r.id === action.routeId
-            ? { ...r, ticketPrice: price,
-                classPrices: { ...r.classPrices, economy: price } }
-            : r
-        ),
+        routePricing: { ...state.routePricing, [tpKey]: { ...tpPrev, economy: price } },
       };
     }
 
@@ -645,26 +822,46 @@ function reducer(state, action) {
       for (const [k, v] of Object.entries(action.updates ?? {})) {
         cleanUpdates[k] = Math.max(1, Math.round(Number(v) || 0));
       }
+      // Per-O&D-pair pricing: merge the class updates into the pair's price set.
+      const cpTarget = state.routes.find(r => r.id === action.routeId);
+      if (!cpTarget) return state;
+      const cpKey  = routePairKey(cpTarget.origin, cpTarget.destination);
+      const cpPrev = state.routePricing?.[cpKey]
+        ?? defaultClassPrices(cleanUpdates.economy ?? mktReferencePrice(cpTarget.origin, cpTarget.destination));
       return {
         ...state,
-        routes: state.routes.map(r => {
-          if (r.id !== action.routeId) return r;
-          const merged = { ...r.classPrices, ...cleanUpdates };
-          return {
-            ...r,
-            classPrices: merged,
-            // keep ticketPrice in sync with economy for any legacy code still reading it
-            ticketPrice: merged.economy ?? r.ticketPrice,
-          };
-        }),
+        routePricing: { ...state.routePricing, [cpKey]: { ...cpPrev, ...cleanUpdates } },
       };
     }
 
     case 'UPDATE_FREQUENCY': {
+      const targetRoute = state.routes.find(r => r.id === action.routeId);
+      if (!targetRoute) return state;
+      const freqAircraft = state.fleet.find(a => a.id === targetRoute.aircraftId);
+      const freqType     = freqAircraft ? getAircraftType(freqAircraft.typeId) : null;
+      const newFreq      = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
+
+      if (freqType) {
+        // Block-hours: sum all other routes on this aircraft + this route at new freq
+        const otherBlockHrs = state.routes
+          .filter(r => r.aircraftId === targetRoute.aircraftId && r.id !== targetRoute.id)
+          .reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, freqType), 0);
+        const newBlockHrs = weeklyBlockHours(routeDistanceKm(targetRoute.origin, targetRoute.destination), newFreq, freqType);
+        if (otherBlockHrs + newBlockHrs > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+        // Gate/slot check: slots used by all other routes at each endpoint + new freq
+        const gates = state.gates ?? {};
+        const slotsAt = (code) => state.routes
+          .filter(r => r.id !== targetRoute.id && (r.origin === code || r.destination === code))
+          .reduce((s, r) => s + r.weeklyFrequency, 0);
+        if (slotsAt(targetRoute.origin)      + newFreq > (gates[targetRoute.origin]      ?? 0) * SLOTS_PER_GATE) return state;
+        if (slotsAt(targetRoute.destination) + newFreq > (gates[targetRoute.destination] ?? 0) * SLOTS_PER_GATE) return state;
+      }
+
       return {
         ...state,
         routes: state.routes.map(r =>
-          r.id === action.routeId ? { ...r, weeklyFrequency: action.weeklyFrequency } : r
+          r.id === action.routeId ? { ...r, weeklyFrequency: newFreq } : r
         ),
       };
     }
@@ -675,12 +872,15 @@ function reducer(state, action) {
       const level = normalizeCateringLevel(action.level);
       const ids = new Set(action.routeIds ?? (action.routeId ? [action.routeId] : []));
       if (ids.size === 0) return state;
-      return {
-        ...state,
-        routes: state.routes.map(r =>
-          ids.has(r.id) ? { ...r, cateringLevel: level } : r
-        ),
-      };
+      // Catering belongs to the O&D pair. Resolve the affected pairs from the routes,
+      // then set the level once per pair (covers every aircraft on it).
+      const keys = new Set(
+        state.routes.filter(r => ids.has(r.id)).map(r => routePairKey(r.origin, r.destination))
+      );
+      if (keys.size === 0) return state;
+      const routeCatering = { ...(state.routeCatering ?? {}) };
+      for (const k of keys) routeCatering[k] = level;
+      return { ...state, routeCatering };
     }
 
     // Airline-wide default catering level applied to newly-opened routes.
@@ -867,20 +1067,25 @@ function reducer(state, action) {
           origin:          a,
           destination:     b,
           aircraftId:      opId,
-          ticketPrice:     basePrice,
           weeklyFrequency: freq,
           hub:             state.hub,
           weeksOpen:       0,
           inherited:       true,
-          cateringLevel:   normalizeCateringLevel(state.defaultCateringLevel),
-          classPrices: {
-            economy:        basePrice,
-            premiumEconomy: Math.round(basePrice * CLASS_FARE_MULTIPLIERS.premiumEconomy),
-            businessClass:  Math.round(basePrice * CLASS_FARE_MULTIPLIERS.businessClass),
-            firstClass:     Math.round(basePrice * CLASS_FARE_MULTIPLIERS.firstClass),
-          },
+          _basePrice:      basePrice,   // transient: folded into routePricing below
         };
       });
+
+      // Price/cater the inherited pairs (one set per O&D). Don't clobber a pair the
+      // player already operates — they keep their own settings on overlapping routes.
+      const acquiredPricing  = { ...(state.routePricing  ?? {}) };
+      const acquiredCatering = { ...(state.routeCatering ?? {}) };
+      const inheritedCatering = normalizeCateringLevel(state.defaultCateringLevel);
+      for (const r of inheritedRoutes) {
+        const key = routePairKey(r.origin, r.destination);
+        if (!acquiredPricing[key])  acquiredPricing[key]  = defaultClassPrices(r._basePrice);
+        if (!acquiredCatering[key]) acquiredCatering[key] = inheritedCatering;
+        delete r._basePrice;
+      }
 
       // Mark assigned tails as such.
       const acquiredFleetFinal = acquiredFleet.map(f =>
@@ -909,6 +1114,8 @@ function reducer(state, action) {
         ...state,
         cash:                state.cash - acquisitionCost + (target.cash ?? 0),
         routes:              [...state.routes, ...inheritedRoutes],
+        routePricing:        acquiredPricing,
+        routeCatering:       acquiredCatering,
         fleet:               [...state.fleet, ...acquiredFleetFinal],
         gates:               newGates,
         competitors:         (state.competitors ?? []).filter(c => c.id !== target.id),
@@ -1279,6 +1486,9 @@ function reducer(state, action) {
         loyalty:         report.totalLoyaltyCost    ?? 0,
         partnerRevenue:  report.totalPartnerRevenue ?? 0,
         partnerFees:     report.totalPartnerFees    ?? 0,
+        cargoRevenue:    report.totalCargoRevenue   ?? 0,
+        cargoProfit:     report.totalCargoProfit    ?? 0,
+        cargoTonnes:     report.totalCargoTonnes    ?? 0,
         loanPayments:       totalLoanPayments,
         loanInterest:       totalLoanInterest,
         leaseRedelivery:    leaseRedeliveryCost,
@@ -1397,6 +1607,15 @@ function reducer(state, action) {
         ...r,
         weeksOpen: (r.weeksOpen ?? 0) + 1,
       }));
+      // Same treatment for cargo routes: drop those whose freighter's lease expired,
+      // age weeksOpen on survivors (drives the cargo maturity ramp).
+      const survivingCargo = expiredLeaseIds.size > 0
+        ? (state.cargoRoutes ?? []).filter(r => !expiredLeaseIds.has(r.aircraftId))
+        : (state.cargoRoutes ?? []);
+      const finalCargoRoutes = survivingCargo.map(r => ({
+        ...r,
+        weeksOpen: (r.weeksOpen ?? 0) + 1,
+      }));
 
       return {
         ...state,
@@ -1405,6 +1624,7 @@ function reducer(state, action) {
         year:              newYear,
         fleet:             finalFleet,
         routes:            finalRoutes,
+        cargoRoutes:       finalCargoRoutes,
         pendingOrders:     remainingOrders,
         financialHistory:  newHistory,
         lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
@@ -1526,6 +1746,10 @@ function reducer(state, action) {
       return freshState();
     }
 
+    case 'LOAD_STATE': {
+      return reconcileState(action.payload);
+    }
+
     default:
       return state;
   }
@@ -1559,13 +1783,15 @@ function reconcileState(parsed) {
   for (const a of (parsed.fleet ?? [])) seenIds.set(a.id, a);
   const fleet = [...seenIds.values()];
 
-  // 2. Remove routes pointing at aircraft that no longer exist.
-  const fleetIds = new Set(fleet.map(a => a.id));
-  const routes   = (parsed.routes ?? []).filter(r => fleetIds.has(r.aircraftId));
+  // 2. Remove routes (passenger + cargo) pointing at aircraft that no longer exist.
+  const fleetIds    = new Set(fleet.map(a => a.id));
+  const routes      = (parsed.routes ?? []).filter(r => fleetIds.has(r.aircraftId));
+  const cargoRoutes = (parsed.cargoRoutes ?? []).filter(r => fleetIds.has(r.aircraftId));
 
-  // 3. Re-derive status from the cleaned routes.
+  // 3. Re-derive status from the cleaned routes (passenger AND cargo — a freighter
+  //    flying only cargo routes must still come back 'assigned', not 'idle').
   //    Preserve 'grounded' so aircraft mid-repair survive a save/reload cycle.
-  const assignedIds = new Set(routes.map(r => r.aircraftId));
+  const assignedIds = new Set([...routes, ...cargoRoutes].map(r => r.aircraftId));
   const cleanFleet  = fleet.map(a => ({
     ...a,
     status: a.status === 'grounded'
@@ -1609,10 +1835,33 @@ function reconcileState(parsed) {
     };
   });
 
+  // 7. Migrate to per-O&D-pair pricing (state.routePricing is the single source of
+  //    truth). New saves already carry routePricing; old saves carried price on each
+  //    route object — fold the (now repriced) per-route fares into the pair map, then
+  //    strip price fields off the stored route objects.
+  const routePricing  = { ...(parsed.routePricing  ?? {}) };
+  const routeCatering = { ...(parsed.routeCatering ?? {}) };
+  for (const r of migratedRoutes) {
+    const key = routePairKey(r.origin, r.destination);
+    if (!routePricing[key]) {
+      const eco = r.classPrices?.economy ?? r.ticketPrice;
+      if (eco) routePricing[key] = r.classPrices ?? defaultClassPrices(eco);
+    }
+    if (!routeCatering[key] && r.cateringLevel) {
+      routeCatering[key] = normalizeCateringLevel(r.cateringLevel);
+    }
+  }
+  const normalizedRoutes = migratedRoutes.map(
+    ({ ticketPrice, classPrices, cateringLevel, ...rest }) => rest
+  );
+
   return {
     ...parsed,
     fleet:            cleanFleet,
-    routes:           migratedRoutes,
+    routes:           normalizedRoutes,
+    routePricing,
+    routeCatering,
+    cargoRoutes,
     competitors,
     pendingOrders,
     // Guarantee fields added in later versions exist even on old saves
@@ -1657,8 +1906,19 @@ export function GameProvider({ children }) {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) { /* ignore */ }
   }, [state]);
 
+  // Expose routes already hydrated with their per-pair price, so every consumer can
+  // keep reading route.classPrices / route.ticketPrice unchanged. The reducer stores
+  // (and persists) the normalized form — price only in state.routePricing.
+  const value = useMemo(() => ({
+    state: {
+      ...state,
+      routes: (state.routes ?? []).map(r => hydrateRoute(r, state.routePricing, state.routeCatering)),
+    },
+    dispatch,
+  }), [state]);
+
   return (
-    <GameContext.Provider value={{ state, dispatch }}>
+    <GameContext.Provider value={value}>
       {children}
     </GameContext.Provider>
   );

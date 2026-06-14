@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import RouteDetail from './RouteDetail.jsx';
 import AirportLink from './AirportLink.jsx';
+import CargoRoutesList, { FreightBadge, PassengerBadge } from './CargoRoutesList.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -35,7 +36,7 @@ function groupRoutes(routes) {
 
 export default function Routes() {
   const { state, dispatch } = useGame();
-  const { fleet, routes, hub, pendingOrders = [] } = state;
+  const { fleet, routes, hub, pendingOrders = [], cargoRoutes = [] } = state;
 
   // Detail view: null = list, { origin, destination } = route detail page
   const [detailPair, setDetailPair] = useState(null);
@@ -48,6 +49,9 @@ export default function Routes() {
   const [search,    setSearch]    = useState('');
   const [sortBy,    setSortBy]    = useState('profit');
   const [filterTab, setFilterTab] = useState('all');
+
+  // Passenger vs Freight view
+  const [typeFilter, setTypeFilter] = useState('all');
 
   // View mode: 'cards' | 'compare'
   const [viewMode, setViewMode] = useState('cards');
@@ -160,8 +164,31 @@ export default function Routes() {
   const formInitialOrigin = isAddingFlights ? formMode.origin : null;
   const formInitialDest   = isAddingFlights ? formMode.destination : null;
 
+  const cargoCount = cargoRoutes.length;
+  const typeToggle = (
+    <div style={{ display: 'flex', gap: 3, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 3, marginBottom: 14, width: 'fit-content' }}>
+      {[{ id: 'all', label: 'All' }, { id: 'passenger', label: '🧍 Passenger' }, { id: 'freight', label: '📦 Freight' }].map(o => {
+        const active = typeFilter === o.id;
+        const accent = o.id === 'freight' ? '#e8833a' : 'var(--accent)';
+        return (
+          <button key={o.id} onClick={() => setTypeFilter(o.id)}
+            style={{ fontSize: 12, padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600,
+              background: active ? `${accent}22` : 'transparent', color: active ? accent : 'var(--text-muted)' }}>
+            {o.label}{o.id === 'freight' && cargoCount > 0 ? ` (${cargoCount})` : ''}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // Freight-only view: show just the cargo routes list.
+  if (typeFilter === 'freight') {
+    return (<div>{typeToggle}<CargoRoutesList /></div>);
+  }
+
   return (
     <div>
+      {typeToggle}
       {/* Header bar */}
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
@@ -320,6 +347,16 @@ export default function Routes() {
             onViewDetail={() => setDetailPair({ origin: group.origin, destination: group.destination })}
           />
         ))
+      )}
+
+      {/* Cargo routes (shown in the All view; the Freight tab shows them on their own) */}
+      {typeFilter === 'all' && cargoCount > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#e8833a', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            📦 Cargo Routes
+          </div>
+          <CargoRoutesList />
+        </div>
       )}
     </div>
   );
@@ -890,8 +927,15 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const destSlotsUsed  = validDest ? slotsUsedAt(dest) : 0;
   const destSlotsOk    = gateAtDest && (destSlotsUsed + Number(frequency) <= destSlotCap);
 
+  // Network-connectivity check: aircraft with existing routes can only extend
+  // from airports they already serve — no teleporting between unconnected cities.
+  const aircraftRoutes   = aircraft ? routes.filter(r => r.aircraftId === aircraft.id) : [];
+  const servedAirports   = new Set(aircraftRoutes.flatMap(r => [r.origin, r.destination]));
+  const connectivityOk   = aircraftRoutes.length === 0 ||
+    servedAirports.has(origin) || (validDest && servedAirports.has(dest));
+
   const canSubmit = validDest && aircraft && inRange && blockOk &&
-    gateAtOrigin && gateAtDest && originSlotsOk && destSlotsOk;
+    gateAtOrigin && gateAtDest && originSlotsOk && destSlotsOk && connectivityOk;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -1032,6 +1076,13 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {dist && !inRange && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
             ⚠ {type?.name} has a range of {effRange.toLocaleString()} km (as configured) — this route is {dist.toLocaleString()} km.
+          </div>
+        )}
+
+        {/* Connectivity warning */}
+        {aircraft && !connectivityOk && (
+          <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
+            ⚠ {aircraft.name} already flies from {[...servedAirports].join(', ')} — new routes must connect to one of those airports. Aircraft can't teleport.
           </div>
         )}
 

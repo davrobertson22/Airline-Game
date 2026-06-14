@@ -27,9 +27,10 @@ function TierBadge({ tier }) {
 export default function Airports() {
   const { state, dispatch } = useGame();
   const { gates = {}, routes, cash, hubs = {} } = state;
-  const [search, setSearch]             = useState('');
-  const [regionFilter, setRegionFilter] = useState(null); // null = All
-  const [selectedAirport, setSelectedAirport] = useState(null);
+  const [search, setSearch]                       = useState('');
+  const [regionFilter, setRegionFilter]           = useState(null); // null = show picker
+  const [myGatesRegion, setMyGatesRegion]         = useState(null); // null = All
+  const [selectedAirport, setSelectedAirport]     = useState(null);
 
   if (selectedAirport) {
     return <AirportDetail code={selectedAirport} onBack={() => setSelectedAirport(null)} />;
@@ -138,18 +139,53 @@ export default function Airports() {
       {/* ── My gates ──────────────────────────────────────────────── */}
       {myGateEntries.length > 0 && (
         <section style={{ marginBottom: 28 }}>
-          <div style={{
-            fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
-            textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8,
-          }}>
-            Your Gates
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.07em',
+            }}>
+              Your Gates
+            </div>
           </div>
+
+          {/* Region filter tabs — only show regions where player has gates */}
           {(() => {
+            const heldRegions = [...new Set(myGateEntries.map(({ airport }) => getRegion(airport.country)))];
+            if (heldRegions.length <= 1) return null;
+            return (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {[null, ...heldRegions].map(r => {
+                  const active = myGatesRegion === r;
+                  return (
+                    <button
+                      key={r ?? 'all'}
+                      onClick={() => setMyGatesRegion(r)}
+                      style={{
+                        padding: '3px 10px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
+                        fontWeight: active ? 700 : 400,
+                        background: active ? 'var(--accent)' : 'var(--surface2)',
+                        color: active ? '#fff' : 'var(--text-muted)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {r ?? 'All'}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {(() => {
+            const visibleEntries = myGatesRegion
+              ? myGateEntries.filter(({ airport }) => getRegion(airport.country) === myGatesRegion)
+              : myGateEntries;
             let lastRegion = null;
-            return myGateEntries.map(({ code, count, airport }) => {
+            return visibleEntries.map(({ code, count, airport }) => {
             const region     = getRegion(airport.country);
-            const showHeader = region !== lastRegion;
-            if (showHeader) lastRegion = region;
+            const showHeader = region !== lastRegion && !myGatesRegion;
+            if (region !== lastRegion) lastRegion = region;
             const used       = slotsUsedAt(code);
             const capacity   = count * SLOTS_PER_GATE;
             const usagePct   = capacity > 0 ? used / capacity : 0;
@@ -241,6 +277,7 @@ export default function Airports() {
             );
           });
           })()}
+
         </section>
       )}
 
@@ -253,42 +290,100 @@ export default function Airports() {
           {myGateEntries.length > 0 ? 'Expand to More Airports' : 'Acquire Your First Gates'}
         </div>
 
-        {/* Region filter tabs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-          {[null, ...REGIONS].map(r => {
-            const active = regionFilter === r;
-            return (
+        {/* Region picker — shown when no region is selected */}
+        {regionFilter === null ? (
+          <div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+              Select a region to browse airports:
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+              {REGIONS.map(r => {
+                const emoji = {
+                  'North America': '🌎',
+                  'South America': '🌎',
+                  'Europe':        '🌍',
+                  'Middle East':   '🌍',
+                  'Africa':        '🌍',
+                  'Asia':          '🌏',
+                  'Oceania':       '🌏',
+                }[r] ?? '🌐';
+                const airportCount = AIRPORTS.filter(a => getRegion(a.country) === r).length;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setRegionFilter(r)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      gap: 6, padding: '16px 12px', borderRadius: 'var(--radius)',
+                      background: 'var(--surface2)', border: '1px solid var(--border)',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                      color: 'var(--text)',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'var(--surface3)';
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'var(--surface2)';
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                    }}
+                  >
+                    <span style={{ fontSize: 28 }}>{emoji}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{r}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{airportCount} airports</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Region filter tabs (with back/all option removed — just show active region + change link) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10, alignItems: 'center' }}>
               <button
-                key={r ?? 'all'}
-                onClick={() => setRegionFilter(r)}
+                onClick={() => { setRegionFilter(null); setSearch(''); }}
                 style={{
                   padding: '4px 10px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
-                  fontWeight: active ? 700 : 400,
-                  background: active ? 'var(--accent)' : 'var(--surface2)',
-                  color: active ? '#fff' : 'var(--text-muted)',
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                  transition: 'all 0.15s',
+                  background: 'var(--surface2)', color: 'var(--text-muted)',
+                  border: '1px solid var(--border)', transition: 'all 0.15s',
                 }}
               >
-                {r ?? 'All'}
+                ← Regions
               </button>
-            );
-          })}
-        </div>
+              {REGIONS.map(r => {
+                const active = regionFilter === r;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => { setRegionFilter(r); setSearch(''); }}
+                    style={{
+                      padding: '4px 10px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
+                      fontWeight: active ? 700 : 400,
+                      background: active ? 'var(--accent)' : 'var(--surface2)',
+                      color: active ? '#fff' : 'var(--text-muted)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {r}
+                  </button>
+                );
+              })}
+            </div>
 
-        <input
-          className="form-input"
-          placeholder="Search by code, city or country…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ marginBottom: 12, maxWidth: 320 }}
-        />
+            <input
+              className="form-input"
+              placeholder="Search by code, city or country…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ marginBottom: 12, maxWidth: 320 }}
+            />
 
-        {browseGroups.length === 0 ? (
-          <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-            No airports match "{search}"
-          </div>
-        ) : browseGroups.map(({ name, airports: groupAirports }) => (
+            {browseGroups.length === 0 ? (
+              <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                No airports match "{search}"
+              </div>
+            ) : browseGroups.map(({ name, airports: groupAirports }) => (
           <div key={name} style={{ marginBottom: 4 }}>
             {/* Country subheading */}
             <div style={{
@@ -361,7 +456,9 @@ export default function Airports() {
               })}
             </div>
           </div>
-        ))}
+            ))}
+          </>
+        )}
       </section>
     </div>
   );

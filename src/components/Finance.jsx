@@ -407,6 +407,12 @@ function PLStatement({ proj }) {
   // Revenue — canonical, including connecting feed + partner O&D + all demand lifts.
   const totRev          = proj.effectiveRevenue;
   const totPartnerRev   = report.totalPartnerRevenue ?? 0;
+  // Cargo (freight) revenue — already inside totRev; broken out as its own line.
+  const totCargoRev     = report.totalCargoRevenue ?? 0;
+  const totCargoTonnes  = report.totalCargoTonnes ?? 0;
+  const cargoResults    = report.cargoRouteResults ?? [];
+  const ytdCargoRev     = ytd(financialHistory, 'cargoRevenue');
+  const cargoRoutesState = state.cargoRoutes ?? [];
 
   // Catering / layover / compensation — canonical totals; per-route detail for display.
   const { onTimeRate } = laborEffects(labor);
@@ -708,14 +714,14 @@ function PLStatement({ proj }) {
             {/* ══ OPERATING REVENUE ══ */}
             <PLCategoryHeader label="Operating Revenue" />
             <CollapsibleSection
-              label="Passenger Revenue"
-              count={routeData.length}
+              label="Traffic Revenue"
+              count={routeData.length + cargoResults.length}
               colSpan={pw ? 4 : 3}
               expanded={sections.revenue}
               onToggle={() => toggleSection('revenue')}
-              summary={<TotalRow label="Passenger Revenue (collapsed)" prior={pw ? pw.revenue : undefined} weekly={totRev} ytd={ytdRev} positive />}
+              summary={<TotalRow label="Traffic Revenue (collapsed)" prior={pw ? pw.revenue : undefined} weekly={totRev} ytd={ytdRev} positive />}
             >
-              {routeData.length === 0
+              {routeData.length === 0 && cargoResults.length === 0
                 ? <EmptyRow text="No active routes" colSpan={pw ? 4 : 3} />
                 : (() => {
                     const pairGroups = {};
@@ -809,6 +815,37 @@ function PLStatement({ proj }) {
                   <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totPartnerRev)}</td>
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
                 </tr>
+              )}
+              {totCargoRev > 0 && (
+                <Fragment>
+                  <tr>
+                    <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                      📦 Cargo revenue <span style={{ color: '#e8833a', fontWeight: 600 }}>(freight)</span>
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                        {cargoResults.length} freighter route{cargoResults.length !== 1 ? 's' : ''} · {totCargoTonnes.toLocaleString()} t/wk
+                      </span>
+                    </td>
+                    {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.cargoRevenue ? '+' + formatMoney(pw.cargoRevenue) : '—'}</td>}
+                    <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totCargoRev)}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{ytdCargoRev ? formatMoney(ytdCargoRev) : '—'}</td>
+                  </tr>
+                  {cargoResults.map(cr => {
+                    const route = cargoRoutesState.find(r => r.id === cr.routeId);
+                    if (!route) return null;
+                    return (
+                      <tr key={cr.routeId} style={{ background: 'rgba(0,0,0,.15)' }}>
+                        <td style={{ paddingLeft: 56, fontSize: 12, color: 'var(--text-muted)' }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#e8833a', marginRight: 6 }} />
+                          {route.origin} → {route.destination}: {cr.tonnes.toLocaleString()} t × ${route.yieldPrice.toFixed(3)}/t-km
+                          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>({formatPercent(cr.loadFactor)} load)</span>
+                        </td>
+                        {pw && <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 11 }}>—</td>}
+                        <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--green)' }}>+{formatMoney(cr.revenue)}</td>
+                        <td />
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               )}
               {totCateringRev > 0 && (
                 <tr>

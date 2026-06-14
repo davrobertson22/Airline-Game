@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useGame } from './store/GameContext.jsx';
 import { ToastProvider, useToast } from './components/ToastSystem.jsx';
 import WeeklyDebrief from './components/WeeklyDebrief.jsx';
+import SaveLoadModal from './components/SaveLoadModal.jsx';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
 import SetupScreen from './components/SetupScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -69,6 +70,8 @@ function AppInner() {
   const { state, dispatch } = useGame();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showTour, setShowTour] = useState(false);
+  const [saveLoadMode, setSaveLoadMode] = useState(null); // 'save' | 'load' | null
+  const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const addToast = useToast();
 
   // Show tour automatically the first time a game starts
@@ -151,9 +154,12 @@ function AppInner() {
   }
 
   function handleReset() {
-    if (window.confirm('Start a new game? All progress will be lost.')) {
-      dispatch({ type: 'RESET' });
-    }
+    setShowNewGameConfirm(true);
+  }
+
+  function confirmNewGame() {
+    setShowNewGameConfirm(false);
+    dispatch({ type: 'RESET' });
   }
 
   const tabContent = {
@@ -200,6 +206,22 @@ function AppInner() {
         </div>
         <button className="btn-advance" onClick={handleAdvanceWeek} title="Advance now (auto-advances in the shown time)">
           Next Week › <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>{formatCountdown(timeUntilNextWeek)}</span>
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={() => setSaveLoadMode('save')}
+          title="Save game to a slot"
+        >
+          💾 Save
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={() => setSaveLoadMode('load')}
+          title="Load a saved game"
+        >
+          📂 Load
         </button>
         <button
           className="btn btn-ghost"
@@ -305,6 +327,28 @@ function AppInner() {
 
       {/* Onboarding tour */}
       {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
+
+      {/* Save / Load modal */}
+      {saveLoadMode && (
+        <SaveLoadModal mode={saveLoadMode} onClose={() => setSaveLoadMode(null)} />
+      )}
+
+      {/* New Game confirmation */}
+      {showNewGameConfirm && (
+        <div className="saveload-overlay" onClick={e => { if (e.target === e.currentTarget) setShowNewGameConfirm(false); }}>
+          <div className="confirm-modal">
+            <h2 className="confirm-modal-title">Start a New Game?</h2>
+            <p className="confirm-modal-body">
+              Your current game is auto-saved and can be recovered via <strong>Load Game</strong> if you save it to a slot first.
+              Starting a new game will reset everything.
+            </p>
+            <div className="confirm-modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowNewGameConfirm(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmNewGame}>Start New Game</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

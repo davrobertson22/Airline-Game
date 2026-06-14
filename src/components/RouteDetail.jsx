@@ -171,16 +171,82 @@ export default function RouteDetail({ origin, dest, onBack }) {
     return { shareResults: results };
   }, [playerRoutes, competitorsOnRoute, market, origin, dest, state.hub, hubs]);
 
-  // Live simulate each player aircraft
-  const playerSims = useMemo(() =>
-    playerRoutes.flatMap(route => {
+  // Live simulate each player aircraft.
+  // When multiple aircraft share this O&D we pre-compute combined demand and
+  // distribute it proportionally so each aircraft doesn't overcount the market.
+  const playerSims = useMemo(() => {
+    if (playerRoutes.length === 0) return [];
+
+    // Build combined demand allocation when there are multiple aircraft
+    const demandAllocations = new Map(); // aircraftId → demandOverride
+    if (playerRoutes.length > 1) {
+      let totalEcoSeats = 0, totalBizSeats = 0, totalFreq = 0;
+      let hasBusinessCabin = false;
+      const validSims = [];
+      for (const route of playerRoutes) {
+        const aircraft = state.fleet.find(a => a.id === route.aircraftId);
+        if (!aircraft) continue;
+        const type = getAircraftType(aircraft.typeId);
+        if (!type) continue;
+        const cfg  = aircraft.config ?? { economy: type.seats };
+        const freq = route.weeklyFrequency ?? 7;
+        const eco  = (cfg.economy ?? type.seats) * freq;
+        const biz  = (cfg.businessClass ?? 0) * freq;
+        totalEcoSeats += eco;
+        totalBizSeats += biz;
+        totalFreq     += freq;
+        if (biz > 0) hasBusinessCabin = true;
+        validSims.push({ route, aircraft, type, cfg, freq, eco, biz });
+      }
+      if (validSims.length > 1 && totalFreq > 0) {
+        const r0   = validSims[0].route;
+        const cp0  = r0.classPrices ?? {};
+        const ecoP = Math.max(1, cp0.economy ?? r0.ticketPrice ?? 1);
+        const bizP = hasBusinessCabin && cp0.businessClass != null
+          ? Math.max(1, cp0.businessClass) : hasBusinessCabin ? ecoP * 3.5 : null;
+        const combinedOffer = {
+          airlineId: 'player', origin, destination: dest,
+          economyPrice: ecoP, businessPrice: bizP,
+          weeklyFrequency: totalFreq,
+          seatsPerFlight: Math.round((totalEcoSeats + totalBizSeats) / totalFreq),
+          economySeats: totalEcoSeats, businessSeats: totalBizSeats,
+          qualityScore: shareResults.find(r => r.airlineId === 'player') ? 70 : 70,
+          connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+        };
+        const compOffers = competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean);
+        const [combined] = computeMarketShare(market, [combinedOffer, ...compOffers]);
+        for (const { aircraft, eco, biz } of validSims) {
+          const ecoFrac = totalEcoSeats > 0 ? eco / totalEcoSeats : 1 / validSims.length;
+          const bizFrac = totalBizSeats > 0 ? biz / totalBizSeats : 1 / validSims.length;
+          demandAllocations.set(aircraft.id, {
+            leisurePax:      Math.round(combined.leisurePax  * ecoFrac),
+            businessPax:     Math.round(combined.businessPax * bizFrac),
+            economyRevenue:  Math.round(combined.economyRevenue  * ecoFrac),
+            businessRevenue: Math.round(combined.businessRevenue * bizFrac),
+            totalPax:        Math.round(combined.totalPax * ((ecoFrac + bizFrac) / 2)),
+            leisureShare:    combined.leisureShare,
+            businessShare:   combined.businessShare,
+            capacityCapped:  combined.capacityCapped,
+          });
+        }
+      }
+    }
+
+    return playerRoutes.flatMap(route => {
       const aircraft = state.fleet.find(a => a.id === route.aircraftId);
       if (!aircraft) return [];
-      const result = simulateRoute(route, aircraft, gameDate);
-      return result ? [{ route, aircraft, type: getAircraftType(aircraft.typeId), result }] : [];
-    }),
-    [playerRoutes, state.fleet, gameDate]
-  );
+      const type = getAircraftType(aircraft.typeId);
+      const result = simulateRoute(route, aircraft, gameDate, null, 1.0,
+        demandAllocations.get(aircraft.id) ?? null);
+      if (!result) return [];
+      // Attach fixed costs so the UI can show a fully-loaded profit indicator
+      const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
+        : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
+      const weeklyMaintCost = type?.baseMaintenancePerWk ?? 0; // approximate (no maint mult here)
+      return [{ route, aircraft, type, result: { ...result, weeklyLeaseCost, weeklyMaintCost,
+        trueProfit: result.revenue - (result.totalOpCost ?? 0) - weeklyLeaseCost - weeklyMaintCost } }];
+    });
+  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults]);
 
   // result.passengers is one-way (per direction) — directly comparable to market demand.
   const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);
@@ -355,7 +421,8 @@ export default function RouteDetail({ origin, dest, onBack }) {
             <Stat label="Avg Load"     value={formatPercent(avgLoad)} color={avgLoad >= 0.75 ? 'var(--green)' : avgLoad >= 0.45 ? 'var(--yellow)' : 'var(--red)'} />
             <Stat label="Revenue/wk"   value={formatMoney(totalRev)} color="var(--green)" />
             <Stat label="Op Cost/wk"   value={formatMoney(totalOpCost)} color="var(--red)" />
-            <Stat label="Op Profit/wk" value={(totalRev - totalOpCost >= 0 ? '+' : '') + formatMoney(totalRev - totalOpCost)} color={totalRev - totalOpCost >= 0 ? 'var(--green)' : 'var(--red)'} />
+            <Stat label="Op Profit/wk" value={(totalRev - totalOpCost >= 0 ? '+' : '') + formatMoney(totalRev - totalOpCost)} color={totalRev - totalOpCost >= 0 ? 'var(--green)' : 'var(--red)'}
+              sub="variable costs only" />
             <Stat
               label="Catering net/wk"
               value={(catRev - catCost >= 0 ? '+' : '') + formatMoney(catRev - catCost)}
@@ -363,6 +430,42 @@ export default function RouteDetail({ origin, dest, onBack }) {
               color={catRev - catCost >= 0 ? 'var(--green)' : 'var(--red)'}
             />
           </div>
+          {/* Fixed cost indicator */}
+          {(() => {
+            const totalLease = playerSims.reduce((s, { result }) => s + (result.weeklyLeaseCost ?? 0), 0);
+            const totalMaint = playerSims.reduce((s, { result }) => s + (result.weeklyMaintCost ?? 0), 0);
+            const totalFixed = totalLease + totalMaint;
+            const trueProfit = totalRev - totalOpCost - totalFixed;
+            if (totalFixed === 0) return null;
+            const trueProfitColor = trueProfit >= 0 ? 'var(--green)' : 'var(--red)';
+            return (
+              <div style={{
+                padding: '10px 14px', marginBottom: 14,
+                background: 'var(--surface2)', borderRadius: 'var(--radius)',
+                borderLeft: `3px solid ${trueProfitColor}`,
+                fontSize: 13,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Fixed costs (lease + maint)</span>
+                  <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{formatMoney(totalFixed)}/wk</span>
+                </div>
+                {totalLease > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>
+                    <span>Lease</span><span>−{formatMoney(totalLease)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  <span>Maintenance</span><span>−{formatMoney(totalMaint)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                  <span style={{ fontWeight: 600 }}>True profit/wk</span>
+                  <span style={{ fontWeight: 700, color: trueProfitColor }}>
+                    {trueProfit >= 0 ? '+' : ''}{formatMoney(trueProfit)}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
           {/* Catering service level */}
           <div style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
             <CateringSelector

@@ -15,6 +15,7 @@ import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import { cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
+import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
 
 function weekToMonth(week) {
   return weekToGameDate(week).monthIndex;
@@ -146,6 +147,8 @@ function TierBadge({ tier }) {
 
 export default function RoutePlanner() {
   const { state, dispatch } = useGame();
+
+  const [mode, setMode] = useState('passenger');
 
   const [origin, setOrigin]       = useState('');
   const [dest,   setDest]         = useState('');
@@ -305,8 +308,15 @@ export default function RoutePlanner() {
   const pricePct = routeData ? Math.round((effectivePrice / routeData.refP - 1) * 100) : 0;
   const totalDemand = routeData ? routeData.market.leisureDemand + routeData.market.businessDemand : 0;
 
+  // Freight mode renders the dedicated cargo planner (hooks above always run first).
+  if (mode === 'freight') {
+    return <CargoRoutePlanner mode={mode} setMode={setMode} />;
+  }
+
   return (
     <div>
+
+      <ModeToggle mode={mode} setMode={setMode} />
 
       {/* ── Route picker ── */}
       <div className="card" style={{ marginBottom: 12 }}>
