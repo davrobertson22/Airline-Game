@@ -38,6 +38,12 @@ function deleteSlot(i) {
 
 function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
   const isEmpty = !slot;
+  const gameDateStr = slot
+    ? (() => {
+        const { monthName, weekInMonth } = weekToGameDate(slot.week);
+        return `${monthName} wk ${weekInMonth}, Yr ${slot.year}`;
+      })()
+    : null;
   const dateStr = slot
     ? new Date(slot.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       + ' ' + new Date(slot.savedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
@@ -68,7 +74,7 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
           <div className="save-slot-meta">
             <div className="save-slot-meta-row">
               <span className="save-slot-meta-label">Date</span>
-              <span>{weekToGameDate(slot.week, slot.year)}</span>
+              <span>{gameDateStr}</span>
             </div>
             <div className="save-slot-meta-row">
               <span className="save-slot-meta-label">Cash</span>
