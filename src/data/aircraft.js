@@ -1693,7 +1693,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.77,
     baseMaintenancePerWk: 14_000,
     description: 'Purpose-built regional freighter. Feeds parcels and express cargo into hubs on thin short-haul lanes where a widebody would never fill.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg/960px-F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/ATR_ATR-72-201%28F%29%2C_West_Air_Europe_Cargo_AN1282441.jpg/960px-ATR_ATR-72-201%28F%29%2C_West_Air_Europe_Cargo_AN1282441.jpg',
   },
   {
     id: 'b737800bcf',
@@ -1710,7 +1710,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 0.79,
     baseMaintenancePerWk: 58_000,
     description: 'Passenger-to-freighter conversion of the best-selling 737-800. The workhorse of e-commerce and express networks on domestic and short regional cargo routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Delta_Boeing_737-800_N371DA_departing_Boston_June_2025.jpg/960px-Delta_Boeing_737-800_N371DA_departing_Boston_June_2025.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Prime_Air%2C_N855DM%2C_Boeing_737-83N%28BCF%29_%2849580078766%29.jpg/960px-Prime_Air%2C_N855DM%2C_Boeing_737-83N%28BCF%29_%2849580078766%29.jpg',
   },
   {
     id: 'b767300f',
@@ -1727,7 +1727,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 1.63,
     baseMaintenancePerWk: 145_000,
     description: 'The backbone of express and mid-haul cargo. FedEx and UPS fly hundreds; ideal medium-widebody capacity for transcontinental and regional intercontinental freight.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Delta_Air_Lines_B767-332_N130DL.jpg/960px-Delta_Air_Lines_B767-332_N130DL.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/ABX_Air_Boeing_767-300F_%28N362CM%29_at_Miami_International_Airport.jpg/960px-ABX_Air_Boeing_767-300F_%28N362CM%29_at_Miami_International_Airport.jpg',
   },
   {
     id: 'a330200f',
@@ -1744,7 +1744,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 1.75,
     baseMaintenancePerWk: 150_000,
     description: 'Modern purpose-built mid-size freighter. Better fuel economics than the 767F with more payload, suited to medium and long-haul cargo trunk routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Bmi.a330-200.g-wwbb.arp.jpg/960px-Bmi.a330-200.g-wwbb.arp.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Airbus_A330-243F%2C_Etihad_Crystal_Cargo_AN2258288.jpg/960px-Airbus_A330-243F%2C_Etihad_Crystal_Cargo_AN2258288.jpg',
   },
   {
     id: 'b777f',
@@ -1761,7 +1761,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2,
     baseMaintenancePerWk: 220_000,
     description: 'The definitive modern long-haul freighter. Near-jumbo payload with twin-engine economics — the choice for ultra-long intercontinental cargo trunk routes.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Cathay_Pacific_Boeing_777-200%3B_B-HNL%40HKG.jpg/960px-Cathay_Pacific_Boeing_777-200%3B_B-HNL%40HKG.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/D-ALFG_Lufthansa_Cargo_B777_FRA.jpg/960px-D-ALFG_Lufthansa_Cargo_B777_FRA.jpg',
   },
   {
     id: 'b747400f',
@@ -1778,7 +1778,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2.25,
     baseMaintenancePerWk: 320_000,
     description: 'The Queen of the cargo skies. Nose-loading door swallows outsize freight; maximum payload on the densest cargo corridors, at the cost of four thirsty engines.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/B-747_Iberia.jpg/960px-B-747_Iberia.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Cargolux_LX-YCV_B747-400F.JPG/960px-Cargolux_LX-YCV_B747-400F.JPG',
   },
   {
     id: 'an124',
@@ -1795,7 +1795,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2.5,
     baseMaintenancePerWk: 380_000,
     description: 'Soviet-era strategic heavylifter. Cheap to acquire and able to swallow outsize loads through its nose and tail doors, but four thirsty D-18T engines and a short max-payload range make it a specialist, not a trunk-route workhorse.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Antonov_An-124-100M-150_Ruslan_Volga-Dnepr_AN1719005.jpg/960px-Antonov_An-124-100M-150_Ruslan_Volga-Dnepr_AN1719005.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Antonov_An-124-100_Ruslan%2C_Volga-Dnepr_Airlines_AN1765053.jpg/960px-Antonov_An-124-100_Ruslan%2C_Volga-Dnepr_Airlines_AN1765053.jpg',
   },
   {
     id: 'b7478f',
@@ -1812,7 +1812,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 2.3,
     baseMaintenancePerWk: 360_000,
     description: 'The largest production freighter in the world. GEnx engines and a stretched upper deck give it more payload than the -400F with markedly better fuel burn per tonne — the modern flagship of dedicated cargo fleets.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Cargolux_Boeing_747-8F_LX-VCC.jpg/960px-Cargolux_Boeing_747-8F_LX-VCC.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Boeing_747-8R7F%2C_Cargolux_Airlines_International_JP7227015.jpg/960px-Boeing_747-8R7F%2C_Cargolux_Airlines_International_JP7227015.jpg',
   },
   {
     id: 'an225',
@@ -1829,7 +1829,7 @@ export const AIRCRAFT_TYPES = [
     crewCostPerKm: 3.0,
     baseMaintenancePerWk: 600_000,
     description: 'The legend. Six engines, the highest payload of any aircraft ever flown, and a cargo hold built to carry the Buran shuttle. A halo machine for ultra-heavy outsize loads — staggering capability, ruinous economics, and only ever viable on the densest special-cargo corridors.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Antonov_An-225_Mriya_%28UR-82060%29_taxiing.jpg/960px-Antonov_An-225_Mriya_%28UR-82060%29_taxiing.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Antonov_An-225_Mriya_front.jpg/960px-Antonov_An-225_Mriya_front.jpg',
   },
 ];
 

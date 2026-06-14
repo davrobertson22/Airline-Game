@@ -371,10 +371,12 @@ export default function Marketplace() {
                     <span className="aircraft-stat-pill-label">Range</span>
                     <span className="aircraft-stat-pill-value">{type.range.toLocaleString()} km</span>
                   </div>
-                  <div className="aircraft-stat-pill">
-                    <span className="aircraft-stat-pill-label">Fuel burn</span>
-                    <span className="aircraft-stat-pill-value">{type.fuelBurnPer100km.toFixed(0)} L/100km</span>
-                  </div>
+                  {!type.freighter && (
+                    <div className="aircraft-stat-pill">
+                      <span className="aircraft-stat-pill-label">Fuel burn</span>
+                      <span className="aircraft-stat-pill-value">{type.fuelBurnPer100km.toFixed(0)} L/100km</span>
+                    </div>
+                  )}
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">{type.freighter ? 'Fuel/tonne' : 'L/seat/100km'}</span>
                     <span className="aircraft-stat-pill-value">
