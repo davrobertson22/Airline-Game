@@ -22,6 +22,10 @@ import Loyalty from './components/Loyalty.jsx';
 import Alliances from './components/Alliances.jsx';
 import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
+import { gameAdBreak } from './utils/ads.js';
+
+// Show a full-screen interstitial every Nth week advance (never on the first).
+const AD_EVERY_N_WEEKS = 3;
 
 function MapIcon({ size = 15 }) {
   return (
@@ -110,6 +114,23 @@ function AppInner() {
     setTimeUntilNextWeek(WEEK_INTERVAL_MS);
   }
 
+  // Shared week-advance, used by both the manual button and the hourly timer so
+  // the ad cadence is identical regardless of how the week advances. Kept in a
+  // ref so the interval's closure always calls the latest version.
+  const weeksSinceAd = useRef(0);
+  const advanceWeek = useRef(() => {});
+  advanceWeek.current = () => {
+    dispatch({ type: 'ADVANCE_WEEK' });
+    setActiveTab('dashboard');
+    resetTimer();
+
+    weeksSinceAd.current += 1;
+    if (weeksSinceAd.current >= AD_EVERY_N_WEEKS) {
+      weeksSinceAd.current = 0;
+      gameAdBreak('weekly_debrief');
+    }
+  };
+
   // Auto-advance every hour
   useEffect(() => {
     if (state.phase !== 'playing') return;
@@ -117,9 +138,7 @@ function AppInner() {
     const tick = setInterval(() => {
       const remaining = nextWeekAt.current - Date.now();
       if (remaining <= 0) {
-        dispatch({ type: 'ADVANCE_WEEK' });
-        setActiveTab('dashboard');
-        resetTimer();
+        advanceWeek.current();
       } else {
         setTimeUntilNextWeek(remaining);
       }
@@ -138,9 +157,7 @@ function AppInner() {
   if (state.phase === 'setup') return <SetupScreen />;
 
   function handleAdvanceWeek() {
-    dispatch({ type: 'ADVANCE_WEEK' });
-    setActiveTab('dashboard');
-    resetTimer();
+    advanceWeek.current();
   }
 
   function formatCountdown(ms) {
