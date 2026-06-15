@@ -325,6 +325,18 @@ function AppInner() {
         </div>
       )}
 
+      {/* Victory overlay — all competitors acquired */}
+      {state.gameWon && !state.victoryAcknowledged && (
+        <VictoryOverlay
+          stats={state.victoryStats}
+          airlineName={state.airlineName}
+          logoId={state.logoId}
+          logoColor={state.logoColor}
+          onContinue={() => dispatch({ type: 'ACKNOWLEDGE_VICTORY' })}
+          onNewGame={handleReset}
+        />
+      )}
+
       {/* Onboarding tour */}
       {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
 
@@ -349,6 +361,78 @@ function AppInner() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Victory screen ───────────────────────────────────────────────────────────
+
+function VictoryStat({ label, value }) {
+  return (
+    <div style={{ textAlign: 'center', minWidth: 90 }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function VictoryOverlay({ stats, airlineName, logoId, logoColor, onContinue, onNewGame }) {
+  const s = stats ?? {};
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9998,
+      background: 'radial-gradient(circle at 50% 30%, rgba(16,185,129,0.18), rgba(0,0,0,0.85))',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div className="card" style={{
+        width: '100%', maxWidth: 460, padding: '32px 28px 24px', textAlign: 'center',
+        border: '1px solid rgba(16,185,129,0.5)',
+      }}>
+        <div style={{ fontSize: 52, marginBottom: 8 }}>🏆</div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <AirlineLogo id={logoId} size={44} radius={8} accentColor={logoColor} />
+        </div>
+        <h2 style={{ fontSize: 26, marginBottom: 6, color: 'var(--green)' }}>You Control the Skies</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4, lineHeight: 1.5 }}>
+          {airlineName} has acquired every competitor{s.lastRival ? <> — {s.lastRival} was the last to fall</> : null}.
+          The industry is yours.
+        </p>
+
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '18px 24px',
+          margin: '22px 0', padding: '18px 12px', background: 'var(--surface2)', borderRadius: 10,
+        }}>
+          {s.marketCap != null && <VictoryStat label="Market cap" value={formatMoney(s.marketCap)} />}
+          <VictoryStat label="Cash" value={formatMoney(s.cash ?? 0)} />
+          <VictoryStat label="Aircraft" value={s.fleetCount ?? 0} />
+          <VictoryStat label="Routes" value={s.routeCount ?? 0} />
+          <VictoryStat label="Airports" value={s.airports ?? 0} />
+          <VictoryStat label="Years played" value={s.year ?? '–'} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onContinue}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
+              background: 'var(--green)', border: 'none', color: '#fff',
+            }}
+          >
+            Keep Playing
+          </button>
+          <button
+            onClick={onNewGame}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+            }}
+          >
+            New Game
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

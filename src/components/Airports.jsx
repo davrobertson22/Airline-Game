@@ -148,17 +148,20 @@ export default function Airports() {
             </div>
           </div>
 
-          {/* Region filter tabs — only show regions where player has gates */}
+          {/* Region filter tabs — gates are shown one region at a time so a
+              large network never has to render every gate at once. */}
           {(() => {
             const heldRegions = [...new Set(myGateEntries.map(({ airport }) => getRegion(airport.country)))];
             if (heldRegions.length <= 1) return null;
+            const activeRegion = myGatesRegion ?? heldRegions[0];
             return (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                {[null, ...heldRegions].map(r => {
-                  const active = myGatesRegion === r;
+                {heldRegions.map(r => {
+                  const active = activeRegion === r;
+                  const regionCount = myGateEntries.filter(({ airport }) => getRegion(airport.country) === r).length;
                   return (
                     <button
-                      key={r ?? 'all'}
+                      key={r}
                       onClick={() => setMyGatesRegion(r)}
                       style={{
                         padding: '3px 10px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
@@ -169,7 +172,7 @@ export default function Airports() {
                         transition: 'all 0.15s',
                       }}
                     >
-                      {r ?? 'All'}
+                      {r} ({regionCount})
                     </button>
                   );
                 })}
@@ -178,14 +181,14 @@ export default function Airports() {
           })()}
 
           {(() => {
-            const visibleEntries = myGatesRegion
-              ? myGateEntries.filter(({ airport }) => getRegion(airport.country) === myGatesRegion)
+            const heldRegions  = [...new Set(myGateEntries.map(({ airport }) => getRegion(airport.country)))];
+            // With multiple regions, only ever render the active one. A single
+            // region renders directly (no filtering needed).
+            const activeRegion = myGatesRegion ?? heldRegions[0];
+            const visibleEntries = heldRegions.length > 1
+              ? myGateEntries.filter(({ airport }) => getRegion(airport.country) === activeRegion)
               : myGateEntries;
-            let lastRegion = null;
             return visibleEntries.map(({ code, count, airport }) => {
-            const region     = getRegion(airport.country);
-            const showHeader = region !== lastRegion && !myGatesRegion;
-            if (region !== lastRegion) lastRegion = region;
             const used       = slotsUsedAt(code);
             const capacity   = count * SLOTS_PER_GATE;
             const usagePct   = capacity > 0 ? used / capacity : 0;
@@ -197,16 +200,6 @@ export default function Airports() {
 
             return (
               <div key={code}>
-                {showHeader && (
-                  <div style={{
-                    fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                    textTransform: 'uppercase', letterSpacing: '0.08em',
-                    marginTop: 12, marginBottom: 6,
-                    paddingBottom: 4, borderBottom: '1px solid var(--border)',
-                  }}>
-                    {region}
-                  </div>
-                )}
                 <div className="card" style={{ marginBottom: 8, padding: '12px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {/* Airport info */}

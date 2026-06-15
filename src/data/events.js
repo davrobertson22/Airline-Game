@@ -19,6 +19,22 @@
 //   competitorMult      multiply competitor aggression / pricing
 //   note                plain-language summary shown in debrief
 
+// Maximum impact a broad (regional/domestic/global) event may have: ±30%.
+export const MAX_EVENT_IMPACT = 0.30;
+// Localized events that hit only a single airport/city may go up to ±50%.
+export const MAX_LOCALIZED_IMPACT = 0.50;
+
+// Global frequency dial for random events. 1.0 = original rates; lower = rarer.
+// At 0.5 the player sits in an active event ~74% of weeks (~10/year).
+export const EVENT_FREQUENCY = 0.5;
+
+// Clamp a multiplier so it can never move more than `cap` from 1.0.
+function clampImpact(mult, cap = MAX_EVENT_IMPACT) {
+  const lo = 1 - cap;
+  const hi = 1 + cap;
+  return Math.min(hi, Math.max(lo, mult));
+}
+
 export const EVENT_TEMPLATES = [
 
   // ── Fuel ──────────────────────────────────────────────────────────────────
@@ -33,7 +49,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.04,
     duration: [3, 6],
     generate() {
-      const mult = 1.15 + Math.random() * 0.20;
+      const mult = clampImpact(1.15 + Math.random() * 0.20);
       return {
         effects: { fuelMult: mult },
         resolvedDesc: `Jet fuel costs up ${pct(mult, true)} — all routes more expensive to operate.`,
@@ -50,7 +66,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.03,
     duration: [4, 8],
     generate() {
-      const mult = 0.78 + Math.random() * 0.14;
+      const mult = clampImpact(0.78 + Math.random() * 0.14);
       return {
         effects: { fuelMult: mult },
         resolvedDesc: `Fuel costs down ${pct(mult, false)} — great week to fly more.`,
@@ -70,7 +86,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.025,
     duration: [4, 8],
     generate() {
-      const mult = 1.12 + Math.random() * 0.13;
+      const mult = clampImpact(1.12 + Math.random() * 0.13);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `All routes seeing ${pct(mult, true)} more passengers than normal.`,
@@ -87,7 +103,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.018,
     duration: [8, 16],
     generate() {
-      const mult = 0.72 + Math.random() * 0.12;
+      const mult = clampImpact(0.72 + Math.random() * 0.12);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Demand down ${pct(mult, false)} across all routes. Load factors dropping.`,
@@ -104,7 +120,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.04,
     duration: [2, 4],
     generate() {
-      const mult = 1.18 + Math.random() * 0.12;
+      const mult = clampImpact(1.18 + Math.random() * 0.12);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Holiday peak — loads up ${pct(mult, true)} this week.`,
@@ -124,7 +140,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.03,
     duration: [6, 12],
     generate() {
-      const mult = 1.20 + Math.random() * 0.18;
+      const mult = clampImpact(1.20 + Math.random() * 0.18);
       return {
         effects: {
           regionCodes: ['SG','HK','MY','TH','ID','PH','JP','KR','CN','IN'],
@@ -144,7 +160,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.035,
     duration: [6, 10],
     generate() {
-      const mult = 1.18 + Math.random() * 0.15;
+      const mult = clampImpact(1.18 + Math.random() * 0.15);
       return {
         effects: {
           regionCodes: ['GB','FR','DE','ES','IT','GR','PT','NL','BE','AT','CH','SE','NO','DK'],
@@ -164,7 +180,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.025,
     duration: [4, 8],
     generate() {
-      const mult = 0.82 + Math.random() * 0.10;
+      const mult = clampImpact(0.82 + Math.random() * 0.10);
       return {
         effects: {
           regionCodes: ['US','CA','MX'],
@@ -187,7 +203,8 @@ export const EVENT_TEMPLATES = [
     probability: 0.02,
     duration: [1, 3],
     generate() {
-      const mult = 0.35 + Math.random() * 0.25;
+      // Single-airport disruption — allowed the higher localized cap.
+      const mult = clampImpact(0.35 + Math.random() * 0.25, MAX_LOCALIZED_IMPACT);
       return {
         effects: {
           regionCodes: ['GB'],
@@ -208,7 +225,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.03,
     duration: [1, 2],
     generate() {
-      const mult = 0.55 + Math.random() * 0.20;
+      const mult = clampImpact(0.55 + Math.random() * 0.20);
       return {
         effects: {
           regionCodes: ['US'],
@@ -229,7 +246,7 @@ export const EVENT_TEMPLATES = [
     duration: [1, 1],
     generate() {
       return {
-        effects: { globalDemandMult: 0.70 },
+        effects: { globalDemandMult: clampImpact(0.70) },
         resolvedDesc: 'Booking systems down — revenue impacted across all routes this week.',
       };
     },
@@ -255,7 +272,7 @@ export const EVENT_TEMPLATES = [
         { codes: ['GB','FR','ES','IT'], label: 'Western Europe' },
       ];
       const region = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 1.25 + Math.random() * 0.20;
+      const mult = clampImpact(1.25 + Math.random() * 0.20);
       return {
         effects: { regionCodes: region.codes, regionDemandMult: mult },
         resolvedDesc: `Major sporting event in ${region.label} driving ${pct(mult, true)} demand to host region.`,
@@ -272,7 +289,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.012,
     duration: [6, 14],
     generate() {
-      const mult = 0.55 + Math.random() * 0.20;
+      const mult = clampImpact(0.55 + Math.random() * 0.20);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Travel demand down ${pct(mult, false)} globally as passengers avoid flying.`,
@@ -294,7 +311,7 @@ export const EVENT_TEMPLATES = [
         { codes: ['ID','PH','MY'], label: 'Southeast Asia' },
       ];
       const region = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 0.30 + Math.random() * 0.25;
+      const mult = clampImpact(0.30 + Math.random() * 0.25);
       return {
         effects: { regionCodes: region.codes, regionDemandMult: mult },
         resolvedDesc: `Volcanic ash closes ${region.label} airspace — routes severely disrupted.`,
@@ -319,7 +336,7 @@ export const EVENT_TEMPLATES = [
         { codes: ['MX','CO'],      label: 'Central America' },
       ];
       const region = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 0.45 + Math.random() * 0.25;
+      const mult = clampImpact(0.45 + Math.random() * 0.25);
       return {
         effects: { regionCodes: region.codes, regionDemandMult: mult },
         resolvedDesc: `Natural disaster in ${region.label} causes ${pct(mult, false)} demand drop — emergency crews replacing tourists.`,
@@ -343,7 +360,7 @@ export const EVENT_TEMPLATES = [
         { codes: ['TH','PH'],      label: 'Southeast Asia' },
       ];
       const region = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 0.60 + Math.random() * 0.18;
+      const mult = clampImpact(0.60 + Math.random() * 0.18);
       return {
         effects: { regionCodes: region.codes, regionDemandMult: mult },
         resolvedDesc: `Political unrest in ${region.label} — travel advisories cut demand by ${pct(mult, false)}.`,
@@ -367,7 +384,7 @@ export const EVENT_TEMPLATES = [
         { codes: ['BR','AR'], label: 'South America' },
       ];
       const region = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 1.15 + Math.random() * 0.20;
+      const mult = clampImpact(1.15 + Math.random() * 0.20);
       return {
         effects: { regionCodes: region.codes, regionDemandMult: mult },
         resolvedDesc: `Tourism surge to ${region.label} — demand up ${pct(mult, true)}.`,
@@ -384,7 +401,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.03,
     duration: [1, 2],
     generate() {
-      const mult = 1.20 + Math.random() * 0.15;
+      const mult = clampImpact(1.20 + Math.random() * 0.15);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Global conference boosts business travel — loads up ${pct(mult, true)} this week.`,
@@ -408,7 +425,7 @@ export const EVENT_TEMPLATES = [
         ['EG','MA'],
       ];
       const codes = regions[Math.floor(Math.random() * regions.length)];
-      const mult = 0.65 + Math.random() * 0.18;
+      const mult = clampImpact(0.65 + Math.random() * 0.18);
       return {
         effects: { regionCodes: codes, regionDemandMult: mult },
         resolvedDesc: `Currency devaluation — outbound travel from affected region down ${pct(mult, false)}.`,
@@ -425,7 +442,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.025,
     duration: [3, 6],
     generate() {
-      const mult = 1.10 + Math.random() * 0.15;
+      const mult = clampImpact(1.10 + Math.random() * 0.15);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Extreme heat drives escape travel — load factors up ${pct(mult, true)} across leisure routes.`,
@@ -442,7 +459,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.018,
     duration: [4, 8],
     generate() {
-      const mult = 1.18 + Math.random() * 0.20;
+      const mult = clampImpact(1.18 + Math.random() * 0.20);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `LCC grounding pushes ${pct(mult, true)} more passengers your way. Capitalize now.`,
@@ -462,7 +479,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.03,
     duration: [3, 6],
     generate() {
-      const mult = 0.82 + Math.random() * 0.10;
+      const mult = clampImpact(0.82 + Math.random() * 0.10);
       return {
         effects: { globalDemandMult: mult, competitorMult: 1.4 },
         resolvedDesc: 'Aggressive pricing by competitors pulling passengers away. Consider lowering fares.',
@@ -479,7 +496,7 @@ export const EVENT_TEMPLATES = [
     probability: 0.015,
     duration: [4, 8],
     generate() {
-      const mult = 1.22 + Math.random() * 0.18;
+      const mult = clampImpact(1.22 + Math.random() * 0.18);
       return {
         effects: { globalDemandMult: mult },
         resolvedDesc: `Stranded passengers from competitor grounding drive ${pct(mult, true)} demand boost.`,
@@ -511,10 +528,18 @@ export function rollEvents(activeEvents = []) {
   for (const tmpl of EVENT_TEMPLATES) {
     if (activeEvents.length + newEvents.length >= MAX_ACTIVE_EVENTS) break; // cap reached
     if (activeTypes.has(tmpl.id)) continue;          // already active
-    if (Math.random() > tmpl.probability) continue;  // didn't trigger
+    if (Math.random() > tmpl.probability * EVENT_FREQUENCY) continue;  // didn't trigger
 
     const dur = randInt(tmpl.duration[0], tmpl.duration[1]);
     const { effects, resolvedDesc } = tmpl.generate();
+
+    // Defensive cap, even if a template forgets to clamp. Localized events
+    // (those hitting a single airport/city) get the higher ±50% cap;
+    // everything broader is held to ±30%.
+    const cap = effects.airportCode ? MAX_LOCALIZED_IMPACT : MAX_EVENT_IMPACT;
+    if (effects.fuelMult)         effects.fuelMult         = clampImpact(effects.fuelMult, cap);
+    if (effects.globalDemandMult) effects.globalDemandMult = clampImpact(effects.globalDemandMult, cap);
+    if (effects.regionDemandMult) effects.regionDemandMult = clampImpact(effects.regionDemandMult, cap);
 
     newEvents.push({
       id:          `${tmpl.id}-${Date.now()}-${Math.random()}`,

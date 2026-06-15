@@ -126,6 +126,7 @@ export const AIRPORTS = [
   // ── NORTH AMERICA (additional) ───────────────────────────────────────────────
   { code: 'EWR', name: 'Newark Liberty Intl',          city: 'New York',        country: 'US', lat: 40.69,  lon: -74.17,   population: 20.1, tier: 'major'    },
   { code: 'LGA', name: 'LaGuardia Airport',             city: 'New York',        country: 'US', lat: 40.78,  lon: -73.87,   population: 20.1, tier: 'major'    },
+  { code: 'ISP', name: 'Long Island MacArthur Airport', city: 'Islip',           country: 'US', lat: 40.79,  lon: -73.10,   population: 1.5,  tier: 'regional' },
   { code: 'SAN', name: 'San Diego Intl',                city: 'San Diego',       country: 'US', lat: 32.73,  lon: -117.19,  population: 3.3,  tier: 'regional' },
   { code: 'MCO', name: 'Orlando Intl',                  city: 'Orlando',         country: 'US', lat: 28.43,  lon: -81.31,   population: 2.7,  tier: 'major'    },
   { code: 'TPA', name: 'Tampa Intl',                    city: 'Tampa',           country: 'US', lat: 27.98,  lon: -82.53,   population: 3.2,  tier: 'regional' },
@@ -142,6 +143,7 @@ export const AIRPORTS = [
   { code: 'SJC', name: 'Norman Y. Mineta San Jose',     city: 'San Jose',        country: 'US', lat: 37.36,  lon: -121.93,  population: 2.0,  tier: 'regional' },
   { code: 'SMF', name: 'Sacramento Intl',               city: 'Sacramento',      country: 'US', lat: 38.70,  lon: -121.59,  population: 2.3,  tier: 'regional' },
   { code: 'RNO', name: 'Reno-Tahoe Intl',               city: 'Reno',            country: 'US', lat: 39.50,  lon: -119.77,  population: 0.5,  tier: 'regional' },
+  { code: 'DRO', name: 'Durango-La Plata County Airport', city: 'Durango',       country: 'US', lat: 37.15,  lon: -107.75,  population: 0.06, tier: 'regional', visitors: 0.5 },
   { code: 'STL', name: 'Lambert-St. Louis Intl',        city: 'St. Louis',       country: 'US', lat: 38.75,  lon: -90.37,   population: 2.8,  tier: 'regional' },
   { code: 'BNA', name: 'Nashville Intl',                city: 'Nashville',       country: 'US', lat: 36.12,  lon: -86.68,   population: 2.0,  tier: 'regional' },
   { code: 'MSY', name: 'Louis Armstrong Intl',          city: 'New Orleans',     country: 'US', lat: 29.99,  lon: -90.26,   population: 1.3,  tier: 'regional' },
