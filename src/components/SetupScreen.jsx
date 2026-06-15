@@ -92,7 +92,7 @@ export default function SetupScreen() {
         <div className="setup-title">✈ Tailwinds - Airline Manager</div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
-          You've secured a $10,000,000 startup loan to get started — use it wisely.
+          You're starting with $10,000,000 in equity to get started — use it wisely.
         </div>
 
         {/* ── Step indicator ── */}
