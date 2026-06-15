@@ -33,6 +33,12 @@
  */
 
 import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/market.js';
+import {
+  buildRouteMarket,
+  buildCompetitorOffer,
+  computeMarketShare,
+  BUSINESS_PRICE_MULTIPLIER,
+} from './demand.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -75,6 +81,44 @@ const PRICE_WEIGHT         = 1.2;
 
 /** Utility weight: how much frequency matters (log scale). */
 const FREQ_WEIGHT          = 0.35;
+
+// ─── Partner O&D revenue model ────────────────────────────────────────────────
+// The player's connecting itinerary competes for each O&D market against any
+// competitor nonstops AND a synthetic "outside option" that represents every
+// other way to make the trip (other carriers' nonstops, connections over other
+// hubs, rail/road, or simply not travelling). The outside option is what stops a
+// single connecting itinerary from ever capturing 100% of a city-pair market.
+
+/**
+ * Utility bonus applied to the outside option, representing the breadth of
+ * alternative itineraries a traveller always has. ~1.4 ≈ ln(4), i.e. all-else-
+ * equal the field of alternatives is favoured ~4:1 over a single connecting
+ * itinerary. This is the single biggest lever on partner-feed size: raise it to
+ * shrink partner O&D revenue, lower it to grow it.
+ */
+const OUTSIDE_OPTION_CONN_BONUS = 1.4;
+
+/** Quality score (0–100) assigned to the outside option (a generic nonstop alt). */
+const OUTSIDE_OPTION_QUALITY    = 70;
+
+/** Weekly frequency assumed for the aggregate outside option. */
+const OUTSIDE_OPTION_FREQUENCY  = 35;
+
+/** Quality score assigned to the player's connecting itinerary (partner-metal blend). */
+const CONNECTION_QUALITY_SCORE  = 58;
+
+/** Seats per flight assumed when sizing connecting-leg capacity. */
+const ASSUMED_SEATS_PER_FLIGHT  = 180;
+
+/**
+ * Fraction of a leg's seats realistically available to *this* connecting O&D.
+ * A spoke flight carries mostly local pax plus connections spread over many
+ * onward markets, so any single O&D can only claim a small slice of the metal.
+ */
+const CONNECTING_SEAT_FRACTION  = 0.18;
+
+/** Share of captured seat-intent that actually boards (no-show / spill buffer). */
+const CONNECTION_LOAD_FACTOR    = 0.85;
 
 // ─── Types (JSDoc) ────────────────────────────────────────────────────────────
 
@@ -422,58 +466,204 @@ export function buildCannibalizationMap(connections) {
 }
 
 /**
- * Compute partner O&D revenue: the player's prorate share from connections
- * where one leg is partner metal.
+ * Index competitors by the sorted O&D route-keys they operate nonstop.
+ * Used by the partner-feed model to find head-to-head nonstop competition.
+ *
+ * @param {object[]} competitors  - live competitor airline objects (with .routes)
+ * @returns {Map<string, object[]>}  sorted routeKey → competitors serving it
+ */
+export function buildCompetitorRouteIndex(competitors = []) {
+  const index = new Map();
+  for (const comp of competitors) {
+    for (const routeKey of Object.keys(comp.routes ?? {})) {
+      // competitor route keys are already sorted 'A-B', but normalise defensively
+      const key = routeKey.split('-').sort().join('-');
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(comp);
+    }
+  }
+  return index;
+}
+
+/**
+ * Build the synthetic "outside option" offer for an O&D market: the aggregate of
+ * every alternative itinerary a traveller can choose instead of the player's
+ * connection (other carriers' nonstops, connections over other hubs, not flying).
+ * Priced at the market reference fare, high frequency, effectively unlimited
+ * capacity, plus a utility bonus so it dominates unless the connection is
+ * genuinely attractive. This is what prevents a single connection from ever
+ * capturing 100% of a city-pair market.
+ *
+ * @param {RouteMarket} market
+ * @returns {AirlineOffer}
+ */
+function buildOutsideOptionOffer(market) {
+  const economyPrice = market.referencePrice;
+  return {
+    airlineId:         '__outside__',
+    origin:            market.origin,
+    destination:       market.destination,
+    economyPrice,
+    businessPrice:     Math.round(economyPrice * BUSINESS_PRICE_MULTIPLIER),
+    weeklyFrequency:   OUTSIDE_OPTION_FREQUENCY,
+    seatsPerFlight:    1e9,
+    economySeats:      1e12,   // never capacity-capped — absorbs all residual demand
+    businessSeats:     1e12,
+    qualityScore:      OUTSIDE_OPTION_QUALITY,
+    connectivityBonus: OUTSIDE_OPTION_CONN_BONUS,
+  };
+}
+
+/**
+ * Build the player's connecting-itinerary offer for an O&D market.
+ * Carries the connection penalty (as a negative connectivity bonus), the
+ * combined two-leg fare, and a capacity ceiling derived from the thinner of the
+ * two legs — a single O&D can only claim a small slice of each spoke flight.
+ *
+ * @param {Connection}  conn
+ * @param {RouteMarket} market
+ * @returns {AirlineOffer}
+ */
+function buildPlayerConnectionOffer(conn, market) {
+  const penalty   = CONNECTION_PENALTY[conn.partnershipType] ?? CONNECTION_PENALTY.interline;
+  const minFreq   = Math.min(conn.leg1Freq, conn.leg2Freq);
+  // Seats this O&D can realistically claim on the thinner leg, over the week.
+  const econSeats = Math.max(
+    1,
+    Math.round(minFreq * ASSUMED_SEATS_PER_FLIGHT * CONNECTING_SEAT_FRACTION),
+  );
+  const economyPrice = conn.totalPrice;
+  return {
+    airlineId:         '__player_conn__',
+    origin:            market.origin,
+    destination:       market.destination,
+    economyPrice,
+    businessPrice:     Math.round(economyPrice * BUSINESS_PRICE_MULTIPLIER),
+    weeklyFrequency:   minFreq,
+    seatsPerFlight:    ASSUMED_SEATS_PER_FLIGHT,
+    economySeats:      econSeats,
+    businessSeats:     Math.max(1, Math.round(econSeats * 0.13)),
+    qualityScore:      CONNECTION_QUALITY_SCORE,
+    connectivityBonus: -penalty,    // connections are less attractive than nonstops
+  };
+}
+
+/**
+ * Compute partner O&D revenue: the player's prorate share of the revenue from
+ * connecting itineraries where exactly one leg is partner metal.
+ *
+ * Unlike the old model — which booked ~100% of every city-pair market onto the
+ * player's connection — this runs each O&D through the same discrete-choice
+ * market-share model the direct routes use. The player's connecting itinerary
+ * competes against any competitor nonstops on that O&D plus an outside option
+ * representing all other itineraries, so its captured share is realistically
+ * bounded and further capped by the connecting capacity of the thinner leg.
  *
  * @param {Connection[]}  connections
- * @param {number}        [assumedLoadFactor=0.72]
+ * @param {object}        [options]
+ * @param {object}        [options.gameDate={month:6}]       - { month } for seasonality
+ * @param {Map<string,object[]>} [options.competitorRouteIndex]
+ *        sorted-routeKey → array of competitor airline objects serving that O&D nonstop
  * @returns {{ totalRevenue: number, entries: PartnerODEntry[] }}
  */
-export function computePartnerODRevenue(connections, assumedLoadFactor = 0.72) {
+export function computePartnerODRevenue(connections, options = {}) {
+  const {
+    gameDate = { month: 6 },
+    competitorRouteIndex = null,
+  } = options;
+
   const entries = [];
   let totalRevenue = 0;
 
+  // ── Group mixed-leg connections by directional O&D market ────────────────────
+  // Every distinct routing that serves the same origin→destination direction
+  // competes for ONE shared market. Scoring them together (rather than once per
+  // routing) prevents the same demand being booked several times over. Grouping
+  // is directional — matching how the rest of the sim treats each travel
+  // direction as its own one-way market — so outbound and return don't cannibalise
+  // each other.
+  const byOD = new Map();   // dirKey → { origin, dest, routings: Map<sig, conn> }
   for (const conn of connections) {
-    // Only relevant when exactly one leg is partner metal
     const mixedLegs = (conn.leg1Owner === 'player') !== (conn.leg2Owner === 'player');
     if (!mixedLegs) continue;
 
-    const origin  = conn.legOneOrigin;
-    const hub     = conn.hub;
-    const dest    = conn.legTwoDest;
+    const origin = conn.legOneOrigin;
+    const dest   = conn.legTwoDest;
+    const dirKey = `${origin}-${dest}`;            // directional
 
-    const pax          = Math.round(conn.odDemand * conn.connectionShare * assumedLoadFactor);
-    if (pax <= 0) continue;
+    if (!byOD.has(dirKey)) byOD.set(dirKey, { dirKey, origin, dest, routings: new Map() });
+    // Collapse exact-duplicate enumerations of the same routing (same hub/metal).
+    const sig = `${conn.hub}|${conn.leg1Owner}`;
+    const group = byOD.get(dirKey);
+    if (!group.routings.has(sig)) group.routings.set(sig, conn);
+  }
 
-    const playerLeg    = conn.leg1Owner === 'player' ? 'leg1' : 'leg2';
-    const playerOrigin = playerLeg === 'leg1' ? origin : hub;
-    const playerDest   = playerLeg === 'leg1' ? hub    : dest;
-    const partnerType  = conn.partnershipType;
+  for (const { origin, dest, routings } of byOD.values()) {
+    const odKey = [origin, dest].sort().join('-');   // display key (unordered)
+    const market = buildRouteMarket(origin, dest, gameDate, 1);
+    if (!market.baseWeeklyDemand) continue;
 
-    const playerMiles  = routeDistance(playerOrigin, playerDest);
-    const totalMiles   = routeDistance(origin, dest);
+    // One offer per distinct player routing, all competing in the same market.
+    const offers   = [];
+    const routingMeta = new Map();   // offerId → { conn, prorate, hub, playerLeg }
+    let i = 0;
+    for (const conn of routings.values()) {
+      const playerLeg    = conn.leg1Owner === 'player' ? 'leg1' : 'leg2';
+      const playerOrigin = playerLeg === 'leg1' ? conn.legOneOrigin : conn.hub;
+      const playerDest   = playerLeg === 'leg1' ? conn.hub          : conn.legTwoDest;
+      const playerMiles  = routeDistance(playerOrigin, playerDest);
+      const totalMiles   = routeDistance(origin, dest);
+      if (!playerMiles || !totalMiles) continue;
 
-    if (!playerMiles || !totalMiles) continue;
+      const partnerType = conn.partnershipType;
+      const prorate = Math.max(
+        playerMiles / totalMiles,
+        PRORATE_FLOOR[partnerType] ?? PRORATE_FLOOR.interline,
+      );
 
-    // Prorate: mileage fraction, subject to floor
-    const mileageProrate = playerMiles / totalMiles;
-    const floorProrate   = PRORATE_FLOOR[partnerType] ?? PRORATE_FLOOR.interline;
-    const prorate        = Math.max(mileageProrate, floorProrate);
+      const offer = buildPlayerConnectionOffer(conn, market);
+      offer.airlineId = `__player_conn__${i++}`;
+      offers.push(offer);
+      routingMeta.set(offer.airlineId, {
+        conn, prorate, playerMiles, totalMiles,
+        hub: conn.hub, partnerType,
+        partnerLeg: playerLeg === 'leg1' ? 'leg2' : 'leg1',
+      });
+    }
+    if (offers.length === 0) continue;
 
-    const ticketPrice    = conn.totalPrice;
-    const playerRevenue  = Math.round(pax * ticketPrice * prorate);
+    // Competitor nonstops on this O&D + the ever-present outside option.
+    for (const competitor of (competitorRouteIndex?.get(odKey) ?? [])) {
+      const offer = buildCompetitorOffer(competitor, market);
+      if (offer) offers.push(offer);
+    }
+    offers.push(buildOutsideOptionOffer(market));
 
-    totalRevenue += playerRevenue;
-    entries.push({
-      odKey:             [origin, dest].sort().join('-'),
-      hub,
-      partnerLeg:        playerLeg === 'leg1' ? 'leg2' : 'leg1',
-      pax,
-      playerRevenue,
-      playerLegMileage:  Math.round(playerMiles),
-      totalMileage:      Math.round(totalMiles),
-      partnershipType:   partnerType,
-    });
+    // Score the whole market once; sum the player's routings.
+    const results = computeMarketShare(market, offers);
+    for (const r of results) {
+      const meta = routingMeta.get(r.airlineId);
+      if (!meta) continue;   // competitor / outside option
+
+      const pax = Math.round(r.totalPax * CONNECTION_LOAD_FACTOR);
+      if (pax <= 0) continue;
+
+      const grossItinRevenue = r.totalRevenue * CONNECTION_LOAD_FACTOR;
+      const playerRevenue    = Math.round(grossItinRevenue * meta.prorate);
+
+      totalRevenue += playerRevenue;
+      entries.push({
+        odKey,
+        hub:               meta.hub,
+        partnerLeg:        meta.partnerLeg,
+        pax,
+        playerRevenue,
+        capturedShare:     +(r.leisureShare ?? 0).toFixed(4),
+        playerLegMileage:  Math.round(meta.playerMiles),
+        totalMileage:      Math.round(meta.totalMiles),
+        partnershipType:   meta.partnerType,
+      });
+    }
   }
 
   return { totalRevenue, entries };
@@ -620,7 +810,8 @@ export function getCannibalizationPreview(
  *   3. Decay partnership health (partnerHealthDecay)
  *
  * @param {object}  state   - subset: { routes, competitors, allianceMembership,
- *                                      codeshareAgreements, allianceDef, jointVentures }
+ *                                      codeshareAgreements, allianceDef, jointVentures,
+ *                                      gameDate }
  * @returns {{
  *   connections:        Connection[],
  *   cannibalizationMap: object,
@@ -636,6 +827,7 @@ export function runNetworkTick(state) {
     codeshareAgreements  = [],
     allianceDef          = null,
     jointVentures        = {},
+    gameDate             = { month: 6 },
   } = state;
 
   const partnershipMap = buildPartnershipMap(
@@ -645,9 +837,16 @@ export function runNetworkTick(state) {
     jointVentures,
   );
 
+  // Index every competitor by the O&D pairs they fly nonstop, so the partner-feed
+  // model can pit the player's connections against real head-to-head competition.
+  const competitorRouteIndex = buildCompetitorRouteIndex(competitors);
+
   const connections        = buildAllConnections(routes, competitors, partnershipMap);
   const cannibalizationMap = buildCannibalizationMap(connections);
-  const partnerODRevenue   = computePartnerODRevenue(connections);
+  const partnerODRevenue   = computePartnerODRevenue(connections, {
+    gameDate,
+    competitorRouteIndex,
+  });
   const partnerHealthDecay = computePartnerHealthDecay(connections, partnershipMap);
 
   return {

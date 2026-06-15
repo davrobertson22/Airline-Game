@@ -972,7 +972,10 @@ tr:hover td { background: rgba(62,166,255,.05); }
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  /* Must sit above Leaflet's map panes (z-index up to ~700) and
+     controls (~1000), or the route map paints over the modal on the
+     Map page. Keep this above any in-app chrome too. */
+  z-index: 2000;
 }
 
 .saveload-modal {
@@ -981,6 +984,8 @@ tr:hover td { background: rgba(62,166,255,.05); }
   border-radius: var(--radius-lg);
   padding: 28px 28px 24px;
   width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
 

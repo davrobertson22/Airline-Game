@@ -852,6 +852,7 @@ export function weeklyTick(state) {
     allianceMembership,
     codeshareAgreements,
     allianceDef,
+    gameDate,
   });
   const { cannibalizationMap, partnerODRevenue, partnerHealthDecay } = networkTick;
 

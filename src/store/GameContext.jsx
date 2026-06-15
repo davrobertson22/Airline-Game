@@ -1663,7 +1663,14 @@ function reducer(state, action) {
         cargoRoutes:       finalCargoRoutes,
         pendingOrders:     remainingOrders,
         financialHistory:  newHistory,
-        lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+        lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax,
+          // Effective revenue includes the world-event demand adjustment that the
+          // headline net already reflects; "all-in" cost folds loan payments,
+          // lease redelivery and corporate tax on top of operating cost so that
+          // (revenueEffective − totalCostAll) reconciles exactly to cashDelta.
+          revenueEffective: Math.round(report.totalRevenue + eventDemandAdj),
+          totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + corporateTax,
+          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,
         loans:             updatedLoans,

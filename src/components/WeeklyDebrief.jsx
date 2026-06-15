@@ -8,6 +8,7 @@ export default function WeeklyDebrief() {
 
   const [displayed, setDisplayed] = useState(0);
   const [phase, setPhase]         = useState('counting'); // 'counting' | 'done'
+  const [showCosts, setShowCosts] = useState(false);
   const frameRef = useRef(null);
 
   const profit = lastReport?.cashDelta ?? 0;
@@ -57,6 +58,30 @@ export default function WeeklyDebrief() {
     : 0;
   const showLoyalty = loyaltyMembers > 0 || loyaltyCost > 0;
 
+  // ── Cost breakdown (reconciles exactly to the "All Costs" chip) ──────────
+  const r = lastReport;
+  const n = v => (typeof v === 'number' ? v : 0);
+  const costAll = r.totalCostAll ?? r.totalCost ?? 0;
+  const costItems = [
+    { label: 'Fuel',                  v: n(r.totalFuel) },
+    { label: 'Crew & labor',          v: n(r.totalCrew) + n(r.totalLaborCosts) + n(r.totalFamilyBaseCosts) },
+    { label: 'Maintenance',           v: n(r.totalMaintenance) },
+    { label: 'Aircraft leases',       v: n(r.totalLeases) },
+    { label: 'Airport & ground fees', v: n(r.totalLandingFees) + n(r.totalGateFees) + n(r.totalGroundHandling) },
+    { label: 'Catering & service',    v: n(r.totalCatering) + n(r.totalLounge) + n(r.totalQuality) },
+    { label: 'Passenger compensation', v: n(r.totalCompensation) + n(r.totalLayover) },
+    { label: 'Distribution & partner fees', v: n(r.totalDistributionCost) + n(r.totalPartnerFees) },
+    { label: 'Marketing & loyalty',   v: n(r.totalMarketingSpend) + n(r.totalLoyaltyCost) },
+    { label: 'Overhead & insurance',  v: n(r.totalHQCost) + n(r.totalHubInvestment) + n(r.totalInsurance) },
+    { label: 'Loan payments',         v: n(r.loanPayments) },
+    { label: 'Lease redelivery',      v: n(r.leaseRedelivery) },
+    { label: 'Corporate tax',         v: n(r.corporateTax) },
+  ];
+  const knownCosts = costItems.reduce((s, i) => s + i.v, 0);
+  const otherCosts = costAll - knownCosts;
+  if (Math.abs(otherCosts) >= 1) costItems.push({ label: 'Other', v: otherCosts });
+  const costRows = costItems.filter(i => Math.abs(i.v) >= 1);
+
   function dismiss() {
     dispatch({ type: 'DISMISS_DEBRIEF' });
   }
@@ -105,10 +130,54 @@ export default function WeeklyDebrief() {
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20,
         }}>
-          <StatChip label="Revenue" value={`+${formatMoney(lastReport.totalRevenue)}`} color="var(--green)" />
-          <StatChip label="All Costs" value={`−${formatMoney(lastReport.totalCost ?? 0)}`} color="var(--red)" />
+          <StatChip label="Revenue" value={`+${formatMoney(lastReport.revenueEffective ?? lastReport.totalRevenue)}`} color="var(--green)" />
+          <StatChip label="All Costs" value={`−${formatMoney(lastReport.totalCostAll ?? lastReport.totalCost ?? 0)}`} color="var(--red)" />
           <StatChip label="Pax" value={(lastReport.totalPassengers ?? '—').toLocaleString?.()} />
         </div>
+
+        {/* Cost breakdown (expandable) */}
+        {costRows.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <button
+              onClick={() => setShowCosts(s => !s)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'var(--surface2)', border: '1px solid transparent', borderRadius: 8,
+                padding: '8px 12px', cursor: 'pointer', color: 'var(--text-muted)',
+                fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
+              }}
+            >
+              <span>Where the money went</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'var(--red)' }}>−{formatMoney(costAll)}</span>
+                <span style={{ transform: showCosts ? 'rotate(90deg)' : 'none', transition: 'transform .15s', fontSize: 13 }}>›</span>
+              </span>
+            </button>
+            {showCosts && (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {costRows.map((item, i) => {
+                  const pct = costAll > 0 ? item.v / costAll : 0;
+                  return (
+                    <div key={i} style={{ position: 'relative', padding: '6px 12px', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        width: `${Math.max(0, Math.min(100, pct * 100))}%`,
+                        background: 'rgba(248,81,73,.10)',
+                      }} />
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>{item.label}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{Math.round(pct * 100)}%</span>
+                          <span style={{ color: 'var(--text)', fontWeight: 600, fontFamily: 'monospace' }}>−{formatMoney(item.v)}</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Active events */}
         {(newEvents.length > 0 || activeEvents.length > 0) && (
