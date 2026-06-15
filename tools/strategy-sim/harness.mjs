@@ -119,7 +119,48 @@ function fleetCount(state) { return state.fleet.filter(a => a.status !== 'retire
 // Each bot receives the current state at the start of a week (before ADVANCE_WEEK)
 // and returns the state after taking its actions.
 
+// Destinations ranked by RAW demand (what a new player intuitively picks — the
+// obvious big-traffic city pairs). Excludes same-metro / ultra-short hops (<250km,
+// e.g. JFK→EWR/LGA) that no real player would launch as a first route.
+const DEST_BY_DEMAND = [...DEST_CANDIDATES]
+  .filter(d => d.dist >= 250)
+  .sort((a, b) => b.demand - a.demand);
+
 const STRATEGIES = {
+  // 0. Casual / struggling player — the profile that's going bankrupt. Picks the
+  //    obvious high-demand (short, low-fare) routes, prices at the reference fare
+  //    (doesn't know to mark up), flies one daily frequency, keeps a thin buffer,
+  //    and does no marketing/loyalty/hub investment. Represents an ordinary player.
+  casual(state) {
+    const TARGET_FLEET = 5;
+    if (fleetCount(state) < TARGET_FLEET && state.cash > 1_500_000) {
+      // grow only when there's an unserved route to fly, then open it immediately
+      const served = new Set();
+      for (const r of state.routes) { served.add(r.origin); served.add(r.destination); }
+      const type = getAircraftType(WORKHORSE);
+      const range = effectiveRangeKm({}, type);
+      const dest = DEST_BY_DEMAND.find(d => !served.has(d.code) && d.dist <= range);
+      if (dest) {
+        state = dispatch(state, { type: 'LEASE_AIRCRAFT', typeId: WORKHORSE });
+        const ac = state.fleet[state.fleet.length - 1];
+        if (!(state.gates?.[dest.code] > 0)) state = dispatch(state, { type: 'ADD_GATE', airportCode: dest.code });
+        let guard = 0;
+        while (true) {
+          const hubSlots = state.routes.filter(r => r.origin === HUB || r.destination === HUB)
+            .reduce((s, r) => s + r.weeklyFrequency, 0);
+          if (hubSlots + 7 <= (state.gates?.[HUB] ?? 0) * 50 || guard++ > 50) break;
+          state = dispatch(state, { type: 'ADD_GATE', airportCode: HUB });
+        }
+        const price = Math.max(1, Math.round(simRefPrice(HUB, dest.code) * 1.0)); // at reference
+        state = dispatch(state, {
+          type: 'ADD_ROUTE', origin: HUB, destination: dest.code,
+          aircraftId: ac.id, weeklyFrequency: 7, ticketPrice: price,
+        });
+      }
+    }
+    return state;
+  },
+
   // 1. Lean & cautious — a small, premium-priced network and a deliberately large
   //    cash buffer. No extra debt beyond the mandatory startup loan. Grows slowly
   //    (one route at a time) and stops early. Optimises for survival over scale.
@@ -245,7 +286,7 @@ export function playGame(strategyName, seed, horizonWeeks) {
       if (absWeek >= 260) survived5 = true;
     }
     // if we ran the full horizon without bankruptcy, both survival flags are set above
-    return { survived2, survived5, won, bankruptWeek };
+    return { survived2, survived5, won, bankruptWeek, finalCash: state.cash, routes: state.routes.length };
   } finally {
     Math.random = origRandom;
   }

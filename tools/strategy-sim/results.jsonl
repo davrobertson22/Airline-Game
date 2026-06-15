@@ -4,3 +4,8 @@
 {"strategy":"aggressive","startSeed":1000,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
 {"strategy":"aggressive","startSeed":1025,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
 {"strategy":"aggressive","startSeed":1050,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
+{"strategy":"aggressive","startSeed":1075,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
+{"strategy":"acquire","startSeed":1000,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
+{"strategy":"acquire","startSeed":1025,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
+{"strategy":"acquire","startSeed":1050,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}
+{"strategy":"acquire","startSeed":1075,"count":25,"s2":25,"s5":25,"wins":0,"bank":0,"deathWeeks":[]}

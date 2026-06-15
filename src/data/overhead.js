@@ -33,7 +33,7 @@
 /** Weekly HQ & corporate overhead for a given fleet size. */
 export function calcHQCost(fleetSize) {
   if (fleetSize <= 0) return 0;
-  return Math.round(45_000 * Math.pow(fleetSize, 0.85));
+  return Math.round(38_000 * Math.pow(fleetSize, 0.85));
 }
 
 /**
@@ -78,8 +78,28 @@ export const HULL_INSURANCE_ANNUAL_RATE = 0.008;   // 0.8 % p.a.
  */
 export const DEPRECIATION_YEARS = 30;
 
-/** Weekly liability premium per aircraft (owned or leased). */
-export const LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT = 18_000;
+/**
+ * Weekly liability premium per aircraft (owned or leased), stepped by aircraft
+ * category — larger aircraft carry far more passenger/third-party liability, so a
+ * turboprop is much cheaper to insure than a widebody. This also gives small-aircraft
+ * startups meaningful relief versus a flat rate.
+ */
+export const LIABILITY_INSURANCE_WEEKLY_BY_CATEGORY = {
+  'Turboprop':    6_000,
+  'Regional Jet': 9_000,
+  'Narrow Body':  12_000,
+  'Wide Body':    18_000,
+  'Double Deck':  24_000,
+  'Supersonic':   20_000,
+};
+/** Fallback weekly liability premium when an aircraft's category is unknown. */
+export const LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT = 12_000;
+
+/** Weekly liability premium for one aircraft, by its type's category. */
+export function liabilityInsuranceWeekly(aircraftType) {
+  return LIABILITY_INSURANCE_WEEKLY_BY_CATEGORY[aircraftType?.category]
+    ?? LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT;
+}
 
 /**
  * Weekly insurance cost for a single aircraft.
@@ -87,7 +107,7 @@ export const LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT = 18_000;
  *   leased: liability only
  */
 export function weeklyInsuranceCost(aircraft, aircraftType) {
-  const liability = LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT;
+  const liability = liabilityInsuranceWeekly(aircraftType);
   if (aircraft.ownershipType !== 'owned' || !aircraftType?.purchasePrice) {
     return liability;
   }
@@ -117,11 +137,11 @@ export function weeklyInsuranceCost(aircraft, aircraftType) {
 // at the airport you land at, not the one you depart from).
 
 export const LANDING_FEE_PER_DEPARTURE = {
-  //                    mega      major   regional
-  'Turboprop':   { mega:   700, major:   450, regional:   200 },
-  'Regional Jet':{ mega: 2_000, major: 1_200, regional:   550 },
-  'Narrow Body': { mega: 4_500, major: 2_800, regional: 1_100 },
-  'Wide Body':   { mega: 9_000, major: 5_800, regional: 2_400 },
+  //                    mega      major   regional   [~15% lower than original]
+  'Turboprop':   { mega:   600, major:   380, regional:   170 },
+  'Regional Jet':{ mega: 1_700, major: 1_020, regional:   470 },
+  'Narrow Body': { mega: 3_800, major: 2_400, regional:   950 },
+  'Wide Body':   { mega: 7_650, major: 4_900, regional: 2_050 },
 };
 
 /** Default fallback if category or tier not found. */

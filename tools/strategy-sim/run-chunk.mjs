@@ -12,13 +12,15 @@ const horizon   = parseInt(horizonS, 10);
 
 let s2 = 0, s5 = 0, wins = 0, bank = 0;
 const deathWeeks = [];
+const survivorCash = [];
 for (let i = 0; i < count; i++) {
   const r = playGame(strategy, startSeed + i, horizon);
   if (r.survived2) s2++;
   if (r.survived5) s5++;
   if (r.won) wins++;
   if (r.bankruptWeek != null) { bank++; deathWeeks.push(r.bankruptWeek); }
+  else survivorCash.push(Math.round(r.finalCash));
 }
-const line = JSON.stringify({ strategy, startSeed, count, s2, s5, wins, bank, deathWeeks });
+const line = JSON.stringify({ strategy, startSeed, count, s2, s5, wins, bank, deathWeeks, survivorCash });
 appendFileSync(outFile, line + '\n');
 process.stdout.write(line + '\n');

@@ -93,11 +93,52 @@ export function getDemandMass(ap) {
  * Base weekly one-way demand for a city pair at the reference price.
  * Airport populations are in millions (metro area).
  */
+/**
+ * Same-metro airport groups whose member airports DON'T share a city label
+ * (so the city-string check below misses them) — chiefly satellite fields.
+ * Most multi-airport metros (London LHR/LGW/LCY/STN/LTN, Chicago ORD/MDW,
+ * Tokyo HND/NRT, etc.) are already caught by the shared "city" field; this table
+ * only needs the exceptions. Each inner array lists IATA codes in one metro.
+ */
+export const METRO_GROUPS = [
+  ['JFK', 'EWR', 'LGA', 'HPN', 'SWF', 'ISP'],   // New York (incl. White Plains, Newburgh/Stewart, Islip)
+  ['LHR', 'LGW', 'LCY', 'STN', 'LTN', 'SEN'],   // London (incl. Southend)
+  ['MIA', 'FLL', 'PBI'],                         // South Florida (Miami / Fort Lauderdale / West Palm)
+  ['EZE', 'AEP'],                                // Buenos Aires (Ezeiza / Aeroparque)
+  ['SFO', 'OAK', 'SJC'],                         // San Francisco Bay Area
+  ['LAX', 'BUR', 'SNA', 'ONT', 'LGB'],           // Greater Los Angeles
+  ['WAS', 'IAD', 'DCA', 'BWI'],                  // Washington–Baltimore
+];
+const METRO_OF = {};
+for (let i = 0; i < METRO_GROUPS.length; i++) {
+  for (const code of METRO_GROUPS[i]) METRO_OF[code] = i;
+}
+
+/**
+ * Two airports serve the same metro area when they belong to the same explicit metro
+ * group, share a city (same country), or sit within a few km of each other. Same-metro
+ * pairs carry no real origin–destination air demand — nobody flies across town — so
+ * their demand is suppressed entirely. Examples: JFK–EWR–LGA, LHR–LGW–LCY, SYD–WSI.
+ * The distance backstop is deliberately small so genuine short water/island hops
+ * (which have no road alternative) keep their demand.
+ */
+export const SAME_METRO_MAX_KM = 35;
+export function isSameMetro(o, d, dist) {
+  if (!o || !d) return false;
+  if (o.code && d.code && METRO_OF[o.code] != null && METRO_OF[o.code] === METRO_OF[d.code]) return true;
+  if (o.country === d.country && o.city && d.city &&
+      o.city.trim().toLowerCase() === d.city.trim().toLowerCase()) return true;
+  const km = dist != null ? dist : distanceKm(o, d);
+  return km < SAME_METRO_MAX_KM;
+}
+
 export function baseCityPairDemand(originCode, destCode) {
   const o = getAirport(originCode);
   const d = getAirport(destCode);
   if (!o || !d) return 0;
   const dist = distanceKm(o, d);
+  // No real O&D demand between two airports serving the same metro area.
+  if (isSameMetro(o, d, dist)) return 0;
 
   // Demand mass generalises population: it adds tourism + national-gateway pull for
   // airports that population alone under-rates. `effectivePop` overrides stay intact,
@@ -145,7 +186,8 @@ export function referencePrice(originCode, destCode) {
   const d = getAirport(destCode);
   if (!o || !d) return 200;
   const dist = distanceKm(o, d);
-  return Math.round(80 + dist * 0.09);
+  // Reference fares boosted 10% across the board to lift baseline yields.
+  return Math.round((80 + dist * 0.09) * 1.1);
 }
 
 // ─── Market capitalisation ─────────────────────────────────────────────────────
@@ -264,6 +306,8 @@ export function cargoCityPairDemand(originCode, destCode) {
   if (!o || !d) return 0;
 
   const dist = distanceKm(o, d);
+  // No air-cargo demand within a single metro area (trucked, not flown).
+  if (isSameMetro(o, d, dist)) return 0;
   const massO = getCargoMass(originCode);
   const massD = getCargoMass(destCode);
 

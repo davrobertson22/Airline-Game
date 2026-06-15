@@ -22,6 +22,7 @@ import {
   HUB_TIER_COUNT,
 } from '../models/demand.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
+import { tickEncroachment } from '../models/encroachment.js';
 import {
   tickFuelPrice,
   effectiveFuelMultiplier,
@@ -81,6 +82,7 @@ function freshState() {
     loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
     phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
     competitors: sampleAndInitializeCompetitors(15),
+    encroachments: {},           // { [pairKey]: entrant } — AI carriers contesting player routes
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
     awareness: 5,                // 0–100: how well-known the airline is; gates demand
@@ -158,28 +160,9 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'START_GAME': {
-      // Startup capital: $10M loan at 8% APR over 5 years (260 weeks).
-      // Player starts with the cash but must service the debt.
-      const STARTUP_PRINCIPAL   = 10_000_000;
-      const STARTUP_RATE        = 0.08;          // 8% APR
-      const STARTUP_TERM        = 260;           // 5 years
-      const startupWeeklyRate   = STARTUP_RATE / 52;
-      const startupFactor       = Math.pow(1 + startupWeeklyRate, STARTUP_TERM);
-      const startupWeeklyPayment = Math.round(
-        STARTUP_PRINCIPAL * startupWeeklyRate * startupFactor / (startupFactor - 1)
-      );
-      const startupLoan = {
-        id:                uid(),
-        principal:         STARTUP_PRINCIPAL,
-        interestRate:      STARTUP_RATE,
-        termWeeks:         STARTUP_TERM,
-        weeklyPayment:     startupWeeklyPayment,  // ≈ $46,600/wk
-        weeksRemaining:    STARTUP_TERM,
-        totalInterestPaid: 0,
-        takenWeek:         1,
-        takenYear:         1,
-        label:             'Startup Capital',
-      };
+      // Startup capital: $10M of founders' EQUITY (see STARTING_CASH in freshState).
+      // It is not a loan — there is no debt to service at launch, giving new airlines
+      // breathing room to reach profitability. Players can borrow from the bank later.
       return {
         ...freshState(),
         airlineName: action.airlineName,
@@ -189,7 +172,7 @@ function reducer(state, action) {
         homeCountry: getAirport(action.hub)?.country ?? '',
         gates:       { [action.hub]: 1 },
         hubs:        { [action.hub]: { tier: 1 } },
-        loans:       [startupLoan],
+        loans:       [],
         phase:             'playing',
         objectives:        action.enableObjectives !== false ? initialObjectives() : [],
         objectivesEnabled: action.enableObjectives !== false,
@@ -1209,7 +1192,19 @@ function reducer(state, action) {
       const gameMonth = weekToGameDate(state.week).monthIndex;
       const gameDate  = { week: state.week, month: gameMonth };
 
-      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate });
+      // ── Route encroachment: AI carriers contest the player's fat routes ──────
+      // Decided from the PRIOR week's outcome (load factor + fares), gated by airline
+      // size, then injected into this week's demand model so they split passengers.
+      const { encroachments: updatedEncroachments, events: encroachEvents } = tickEncroachment({
+        routes:       state.routes.map(r => hydrateRoute(r, state.routePricing, state.routeCatering)),
+        routePricing: state.routePricing,
+        lastReport:   state.lastReport,
+        marketCap:    state.marketCap ?? 0,
+        competitors:  state.competitors ?? [],
+        encroachments: state.encroachments ?? {},
+      });
+
+      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments });
 
       // ── Loyalty program: grow/decay member base ──────────────────────────
       const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
@@ -1350,6 +1345,25 @@ function reducer(state, action) {
 
       // Merge lease warnings, failures, and recovery toasts in (after agedFleet is built)
       newToasts.push(...leaseWarningToasts, ...failureToasts, ...recoveryToasts);
+
+      // Encroachment notifications — a rival entering or leaving one of your routes.
+      for (const ev of encroachEvents ?? []) {
+        if (ev.type === 'enter') {
+          newToasts.push({
+            type: 'warning', icon: '🪧',
+            title: `${ev.name} entered ${ev.origin}–${ev.destination}`,
+            message: `${ev.name} sees your fares on ${ev.origin}–${ev.destination} and has launched a competing service. Expect to lose some traffic unless you respond on price or frequency.`,
+            duration: 9000,
+          });
+        } else if (ev.type === 'exit') {
+          newToasts.push({
+            type: 'success', icon: '🏳️',
+            title: `Competitor withdrew from a route`,
+            message: `A rival has pulled out of one of your routes — the lane is yours again.`,
+            duration: 6000,
+          });
+        }
+      }
 
       // Morale drifts toward target (based on pay) at 12% per week
       const currentLabor = state.labor ?? DEFAULT_LABOR_STATE;
@@ -1650,6 +1664,7 @@ function reducer(state, action) {
         financialHistory:  newHistory,
         lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax, loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
+        encroachments:     updatedEncroachments,
         loans:             updatedLoans,
         labor:             updatedLabor,
         maintenanceBudget: mainBudget,

@@ -23,7 +23,7 @@ import {
   weeklyCateringCost, weeklyLayoverCost, weeklyPassengerCompensation,
   GROUND_HANDLING_COST_PER_PAX,
   DISTRIBUTION_COST_PCT,
-  HULL_INSURANCE_ANNUAL_RATE, LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT,
+  HULL_INSURANCE_ANNUAL_RATE, LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT, liabilityInsuranceWeekly,
   DEPRECIATION_YEARS,
 } from '../data/overhead.js';
 import { projectWeek } from '../utils/financeProjection.js';
@@ -396,7 +396,7 @@ function PLStatement({ proj }) {
     const bv = (t?.purchasePrice ?? 0) * Math.max(0.1, 1 - ageYrs / DEPRECIATION_YEARS);
     return s + Math.round(bv * HULL_INSURANCE_ANNUAL_RATE / 52);
   }, 0);
-  const totLiabilityIns = fleet.length * LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT;
+  const totLiabilityIns = fleet.reduce((s, a) => s + liabilityInsuranceWeekly(getAircraftType(a.typeId)), 0);
   const ytdInsurance  = ytd(financialHistory, 'insurance');
 
   // Marketing
@@ -1072,7 +1072,7 @@ function PLStatement({ proj }) {
                     <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
                       Liability insurance
                       <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-                        {fleet.length} aircraft × {formatMoney(LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT)}/wk
+                        {fleet.length} aircraft · rate by type ($6K–$24K/wk)
                       </span>
                     </td>
                     {pw && <td />}
@@ -2611,8 +2611,9 @@ const LOAN_PRODUCTS = [
     name: 'Short-term Loan',
     termWeeks: 13,
     baseRate: 0.08,
-    maxMultiple: 4,   // max = 4× weekly revenue
-    description: '13-week term · lowest total interest',
+    maxMultiple: 4,            // max = 4× weekly revenue …
+    baseMax: 5_000_000,        // … or $5M, whichever is higher (available from launch)
+    description: '13-week term · up to $5M · lowest total interest',
     color: '#38d39f',
   },
   {
@@ -2621,7 +2622,8 @@ const LOAN_PRODUCTS = [
     termWeeks: 26,
     baseRate: 0.10,
     maxMultiple: 8,
-    description: '26-week term · balanced payments',
+    baseMax: 10_000_000,       // up to $10M
+    description: '26-week term · up to $10M · balanced payments',
     color: '#3ea6ff',
   },
   {
@@ -2630,7 +2632,8 @@ const LOAN_PRODUCTS = [
     termWeeks: 52,
     baseRate: 0.13,
     maxMultiple: 16,
-    description: '52-week term · largest amounts available',
+    baseMax: 20_000_000,       // up to $20M
+    description: '52-week term · up to $20M · largest amounts available',
     color: '#ffb43d',
   },
 ];
@@ -2713,7 +2716,11 @@ function Loans({ proj }) {
 
   const product = LOAN_PRODUCTS.find(p => p.id === selectedProduct);
   const effectiveRate = product ? Math.max(0.03, product.baseRate + credit.rateBonus) : 0;
-  const maxAmount = weeklyRevenue > 0 ? Math.floor(weeklyRevenue * product.maxMultiple / 1000) * 1000 : 500_000;
+  // Each product offers a guaranteed headline amount (baseMax: $5M/$10M/$20M) that's
+  // available even to a brand-new airline with no revenue yet; higher weekly revenue
+  // can unlock more (revenue × multiple).
+  const revenueMax = weeklyRevenue > 0 ? Math.floor(weeklyRevenue * product.maxMultiple / 1000) * 1000 : 0;
+  const maxAmount = Math.max(product.baseMax ?? 500_000, revenueMax);
   const parsedAmount = parseInt(loanAmount.replace(/[^0-9]/g, ''), 10) || 0;
   const weeklyPayment = parsedAmount > 0 ? calcWeeklyPayment(parsedAmount, effectiveRate, product.termWeeks) : 0;
   const totalInterest = weeklyPayment > 0 ? weeklyPayment * product.termWeeks - parsedAmount : 0;
@@ -2936,7 +2943,7 @@ function Loans({ proj }) {
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, lineHeight: 1.6 }}>
         Interest rates reflect your credit rating. Early repayment incurs a 2% penalty on remaining principal.
         Loan payments are deducted automatically each week before cash is updated.
-        Maximum loan amount = weekly revenue × product multiplier (higher revenue unlocks larger loans).
+        Each loan offers a guaranteed amount ($5M / $10M / $20M) available from day one; higher weekly revenue can unlock even more (revenue × product multiplier).
       </div>
     </div>
   );

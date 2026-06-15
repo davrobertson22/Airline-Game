@@ -32,6 +32,7 @@ import {
   partnerInterlineRevenue,
 } from '../data/alliances.js';
 import { runNetworkTick } from '../models/network.js';
+import { buildEncroachmentOffer } from '../models/encroachment.js';
 
 // ─────────────────────────────────────────────
 // DISTANCE
@@ -62,7 +63,8 @@ export function referencePrice(originCode, destCode) {
   const d = getAirport(destCode);
   if (!o || !d) return 200;
   const dist = distanceKm(o, d);
-  return Math.round(80 + dist * 0.09);
+  // Reference fares boosted 10% across the board to lift baseline yields.
+  return Math.round((80 + dist * 0.09) * 1.1);
 }
 
 // ─────────────────────────────────────────────
@@ -427,7 +429,7 @@ export function defaultConfig(totalSeats) {
  * @param {object} [gameDate={ month: 6 }] - { week, month } — month is 1-indexed
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = []) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -511,6 +513,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     const competitorOffers = COMPETITOR_AIRLINES
       .map(c => buildCompetitorOffer(c, market))
       .filter(Boolean);
+    // Injected challengers (e.g. route encroachment) contest this O&D directly.
+    if (encroachmentSpecs && encroachmentSpecs.length) {
+      for (const spec of encroachmentSpecs) {
+        const offer = buildEncroachmentOffer(spec, market);
+        if (offer) competitorOffers.push(offer);
+      }
+    }
     competitorOffersCount = competitorOffers.length;
     const allOffers = [playerOffer, ...competitorOffers];
     const shareResults = computeMarketShare(market, allOffers);
@@ -787,7 +796,15 @@ export function weeklyTick(state) {
     marketingBudget = 0,
     loyalty = { weeklyInvestment: 0, members: 0 },
     awareness = 5,
+    encroachments = {},
   } = state;
+
+  // Encroachment challengers, keyed by O&D pair, injected into the demand model so
+  // they split the route's passenger pool with the player.
+  const encroachByPair = (pairKey) => {
+    const e = encroachments?.[pairKey];
+    return e ? [e] : [];
+  };
 
   // Price and catering live on the route (O&D pair) in state.routePricing /
   // state.routeCatering — hydrate each route object so the engine reads
@@ -968,6 +985,12 @@ export function weeklyTick(state) {
       const competitorOffers = COMPETITOR_AIRLINES
         .map(c => buildCompetitorOffer(c, market))
         .filter(Boolean);
+      // Inject any encroachment challengers contesting this O&D pair.
+      const rkPre = [r0.origin, r0.destination].sort().join('-');
+      for (const spec of encroachByPair(rkPre)) {
+        const offer = buildEncroachmentOffer(spec, market);
+        if (offer) competitorOffers.push(offer);
+      }
       const [combinedResult] = computeMarketShare(market, [combinedOffer, ...competitorOffers]);
 
       // Distribute pax to each aircraft proportionally by seat share
@@ -1009,8 +1032,9 @@ export function weeklyTick(state) {
     );
     const routeWithHubBonus = hubQuality > 0 ? { ...route, hubQualityBonus: hubQuality } : route;
 
+    const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
-      demandAllocations.get(aircraft.id) ?? null);
+      demandAllocations.get(aircraft.id) ?? null, encroachByPair(rkRoute));
     if (!result) continue;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
