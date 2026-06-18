@@ -1,6 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney } from '../utils/simulation.js';
+import {
+  formatMoney,
+  loyaltyPenetration,
+  loyaltyTier,
+  loyaltyDemandBoostPct,
+  loyaltyReputationBonus,
+  loyaltyPointsCostPct,
+} from '../utils/simulation.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,27 +30,9 @@ function loyaltyTierLabel(investment) {
   return                             { label: 'Elite',  color: '#bc8cff' };
 }
 
-function memberPenetrationRate(members, weeklyPassengers) {
-  if (!weeklyPassengers) return 0;
-  // Estimate monthly penetration: members / (4 weeks of passengers)
-  return Math.min(1, members / Math.max(1, weeklyPassengers * 4));
-}
-
-function priceSensitivityReduction(members) {
-  // Loyal members reduce effective price sensitivity up to 15%
-  // Scales: 10k members → 1.5%, 100k → 10%, 200k → 15%
-  return Math.min(0.15, members / 1_333_333);
-}
-
-function loyaltyReputationBonus(members) {
-  return Math.min(8, Math.round(members / 12_500));
-}
-
-function weeklyPointsCost(members, weeklyRevenue) {
-  return members > 0
-    ? Math.round(weeklyRevenue * Math.min(0.02, members / 5_000_000))
-    : 0;
-}
+// NOTE: all loyalty effect math now lives in utils/simulation.js so the engine
+// and this panel are guaranteed to agree. These thin wrappers keep the existing
+// call sites readable and base everything on member PENETRATION.
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -61,12 +50,13 @@ export default function Loyalty() {
   const investment = loyalty.weeklyInvestment ?? 0;
 
   const tierInfo        = loyaltyTierLabel(investment);
-  const penetration     = memberPenetrationRate(members, weeklyPassengers);
-  const sensitivityRed  = priceSensitivityReduction(members);
-  const repBonus        = loyaltyReputationBonus(members);
-  const pointsCost      = weeklyPointsCost(members, weeklyRevenue);
+  const penetration     = loyaltyPenetration(members, weeklyPassengers);
+  const generosity      = loyaltyTier(investment).generosity || (members > 0 ? 0.85 : 0);
+  const repBonus        = loyaltyReputationBonus(penetration);
+  const pointsCostPct   = loyaltyPointsCostPct(penetration, generosity);
+  const pointsCost      = members > 0 ? Math.round(weeklyRevenue * pointsCostPct) : 0;
   const totalWeeklyCost = investment + pointsCost;
-  const demandBoost     = Math.min(0.12, members / 1_200_000);
+  const demandBoost     = loyaltyDemandBoostPct(penetration);
 
   // 12-week loyalty history from financialHistory
   const loyaltyHistory = useMemo(() =>
@@ -199,23 +189,16 @@ export default function Loyalty() {
           <div className="card-title">Program Effects</div>
 
           <EffectRow
-            label="Price Sensitivity Reduction"
-            value={`−${(sensitivityRed * 100).toFixed(1)}%`}
-            desc="Loyal members book with you even when competitors undercut. Reduces churn on competitive routes."
-            color="#38d39f"
-            active={members > 0}
-          />
-          <EffectRow
             label="Demand Stability Boost"
             value={`+${(demandBoost * 100).toFixed(1)}%`}
-            desc="Retained passengers who might otherwise defect due to price. Applies to all routes."
+            desc="Retained passengers who might otherwise defect due to price. Strongest on hub routes; diluted on off-hub leisure routes."
             color="#3ea6ff"
             active={demandBoost > 0}
           />
           <EffectRow
             label="Points Redemption Cost"
-            value={`−2% of revenue`}
-            desc="Members redeem points for free/discounted seats. Cost scales with your member base."
+            value={`−${(pointsCostPct * 100).toFixed(1)}% of revenue`}
+            desc="Members redeem points for free/discounted seats. Scales with member penetration and how generous your tier is."
             color="#ff5d6c"
             active={members > 0}
           />

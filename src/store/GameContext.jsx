@@ -7,6 +7,7 @@ import {
   routeStops, routeLegs, routeSegments, routeSegmentKey,
   routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
   MAX_ROUTE_STOPS,
+  loyaltyTier, loyaltyEnrollPull,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
@@ -76,7 +77,8 @@ function freshState() {
     marketingBudget:   0,          // weekly marketing spend ($) — 0 = no active marketing
     defaultCateringLevel: 'full',  // catering service level applied to newly-opened routes
     loyalty: {
-      weeklyInvestment: 0,   // weekly $ spend on loyalty program
+      weeklyInvestment: 0,   // weekly $ spend on loyalty program (the set budget)
+      effInvestment: 0,      // ramped "effective" budget — eases toward weeklyInvestment
       members: 0,            // current active members
     },
     financialHistory: [],  // last 52 weeks of reports
@@ -1336,21 +1338,32 @@ function reducer(state, action) {
       const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments });
 
       // ── Loyalty program: grow/decay member base ──────────────────────────
-      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
-      let newLoyaltyMembers = currentLoyalty.members;
-      if (currentLoyalty.weeklyInvestment > 0) {
-        // Members gained this week = passengers flown × enrollment rate driven by investment
-        // Enrollment rate tops out at ~25% of weekly passengers at $500k/wk investment
-        const weeklyPax      = report.totalPassengers ?? 0;
-        const enrollRate     = Math.min(0.25, currentLoyalty.weeklyInvestment / 2_000_000);
-        const newEnrollments = Math.round(weeklyPax * enrollRate);
-        // 2% weekly churn (members lapse if they don't fly)
-        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.98 + newEnrollments);
+      // Penetration-based S-curve. Enrollment slows as the base approaches the
+      // tier's penetration ceiling (you can't enrol people who already belong),
+      // so reaching a deep, mature program takes sustained investment in a high
+      // tier rather than being an instant win. A ramped "effective" budget gives
+      // the dial inertia so changing it isn't a light switch.
+      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0, effInvestment: 0 };
+      const targetInvestment = currentLoyalty.weeklyInvestment ?? 0;
+      const prevEff          = currentLoyalty.effInvestment ?? targetInvestment;
+      // Ease ~18%/week toward the set budget (≈63% of a change felt after 5 weeks).
+      const effInvestment    = Math.round(prevEff + (targetInvestment - prevEff) * 0.18);
+
+      const loyaltyWeeklyPax = report.totalPassengers ?? 0;
+      let newLoyaltyMembers  = currentLoyalty.members ?? 0;
+      if (effInvestment > 0 && loyaltyWeeklyPax > 0) {
+        const tier      = loyaltyTier(effInvestment);
+        const enrollPull = loyaltyEnrollPull(effInvestment);
+        const ceiling   = tier.maxPenetration * loyaltyWeeklyPax * 4;   // max members this tier sustains
+        const headroom  = ceiling > 0 ? Math.max(0, 1 - newLoyaltyMembers / ceiling) : 0;
+        const newEnrollments = Math.round(loyaltyWeeklyPax * enrollPull * headroom);
+        // 0.4% weekly churn when funded — real frequent-flyer accounts are sticky.
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.996 + newEnrollments);
       } else {
-        // Program inactive: 5% weekly churn (faster decay)
-        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.95);
+        // Program unfunded: 1.2% weekly decay (gradual lapse, not a cliff).
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.988);
       }
-      const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers) };
+      const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers), effInvestment };
 
       // ── Awareness: grows from operations + marketing, decays without activity ──
       // Organic: passengers flying builds word-of-mouth. Marketing accelerates growth.
@@ -2052,7 +2065,9 @@ function reconcileState(parsed) {
     gates:            parsed.gates            ?? {},
     loans:            parsed.loans            ?? [],
     hedgeContracts:   parsed.hedgeContracts   ?? [],
-    loyalty:          parsed.loyalty          ?? { weeklyInvestment: 0, members: 0 },
+    loyalty:          parsed.loyalty
+      ? { effInvestment: parsed.loyalty.weeklyInvestment ?? 0, ...parsed.loyalty }
+      : { weeklyInvestment: 0, effInvestment: 0, members: 0 },
     fuelPrice:        parsed.fuelPrice        ?? { index: 1.0, history: [] },
     allianceMembership:       parsed.allianceMembership       ?? null,
     codeshareAgreements:      parsed.codeshareAgreements      ?? [],

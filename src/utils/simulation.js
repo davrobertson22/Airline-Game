@@ -1106,6 +1106,67 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
 }
 
 // ─────────────────────────────────────────────
+// LOYALTY PROGRAM MODEL
+// ─────────────────────────────────────────────
+// Every loyalty effect scales with MEMBER PENETRATION — the share of your own
+// flyers who are members — rather than an absolute member count. This keeps the
+// milestones meaningful at any airline size (a 100k-member program is elite for
+// a small carrier and trivial for a giant one) and makes the program a slow,
+// expensive asset to mature rather than a week-one freebie.
+//
+// Penetration is members / (4 weeks of passengers) — i.e. roughly the fraction
+// of a month's travellers carrying your card. It saturates at 1.0.
+
+export function loyaltyPenetration(members, weeklyPassengers) {
+  if (!weeklyPassengers || weeklyPassengers <= 0) return 0;
+  return Math.min(1, (members ?? 0) / (weeklyPassengers * 4));
+}
+
+// Investment tier → program quality. Higher tiers unlock a higher achievable
+// penetration CEILING (how deep into your base you can sign people up) and pay
+// richer rewards (generosity drives the points-redemption cost). The tier sets
+// where the program can go; the weekly budget sets how fast it gets there.
+export function loyaltyTier(weeklyInvestment) {
+  const inv = weeklyInvestment ?? 0;
+  if (inv <= 0)        return { label: 'None',   maxPenetration: 0,    generosity: 0    };
+  if (inv < 100_000)   return { label: 'Basic',  maxPenetration: 0.15, generosity: 0.85 };
+  if (inv < 250_000)   return { label: 'Silver', maxPenetration: 0.30, generosity: 1.00 };
+  if (inv < 500_000)   return { label: 'Gold',   maxPenetration: 0.45, generosity: 1.15 };
+  return                      { label: 'Elite',  maxPenetration: 0.60, generosity: 1.30 };
+}
+
+// Per-week enrollment pull as a fraction of passengers flown, driven by budget.
+// Continuous in spend so the slider still matters; the S-curve ceiling (above)
+// is what ultimately bounds the program.
+export function loyaltyEnrollPull(weeklyInvestment) {
+  return Math.min(0.25, (weeklyInvestment ?? 0) / 2_000_000);
+}
+
+// Demand stability boost (retained price-defectors). Concentrated on hub routes
+// by the caller; this is the full hub-route figure. Cap +10%, reached near 40%
+// penetration.
+export function loyaltyDemandBoostPct(penetration) {
+  return Math.min(0.10, 0.25 * (penetration ?? 0));
+}
+
+// Effective price-sensitivity reduction members confer. Cap 15%, near maturity.
+export function loyaltyPriceSensitivityReduction(penetration) {
+  return Math.min(0.15, 0.35 * (penetration ?? 0));
+}
+
+// Brand/reputation bonus: only a deep, mature program earns the full +8. Linear
+// in penetration, full value at ~45% penetration (a Gold+ program at scale).
+export function loyaltyReputationBonus(penetration) {
+  return Math.min(8, Math.round(8 * ((penetration ?? 0) / 0.45)));
+}
+
+// Points-redemption cost as a share of revenue. Scales with penetration AND tier
+// generosity (richer programs give more away). Real programs run ~2–4%; cap 4%.
+export function loyaltyPointsCostPct(penetration, generosity) {
+  return Math.min(0.04, 0.06 * (penetration ?? 0) * (generosity || 1));
+}
+
+// ─────────────────────────────────────────────
 // WEEKLY TICK
 // ─────────────────────────────────────────────
 
@@ -1195,12 +1256,19 @@ export function weeklyTick(state) {
   const allianceDemandBoostPct = allianceDef?.demandBoostPct ?? 0;
 
   // Loyalty demand effect: members are less price-sensitive, so the player
-  // retains more of them even when competitors undercut. Model as a small
-  // demand multiplier proportional to member penetration.
-  // At 10k members → ~2% boost; at 100k → ~8% boost; capped at 12%.
+  // retains more of them even when competitors undercut. The size of the effect
+  // scales with member PENETRATION (share of our own flyers enrolled), using
+  // last week's passenger count as the base. It is CONCENTRATED on hub routes —
+  // where frequent flyers actually have a captive relationship — and diluted on
+  // off-hub leisure routes where people buy on price regardless.
   const loyaltyMembers      = loyalty?.members ?? 0;
-  const loyaltyDemandBoost  = Math.min(0.12, loyaltyMembers / 1_200_000);
-  const loyaltyMultiplier   = 1 + loyaltyDemandBoost;
+  const loyaltyPaxBase      = state.lastReport?.totalPassengers ?? 0;
+  const loyaltyPenet        = loyaltyPenetration(loyaltyMembers, loyaltyPaxBase);
+  const loyaltyBoostHub     = loyaltyDemandBoostPct(loyaltyPenet);   // full, hub routes
+  const loyaltyBoostOffHub  = loyaltyBoostHub * 0.4;                 // diluted, off-hub
+  // Headline multiplier reported to the UI is the hub-route ("up to") figure,
+  // consistent with how marketing/awareness lifts are surfaced.
+  const loyaltyMultiplier   = 1 + loyaltyBoostHub;
 
   // Pre-compute marketing multiplier (needs an initial revenue pass — use last week's revenue
   // if available, otherwise estimate from current routes without multiplier applied yet)
@@ -1366,7 +1434,9 @@ export function weeklyTick(state) {
       if (!result) continue;
 
       const cateringRev    = result.cateringRevenue ?? 0;
-      const combinedMult   = awarenessMultiplier * mktMultiplier * loyaltyMultiplier;
+      // Loyalty boost is concentrated on hub-touching routes.
+      const tagLoyaltyBoost = tagHubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
+      const combinedMult   = awarenessMultiplier * mktMultiplier * (1 + tagLoyaltyBoost);
       const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
       const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
 
@@ -1400,7 +1470,7 @@ export function weeklyTick(state) {
         ...result,
         revenue:       routeRevenue,
         marketingLift: Math.round(result.revenue * (mktMultiplier   - 1)),
-        loyaltyLift:   Math.round(result.revenue * (loyaltyMultiplier - 1)),
+        loyaltyLift:   Math.round(result.revenue * tagLoyaltyBoost),
         allianceLift:  0,
         landingFee,
         profit:        Math.round(routeRevenue - result.totalOpCost - landingFee),
@@ -1459,8 +1529,9 @@ export function weeklyTick(state) {
       : connectingRaw;
     const allianceLift   = partnerContestedKeys.has(routeKey) ? allianceDemandBoostPct : 0;
     const marketingLift  = mktMultiplier - 1;
-    const loyaltyLift    = loyaltyMultiplier - 1;
-    const combinedMult   = awarenessMultiplier * mktMultiplier * loyaltyMultiplier * (1 + allianceLift);
+    // Loyalty boost concentrated on hub-touching routes, diluted elsewhere.
+    const loyaltyLift    = hubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
+    const combinedMult   = awarenessMultiplier * mktMultiplier * (1 + loyaltyLift) * (1 + allianceLift);
     // Ancillary catering revenue is per-actual-passenger income — it should NOT be
     // amplified by the marketing/awareness/loyalty demand multipliers (those proxy
     // for attracting MORE passengers, which catering income would then double-count).
@@ -1656,8 +1727,13 @@ export function weeklyTick(state) {
   //   - Points redemption / award seat cost: up to 3.5% of revenue at full membership.
   //   Real programs run 2–4% of revenue; 3.5% cap is realistic for a large mature program.
   const loyaltyInvestment = loyalty?.weeklyInvestment ?? 0;
+  // Redemption cost scales with penetration AND how generous the current tier is.
+  // A program kept alive with members but zero budget still honours outstanding
+  // points, so fall back to a baseline generosity when members remain.
+  const loyaltyGenerosity = loyaltyTier(loyaltyInvestment).generosity
+    || (loyaltyMembers > 0 ? 0.85 : 0);
   const loyaltyPointsCost = loyaltyMembers > 0
-    ? Math.round(totalRevenue * Math.min(0.035, loyaltyMembers / 5_000_000 * 1.75))
+    ? Math.round(totalRevenue * loyaltyPointsCostPct(loyaltyPenet, loyaltyGenerosity))
     : 0;
   const totalLoyaltyCost  = loyaltyInvestment + loyaltyPointsCost;
 

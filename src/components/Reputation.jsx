@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, referencePrice } from '../utils/simulation.js';
+import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyReputationBonus } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
@@ -58,10 +58,12 @@ function calcReputation(state) {
   const profitBump   = Math.max(-10, Math.min(10, recentProfit / 200000 * 10));
   const moraleScore  = Math.round(Math.min(100, Math.max(0, avgMorale + profitBump)));
 
-  // Loyalty bonus: up to +8 reputation points for a well-established program
-  // Scales with member count — 50k members → ~4 pts, 100k → ~8 pts (cap)
+  // Loyalty bonus: up to +8 reputation points for a deep, mature program.
+  // Scales with member PENETRATION (share of your own flyers enrolled), so the
+  // full +8 takes a sustained high-tier program at scale — not a quick win.
   const loyaltyMembers = loyalty?.members ?? 0;
-  const loyaltyBonus   = Math.min(8, Math.round(loyaltyMembers / 12_500));
+  const loyaltyPax     = state.lastReport?.totalPassengers ?? 0;
+  const loyaltyBonus   = loyaltyReputationBonus(loyaltyPenetration(loyaltyMembers, loyaltyPax));
 
   const overall = Math.min(100, Math.round(
     serviceScore * 0.35 +
