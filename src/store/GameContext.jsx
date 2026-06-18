@@ -3,7 +3,7 @@ import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
-  routePairKey, defaultClassPrices, hydrateRoute, normalizeRouteStops,
+  routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
   routeStops, routeLegs, routeSegments, routeSegmentKey,
   routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
   MAX_ROUTE_STOPS,
@@ -914,11 +914,14 @@ function reducer(state, action) {
       // Clamp to a sane positive fare: a 0 or negative price feeds the elasticity
       // model Math.pow(ref/price, …), producing Infinity/NaN that poisons the
       // whole weekly tick (revenue → cashDelta → cash all become NaN).
-      const price = Math.max(1, Math.round(Number(action.ticketPrice) || 0));
       // Price belongs to the O&D pair. Resolve the pair from the route, then update
       // its economy fare in routePricing — every aircraft on the pair shares it.
       const tpTarget = state.routes.find(r => r.id === action.routeId);
       if (!tpTarget) return state;
+      // Clamp to [1, cap]: the upper bound (PRICE_CAP_MULTIPLE × reference) stops
+      // players exploiting the demand curve's flat tail with absurd fares.
+      const tpRefP = mktReferencePrice(tpTarget.origin, tpTarget.destination);
+      const price  = clampClassPrice(action.ticketPrice, tpRefP, 'economy');
       const tpKey  = routePairKey(tpTarget.origin, tpTarget.destination);
       const tpPrev = state.routePricing?.[tpKey] ?? defaultClassPrices(price);
       return {
@@ -930,14 +933,16 @@ function reducer(state, action) {
     // Set individual class prices without touching others
     case 'UPDATE_CLASS_PRICES': {
       // action: { routeId, updates: { economy?, premiumEconomy?, businessClass?, firstClass? } }
-      // Sanitize each provided fare to a positive integer (see UPDATE_TICKET_PRICE).
-      const cleanUpdates = {};
-      for (const [k, v] of Object.entries(action.updates ?? {})) {
-        cleanUpdates[k] = Math.max(1, Math.round(Number(v) || 0));
-      }
-      // Per-O&D-pair pricing: merge the class updates into the pair's price set.
       const cpTarget = state.routes.find(r => r.id === action.routeId);
       if (!cpTarget) return state;
+      // Sanitize each provided fare to a positive integer and clamp to its
+      // per-class ceiling (PRICE_CAP_MULTIPLE × that class's reference fare).
+      const cpRefP = mktReferencePrice(cpTarget.origin, cpTarget.destination);
+      const cleanUpdates = {};
+      for (const [k, v] of Object.entries(action.updates ?? {})) {
+        cleanUpdates[k] = clampClassPrice(v, cpRefP, k);
+      }
+      // Per-O&D-pair pricing: merge the class updates into the pair's price set.
       const cpKey  = routePairKey(cpTarget.origin, cpTarget.destination);
       const cpPrev = state.routePricing?.[cpKey]
         ?? defaultClassPrices(cleanUpdates.economy ?? mktReferencePrice(cpTarget.origin, cpTarget.destination));

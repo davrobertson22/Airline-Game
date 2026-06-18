@@ -25,6 +25,7 @@ import {
   COMPETITOR_AIRLINES,
   computeConnectingDemand,
   HUB_TIERS,
+  PRICE_CAP_MULTIPLE,
 } from '../models/demand.js';
 import {
   ALLIANCES,
@@ -239,6 +240,35 @@ export function defaultClassPrices(economyFare) {
     businessClass:  Math.round(eco * CLASS_FARE_MULTIPLIERS.businessClass),
     firstClass:     Math.round(eco * CLASS_FARE_MULTIPLIERS.firstClass),
   };
+}
+
+/**
+ * Highest fare allowed for a class on a route, in dollars.
+ * Each class's ceiling is PRICE_CAP_MULTIPLE × its own reference fare
+ * (reference = economy reference price × that class's fare multiplier).
+ * Beyond this, demand is choked to zero anyway, so we forbid the input.
+ *
+ * @param {number} economyRefPrice  the route's economy reference price ($)
+ * @param {keyof typeof CLASS_FARE_MULTIPLIERS} className
+ * @returns {number} max fare ($)
+ */
+export function maxClassPrice(economyRefPrice, className) {
+  const ref  = Math.max(1, Number(economyRefPrice) || 1);
+  const mult = CLASS_FARE_MULTIPLIERS[className] ?? 1;
+  return Math.round(ref * mult * PRICE_CAP_MULTIPLE);
+}
+
+/**
+ * Clamp a class fare to the route's [1, maxClassPrice] range.
+ *
+ * @param {number} value            requested fare ($)
+ * @param {number} economyRefPrice  the route's economy reference price ($)
+ * @param {keyof typeof CLASS_FARE_MULTIPLIERS} className
+ * @returns {number} clamped fare ($)
+ */
+export function clampClassPrice(value, economyRefPrice, className) {
+  const v = Math.max(1, Math.round(Number(value) || 0));
+  return Math.min(v, maxClassPrice(economyRefPrice, className));
 }
 
 /**

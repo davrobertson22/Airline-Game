@@ -12,6 +12,7 @@ import {
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
+  maxClassPrice,
 } from '../utils/simulation.js';
 
 // ─── Route grouping ───────────────────────────────────────────────────────────
@@ -799,10 +800,17 @@ function PricingPanel({ route, aircraft, type }) {
     return result;
   });
 
+  // Per-class fare ceiling (3× the class's reference fare). The reducer clamps
+  // too, but clamping here gives the player immediate feedback in the field.
+  const maxPrices = {};
+  for (const cls of activeClasses) maxPrices[cls] = maxClassPrice(refP, cls);
+
   function handleBlur(cls) {
     const val = parseInt(draft[cls], 10);
     if (!isNaN(val) && val > 0) {
-      dispatch({ type: 'UPDATE_CLASS_PRICES', routeId: route.id, updates: { [cls]: val } });
+      const clamped = Math.min(val, maxPrices[cls]);
+      if (clamped !== val) setDraft(d => ({ ...d, [cls]: String(clamped) }));
+      dispatch({ type: 'UPDATE_CLASS_PRICES', routeId: route.id, updates: { [cls]: clamped } });
     }
   }
 
@@ -828,6 +836,8 @@ function PricingPanel({ route, aircraft, type }) {
                 className="form-input"
                 type="number"
                 min="1"
+                max={maxPrices[cls]}
+                title={`Max $${maxPrices[cls].toLocaleString()} (cap: 3× reference)`}
                 style={{ width: 72, padding: '3px 6px', fontSize: 12 }}
                 value={draft[cls]}
                 onChange={e => setDraft(d => ({ ...d, [cls]: e.target.value }))}
@@ -836,6 +846,7 @@ function PricingPanel({ route, aircraft, type }) {
             </div>
             <div style={{ fontSize: 10, color: pct > 0 ? 'var(--red)' : pct < 0 ? 'var(--green)' : 'var(--text-dim)', marginTop: 2 }}>
               ref ${refPrices[cls]} {pct !== 0 && `(${pct > 0 ? '+' : ''}${pct}%)`}
+              <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>· max ${maxPrices[cls].toLocaleString()}</span>
             </div>
           </div>
         );

@@ -42,6 +42,42 @@ export const BUSINESS_DEMAND_SHARE = 0.15; // kept for any external references; 
 export const BUSINESS_PRICE_MULTIPLIER = 3.5;
 
 /**
+ * Maximum fare any class may charge, as a multiple of that class's own
+ * reference price. Two jobs:
+ *   1. Input cap — reducers clamp player/AI prices to this ceiling so a fare
+ *      can never be set absurdly high (see clampClassPrice in simulation.js).
+ *   2. Demand choke — demand tapers to ~0 as price approaches this ceiling
+ *      (see priceChokeFactor below), so pricing at the cap is not a free lunch.
+ * Both use the same multiple so the choke reaches zero exactly at the input cap.
+ */
+export const PRICE_CAP_MULTIPLE = 3;
+
+/**
+ * Demand multiplier (0–1) that forces demand toward zero as a fare climbs from
+ * its reference price up to the cap (PRICE_CAP_MULTIPLE × reference).
+ *
+ *   price ≤ reference        → 1   (no extra penalty; elasticity already applies)
+ *   price ≥ cap × reference  → 0   (nobody buys at the ceiling)
+ *   in between               → convex falloff (1 - t²)
+ *
+ * This sits on TOP of the existing elasticity power-curve. Elasticity alone
+ * flattens to a small but non-zero asymptote (the bug that made a $1M fare still
+ * sell ~8 seats); the choke guarantees the curve actually reaches zero.
+ *
+ * @param {number} price        the fare being charged ($)
+ * @param {number} refForClass  the reference fare for this class ($)
+ * @returns {number} 0–1
+ */
+export function priceChokeFactor(price, refForClass) {
+  const ref = Math.max(refForClass, 1);
+  const ratio = price / ref;
+  if (ratio <= 1) return 1;
+  if (ratio >= PRICE_CAP_MULTIPLE) return 0;
+  const t = (ratio - 1) / (PRICE_CAP_MULTIPLE - 1); // 0 at ref, 1 at cap
+  return Math.max(0, 1 - t * t);
+}
+
+/**
  * Price elasticity per segment.
  * A ratio of (refPrice / yourPrice) is raised to this power.
  */
@@ -440,9 +476,19 @@ export function computeMarketShare(market, offers) {
     const lShare = leisureShares[i];
     const bShare = businessShares[i];
 
-    // Raw demand allocation (elastic total × softmax share)
-    let leisurePax  = Math.round(adjustedLeisureDemand  * lShare);
-    let businessPax = Math.round(adjustedBusinessDemand * bShare);
+    // Raw demand allocation (elastic total × softmax share × per-fare choke).
+    // The choke drives an individual carrier's demand to ~0 as its own fare
+    // approaches the cap, even though the share softmax alone would still hand it
+    // a sliver of the market.
+    const bizPrice = offer.businessPrice != null
+      ? offer.businessPrice
+      : offer.economyPrice * BUSINESS_PRICE_MULTIPLIER;
+    let leisurePax  = Math.round(
+      adjustedLeisureDemand  * lShare * priceChokeFactor(offer.economyPrice, market.referencePrice)
+    );
+    let businessPax = Math.round(
+      adjustedBusinessDemand * bShare * priceChokeFactor(bizPrice, market.referencePrice * BUSINESS_PRICE_MULTIPLIER)
+    );
 
     // Cap at capacity
     const leisureCapped  = leisurePax  > offer.economySeats;
@@ -474,12 +520,12 @@ function _monopolyResult(market, offer) {
   const noBusiness = offer.businessPrice == null;
 
   // Compute business demand first so we can detect overflow before sizing leisure.
+  const businessRef = market.referencePrice * BUSINESS_PRICE_MULTIPLIER;
   const businessAdj = noBusiness
     ? 0
-    : Math.round(market.businessDemand * Math.pow(
-        (market.referencePrice * BUSINESS_PRICE_MULTIPLIER) / offer.businessPrice,
-        ELASTICITY.business
-      ));
+    : Math.round(market.businessDemand
+        * Math.pow(businessRef / offer.businessPrice, ELASTICITY.business)
+        * priceChokeFactor(offer.businessPrice, businessRef));
   const businessPax = noBusiness ? 0 : Math.min(businessAdj, offer.businessSeats);
 
   // Business travelers who can't get a premium seat downgrade to economy rather
@@ -494,7 +540,9 @@ function _monopolyResult(market, offer) {
 
   // Demand with price elasticity applied
   const leisureAdj  = Math.round(
-    leisurePool * Math.pow(market.referencePrice / offer.economyPrice, ELASTICITY.leisure)
+    leisurePool
+      * Math.pow(market.referencePrice / offer.economyPrice, ELASTICITY.leisure)
+      * priceChokeFactor(offer.economyPrice, market.referencePrice)
   );
 
   const leisurePax  = Math.min(leisureAdj,  offer.economySeats);
