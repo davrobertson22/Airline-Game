@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
+import { Glyph } from './Icons.jsx';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
@@ -89,7 +90,7 @@ export default function SetupScreen() {
   return (
     <div className="setup-screen">
       <div className="setup-card" style={{ maxWidth: 600 }}>
-        <div className="setup-title">✈ Tailwinds - Airline Manager</div>
+        <div className="setup-title"><Glyph e="✈" /> Tailwinds - Airline Manager</div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
           You're starting with $10,000,000 in equity to get started — use it wisely.
@@ -112,7 +113,7 @@ export default function SetupScreen() {
                     color: active || done ? '#fff' : 'var(--text-dim)',
                     transition: 'background .15s',
                   }}>
-                    {done ? '✓' : n}
+                    {done ? <Glyph e="✓" size={14} /> : n}
                   </div>
                   <span style={{
                     fontSize: 12, fontWeight: active ? 700 : 500,
@@ -349,7 +350,7 @@ export default function SetupScreen() {
                           {a.tier}
                         </span>
                         {selected && (
-                          <span style={{ color: 'var(--accent)', fontSize: 14, marginLeft: 4 }}>✓</span>
+                          <span style={{ color: 'var(--accent)', fontSize: 14, marginLeft: 4 }}><Glyph e="✓" /></span>
                         )}
                       </button>
                     );
@@ -363,7 +364,7 @@ export default function SetupScreen() {
               <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
                 {hubAirport.name} · {hubAirport.population}M metro area · {hubAirport.tier} hub
                 <span style={{ marginLeft: 8, color: 'var(--accent)', fontWeight: 600 }}>
-                  🏠 Home country: {countryName(hubAirport.country)}
+                  <Glyph e="🏠" /> Home country: {countryName(hubAirport.country)}
                 </span>
               </div>
             )}
@@ -416,7 +417,7 @@ export default function SetupScreen() {
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
-                  🏅 Board Objectives
+                  <Glyph e="🏅" /> Board Objectives
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {enableObjectives

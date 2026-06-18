@@ -28,6 +28,7 @@ import {
 } from '../data/overhead.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { CATERING_LEVELS, normalizeCateringLevel } from '../data/catering.js';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class FinanceErrorBoundary extends Component {
@@ -37,7 +38,7 @@ class FinanceErrorBoundary extends Component {
     if (this.state.error) {
       return (
         <div style={{ padding: 32, color: 'var(--fg-muted)', fontFamily: 'monospace' }}>
-          <div style={{ fontSize: 18, color: 'var(--red)', marginBottom: 12 }}>⚠ Finance page error</div>
+          <div style={{ fontSize: 18, color: 'var(--red)', marginBottom: 12 }}><Glyph e="⚠" /> Finance page error</div>
           <pre style={{ background: 'var(--bg-card)', padding: 16, borderRadius: 8, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
             {this.state.error?.message ?? String(this.state.error)}
             {'\n\n'}
@@ -171,7 +172,7 @@ function FinanceInner() {
             style={{ fontSize: 13 }}
             onClick={() => setView(v.id)}
           >
-            {v.label}
+            <GlyphLabel text={v.label} size={13} />
           </button>
         ))}
       </div>
@@ -820,7 +821,7 @@ function PLStatement({ proj }) {
                 <Fragment>
                   <tr>
                     <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
-                      📦 Cargo revenue <span style={{ color: '#e8833a', fontWeight: 600 }}>(freight)</span>
+                      <Glyph e="📦" /> Cargo revenue <span style={{ color: '#e8833a', fontWeight: 600 }}>(freight)</span>
                       <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
                         {cargoResults.length} freighter route{cargoResults.length !== 1 ? 's' : ''} · {totCargoTonnes.toLocaleString()} t/wk
                       </span>
@@ -1558,10 +1559,10 @@ function BalanceSheet() {
             background: Math.abs(totalAssets - totalLiabPlusEquity) < 1 ? 'rgba(63,185,80,.08)' : 'rgba(248,81,73,.08)',
             color: Math.abs(totalAssets - totalLiabPlusEquity) < 1 ? 'var(--green)' : 'var(--red)',
           }}>
-            {Math.abs(totalAssets - totalLiabPlusEquity) < 1
+            <GlyphLabel size={12} text={Math.abs(totalAssets - totalLiabPlusEquity) < 1
               ? '✓ Balance sheet balances'
               : `⚠ Imbalance of ${formatMoney(Math.abs(totalAssets - totalLiabPlusEquity))}`
-            }
+            } />
           </div>
 
           {/* Off-balance-sheet commitments */}
@@ -1607,7 +1608,7 @@ function RouteBreakdown({ proj }) {
   }).filter(Boolean);
 
   if (routeData.length === 0) {
-    return <div className="empty-state"><div className="empty-state-icon">🗺️</div><div className="empty-state-text">No active routes.</div></div>;
+    return <div className="empty-state"><div className="empty-state-icon"><Glyph e="🗺️" /></div><div className="empty-state-text">No active routes.</div></div>;
   }
 
   // Consolidate by origin→destination pair
@@ -1726,7 +1727,7 @@ function RouteBreakdown({ proj }) {
                         <InfoLine label="Market demand" value={result.marketDemand?.toLocaleString() + ' pax/wk'} />
                         <InfoLine label="Seasonality"   value={result.seasonality ? formatPercent(result.seasonality - 1) + ' adj' : '—'} />
                         <InfoLine label="Competitors"   value={result.competitorCount + ' airlines'} />
-                        <InfoLine label="At capacity"   value={result.capacityCapped ? '⚠ Yes' : '✓ No'} />
+                        <InfoLine label="At capacity"   value={<GlyphLabel size={12} text={result.capacityCapped ? '⚠ Yes' : '✓ No'} />} />
                       </div>
                     )}
                   </div>
@@ -1858,7 +1859,7 @@ function AirportBreakdown({ proj }) {
   const airports = Object.values(airportMap).sort((a, b) => b.revenue - a.revenue);
 
   if (airports.length === 0) {
-    return <div className="empty-state"><div className="empty-state-icon">🏢</div><div className="empty-state-text">No active routes.</div></div>;
+    return <div className="empty-state"><div className="empty-state-icon"><Glyph e="🏢" /></div><div className="empty-state-text">No active routes.</div></div>;
   }
 
   const gates = state.gates ?? {};
@@ -2184,7 +2185,7 @@ function UnitEconomics({ proj }) {
   }
 
   if (routeData.length === 0) {
-    return <div className="empty-state"><div className="empty-state-icon">📐</div><div className="empty-state-text">No active routes.</div></div>;
+    return <div className="empty-state"><div className="empty-state-icon"><Glyph e="📐" /></div><div className="empty-state-text">No active routes.</div></div>;
   }
 
   return (
@@ -2244,7 +2245,7 @@ function UnitEconomics({ proj }) {
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{formatPercent(ue.breakEvenLF)}</td>
                   <td style={{ textAlign: 'right' }}>
                     <span className="badge" style={{ background: aboveBEP?'rgba(63,185,80,.12)':'rgba(248,81,73,.12)', color: aboveBEP?'var(--green)':'var(--red)' }}>
-                      {aboveBEP ? '✓ Above BEP' : '✗ Below BEP'}
+                      <GlyphLabel size={11} text={aboveBEP ? '✓ Above BEP' : '✗ Below BEP'} />
                     </span>
                   </td>
                   <td style={{ textAlign: 'center' }}>
@@ -2368,17 +2369,17 @@ function Forecast({ proj }) {
     <div>
       {firstNeg ? (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(248,81,73,.1)', border: '1px solid rgba(248,81,73,.3)', marginBottom: 14, fontSize: 13, color: 'var(--red)' }}>
-          ⚠ <strong>Cash Warning:</strong> At current trajectory, cash turns negative in Week +{firstNeg.offset} ({MONTH_NAMES[firstNeg.month]}).
+          <Glyph e="⚠" /> <strong>Cash Warning:</strong> At current trajectory, cash turns negative in Week +{firstNeg.offset} ({MONTH_NAMES[firstNeg.month]}).
         </div>
       ) : baseRevenue > 0 && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(63,185,80,.08)', border: '1px solid rgba(63,185,80,.2)', marginBottom: 14, fontSize: 13, color: 'var(--green)' }}>
-          ✓ Cash stays positive across all 12 forecast weeks.
+          <Glyph e="✓" /> Cash stays positive across all 12 forecast weeks.
         </div>
       )}
 
       {(globalDemandMult !== 1 || awarenessMultiplier < 0.95) && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(210,153,34,.08)', border: '1px solid rgba(210,153,34,.25)', marginBottom: 14, fontSize: 12, color: 'var(--yellow)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <span>⚡ Revenue multipliers applied to this forecast:</span>
+          <span><Glyph e="⚡" /> Revenue multipliers applied to this forecast:</span>
           {globalDemandMult !== 1 && <span>Events {globalDemandMult > 1 ? '+' : ''}{formatPercent(globalDemandMult - 1)}</span>}
           {awarenessMultiplier < 0.95 && <span>Awareness {formatPercent(awarenessMultiplier)} of max</span>}
           {mktMultiplier > 1 && <span>Marketing +{formatPercent(mktMultiplier - 1)}</span>}
@@ -2484,7 +2485,7 @@ function Trends() {
   const hist = state.financialHistory;
 
   if (hist.length < 2) {
-    return <div className="empty-state"><div className="empty-state-icon">📈</div><div className="empty-state-text">Advance at least 2 weeks to see trends.</div></div>;
+    return <div className="empty-state"><div className="empty-state-icon"><Glyph e="📈" /></div><div className="empty-state-text">Advance at least 2 weeks to see trends.</div></div>;
   }
 
   const last = hist[hist.length - 1];
@@ -2510,12 +2511,12 @@ function Trends() {
     <div>
       {cashDecline && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(248,81,73,.1)', border: '1px solid rgba(248,81,73,.3)', marginBottom: 12, fontSize: 13, color: 'var(--red)' }}>
-          ⚠ <strong>Cash declining</strong> for {last4Cash.length} consecutive weeks.
+          <Glyph e="⚠" /> <strong>Cash declining</strong> for {last4Cash.length} consecutive weeks.
         </div>
       )}
       {profitDecline && !cashDecline && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(210,153,34,.1)', border: '1px solid rgba(210,153,34,.3)', marginBottom: 12, fontSize: 13, color: 'var(--yellow)' }}>
-          ⚠ Profit trending downward for {last4Profit.length} weeks.
+          <Glyph e="⚠" /> Profit trending downward for {last4Profit.length} weeks.
         </div>
       )}
 
@@ -2826,7 +2827,7 @@ function Loans({ proj }) {
 
       {activeLoans.length === 0 && (
         <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(63,185,80,.06)', border: '1px solid rgba(63,185,80,.15)', marginBottom: 20, fontSize: 13, color: 'var(--green)' }}>
-          ✓ No active loans — your balance sheet is debt-free.
+          <Glyph e="✓" /> No active loans — your balance sheet is debt-free.
         </div>
       )}
 
@@ -2910,12 +2911,12 @@ function Loans({ proj }) {
             </div>
             {parsedAmount > maxAmount && (
               <div style={{ marginTop: 10, color: 'var(--red)', fontSize: 12 }}>
-                ⚠ Exceeds maximum for this product ({formatMoney(maxAmount)}).
+                <Glyph e="⚠" /> Exceeds maximum for this product ({formatMoney(maxAmount)}).
               </div>
             )}
             {parsedAmount < 10_000 && parsedAmount > 0 && (
               <div style={{ marginTop: 10, color: 'var(--yellow)', fontSize: 12 }}>
-                ⚠ Minimum loan amount is $10,000.
+                <Glyph e="⚠" /> Minimum loan amount is $10,000.
               </div>
             )}
           </div>

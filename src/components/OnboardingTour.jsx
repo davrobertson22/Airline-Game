@@ -1,6 +1,10 @@
 import { useState } from 'react';
+import { Glyph } from './Icons.jsx';
 
-export const TOUR_KEY = 'bbae_tour_seen_v1';
+// Bump this version whenever the tour content changes so returning players
+// see the updated guidance once (v2 added: Market filtering, idle-aircraft
+// assignment, and a "More to Explore" sweep of commonly-missed features).
+export const TOUR_KEY = 'bbae_tour_seen_v2';
 
 const STEPS = [
   {
@@ -22,10 +26,22 @@ const STEPS = [
     highlight: 'Market',
   },
   {
+    icon: '🔎',
+    title: 'Tip — Filter the Market',
+    body: "The Market is filterable. Use the category tabs at the top (Turboprop, Regional Jet, Narrowbody, Widebody) to narrow the list, then the manufacturer pills below to filter by maker. Both controls update the aircraft grid live — a quick way to find exactly the plane you want.",
+    highlight: 'Market',
+  },
+  {
     icon: '🗺️',
     title: 'Step 2 — Open a Route',
-    body: "Go to Routes → New Route. Pick two airports, assign your aircraft, and set a ticket price. You already have a gate at your hub — you'll need to buy one at your destination first.",
+    body: "Go to Routes → Open Route (or use the Route Planner tab). Pick two airports, choose your aircraft, and set a ticket price. You already have a gate at your hub — you'll need to buy one at your destination first.",
     highlight: 'Routes',
+  },
+  {
+    icon: '🛫',
+    title: 'Tip — Put Idle Aircraft to Work',
+    body: "An aircraft earns nothing until it's flying a route. Any plane not yet assigned shows as \"idle\" in your Fleet. To assign one: open the Route Planner (or Routes → Open Route), pick your airports, and choose an aircraft type — the picker shows how many idle planes you have of each type. Hit \"Open Route\" and the idle aircraft is deployed. Aircraft with spare hours can even take on a second route.",
+    highlight: 'Route Planner',
   },
   {
     icon: '⏩',
@@ -38,6 +54,12 @@ const STEPS = [
     title: 'How You Go Bankrupt',
     body: "Two ways to lose:\n• Miss 3 loan payments (cash goes negative on a week when loans are due)\n• Stay cash-negative for 6 consecutive weeks\n\nWatch Finance. Manage your debt early. Warning toasts will appear before either limit is reached.",
     highlight: 'Finance',
+  },
+  {
+    icon: '🧭',
+    title: 'More to Explore',
+    body: "A few features players often miss:\n• Hubs — build up a base airport to feed connecting traffic\n• Operations — manage crews, maintenance and reliability\n• Loyalty & Reputation — grow repeat demand and brand\n• Map & Route Planner — visualise your network and preview a route's profit before you commit\n\nHover the ⓘ icons next to controls anywhere in the game for a quick explanation, and check the Help tab for the full wiki.",
+    highlight: 'Help',
   },
   {
     icon: '🏆',
@@ -104,8 +126,8 @@ export default function OnboardingTour({ onClose }) {
         </div>
 
         {/* Icon */}
-        <div style={{ fontSize: 46, marginBottom: 18, lineHeight: 1 }}>
-          {current.icon}
+        <div style={{ marginBottom: 18, lineHeight: 1, color: 'var(--accent)' }}>
+          <Glyph e={current.icon} size={46} />
         </div>
 
         {/* Title */}
@@ -190,7 +212,7 @@ export default function OnboardingTour({ onClose }) {
             className="btn btn-primary"
             style={{ padding: '9px 22px', fontSize: 13, fontWeight: 600, marginLeft: isLast ? 'auto' : 0 }}
           >
-            {isLast ? "Let's Go! 🚀" : 'Next →'}
+            {isLast ? "Let's Go!" : 'Next →'}
           </button>
         </div>
       </div>

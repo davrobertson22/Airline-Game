@@ -1,3 +1,4 @@
+import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney } from '../utils/simulation.js';
@@ -233,7 +234,7 @@ function AllianceCard({
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 26, lineHeight: 1 }}>{alliance.icon}</div>
+        <div style={{ fontSize: 26, lineHeight: 1, display: 'inline-flex' }}><Glyph e={alliance.icon} size={26} /></div>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: alliance.color }}>{alliance.name}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{alliance.tagline}</div>
@@ -296,7 +297,7 @@ function AllianceCard({
             }}
             onClick={handleLeave}
           >
-            {confirmLeave ? '⚠ Confirm Leave Alliance' : 'Leave Alliance'}
+            <GlyphLabel size={12} text={confirmLeave ? '⚠ Confirm Leave Alliance' : 'Leave Alliance'} />
           </button>
           {confirmLeave && (
             <button
@@ -313,7 +314,7 @@ function AllianceCard({
             <div style={{ fontSize: 11, color: '#f87171', marginBottom: 8 }}>
               {reasons.map((r, i) => (
                 <div key={i}>
-                  ✗ {r}
+                  <Glyph e="✗" /> {r}
                   {r.includes('quality') && (
                     <div style={{ color: 'var(--text-muted)', marginTop: 2, marginLeft: 10 }}>
                       ↳ This is your in-flight product score, not overall reputation.
@@ -326,7 +327,7 @@ function AllianceCard({
           )}
           {eligible && !canAfford && (
             <div style={{ fontSize: 11, color: '#f87171', marginBottom: 8 }}>
-              ✗ Need {formatMoney(alliance.initiationFee)} to join
+              <Glyph e="✗" /> Need {formatMoney(alliance.initiationFee)} to join
             </div>
           )}
           {eligible && canAfford && hasAnyMembership && (
@@ -453,13 +454,13 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
           fontSize: 12, color: 'var(--yellow)', background: 'rgba(251,191,36,0.1)',
           padding: '8px 12px', borderRadius: 6, marginBottom: 10,
         }}>
-          ⚠ Maximum codeshare agreements reached ({MAX_CODESHARE_AGREEMENTS}). Cancel one to add another.
+          <Glyph e="⚠" /> Maximum codeshare agreements reached ({MAX_CODESHARE_AGREEMENTS}). Cancel one to add another.
         </div>
       )}
 
       {available.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🤝</div>
+          <div className="empty-state-icon"><Glyph e="🤝" /></div>
           <div className="empty-state-text">
             {filter !== 'all' ? `No available ${filter} partners` : 'All carriers already partnered'}
           </div>
@@ -544,7 +545,7 @@ function SummaryKPI({ label, value, color, prefix = '', sub }) {
 function BenefitLine({ icon, label }) {
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-      <span style={{ fontSize: 13, lineHeight: 1.4 }}>{icon}</span>
+      <span style={{ lineHeight: 1.4, display: 'inline-flex' }}><Glyph e={icon} size={14} /></span>
       <span style={{ color: 'var(--text)', lineHeight: 1.4 }}>{label}</span>
     </div>
   );

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, weekToGameDate } from '../utils/simulation.js';
 import AirlineLogo from './AirlineLogo.jsx';
+import { SaveIcon, FolderOpenIcon, CloseIcon } from './Icons.jsx';
 
 const SLOT_PREFIX = 'bbae_slot_';
 const NUM_SLOTS = 3;
@@ -54,7 +55,7 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
       <div className="save-slot-header">
         <span className="save-slot-label">Slot {index + 1}</span>
         {!isEmpty && (
-          <button className="save-slot-delete" onClick={() => onDelete(index)} title="Delete save">✕</button>
+          <button className="save-slot-delete" onClick={() => onDelete(index)} title="Delete save"><CloseIcon size={13} /></button>
         )}
       </div>
 
@@ -133,8 +134,10 @@ export default function SaveLoadModal({ mode, onClose }) {
     <div className="saveload-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="saveload-modal">
         <div className="saveload-header">
-          <h2 className="saveload-title">{mode === 'save' ? '💾 Save Game' : '📂 Load Game'}</h2>
-          <button className="saveload-close btn btn-ghost" onClick={onClose}>✕</button>
+          <h2 className="saveload-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {mode === 'save' ? <><SaveIcon size={18} /> Save Game</> : <><FolderOpenIcon size={18} /> Load Game</>}
+          </h2>
+          <button className="saveload-close btn btn-ghost" onClick={onClose}><CloseIcon size={15} /></button>
         </div>
         <p className="saveload-hint">
           {mode === 'save'

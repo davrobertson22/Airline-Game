@@ -8,6 +8,7 @@ import {
   AIRPORT_GATEWAY_SCORES, HUB_TIERS,
 } from '../models/demand.js';
 import { getAirportRestrictions } from '../data/airportRestrictions.js';
+import { Glyph } from './Icons.jsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export default function AirportDetail({ code, onBack }) {
           )}
           {restrictions.map((r, i) => (
             <span key={i} style={{ background: 'rgba(220,53,69,0.12)', color: 'var(--red)', border: '1px solid rgba(220,53,69,0.35)', borderRadius: 4, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>
-              🚫 {r.shortLabel}
+              <Glyph e="🚫" /> {r.shortLabel}
             </span>
           ))}
         </div>
@@ -358,7 +359,7 @@ export default function AirportDetail({ code, onBack }) {
                       <td style={{ padding: '7px 12px', color: 'var(--text-muted)' }}>${pair.refP}</td>
                       <td style={{ padding: '7px 12px' }}>
                         {iServe
-                          ? <span style={{ color: 'var(--green)', fontSize: 12, fontWeight: 600 }}>✓ Serving</span>
+                          ? <span style={{ color: 'var(--green)', fontSize: 12, fontWeight: 600 }}><Glyph e="✓" /> Serving</span>
                           : <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>—</span>
                         }
                       </td>

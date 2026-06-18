@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { OBJECTIVE_TEMPLATES } from '../data/objectives.js';
 import { formatMoney } from '../utils/simulation.js';
+import { Glyph } from './Icons.jsx';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ export default function BoardObjectives() {
 
   const strategic = merged.filter(o => o.phase === 'strategic');
   const financial = merged.filter(o => o.phase === 'financial');
+  const empire    = merged.filter(o => o.phase === 'empire');
 
   const totalCompleted = merged.filter(o => o.completed).length;
   const totalRewardEarned = merged
@@ -46,7 +48,7 @@ export default function BoardObjectives() {
         onClick={() => setCollapsed(v => !v)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>🏅 Board Objectives</span>
+          <span style={{ fontSize: 16, fontWeight: 700 }}><Glyph e="🏅" /> Board Objectives</span>
           <span style={{
             fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
             background: 'rgba(56,139,253,0.12)', color: 'var(--accent)',
@@ -67,6 +69,9 @@ export default function BoardObjectives() {
         <div style={{ marginTop: 14 }}>
           <ObjectiveGroup label="Year 1 — Strategic" objectives={strategic} color="var(--accent)" />
           <ObjectiveGroup label="Year 2+ — Financial" objectives={financial} color="var(--yellow)" style={{ marginTop: 14 }} />
+          {empire.length > 0 && (
+            <ObjectiveGroup label="Empire — Endgame" objectives={empire} color="var(--green)" style={{ marginTop: 14 }} />
+          )}
         </div>
       )}
     </div>
@@ -136,12 +141,13 @@ function ObjectiveCard({ obj, groupColor }) {
     }}>
       {/* Icon / check */}
       <div style={{
-        fontSize: 18,
         lineHeight: 1,
         flexShrink: 0,
-        filter: done ? 'none' : 'grayscale(0.4) opacity(0.7)',
+        display: 'inline-flex',
+        color: done ? 'var(--green)' : 'var(--text-muted)',
+        filter: done ? 'none' : 'opacity(0.8)',
       }}>
-        {done ? '✅' : obj.icon}
+        <Glyph e={done ? '✅' : obj.icon} size={18} />
       </div>
 
       {/* Text */}
@@ -162,7 +168,7 @@ function ObjectiveCard({ obj, groupColor }) {
         </div>
         {done ? (
           <div style={{ fontSize: 10, color: 'var(--green)', fontWeight: 600 }}>
-            ✓ Completed W{obj.completedWeek}/{obj.completedYear}
+            <Glyph e="✓" /> Completed W{obj.completedWeek}/{obj.completedYear}
           </div>
         ) : (
           <div style={{ fontSize: 10, color: groupColor, fontWeight: 600 }}>

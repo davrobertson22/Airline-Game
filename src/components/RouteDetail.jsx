@@ -10,10 +10,12 @@ import {
 import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
+  isRouteActive, routeActiveMonths,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -131,6 +133,23 @@ export default function RouteDetail({ origin, dest, onBack }) {
     (r.origin === origin && r.destination === dest) ||
     (r.origin === dest   && r.destination === origin)
   );
+
+  // Seasonal dormancy: true when every player route on this pair carries a season
+  // window and none of them operates in the current month. The forecast figures
+  // below are the in-season projection, so we surface a banner to avoid confusion.
+  const seasonalRoutes = playerRoutes.filter(r => r.season);
+  const isDormantNow = playerRoutes.length > 0 && seasonalRoutes.length === playerRoutes.length &&
+    playerRoutes.every(r => !isRouteActive(r, gameDate.month));
+  const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const resumeMonth = (() => {
+    if (!isDormantNow) return null;
+    const months = routeActiveMonths(playerRoutes[0]);
+    for (let i = 0; i < 12; i++) {
+      const m = ((gameDate.month - 1 + i) % 12) + 1;
+      if (months.includes(m)) return m;
+    }
+    return months[0];
+  })();
 
   // Competitors on this route
   const competitorsOnRoute = (state.competitors ?? []).filter(c => c.routes?.[routeKey]);
@@ -332,11 +351,23 @@ export default function RouteDetail({ origin, dest, onBack }) {
           </div>
         </div>
         {playerRoutes.length > 0 && (
-          <div style={{ background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--green)', flexShrink: 0 }}>
-            ✈ Operating · {playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0)}× / wk
-          </div>
+          isDormantNow ? (
+            <div style={{ background: 'rgba(139,148,158,0.12)', border: '1px solid rgba(139,148,158,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', flexShrink: 0 }}>
+              <Glyph e="🗓" /> Dormant · resumes {MONTH_NAMES[resumeMonth]}
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--green)', flexShrink: 0 }}>
+              <Glyph e="✈" /> Operating · {playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0)}× / wk
+            </div>
+          )
         )}
       </div>
+
+      {isDormantNow && (
+        <div style={{ background: 'rgba(139,148,158,0.1)', border: '1px solid rgba(139,148,158,0.3)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--text-muted)' }}>
+          <Glyph e="🗓" /> <strong>Out of season.</strong> This route is dormant until {MONTH_NAMES[resumeMonth]} — it earns no revenue and incurs no operating cost this month. The figures below are the in-season forecast for when it resumes.
+        </div>
+      )}
 
       {/* Row 1: Market overview + Market share side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 12 }}>
@@ -613,7 +644,7 @@ export default function RouteDetail({ origin, dest, onBack }) {
                     +{side.pax} <span style={{ fontSize: 12, fontWeight: 400 }}>pax/wk</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    {side.source === 'own-hub' ? '✓ Own hub · 100% yield' : side.source === 'partner-hub' ? 'Partner hub · 80% yield' : 'Gateway · 80% yield'}
+                    <GlyphLabel size={12} text={side.source === 'own-hub' ? '✓ Own hub · 100% yield' : side.source === 'partner-hub' ? 'Partner hub · 80% yield' : 'Gateway · 80% yield'} />
                   </div>
                   {/* Breakdown for own-hub endpoints */}
                   {side.source === 'own-hub' && (

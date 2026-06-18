@@ -3,55 +3,56 @@
    Sleek modern aviation theme · minimal motion
    ============================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Core surfaces — deep aviation navy, layered */
-  --bg:            #070b14;
-  --bg-elev:       #0a1019;
-  --surface:       #0e1623;
-  --surface2:      #15202f;
-  --surface3:      #1d2c3e;
-  --border:        #233244;
-  --border-subtle: #18222f;
-  --border-strong: #2f4257;
+  /* Core surfaces — neutral charcoal, warm-grey layered (no blue tint) */
+  --bg:            #18181b;
+  --bg-elev:       #1d1d20;
+  --surface:       #212125;
+  --surface2:      #292a2e;
+  --surface3:      #34353a;
+  --border:        #3a3b40;
+  --border-subtle: #292a2e;
+  --border-strong: #4a4b51;
 
-  /* Text */
-  --text:        #eaf2fb;
-  --text-muted:  #93a4ba;
-  --text-dim:    #5e7088;
+  /* Text — neutral, not blue-white */
+  --text:        #ededee;
+  --text-muted:  #a2a2a8;
+  --text-dim:    #6e6f76;
 
-  /* Accent — instrument azure with cyan edge */
-  --accent:       #3ea6ff;
-  --accent-bright:#5cb8ff;
-  --accent-deep:  #1d6fd6;
-  --accent-dim:   #14365f;
-  --accent-glow:  rgba(62,166,255,.35);
+  /* Accent — muted brass (grounded, not neon tech-blue) */
+  --accent:       #c79a4b;
+  --accent-bright:#dcb568;
+  --accent-deep:  #9a762f;
+  --accent-dim:   #352b15;
+  --accent-glow:  rgba(0,0,0,0);   /* glow removed */
 
   /* Status */
-  --green:       #38d39f;
-  --green-glow:  rgba(56,211,159,.30);
-  --red:         #ff5d6c;
-  --red-glow:    rgba(255,93,108,.30);
-  --yellow:      #ffb43d;
-  --purple:      #a98bff;
+  --green:       #4caf86;
+  --green-glow:  rgba(0,0,0,0);
+  --red:         #e06576;
+  --red-glow:    rgba(0,0,0,0);
+  --yellow:      #d9a441;
+  --purple:      #9d86d6;
 
   --radius:      9px;
   --radius-lg:   14px;
   --radius-sm:   6px;
-  --font:        'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono:   'Inter', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font:        'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display:'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:   'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* Elevation */
-  --shadow-sm:   0 1px 2px rgba(0,0,0,.4);
-  --shadow:      0 8px 24px -6px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4);
-  --shadow-lg:   0 20px 50px -12px rgba(0,0,0,.7);
-  --shadow-glow: 0 4px 18px -2px var(--accent-glow);
+  /* Elevation — flat, functional shadows only (no glow) */
+  --shadow-sm:   0 1px 2px rgba(0,0,0,.35);
+  --shadow:      0 6px 18px -8px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.35);
+  --shadow-lg:   0 18px 44px -14px rgba(0,0,0,.6);
+  --shadow-glow: var(--shadow);
 
-  /* Glass */
-  --glass:       rgba(14,22,35,.72);
+  /* Glass — near-solid, minimal blur */
+  --glass:       rgba(29,29,32,.94);
   --speed:       .14s;
 }
 
@@ -67,12 +68,9 @@ html, body, #root {
   text-rendering: optimizeLegibility;
 }
 
-/* Ambient cockpit backdrop */
+/* Flat neutral backdrop (ambient glow removed) */
 body {
-  background:
-    radial-gradient(1200px 700px at 78% -10%, rgba(62,166,255,.10), transparent 55%),
-    radial-gradient(900px 600px at 8% 110%, rgba(169,139,255,.07), transparent 55%),
-    var(--bg);
+  background: var(--bg);
   background-attachment: fixed;
 }
 
@@ -111,10 +109,10 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
   padding: 0 22px;
   height: 58px;
   background: var(--glass);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(255,255,255,.02), var(--shadow-sm);
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
   position: relative;
   z-index: 20;
@@ -124,23 +122,20 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
   display: flex;
   align-items: center;
   gap: 9px;
+  font-family: var(--font-display);
   font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.4px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
   white-space: nowrap;
   min-width: 0;
-  background: linear-gradient(180deg, #ffffff, #b9d6f5);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
 }
 
 .topbar-logo-icon {
   font-size: 18px;
   color: var(--accent);
-  -webkit-text-fill-color: var(--accent);
-  filter: drop-shadow(0 0 8px var(--accent-glow));
-  transform: rotate(-12deg);
+  display: inline-flex;
+  align-items: center;
 }
 
 .topbar-sep {
@@ -212,19 +207,19 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
 .topbar-cash.negative { color: var(--red); text-shadow: 0 0 16px var(--red-glow); }
 
 .btn-advance {
-  background: linear-gradient(135deg, var(--accent-bright), var(--accent-deep));
-  color: #fff;
-  border: none;
+  background: var(--accent);
+  color: #20180a;
+  border: 1px solid var(--accent-deep);
   border-radius: var(--radius);
   padding: 9px 18px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform var(--speed), box-shadow var(--speed), filter var(--speed);
-  box-shadow: 0 4px 14px -2px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.25);
+  transition: transform var(--speed), background var(--speed);
+  box-shadow: var(--shadow-sm);
   white-space: nowrap;
 }
-.btn-advance:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -2px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.3); }
+.btn-advance:hover { background: var(--accent-bright); }
 .btn-advance:active { transform: translateY(1px); }
 
 /* --- Nav tabs --- */
@@ -265,7 +260,7 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
 .nav-tab.active {
   color: var(--accent-bright);
   border-bottom-color: var(--accent);
-  background: linear-gradient(180deg, rgba(62,166,255,.10), transparent);
+  background: var(--accent-dim);
 }
 .nav-tab.active svg { filter: drop-shadow(0 0 6px var(--accent-glow)); }
 
@@ -274,6 +269,17 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
   flex: 1;
   overflow-y: auto;
   padding: 26px;
+}
+
+.app-footer {
+  flex-shrink: 0;
+  padding: 9px 26px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 /* page fade — single, fast */
@@ -404,14 +410,16 @@ tr:hover td { background: rgba(62,166,255,.05); }
 .btn:disabled { opacity: .45; cursor: not-allowed; filter: none; transform: none; }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-bright), var(--accent-deep));
-  color: #fff;
-  box-shadow: 0 3px 12px -2px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.2);
+  background: var(--accent);
+  color: #20180a;
+  border-color: var(--accent-deep);
+  box-shadow: var(--shadow-sm);
 }
 .btn-danger {
-  background: linear-gradient(135deg, #ff7480, #e23b4a);
-  color: #fff;
-  box-shadow: 0 3px 12px -2px var(--red-glow), inset 0 1px 0 rgba(255,255,255,.2);
+  background: var(--red);
+  color: #2a0d11;
+  border-color: #b24350;
+  box-shadow: var(--shadow-sm);
 }
 .btn-ghost {
   background: var(--surface2);
@@ -475,7 +483,6 @@ tr:hover td { background: rgba(62,166,255,.05); }
   justify-content: center;
   min-height: 100vh;
   background:
-    radial-gradient(1000px 600px at 50% -10%, rgba(62,166,255,.14), transparent 60%),
     var(--bg);
   padding: 24px;
 }
@@ -491,14 +498,12 @@ tr:hover td { background: rgba(62,166,255,.05); }
 }
 
 .setup-title {
+  font-family: var(--font-display);
   font-size: 30px;
-  font-weight: 900;
-  letter-spacing: -.8px;
+  font-weight: 700;
+  letter-spacing: -.5px;
   margin-bottom: 6px;
-  background: linear-gradient(135deg, var(--accent-bright), #b9d6f5);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
 }
 
 .setup-subtitle {
@@ -630,7 +635,7 @@ tr:hover td { background: rgba(62,166,255,.05); }
 .category-tab.active {
   color: var(--accent-bright);
   border-bottom-color: var(--accent);
-  background: linear-gradient(180deg, rgba(62,166,255,.10), transparent);
+  background: var(--accent-dim);
 }
 
 /* =============================================
@@ -1179,3 +1184,74 @@ tr:hover td { background: rgba(62,166,255,.05); }
   border: none;
 }
 .btn-danger:hover { background: #c0392b; }
+
+/* ── InfoTip — hover help on controls ─────────────────────────────── */
+.infotip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  cursor: help;
+  outline: none;
+}
+.infotip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  border-radius: 20px;
+  padding: 2px 7px;
+  transition: color .15s, border-color .15s, background .15s;
+  white-space: nowrap;
+}
+.infotip:hover .infotip-trigger,
+.infotip:focus .infotip-trigger {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.infotip-bubble {
+  position: absolute;
+  z-index: 9999;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 260px;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.infotip:hover .infotip-bubble,
+.infotip:focus .infotip-bubble {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Bottom-side variant for tips near the top of the viewport */
+.infotip-bottom .infotip-bubble {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+}
+.infotip-bottom:hover .infotip-bubble,
+.infotip-bottom:focus .infotip-bubble {
+  transform: translateX(-50%) translateY(0);
+}

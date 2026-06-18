@@ -1,3 +1,4 @@
+import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAircraftType } from '../data/aircraft.js';
@@ -126,7 +127,7 @@ export default function FleetConfig({ aircraftId, onClose }) {
               {type.name} · {maxSeats} total seats · Current cash: <strong style={{ color: 'var(--green)' }}>{formatMoney(state.cash)}</strong>
             </div>
           </div>
-          <button className="btn btn-ghost" style={{ padding: '4px 10px', flexShrink: 0 }} onClick={onClose}>✕</button>
+          <button className="btn btn-ghost" style={{ padding: '4px 10px', flexShrink: 0 }} onClick={onClose}><Glyph e="✕" /></button>
         </div>
 
         {/* Cabin Layout */}
@@ -199,7 +200,7 @@ export default function FleetConfig({ aircraftId, onClose }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
               <span style={{ color: over ? 'var(--red)' : 'var(--text-muted)' }}>
                 {over
-                  ? `⚠ Over by ${(usedUnits - maxSeats).toFixed(2)} seat units — reduce a class`
+                  ? <GlyphLabel size={12} text={`⚠ Over by ${(usedUnits - maxSeats).toFixed(2)} seat units — reduce a class`} />
                   : `${usedUnits.toFixed(1)} / ${maxSeats} seat units used${emptyUnits >= 1 ? ` · ${emptyUnits.toFixed(0)} empty` : ''}`}
               </span>
               <span style={{ color: 'var(--text-muted)' }}>

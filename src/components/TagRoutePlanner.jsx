@@ -11,6 +11,7 @@ import {
   routeLandingFee, routeStops, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
 } from '../utils/simulation.js';
 import { ModeToggle } from './CargoRoutePlanner.jsx';
+import { Glyph } from './Icons.jsx';
 
 // ─── Region-grouped airport <select> (only airports with a gate) ───────────────
 
@@ -176,7 +177,7 @@ export default function TagRoutePlanner({ mode, setMode }) {
                 </div>
                 {isInterior && stops.length > 3 && (
                   <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 13 }}
-                    onClick={() => removeStop(i)} title="Remove this stop">✕</button>
+                    onClick={() => removeStop(i)} title="Remove this stop"><Glyph e="✕" /></button>
                 )}
               </div>
             );
@@ -190,14 +191,14 @@ export default function TagRoutePlanner({ mode, setMode }) {
             Up to {MAX_ROUTE_STOPS - 2} intermediate stop{MAX_ROUTE_STOPS - 2 === 1 ? '' : 's'} ({MAX_ROUTE_STOPS} airports).
           </span>
           {!distinct && (
-            <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--red)' }}>⚠ Each airport can appear only once.</span>
+            <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--red)' }}><Glyph e="⚠" /> Each airport can appear only once.</span>
           )}
         </div>
       </div>
 
       {!ready && (
         <div className="empty-state" style={{ marginTop: 24 }}>
-          <div className="empty-state-icon">🧭</div>
+          <div className="empty-state-icon"><Glyph e="🧭" /></div>
           <div className="empty-state-text">Pick at least three airports to plan a tag flight.</div>
         </div>
       )}
@@ -234,12 +235,12 @@ export default function TagRoutePlanner({ mode, setMode }) {
             {/* Blockers */}
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
               {!inRange && type && (
-                <span style={{ color: 'var(--red)' }}>⚠ {type.name} range {effRange.toLocaleString()} km &lt; longest leg {Math.round(maxLeg).toLocaleString()} km.</span>
+                <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {type.name} range {effRange.toLocaleString()} km &lt; longest leg {Math.round(maxLeg).toLocaleString()} km.</span>
               )}
-              {!blockOk && <span style={{ color: 'var(--red)' }}>⚠ Exceeds the {MAX_WEEKLY_BLOCK_HOURS}h/wk block-hour cap for this aircraft.</span>}
-              {gateProblem && <span style={{ color: 'var(--red)' }}>⚠ No gate at {gateProblem} — acquire one in the Gates tab.</span>}
-              {slotProblem && <span style={{ color: 'var(--yellow)' }}>⚠ Not enough slots at {slotProblem} — add a gate there.</span>}
-              {!connectivityOk && <span style={{ color: 'var(--red)' }}>⚠ {aircraft?.name} can only extend from an airport it already serves.</span>}
+              {!blockOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> Exceeds the {MAX_WEEKLY_BLOCK_HOURS}h/wk block-hour cap for this aircraft.</span>}
+              {gateProblem && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {gateProblem} — acquire one in the Gates tab.</span>}
+              {slotProblem && <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {slotProblem} — add a gate there.</span>}
+              {!connectivityOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {aircraft?.name} can only extend from an airport it already serves.</span>}
             </div>
           </div>
 
@@ -336,10 +337,10 @@ export default function TagRoutePlanner({ mode, setMode }) {
                 Open Multi-stop Route
               </button>
               <span style={{ fontSize: 12, color: canAfford ? 'var(--text-muted)' : 'var(--red)' }}>
-                {canAfford ? '💸' : '⚠'} Launch cost {formatMoney(launchCost)}{!canAfford ? ' — insufficient cash' : ''}
+                <Glyph e={canAfford ? '💸' : '⚠'} size={12} /> Launch cost {formatMoney(launchCost)}{!canAfford ? ' — insufficient cash' : ''}
               </span>
               {preview && preview.profit - routeLandingFee(route, type, frequency) < 0 && (
-                <span style={{ fontSize: 12, color: 'var(--yellow)' }}>⚠ Unprofitable at these settings</span>
+                <span style={{ fontSize: 12, color: 'var(--yellow)' }}><Glyph e="⚠" /> Unprofitable at these settings</span>
               )}
             </div>
           </div>

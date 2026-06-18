@@ -14,10 +14,10 @@
 // predicted, by design — a projection should be deterministic).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { weeklyTick, weekToGameDate } from './simulation.js';
+import { weeklyTick, weekToGameDate, isRouteActive, routeDistanceKm } from './simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { effectiveFuelMultiplier, absoluteWeek } from './fuel.js';
-import { DEPRECIATION_YEARS } from '../data/overhead.js';
+import { DEPRECIATION_YEARS, routeLaunchCost } from '../data/overhead.js';
 
 const CORPORATE_TAX_RATE = 0.21;
 
@@ -119,14 +119,27 @@ export function projectWeek(state) {
   }
   const principal = loanPayments - interest;
 
+  // ── Seasonal reactivation: routes that resume service this projected week ──────
+  // Mirrors the reducer — a dormant seasonal route flipping active in this month
+  // pays 1/3 of its launch cost. Deductible, like lease redelivery.
+  let seasonalReactivation = 0;
+  for (const r of state.routes ?? []) {
+    if (!r.season) continue;
+    const shouldBeActive = isRouteActive(r, gameMonth);
+    const prevState = r.seasonState ?? (shouldBeActive ? 'active' : 'dormant');
+    if (shouldBeActive && prevState === 'dormant') {
+      seasonalReactivation += Math.round(routeLaunchCost(routeDistanceKm(r.origin, r.destination)) / 3);
+    }
+  }
+
   // ── Tax & bottom line ────────────────────────────────────────────────────────
-  // Tax base is EBT = EBITDA − depreciation − interest (loan PRINCIPAL is not an
-  // expense and is NOT deductible). This matches the reducer.
-  const taxableIncome = ebit - interest;                 // = ebitda − depreciation − interest
+  // Tax base is EBT = EBITDA − depreciation − interest − reactivation (loan
+  // PRINCIPAL is not an expense and is NOT deductible). This matches the reducer.
+  const taxableIncome = ebit - interest - seasonalReactivation;
   const corporateTax  = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
-  // Cash bottom line: operating cash − loan payments − tax (matches the `profit`
-  // stored in history). Depreciation is non-cash so it does not affect cash.
-  const preTaxProfit  = ebitda - loanPayments;           // pre-tax CASH
+  // Cash bottom line: operating cash − loan payments − reactivation − tax (matches
+  // the `profit` stored in history). Depreciation is non-cash so it doesn't affect cash.
+  const preTaxProfit  = ebitda - loanPayments - seasonalReactivation;   // pre-tax CASH
   const netCash       = preTaxProfit - corporateTax;
   // Accrual view (proper P&L): EBIT − interest − tax. Principal excluded.
   const netIncomeAccrual = ebit - interest - corporateTax;
@@ -145,6 +158,7 @@ export function projectWeek(state) {
     interest,
     principal,
     loanPayments,
+    seasonalReactivation,
     preTaxProfit,
     corporateTax,
     netCash,

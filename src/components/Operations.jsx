@@ -15,6 +15,7 @@ import {
 } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
+import { Glyph } from './Icons.jsx';
 
 // ─── Headcount estimation ─────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ function MoraleBar({ morale, payMultiplier }) {
     : morale >= 70 ? 'Good'
     : morale >= 50 ? 'Neutral'
     : morale >= 30 ? 'Poor'
-    : 'Crisis ⚠';
+    : 'Crisis';
 
   return (
     <div>
@@ -221,7 +222,7 @@ function MaintenanceCard({ budget, fleetMaintTotal, dispatch }) {
   const agingRate = Math.max(0.5, 1 + (1 - budget) * 0.5);
   const agingColor = agingRate > 1.1 ? 'var(--red)' : agingRate < 0.9 ? 'var(--green)' : 'var(--text-muted)';
 
-  const budgetLabel = budget < 0.75 ? 'Cut-rate ⚠'
+  const budgetLabel = budget < 0.75 ? 'Cut-rate'
     : budget < 0.95 ? 'Below standard'
     : budget < 1.1  ? 'Standard'
     : budget < 1.5  ? 'Enhanced'
@@ -232,7 +233,7 @@ function MaintenanceCard({ budget, fleetMaintTotal, dispatch }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🛠️</span>
+            <span style={{ fontSize: 18 }}><Glyph e="🛠️" /></span>
             Maintenance Budget
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, maxWidth: 420 }}>
@@ -331,7 +332,7 @@ function MarketingCard({ budget, weeklyRevenue, dispatch }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>📣</span>
+            <span style={{ fontSize: 18 }}><Glyph e="📣" /></span>
             Marketing Budget
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, maxWidth: 420 }}>
@@ -571,7 +572,7 @@ export default function Operations() {
             <div className="card" style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>🏢</span> HQ &amp; Administration
+                  <span><Glyph e="🏢" /></span> HQ &amp; Administration
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--red)', fontWeight: 600, marginBottom: 4 }}>
                   −{formatMoney(hqCost)}/wk
@@ -586,7 +587,7 @@ export default function Operations() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>🛡️</span> Insurance
+                  <span><Glyph e="🛡️" /></span> Insurance
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--red)', fontWeight: 600, marginBottom: 4 }}>
                   −{formatMoney(totalInsurance)}/wk
@@ -653,7 +654,7 @@ export default function Operations() {
                     </div>
                     {info.note && (
                       <div style={{ fontSize: 11, color: 'var(--yellow)', marginTop: 2, fontStyle: 'italic' }}>
-                        ⚠ {info.note}
+                        <Glyph e="⚠" /> {info.note}
                       </div>
                     )}
                   </div>
@@ -668,7 +669,7 @@ export default function Operations() {
             <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
               {famEntries.length === 1 ? (
                 <span style={{ color: 'var(--green)' }}>
-                  ✓ Single-family fleet — you pay the minimum possible MRO base cost.
+                  <Glyph e="✓" /> Single-family fleet — you pay the minimum possible MRO base cost.
                 </span>
               ) : (
                 <>

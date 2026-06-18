@@ -3,6 +3,7 @@ import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import { simulateRoute, simulateCargoRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
 import { getAlliance } from '../data/alliances.js';
+import { Glyph } from './Icons.jsx';
 
 // ── Great-circle path as a single continuous segment ─────────────────────────
 // Keeps longitudes unwrapped (may exceed ±180) so Leaflet draws one smooth arc
@@ -313,7 +314,7 @@ export default function RouteMap() {
         <div class="map-tip">
           <div class="map-tip-title" style="color:${color}">${origin.code} → ${dest.code}</div>
           <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
-          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${type === 'alliance' ? '🌐 Alliance' : '🤝 Codeshare'}</div>
+          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${type === 'alliance' ? 'Alliance' : 'Codeshare'}</div>
         </div>
       `;
 
@@ -369,7 +370,7 @@ export default function RouteMap() {
       const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
       const tipHtml = `
         <div class="map-tip">
-          <div class="map-tip-title" style="color:${CARGO_COLOR}">📦 ${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-title" style="color:${CARGO_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
           <div class="map-tip-sub">${origin.city} → ${dest.city} · ${g.aircraftCount} freighter${g.aircraftCount !== 1 ? 's' : ''}</div>
           <div class="map-tip-stats">
             <div><span class="map-tip-lbl">Tonnes/wk</span><span class="map-tip-val" style="color:${CARGO_COLOR}">${tonnes}</span></div>
@@ -578,7 +579,7 @@ export default function RouteMap() {
   if (routes.length === 0 && cargoRoutes.length === 0) {
     return (
       <div className="empty-state" style={{ paddingTop: 80 }}>
-        <div className="empty-state-icon">🗺️</div>
+        <div className="empty-state-icon"><Glyph e="🗺️" /></div>
         <div className="empty-state-text">No routes yet.</div>
         <div style={{ marginTop: 8, fontSize: 13 }}>Open routes to see your network on the map.</div>
       </div>
@@ -611,7 +612,7 @@ export default function RouteMap() {
                 onClick={() => setSelectedId(null)}
                 className="map-clear-btn"
               >
-                ✕ Clear focus
+                <Glyph e="✕" /> Clear focus
               </button>
             )}
             {/* Static legend items */}
@@ -641,7 +642,7 @@ export default function RouteMap() {
                 title={showCargo ? 'Hide cargo routes' : 'Show cargo routes'}
               >
                 <span style={{ width: 18, height: 2, background: CARGO_COLOR, display: 'inline-block', borderRadius: 1 }} />
-                📦 Cargo
+                <Glyph e="📦" /> Cargo
               </button>
             )}
 
@@ -693,7 +694,7 @@ export default function RouteMap() {
         {/* Map container */}
         {error ? (
           <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
-            ⚠ Could not load map: {error}
+            <Glyph e="⚠" /> Could not load map: {error}
           </div>
         ) : !ready ? (
           <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--text-muted)', fontSize: 13, gap: 10 }}>

@@ -6,6 +6,7 @@ import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE } from '../u
 import { computeQualityScore } from '../models/demand.js';
 import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 const ACQUISITION_PREMIUM = 1.25;
 
@@ -89,10 +90,10 @@ export default function Competition() {
       />
 
       {/* ── Contested routes ──────────────────────────────────────────────── */}
-      <SectionHeader>⚔ Contested Routes</SectionHeader>
+      <SectionHeader><Glyph e="⚔" /> Contested Routes</SectionHeader>
       {contestedKeys.length === 0 ? (
         <div className="empty-state" style={{ marginBottom: 24 }}>
-          <div className="empty-state-icon">🤝</div>
+          <div className="empty-state-icon"><Glyph e="🤝" /></div>
           <div className="empty-state-text">No contested routes yet</div>
           <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-muted)' }}>
             Open routes that competitors also fly to see head-to-head comparisons.
@@ -179,11 +180,11 @@ function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, pl
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <SectionHeader>🏆 Industry Leaderboard — Market Capitalisation</SectionHeader>
+      <SectionHeader><Glyph e="🏆" /> Industry Leaderboard — Market Capitalisation</SectionHeader>
 
       {!hasMarketCapData && (
         <div className="empty-state" style={{ marginBottom: 8 }}>
-          <div className="empty-state-icon">📊</div>
+          <div className="empty-state-icon"><Glyph e="📊" /></div>
           <div className="empty-state-text">Advance a few weeks to populate the leaderboard</div>
         </div>
       )}
@@ -212,8 +213,8 @@ function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, pl
               }}
             >
               {/* Rank */}
-              <div style={{ width: 28, textAlign: 'center', fontSize: idx < 3 ? 18 : 13, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>
-                {rankBadge}
+              <div style={{ width: 28, display: 'flex', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: idx < 3 ? ['#e0b341', '#b8bcc4', '#c8853f'][idx] : 'var(--text-muted)', flexShrink: 0 }}>
+                <Glyph e={rankBadge} size={idx < 3 ? 18 : 13} />
               </div>
 
               {/* Logo */}
@@ -348,7 +349,7 @@ function CompetitorCard({ carrier, playerRouteMap }) {
       <div style={{ display: 'flex', gap: 12, fontSize: 12, marginTop: 8, color: 'var(--text-muted)' }}>
         <span>{totalRoutes} routes</span>
         {sharedRoutes > 0 && (
-          <span style={{ color: 'var(--yellow)', fontWeight: 600 }}>⚔ {sharedRoutes} shared</span>
+          <span style={{ color: 'var(--yellow)', fontWeight: 600 }}><Glyph e="⚔" /> {sharedRoutes} shared</span>
         )}
       </div>
     </div>
@@ -515,7 +516,7 @@ function CompetitiveHints({ playerRoute, playerQual, competitors, routeKey, refP
     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {hints.map((h, i) => (
         <div key={i} style={{ fontSize: 12, color: colors[h.type], padding: '4px 8px', background: 'var(--surface2)', borderRadius: 4 }}>
-          {h.type === 'warn' ? '⚠ ' : h.type === 'good' ? '✓ ' : 'ℹ '}{h.text}
+          <Glyph e={h.type === 'warn' ? '⚠' : h.type === 'good' ? '✓' : 'ℹ'} size={12} /> {h.text}
         </div>
       ))}
     </div>
@@ -563,7 +564,7 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
               }}
               title={canAfford ? `Acquire for ${formatMoney(acquisitionCost)}` : `Need ${formatMoney(acquisitionCost ?? 0)} to acquire`}
             >
-              {canAfford ? '🤝 Acquire' : `🔒 ${formatMoney(acquisitionCost ?? 0)}`}
+              <GlyphLabel size={13} text={canAfford ? '🤝 Acquire' : `🔒 ${formatMoney(acquisitionCost ?? 0)}`} />
             </button>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{expanded ? '▲' : '▼'}</span>
@@ -604,7 +605,7 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
                       </span>
                       {isShared && (
                         <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--yellow)', fontWeight: 600 }}>
-                          ⚔ contested
+                          <Glyph e="⚔" /> contested
                         </span>
                       )}
                     </td>

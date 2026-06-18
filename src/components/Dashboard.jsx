@@ -7,6 +7,7 @@ import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
 import { getSeasonalProfile } from '../models/demand.js';
 import BoardObjectives from './BoardObjectives.jsx';
+import { AlertIcon, DotIcon, TrendDownIcon, PackageIcon } from './Icons.jsx';
 
 export default function Dashboard() {
   const { state } = useGame();
@@ -115,12 +116,12 @@ export default function Dashboard() {
   // ── Action alerts ────────────────────────────────────────────────────────
   const alerts = [];
   if (idleAircraft > 0)
-    alerts.push({ color: 'var(--yellow)', icon: '⚠', text: `${idleAircraft} idle aircraft — paying lease with no revenue` });
+    alerts.push({ color: 'var(--yellow)', icon: AlertIcon, text: `${idleAircraft} idle aircraft — paying lease with no revenue` });
   if (isFinite(weeksOfCash) && weeksOfCash < 4)
-    alerts.push({ color: 'var(--red)', icon: '🔴', text: `Only ${weeksOfCash} weeks of cash runway remaining` });
+    alerts.push({ color: 'var(--red)', icon: DotIcon, text: `Only ${weeksOfCash} weeks of cash runway remaining` });
   const losingRoutes = routeResults.filter(({ result }) => result && result.profit < 0);
   if (losingRoutes.length > 0)
-    alerts.push({ color: 'var(--red)', icon: '📉', text: `${losingRoutes.length} loss-making route${losingRoutes.length !== 1 ? 's' : ''} — consider repricing` });
+    alerts.push({ color: 'var(--red)', icon: TrendDownIcon, text: `${losingRoutes.length} loss-making route${losingRoutes.length !== 1 ? 's' : ''} — consider repricing` });
   if (activeEvents.length > 0) {
     const bad = activeEvents.filter(e =>
       (e.effects?.fuelMult ?? 1) > 1 ||
@@ -165,7 +166,9 @@ export default function Dashboard() {
               borderRadius: 'var(--radius)',
               fontSize: 13,
             }}>
-              <span style={{ fontSize: 14 }}>{a.icon}</span>
+              <span style={{ fontSize: 14, color: a.color, display: 'inline-flex', flexShrink: 0 }}>
+                {typeof a.icon === 'function' ? (() => { const Ic = a.icon; return <Ic size={15} />; })() : a.icon}
+              </span>
               <span style={{ color: 'var(--text)' }}>{a.text}</span>
             </div>
           ))}
@@ -200,7 +203,7 @@ export default function Dashboard() {
             label="Cargo / wk"
             value={formatMoney(cargoRevenue)}
             color="green"
-            sub={`📦 ${Math.round(cargoTonnes).toLocaleString()} t/wk · ${cargoRoutes.length} route${cargoRoutes.length !== 1 ? 's' : ''}`}
+            sub={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><PackageIcon size={11} /> {Math.round(cargoTonnes).toLocaleString()} t/wk · {cargoRoutes.length} route{cargoRoutes.length !== 1 ? 's' : ''}</span>}
             subColor="var(--text-dim)"
           />
         )}

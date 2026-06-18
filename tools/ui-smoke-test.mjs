@@ -53,14 +53,22 @@ const { GameProvider, freshState } = await import('../src/store/GameContext.jsx'
 const Routes        = (await import('../src/components/Routes.jsx')).default;
 const RoutePlanner  = (await import('../src/components/RoutePlanner.jsx')).default;
 const TagRoutePlanner = (await import('../src/components/TagRoutePlanner.jsx')).default;
+const RouteDetail   = (await import('../src/components/RouteDetail.jsx')).default;
 const Wiki          = (await import('../src/components/Wiki.jsx')).default;
 
 const save = {
   ...freshState(),
   phase: 'playing', week: 20, year: 1, hub: P, cash: 5_000_000,
   gates: { [P]: 8, [Q]: 8, [R]: 8 },
-  fleet: [{ id: 'ac1', typeId: jet.id, name: 'Spirit of Test', tailNumber: 'N1TEST', status: 'assigned', ageWeeks: 52, ownershipType: 'owned', config: { economy: jet.seats } }],
-  routes: [{ id: 'tg', origin: P, destination: R, stops: [P, Q, R], aircraftId: 'ac1', weeklyFrequency: 5, weeksOpen: 20, hub: P, segmentPrices: sp, cateringLevel: 'full' }],
+  fleet: [
+    { id: 'ac1', typeId: jet.id, name: 'Spirit of Test', tailNumber: 'N1TEST', status: 'assigned', ageWeeks: 52, ownershipType: 'owned', config: { economy: jet.seats } },
+    { id: 'ac2', typeId: jet.id, name: 'Seasonal Flyer', tailNumber: 'N2TEST', status: 'assigned', ageWeeks: 52, ownershipType: 'owned', config: { economy: jet.seats } },
+  ],
+  routes: [
+    { id: 'tg', origin: P, destination: R, stops: [P, Q, R], aircraftId: 'ac1', weeklyFrequency: 5, weeksOpen: 20, hub: P, segmentPrices: sp, cateringLevel: 'full' },
+    // Summer-only route; the save is at week 20 (May) so it is DORMANT now.
+    { id: 'seas', origin: P, destination: Q, stops: [P, Q], aircraftId: 'ac2', weeklyFrequency: 5, weeksOpen: 20, hub: P, ticketPrice: 320, cateringLevel: 'full', season: { months: [6, 7, 8, 9] }, seasonState: 'dormant' },
+  ],
 };
 store.set('bbae_save_v2', JSON.stringify(save));
 
@@ -91,6 +99,17 @@ test('Wiki renders and registers the Multi-stop Routes help section', () => {
   // every section title, so the new entry shows there once it's wired in.
   const html = renderToString(React.createElement(Wiki));
   assert.ok(html.includes('Multi-stop Routes'), 'multi-stop help section listed');
+});
+
+console.log('\n── 4. Seasonal flights surface in the UI ────────────────');
+test('Routes list shows a Dormant badge for an out-of-season route', () => {
+  const html = render(React.createElement(Routes));
+  assert.ok(html.includes('Dormant'), 'dormant badge rendered for the summer route in May');
+});
+
+test('RouteDetail renders a dormancy notice for an out-of-season route', () => {
+  const html = render(React.createElement(RouteDetail, { origin: P, dest: Q, onBack: () => {} }));
+  assert.ok(html.includes('Dormant') || html.includes('Out of season'), 'dormancy notice present');
 });
 
 console.log(`\n${'─'.repeat(56)}`);

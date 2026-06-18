@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Glyph } from './Icons.jsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-game Wiki / Help panel.
@@ -428,7 +429,7 @@ function Block({ block }) {
         background: 'var(--accent-dim)', border: '1px solid var(--accent)',
         borderRadius: 10,
       }}>
-        <span style={{ fontSize: 15, lineHeight: 1.4 }}>💡</span>
+        <span style={{ fontSize: 15, lineHeight: 1.4 }}><Glyph e="💡" /></span>
         <span style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text)' }}>{renderInline(block.tip)}</span>
       </div>
     );
@@ -440,7 +441,7 @@ function Block({ block }) {
         background: 'rgba(255,93,108,0.10)', border: '1px solid var(--red)',
         borderRadius: 10,
       }}>
-        <span style={{ fontSize: 15, lineHeight: 1.4 }}>⚠️</span>
+        <span style={{ fontSize: 15, lineHeight: 1.4 }}><Glyph e="⚠️" /></span>
         <span style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text)' }}>{renderInline(block.warn)}</span>
       </div>
     );
@@ -511,7 +512,7 @@ export default function Wiki() {
                     transition: 'background 0.15s, color 0.15s',
                   }}
                 >
-                  <span style={{ fontSize: 15, flexShrink: 0 }}>{s.icon}</span>
+                  <span style={{ flexShrink: 0, display: 'inline-flex' }}><Glyph e={s.icon} size={15} /></span>
                   <span>{s.title}</span>
                 </button>
               );
@@ -524,7 +525,7 @@ export default function Wiki() {
           {active && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                <span style={{ fontSize: 30, lineHeight: 1 }}>{active.icon}</span>
+                <span style={{ lineHeight: 1, display: 'inline-flex', color: 'var(--accent)' }}><Glyph e={active.icon} size={28} /></span>
                 <div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', lineHeight: 1.2 }}>
                     {active.title}

@@ -1,3 +1,4 @@
+import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import RouteDetail from './RouteDetail.jsx';
@@ -7,13 +8,96 @@ import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
+import InfoTip from './InfoTip.jsx';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
-  maxClassPrice,
+  maxClassPrice, isRouteActive, routeActiveMonths,
 } from '../utils/simulation.js';
+
+const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const SEASON_PRESETS = [
+  { id: 'year',   label: 'Year-round', months: null },
+  { id: 'summer', label: 'Summer', months: [6, 7, 8, 9] },
+  { id: 'winter', label: 'Winter', months: [12, 1, 2, 3] },
+];
+
+// Month-window picker used in the add-route form (counter-seasonal reassignment path).
+function FormSeasonPicker({ value, onChange, currentMonth }) {
+  const selected = new Set(value?.months ?? []);
+  const isYearRound = !value || selected.size === 0;
+  const toggleMonth = (m) => {
+    const next = new Set(selected);
+    next.has(m) ? next.delete(m) : next.add(m);
+    onChange(next.size === 0 ? null : { months: [...next].sort((a, b) => a - b) });
+  };
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 5 }}>
+        Operating window
+        <InfoTip text="Restrict this route to certain months. Off-season it's dormant (no revenue or cost) and frees its aircraft and slots for a counter-seasonal route. Resuming each season costs 1/3 of launch; gate fees bill year-round." />
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+        {SEASON_PRESETS.map(p => {
+          const active = (p.months === null && isYearRound) ||
+            (p.months && !isYearRound && p.months.length === selected.size && p.months.every(m => selected.has(m)));
+          return (
+            <button key={p.id} type="button" className={`btn ${active ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '3px 10px', fontSize: 11 }}
+              onClick={() => onChange(p.months ? { months: [...p.months] } : null)}>
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+          const on = !isYearRound && selected.has(m);
+          return (
+            <button key={m} type="button" onClick={() => toggleMonth(m)}
+              style={{
+                width: 30, height: 26, fontSize: 11, borderRadius: 5, cursor: 'pointer',
+                border: m === currentMonth ? '2px solid var(--accent)' : '1px solid var(--border)',
+                background: on ? 'var(--accent)' : 'transparent',
+                color: on ? '#fff' : 'var(--text-muted)', fontWeight: on ? 700 : 400,
+              }}>
+              {SEASON_MONTH_ABBR[m].slice(0, 1)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Compact badge shown on seasonal routes: green "Seasonal" when operating this
+// month, grey "Dormant" (with resume month) when out of season.
+function SeasonBadge({ route, month }) {
+  if (!route?.season) return null;
+  const active = isRouteActive(route, month);
+  const months = routeActiveMonths(route);
+  // Next active month (for the dormant resume hint)
+  let resume = months[0];
+  for (let i = 0; i < 12; i++) {
+    const m = ((month - 1 + i) % 12) + 1;
+    if (months.includes(m)) { resume = m; break; }
+  }
+  const style = {
+    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+    textTransform: 'uppercase', letterSpacing: '.04em',
+    background: active ? 'rgba(63,185,80,0.15)' : 'rgba(139,148,158,0.15)',
+    color: active ? 'var(--green)' : 'var(--text-muted)',
+    border: `1px solid ${active ? 'rgba(63,185,80,0.3)' : 'rgba(139,148,158,0.3)'}`,
+  };
+  return (
+    <span style={style} title={`Operates: ${months.map(m => SEASON_MONTH_ABBR[m]).join(', ')}`}>
+      <Glyph e="🗓" /> {active ? 'Seasonal' : `Dormant · ${SEASON_MONTH_ABBR[resume]}`}
+    </span>
+  );
+}
 
 // ─── Route grouping ───────────────────────────────────────────────────────────
 
@@ -180,7 +264,7 @@ export default function Routes() {
           <button key={o.id} onClick={() => setTypeFilter(o.id)}
             style={{ fontSize: 12, padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600,
               background: active ? `${accent}22` : 'transparent', color: active ? accent : 'var(--text-muted)' }}>
-            {o.label}{o.id === 'freight' && cargoCount > 0 ? ` (${cargoCount})` : ''}
+            <GlyphLabel text={o.label} size={12} />{o.id === 'freight' && cargoCount > 0 ? ` (${cargoCount})` : ''}
           </button>
         );
       })}
@@ -202,8 +286,9 @@ export default function Routes() {
           {' · '}
           {routes.length} aircraft deployment{routes.length !== 1 ? 's' : ''}
           {idleCount > 0 && (
-            <span style={{ color: 'var(--yellow)', marginLeft: 12 }}>
+            <span style={{ color: 'var(--yellow)', marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {idleCount} idle aircraft
+              <InfoTip side="bottom" text="Idle aircraft earn nothing. Click '+ Open Route', pick two airports and an aircraft type, then 'Open Route' to deploy one. The aircraft picker shows how many idle planes you have of each type." />
             </span>
           )}
           {availableFleet.length > idleCount && (
@@ -242,7 +327,7 @@ export default function Routes() {
                 : 'Open a new route'
             }
           >
-            {showForm && !isAddingFlights ? '✕ Cancel' : '+ Open Route'}
+            <GlyphLabel size={12} text={showForm && !isAddingFlights ? '✕ Cancel' : '+ Open Route'} />
           </button>
         </div>
       </div>
@@ -258,7 +343,7 @@ export default function Routes() {
           fontSize: 13,
           color: 'var(--color-warning-text, #92400e)',
         }}>
-          ✈️ Your aircraft {pendingOrders.length === 1 ? 'is' : 'are'} on the way — advance time to receive {pendingOrders.length === 1 ? 'it' : 'them'} and open routes.
+          <Glyph e="✈️" /> Your aircraft {pendingOrders.length === 1 ? 'is' : 'are'} on the way — advance time to receive {pendingOrders.length === 1 ? 'it' : 'them'} and open routes.
         </div>
       )}
 
@@ -285,7 +370,7 @@ export default function Routes() {
                 style={{ fontSize: 12, padding: '4px 10px' }}
                 onClick={() => setFilterTab(t.id)}
               >
-                {t.label}
+                <GlyphLabel text={t.label} size={12} />
                 {tabCounts[t.id] > 0 && (
                   <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 11 }}>{tabCounts[t.id]}</span>
                 )}
@@ -319,7 +404,7 @@ export default function Routes() {
       {/* Route groups / compare table */}
       {routeGroups.length === 0 && tagRoutes.length === 0 && !showForm ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🗺️</div>
+          <div className="empty-state-icon"><Glyph e="🗺️" /></div>
           <div className="empty-state-text">No routes yet.</div>
           <div style={{ marginTop: 8, fontSize: 13 }}>
             {fleet.length > 0
@@ -329,7 +414,7 @@ export default function Routes() {
         </div>
       ) : routeGroups.length > 0 && visibleGroups.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🔍</div>
+          <div className="empty-state-icon"><Glyph e="🔍" /></div>
           <div className="empty-state-text">No routes match</div>
           <div style={{ marginTop: 8, fontSize: 13 }}>
             <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setSearch(''); setFilterTab('all'); }}>
@@ -359,7 +444,7 @@ export default function Routes() {
       {typeFilter !== 'freight' && tagRoutes.length > 0 && (
         <div style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--purple)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            🔗 Multi-stop Routes
+            <Glyph e="🔗" /> Multi-stop Routes
           </div>
           {tagRoutes.map(route => (
             <TagRouteCard key={route.id} route={route} onClose={handleClose} />
@@ -371,7 +456,7 @@ export default function Routes() {
       {typeFilter === 'all' && cargoCount > 0 && (
         <div style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#e8833a', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            📦 Cargo Routes
+            <Glyph e="📦" /> Cargo Routes
           </div>
           <CargoRoutesList />
         </div>
@@ -635,7 +720,7 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
               background: 'rgba(248,81,73,0.12)', color: 'var(--red)',
               border: '1px solid rgba(248,81,73,0.35)',
             }}>
-              ⚠️ Disrupted
+              <Glyph e="⚠️" /> Disrupted
             </span>
           )}
           <span style={{
@@ -858,6 +943,9 @@ function PricingPanel({ route, aircraft, type }) {
 // ─── Per-aircraft table row ───────────────────────────────────────────────────
 
 function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPriceChange }) {
+  const { state } = useGame();
+  const curMonth = currentGameDate(state).month;
+  const isDormant = !!route.season && !isRouteActive(route, curMonth);
   const [showPricing, setShowPricing] = useState(false);
   const econPrice = route.classPrices?.economy ?? route.ticketPrice;
 
@@ -874,12 +962,13 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
     <>
       <tr style={{
         borderBottom: showPricing ? 'none' : '1px solid var(--border-subtle)',
-        opacity: isGrounded ? 0.6 : 1,
+        opacity: (isGrounded || isDormant) ? 0.6 : 1,
         background: isGrounded ? 'rgba(248,81,73,0.04)' : undefined,
       }}>
         <td style={{ padding: '7px 8px', fontWeight: 600 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {aircraft?.name ?? '—'}
+            <SeasonBadge route={route} month={curMonth} />
             {isGrounded && (
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
@@ -887,7 +976,7 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
                 border: '1px solid rgba(248,81,73,0.3)',
                 textTransform: 'uppercase', letterSpacing: '.04em',
               }}>
-                🔧 {aircraft.groundedWeeksLeft}w
+                <Glyph e="🔧" /> {aircraft.groundedWeeksLeft}w
               </span>
             )}
           </div>
@@ -989,6 +1078,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const [aircraftId,  setAircraftId]  = useState(defaultAircraft?.id ?? '');
   const [frequency,   setFrequency]   = useState(7);
   const [ticketPrice, setTicketPrice] = useState('');
+  const [season,      setSeason]      = useState(null); // null = year-round
 
   const aircraft = fleet.find(a => a.id === aircraftId);
   const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
@@ -1004,8 +1094,13 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const effRange = type && aircraft ? effectiveRangeKm(aircraft, type) : (type?.range ?? 0);
   const inRange  = type && dist ? dist <= effRange : true;
 
-  // Block hours (cumulative)
-  const existingBlockHrs = usedBlockHrsFor(aircraft);
+  // Block hours — checked PER MONTH so a dormant route's hours don't count against
+  // a counter-seasonal route on the same aircraft (mirrors the reducer's logic).
+  const newMonths   = routeActiveMonths({ season });
+  const acRoutes    = aircraft ? routes.filter(r => r.aircraftId === aircraft.id) : [];
+  const existingBlockHrs = type ? Math.max(0, ...newMonths.map(m =>
+    acRoutes.filter(r => isRouteActive(r, m))
+      .reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0))) : 0;
   const newBlockHrs      = type && dist ? weeklyBlockHours(dist, Number(frequency), type) : 0;
   const totalBlockHrs    = existingBlockHrs + newBlockHrs;
   const blockOk          = newBlockHrs === 0 || totalBlockHrs <= MAX_WEEKLY_BLOCK_HOURS;
@@ -1021,8 +1116,10 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // Gate / slot checks
   const gateAtOrigin   = (gates[origin] ?? 0) > 0;
   const gateAtDest     = validDest && (gates[dest] ?? 0) > 0;
-  const slotsUsedAt    = (code) => routes.filter(r => r.origin === code || r.destination === code)
-    .reduce((s, r) => s + r.weeklyFrequency, 0);
+  // Per-month peak so a dormant route frees its slots for a counter-seasonal route.
+  const slotsUsedAt    = (code) => Math.max(0, ...newMonths.map(m =>
+    routes.filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
+      .reduce((s, r) => s + r.weeklyFrequency, 0)));
   const originSlotCap  = (gates[origin] ?? 0) * SLOTS_PER_GATE;
   const originSlotsUsed = slotsUsedAt(origin);
   const originSlotsOk  = gateAtOrigin && (originSlotsUsed + Number(frequency) <= originSlotCap);
@@ -1050,6 +1147,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
       aircraftId,
       weeklyFrequency: Number(frequency),
       ticketPrice: Number(ticketPrice) || refP,
+      season,
     });
     onClose();
   }
@@ -1178,14 +1276,14 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {/* Range warning */}
         {dist && !inRange && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
-            ⚠ {type?.name} has a range of {effRange.toLocaleString()} km (as configured) — this route is {dist.toLocaleString()} km.
+            <Glyph e="⚠" /> {type?.name} has a range of {effRange.toLocaleString()} km (as configured) — this route is {dist.toLocaleString()} km.
           </div>
         )}
 
         {/* Connectivity warning */}
         {aircraft && !connectivityOk && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
-            ⚠ {aircraft.name} already flies from {[...servedAirports].join(', ')} — new routes must connect to one of those airports. Aircraft can't teleport.
+            <Glyph e="⚠" /> {aircraft.name} already flies from {[...servedAirports].join(', ')} — new routes must connect to one of those airports. Aircraft can't teleport.
           </div>
         )}
 
@@ -1219,28 +1317,30 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {validDest && (
           <div style={{ fontSize: 12, marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {!gateAtOrigin ? (
-              <span style={{ color: 'var(--red)' }}>⚠ No gate at {origin} — go to Gates tab</span>
+              <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {origin} — go to Gates tab</span>
             ) : !originSlotsOk ? (
-              <span style={{ color: 'var(--yellow)' }}>⚠ Not enough slots at {origin} ({originSlotsUsed}/{originSlotCap}) — add another gate</span>
+              <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {origin} ({originSlotsUsed}/{originSlotCap}) — add another gate</span>
             ) : (
-              <span style={{ color: 'var(--green)' }}>✓ {origin}: {originSlotsUsed + Number(frequency)}/{originSlotCap} slots</span>
+              <span style={{ color: 'var(--green)' }}><Glyph e="✓" /> {origin}: {originSlotsUsed + Number(frequency)}/{originSlotCap} slots</span>
             )}
             {!gateAtDest ? (
-              <span style={{ color: 'var(--red)' }}>⚠ No gate at {dest} — go to Gates tab</span>
+              <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {dest} — go to Gates tab</span>
             ) : !destSlotsOk ? (
-              <span style={{ color: 'var(--yellow)' }}>⚠ Not enough slots at {dest} ({destSlotsUsed}/{destSlotCap}) — add another gate</span>
+              <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {dest} ({destSlotsUsed}/{destSlotCap}) — add another gate</span>
             ) : (
-              <span style={{ color: 'var(--green)' }}>✓ {dest}: {destSlotsUsed + Number(frequency)}/{destSlotCap} slots</span>
+              <span style={{ color: 'var(--green)' }}><Glyph e="✓" /> {dest}: {destSlotsUsed + Number(frequency)}/{destSlotCap} slots</span>
             )}
           </div>
         )}
 
+        <FormSeasonPicker value={season} onChange={setSeason} currentMonth={currentGameDate(state).month} />
+
         {/* Live preview */}
         {preview && inRange && (
           <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 14, fontSize: 13, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <span>📏 {dist?.toLocaleString()} km</span>
-            <span>👥 {preview.passengers.toLocaleString()} pax/wk</span>
-            <span>📊 {formatPercent(preview.loadFactor)} load</span>
+            <span><Glyph e="📏" /> {dist?.toLocaleString()} km</span>
+            <span><Glyph e="👥" /> {preview.passengers.toLocaleString()} pax/wk</span>
+            <span><Glyph e="📊" /> {formatPercent(preview.loadFactor)} load</span>
             <span style={{ color: 'var(--green)' }}>+{formatMoney(preview.revenue)}/wk</span>
             <span style={{ color: preview.profit >= 0 ? 'var(--green)' : 'var(--red)' }}>
               {preview.profit >= 0 ? '+' : ''}{formatMoney(preview.profit)}/wk op profit

@@ -10,7 +10,9 @@ import {
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { DEPRECIATION_YEARS } from '../data/overhead.js';
+import InfoTip from './InfoTip.jsx';
 import FleetConfig from './FleetConfig.jsx';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 const CAT_COLORS = {
   'Turboprop':    '#ffb43d',
@@ -47,7 +49,7 @@ function AircraftThumb({ type, size = 'sm' }) {
           } : {}),
         }}
       >
-        <span style={{ fontSize: isLarge ? 36 : 18, opacity: 0.5 }}>✈</span>
+        <span style={{ fontSize: isLarge ? 36 : 18, opacity: 0.5 }}><Glyph e="✈" /></span>
       </div>
     );
   }
@@ -152,7 +154,7 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
                   border: '1px solid rgba(248,81,73,.4)',
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }}>
-                  🔧 Grounded {aircraft.groundedWeeksLeft > 0 ? `(${aircraft.groundedWeeksLeft}w)` : ''}
+                  <Glyph e="🔧" /> Grounded {aircraft.groundedWeeksLeft > 0 ? `(${aircraft.groundedWeeksLeft}w)` : ''}
                 </span>
               )}
               <span className="badge" style={{
@@ -162,7 +164,7 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
               }}>
                 {aircraft.ownershipType === 'owned' ? 'Owned' : 'Leased'}
               </span>
-              <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 16 }} onClick={onClose}>✕</button>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 16 }} onClick={onClose}><Glyph e="✕" /></button>
             </div>
           </div>
 
@@ -170,8 +172,8 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
           <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
             <span>⟣ {type?.seats ?? '?'} seats max</span>
             <span>↔ {type?.range?.toLocaleString() ?? '?'} km range</span>
-            <span>⛽ {type?.fuelBurnPer100km?.toFixed(0)} L/100km fuel burn</span>
-            {aircraft.engineLabel && <span>🔧 {aircraft.engineLabel}</span>}
+            <span><Glyph e="⛽" /> {type?.fuelBurnPer100km?.toFixed(0)} L/100km fuel burn</span>
+            {aircraft.engineLabel && <span><Glyph e="🔧" /> {aircraft.engineLabel}</span>}
             {aircraft.hasWingtips  && <span style={{ color: 'var(--green)' }}>◇ Wingtips</span>}
             {aircraft.fuelMod && aircraft.fuelMod !== 1.0 && (
               <span style={{ color: 'var(--green)', fontWeight: 600 }}>
@@ -299,7 +301,10 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
             padding: '14px 16px', background: 'var(--surface2)', borderRadius: 'var(--radius)',
             color: 'var(--text-muted)', fontSize: 13, textAlign: 'center',
           }}>
-            Aircraft is idle — assign it to a route to start earning
+            Aircraft is idle — assign it to a route to start earning.
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+              Open the <strong>Route Planner</strong> (or <strong>Routes → + Open Route</strong>), pick two airports, choose this aircraft's type, and hit <strong>Open Route</strong> to deploy it.
+            </div>
           </div>
         )}
 
@@ -513,7 +518,7 @@ function FleetByType({ fleet, routes }) {
                 )}
                 {grounded > 0 && (
                   <span className="badge" style={{ background: 'rgba(248,81,73,.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.4)' }}>
-                    🔧 {grounded} grounded
+                    <Glyph e="🔧" /> {grounded} grounded
                   </span>
                 )}
               </div>
@@ -670,7 +675,7 @@ function FleetByCategory({ fleet, routes }) {
                   {idle > 0     && <span className="badge badge-yellow">{idle} idle</span>}
                   {grounded > 0 && (
                     <span className="badge" style={{ background: 'rgba(248,81,73,.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.4)' }}>
-                      🔧 {grounded} grounded
+                      <Glyph e="🔧" /> {grounded} grounded
                     </span>
                   )}
                 </div>
@@ -761,7 +766,7 @@ export default function Fleet() {
   if (fleet.length === 0 && pendingOrders.length === 0) {
     return (
       <div className="empty-state">
-        <div className="empty-state-icon">🛩️</div>
+        <div className="empty-state-icon"><Glyph e="🛩️" /></div>
         <div className="empty-state-text">No aircraft yet.</div>
         <div style={{ marginTop: 8, fontSize: 13 }}>Head to <strong>Market</strong> to lease or buy your first aircraft.</div>
       </div>
@@ -827,7 +832,10 @@ export default function Fleet() {
           <div className="stat-value red">−{formatMoney(weeklyMaintTotal)}</div>
         </div>
         <div className="stat-box">
-          <div className="stat-label">Idle Aircraft</div>
+          <div className="stat-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            Idle Aircraft
+            <InfoTip side="bottom" text="Planes not assigned to any route. They still cost lease & maintenance but earn nothing — assign them via the Route Planner or Routes → Open Route." />
+          </div>
           <div className="stat-value yellow">{fleet.filter(a => a.status === 'idle').length}</div>
         </div>
         {pendingOrders.length > 0 && (
@@ -909,7 +917,7 @@ export default function Fleet() {
                 className="btn btn-ghost"
                 style={{ alignSelf: 'center', fontSize: 12 }}
               >
-                ✕ Clear type filter
+                <Glyph e="✕" /> Clear type filter
               </button>
             )}
           </div>
@@ -944,7 +952,7 @@ export default function Fleet() {
                       style={{ fontSize: 12, padding: '4px 10px' }}
                       onClick={() => setFilterChip(c.id)}
                     >
-                      {c.label}
+                      <GlyphLabel text={c.label} size={12} />
                       {c.id !== 'all' && chipCounts[c.id] > 0 && (
                         <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 11 }}>{chipCounts[c.id]}</span>
                       )}
@@ -971,7 +979,7 @@ export default function Fleet() {
                 style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}
                 onClick={() => setViewMode(v.id)}
               >
-                {v.label}
+                <GlyphLabel text={v.label} size={12} />
               </button>
             ))}
           </div>
@@ -988,7 +996,7 @@ export default function Fleet() {
             textTransform: 'uppercase', letterSpacing: '0.07em',
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <span>📦</span><span>On Order ({pendingOrders.length})</span>
+            <span><Glyph e="📦" /></span><span>On Order ({pendingOrders.length})</span>
           </div>
           <table>
             <thead>
@@ -1193,7 +1201,7 @@ export default function Fleet() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {aircraft.status === 'grounded' ? (
                         <span className="badge" style={{ background: 'rgba(248,81,73,.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.4)' }}>
-                          🔧 Grounded {aircraft.groundedWeeksLeft > 0 ? `(${aircraft.groundedWeeksLeft}w)` : ''}
+                          <Glyph e="🔧" /> Grounded {aircraft.groundedWeeksLeft > 0 ? `(${aircraft.groundedWeeksLeft}w)` : ''}
                         </span>
                       ) : allRoutes.length > 0 ? (
                         allRoutes.length === 1
@@ -1208,7 +1216,7 @@ export default function Fleet() {
                             fontSize: 10, fontWeight: 600,
                             color: leaseUrgent ? 'var(--red)' : leaseWarning ? 'var(--yellow)' : 'var(--text-dim)',
                           }}>
-                            {leaseUrgent ? '⚠ ' : ''}{leaseRemaining}w lease
+                            {leaseUrgent && <><Glyph e="⚠" size={10} /> </>}{leaseRemaining}w lease
                           </span>
                           {leaseRemaining <= 8 && (
                             <button

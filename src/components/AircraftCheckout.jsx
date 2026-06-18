@@ -11,6 +11,7 @@ import {
   configRangeMod,
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 const CAT_COLORS = {
   'Turboprop':    '#ffb43d',
@@ -59,7 +60,7 @@ function AircraftPhoto({ src, alt, category }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         borderRadius: '10px 10px 0 0',
       }}>
-        <span style={{ fontSize: 56, opacity: 0.2 }}>✈</span>
+        <span style={{ fontSize: 56, opacity: 0.2 }}><Glyph e="✈" /></span>
       </div>
     );
   }
@@ -327,7 +328,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                 {' · '}{type.seats} seats · {type.range.toLocaleString()} km range
               </div>
             </div>
-            <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', marginLeft: 8 }}>✕</button>
+            <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', marginLeft: 8 }}><Glyph e="✕" /></button>
           </div>
 
           {/* Delivery callout */}
@@ -338,7 +339,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             border: '1px solid rgba(56,139,253,0.25)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>📅</span>
+              <span><Glyph e="📅" /></span>
               <span>
                 {quantity === 1 ? (
                   <>First delivery in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear})</>
@@ -460,7 +461,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
               <span style={{ color: over ? 'var(--red)' : undefined }}>
                 {over
-                  ? `⚠ Over-allocated by ${(usedUnits - maxSeats).toFixed(1)} seat-units`
+                  ? <GlyphLabel size={11} text={`⚠ Over-allocated by ${(usedUnits - maxSeats).toFixed(1)} seat-units`} />
                   : `${usedUnits.toFixed(1)} / ${maxSeats} seat-units used`}
               </span>
               <span>{first + biz + prem + eco} physical seats</span>
@@ -501,7 +502,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                 border: '1px solid rgba(56,139,253,0.2)',
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <span>✈</span>
+                <span><Glyph e="✈" /></span>
                 <span>
                   Sparse cabin — effective range{' '}
                   <strong>{effectiveRangeFull.toLocaleString()} km</strong>
@@ -657,19 +658,19 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
                   {fuelPctSaving > 0 && (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>⛽</span>
+                      <span><Glyph e="⛽" /></span>
                       <span>Saves <strong>{fuelPctSaving}%</strong> fuel vs standard build</span>
                     </span>
                   )}
                   {rangePctGain > 0 && (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--accent)' }}>
-                      <span>✈</span>
+                      <span><Glyph e="✈" /></span>
                       <span>Range extended to <strong>{effectiveRange.toLocaleString()} km</strong> (+{rangePctGain}%)</span>
                     </span>
                   )}
                   {maintPctChange !== 0 && (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: maintPctChange > 0 ? 'var(--red)' : 'var(--green)' }}>
-                      <span>🔧</span>
+                      <span><Glyph e="🔧" /></span>
                       <span>Maintenance <strong>{maintPctChange > 0 ? '+' : ''}{maintPctChange}%</strong> vs standard engine</span>
                     </span>
                   )}
@@ -680,7 +681,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             {/* Cabin summary callout */}
             {(first + biz + prem > 0 || eco < maxEco || seatQ !== 'standard' || servQ !== 'standard') && (
               <div style={{ marginTop: 8, padding: '7px 10px', background: 'rgba(163,113,247,0.1)', borderRadius: 5, fontSize: 12, color: '#a98bff', border: '1px solid rgba(163,113,247,0.25)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>💺</span>
+                <span><Glyph e="💺" /></span>
                 <span>
                   {[
                     first > 0 && `${first}F`,
@@ -705,11 +706,11 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               disabled={!canAfford || over}
               onClick={handleConfirm}
             >
-              {over
+              <GlyphLabel size={13} text={over
                 ? '⚠ Fix cabin layout'
                 : mode === 'buy'
                   ? `🛒 Order ${quantity > 1 ? quantity + '× ' : ''}${type.name}`
-                  : `✍️ Sign Lease${quantity > 1 ? ` × ${quantity}` : ''}`}
+                  : `✍️ Sign Lease${quantity > 1 ? ` × ${quantity}` : ''}`} />
             </button>
           </div>
 

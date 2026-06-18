@@ -5,6 +5,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
 import { computeQualityScore } from '../models/demand.js';
+import { Glyph } from './Icons.jsx';
 
 // ─── Reputation scoring constants ────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ export default function Reputation() {
   if (fleet.length === 0 && routes.length === 0) {
     return (
       <div className="empty-state">
-        <div className="empty-state-icon">⭐</div>
+        <div className="empty-state-icon"><Glyph e="⭐" /></div>
         <div className="empty-state-text">Lease aircraft and open routes to start building your brand.</div>
       </div>
     );
@@ -226,7 +227,7 @@ export default function Reputation() {
           <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8,
             background: strategy.color + '14', border: `1px solid ${strategy.color}33` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18 }}>{strategy.emoji}</span>
+              <span style={{ display: 'inline-flex', color: strategy.color }}><Glyph e={strategy.emoji} size={18} /></span>
               <strong style={{ color: strategy.color }}>{strategy.name}</strong>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -288,7 +289,7 @@ export default function Reputation() {
               <div key={group.id} style={{ background: 'var(--surface2)', borderRadius: 8, padding: '12px 14px', border: `1px solid var(--border)` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 16 }}>{group.emoji}</span>
+                    <span style={{ display: 'inline-flex' }}><Glyph e={group.emoji} size={16} /></span>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{group.name}</span>
                   </div>
                   <span style={{ fontWeight: 700, fontSize: 16, color: moraleColor(morale) }}>{morale}</span>
@@ -406,7 +407,7 @@ function DimensionRow({ label, score, icon, detail, tip }) {
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 14 }}>{icon}</span>
+          <span style={{ display: 'inline-flex' }}><Glyph e={icon} size={14} /></span>
           <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
         </div>
         <span style={{ fontWeight: 700, fontSize: 15, color: scoreColor(score) }}>{score}</span>
@@ -426,7 +427,7 @@ function StrategyCard({ emoji, name, active, color, howTo, payoff }) {
       border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 20 }}>{emoji}</span>
+        <span style={{ display: 'inline-flex', color }}><Glyph e={emoji} size={20} /></span>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: active ? color : 'var(--text)' }}>{name}</div>
           {active && <span style={{ fontSize: 10, color, textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 600 }}>Your current positioning</span>}

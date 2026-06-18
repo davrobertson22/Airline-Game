@@ -4,6 +4,7 @@ import AirportDetail from './AirportDetail.jsx';
 import { AIRPORTS, getAirport, gateMonthlyFee, totalGateMonthlyFee, REGIONS, getRegion, getCountryName } from '../data/airports.js';
 import { SLOTS_PER_GATE } from '../utils/simulation.js';
 import { formatMoney } from '../utils/simulation.js';
+import { Glyph } from './Icons.jsx';
 
 // Tier badge styling
 function TierBadge({ tier }) {
@@ -321,7 +322,7 @@ export default function Airports() {
                       e.currentTarget.style.borderColor = 'var(--border)';
                     }}
                   >
-                    <span style={{ fontSize: 28 }}>{emoji}</span>
+                    <span style={{ display: 'inline-flex', color: 'var(--accent)' }}><Glyph e={emoji} size={26} /></span>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{r}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{airportCount} airports</span>
                   </button>
@@ -420,7 +421,7 @@ export default function Airports() {
                         <TierBadge tier={airport.tier} />
                         {held && (
                           <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            ✓ {count} gate{count > 1 ? 's' : ''}
+                            <Glyph e="✓" /> {count} gate{count > 1 ? 's' : ''}
                           </span>
                         )}
                       </div>

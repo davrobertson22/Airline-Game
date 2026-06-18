@@ -178,6 +178,32 @@ export function isMultiStop(route) {
   return routeStops(route).length > 2;
 }
 
+// ── Seasonal flights ─────────────────────────────────────────────────────────
+// A route may carry a `season: { months: [1..12] }` window. When set, the route
+// only operates in those (1-indexed) months — it is "dormant" the rest of the
+// year, earning nothing and freeing its aircraft/slots for a counter-seasonal
+// route. Absent/null season = operates year-round (default, backward-compatible).
+export const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+/** Active months for a route (1-indexed). Year-round routes return all 12. */
+export function routeActiveMonths(route) {
+  const m = route?.season?.months;
+  return Array.isArray(m) && m.length > 0 ? m : ALL_MONTHS;
+}
+
+/** Is the route operating in the given 1-indexed month? */
+export function isRouteActive(route, month) {
+  const m = route?.season?.months;
+  if (!Array.isArray(m) || m.length === 0) return true;   // year-round
+  return m.includes(month);
+}
+
+/** Do two routes' active windows share at least one month? Year-round overlaps all. */
+export function seasonsOverlap(a, b) {
+  const mb = new Set(routeActiveMonths(b));
+  return routeActiveMonths(a).some(m => mb.has(m));
+}
+
 /** Sum of leg distances (km) — total ground covered; drives fuel & crew cost. */
 export function routeTotalDistanceKm(route) {
   return routeLegs(route).reduce((s, l) => s + routeDistanceKm(l.from, l.to), 0);
@@ -1229,6 +1255,9 @@ export function weeklyTick(state) {
   const routePricing  = state.routePricing  ?? {};
   const routeCatering = state.routeCatering ?? {};
   const routes = rawRoutes.map(r => hydrateRoute(r, routePricing, routeCatering));
+  // Routes operating THIS month. Dormant seasonal routes must not provide network
+  // feed, interline adjacency, or cannibalization while they're out of season.
+  const activeRoutes = routes.filter(r => isRouteActive(r, gameDate.month));
 
   // Awareness multiplier: new/unknown airlines attract only a fraction of potential demand.
   // Range 0.4 (awareness=0, brand unknown) → 1.0 (awareness=100, household name).
@@ -1239,9 +1268,10 @@ export function weeklyTick(state) {
   const codeshareAgreements = state.codeshareAgreements ?? [];
   const competitors         = state.competitors         ?? [];
 
-  // Build set of airports the player serves (for interline adjacency)
+  // Build set of airports the player serves (for interline adjacency).
+  // Only routes operating this month count — a dormant route serves no one.
   const servedAirports = new Set();
-  for (const r of routes) {
+  for (const r of activeRoutes) {
     servedAirports.add(r.origin);
     servedAirports.add(r.destination);
   }
@@ -1264,7 +1294,7 @@ export function weeklyTick(state) {
   // Run the full network tick: enumerates 1-stop connections, applies logit
   // diversion when a direct route competes, computes O&D-based partner revenue.
   const networkTick = runNetworkTick({
-    routes,
+    routes: activeRoutes,
     competitors,
     allianceMembership,
     codeshareAgreements,
@@ -1323,9 +1353,11 @@ export function weeklyTick(state) {
   let totalPassengers     = 0;
   const routeResults    = [];
 
-  // Pre-count how many routes the player has at each airport (for hub feed bonus)
+  // Pre-count how many routes the player has at each airport (for hub feed bonus).
+  // Dormant seasonal routes don't operate this month, so they don't feed the hub.
   const routeCountByAirport = {};
   for (const r of routes) {
+    if (!isRouteActive(r, gameDate.month)) continue;
     routeCountByAirport[r.origin]      = (routeCountByAirport[r.origin]      ?? 0) + 1;
     routeCountByAirport[r.destination] = (routeCountByAirport[r.destination] ?? 0) + 1;
   }
@@ -1347,6 +1379,7 @@ export function weeklyTick(state) {
     for (const route of routes) {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       if (!aircraft || aircraft.status === 'grounded') continue;
+      if (!isRouteActive(route, gameDate.month)) continue;   // dormant this month
       if (isMultiStop(route)) continue;   // tag routes self-contain their O&D split
       const rk = [route.origin, route.destination].sort().join('-');
       if (!routeGroups.has(rk)) routeGroups.set(rk, []);
@@ -1448,6 +1481,7 @@ export function weeklyTick(state) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) continue;
     if (aircraft.status === 'grounded') continue; // mechanical failure — no revenue this week
+    if (!isRouteActive(route, gameDate.month)) continue; // seasonal route dormant this month
 
     // ── Tag (multi-stop) route: self-contained O&D split via simulateTagRoute ──
     // It already returns blended revenue/costs across all legs & segments. We

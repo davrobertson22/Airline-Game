@@ -10,7 +10,7 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon } from './components/Icons.jsx';
+import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon } from './components/Icons.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
 import Competition from './components/Competition.jsx';
@@ -27,6 +27,19 @@ import { gameAdBreak } from './utils/ads.js';
 
 // Show a full-screen interstitial every Nth week advance (never on the first).
 const AD_EVERY_N_WEEKS = 3;
+
+// Tailwinds brand mark — the real logo artwork (transparent, mark only).
+function TailwindsMark({ size = 22 }) {
+  return (
+    <img
+      src="/tailwinds-mark-color.png"
+      alt="Tailwinds"
+      width={Math.round(size * 1.27)}
+      height={size}
+      style={{ flexShrink: 0, display: 'block', objectFit: 'contain' }}
+    />
+  );
+}
 
 function MapIcon({ size = 15 }) {
   return (
@@ -214,7 +227,7 @@ function AppInner() {
       {/* Top bar */}
       <div className="topbar">
         <div className="topbar-logo">
-          <span className="topbar-logo-icon">✈</span>
+          <span className="topbar-logo-icon"><TailwindsMark size={20} /></span>
           Tailwinds - Airline Manager
         </div>
         <div className="topbar-sep" />
@@ -239,19 +252,19 @@ function AppInner() {
         </button>
         <button
           className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px' }}
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           onClick={() => setSaveLoadMode('save')}
           title="Save game to a slot"
         >
-          💾 Save
+          <SaveIcon size={13} /> Save
         </button>
         <button
           className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px' }}
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           onClick={() => setSaveLoadMode('load')}
           title="Load a saved game"
         >
-          📂 Load
+          <FolderOpenIcon size={13} /> Load
         </button>
         <button
           className="btn btn-ghost"
@@ -300,6 +313,12 @@ function AppInner() {
         {tabContent[activeTab]}
       </div>
 
+      {/* AI disclosure */}
+      <footer className="app-footer">
+        AI was used in the development of this game. While core mechanics were designed by humans,
+        much of the coding and scaling of designs were done through the use of LLMs.
+      </footer>
+
       {/* Weekly debrief modal */}
       <WeeklyDebrief />
 
@@ -313,7 +332,7 @@ function AppInner() {
             background: 'var(--surface)', border: '1px solid var(--red)',
             borderRadius: 12, padding: 32, maxWidth: 500, width: '90%',
           }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️ Advance Week Error</div>
+            <div style={{ fontSize: 24, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><AlertIcon size={24} /> Advance Week Error</div>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
               An error occurred while advancing the week. Please copy this message and report it:
             </p>
@@ -339,7 +358,7 @@ function AppInner() {
       {state.phase === 'bankrupt' && (
         <div className="bankrupt-overlay">
           <div className="bankrupt-card">
-            <div style={{ fontSize: 48, marginBottom: 16 }}>💸</div>
+            <div style={{ marginBottom: 16, color: 'var(--red)' }}><SkullIcon size={48} /></div>
             <h2 style={{ fontSize: 24, marginBottom: 8 }}>Bankruptcy</h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: 8 }}>
               {state.airlineName} has been declared bankrupt.
@@ -431,7 +450,7 @@ function VictoryOverlay({ stats, airlineName, logoId, logoColor, onContinue, onN
         width: '100%', maxWidth: 460, padding: '32px 28px 24px', textAlign: 'center',
         border: '1px solid rgba(16,185,129,0.5)',
       }}>
-        <div style={{ fontSize: 52, marginBottom: 8 }}>🏆</div>
+        <div style={{ marginBottom: 8, color: 'var(--accent)' }}><TrophyIcon size={52} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
           <AirlineLogo id={logoId} size={44} radius={8} accentColor={logoColor} />
         </div>

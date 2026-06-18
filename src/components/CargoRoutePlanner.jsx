@@ -5,6 +5,7 @@ import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import { simulateCargoRoute, formatMoney, formatPercent } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
+import { Glyph } from './Icons.jsx';
 
 // ─── Passenger / Freight mode toggle (shared with RoutePlanner) ─────────────────
 
@@ -32,7 +33,7 @@ export function ModeToggle({ mode, setMode }) {
               transition: 'all 0.15s',
             }}
           >
-            <span>{o.icon}</span>{o.label}
+            <span style={{ display: 'inline-flex', marginRight: 5 }}><Glyph e={o.icon} size={14} /></span>{o.label}
           </button>
         );
       })}
@@ -199,7 +200,7 @@ export default function CargoRoutePlanner({ mode, setMode }) {
 
       {!ready && (
         <div className="empty-state" style={{ marginTop: 32 }}>
-          <div className="empty-state-icon">📦</div>
+          <div className="empty-state-icon"><Glyph e="📦" /></div>
           <div className="empty-state-text">Select two airports to analyse a freight lane</div>
           <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
             Cargo demand is driven by trade, not tourism — manufacturing and gateway hubs ship the most.
@@ -215,7 +216,7 @@ export default function CargoRoutePlanner({ mode, setMode }) {
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>
                   {origin} → {dest}
-                  <span style={{ marginLeft: 10, fontSize: 12, background: `${ACCENT}22`, color: ACCENT, borderRadius: 4, padding: '2px 8px', fontWeight: 600, verticalAlign: 'middle' }}>📦 Freight</span>
+                  <span style={{ marginLeft: 10, fontSize: 12, background: `${ACCENT}22`, color: ACCENT, borderRadius: 4, padding: '2px 8px', fontWeight: 600, verticalAlign: 'middle' }}><Glyph e="📦" /> Freight</span>
                   {alreadyActive && (
                     <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(56,139,253,0.15)', color: 'var(--accent)', borderRadius: 4, padding: '2px 8px', fontWeight: 600, verticalAlign: 'middle' }}>Operating</span>
                   )}
@@ -317,10 +318,10 @@ export default function CargoRoutePlanner({ mode, setMode }) {
                             No idle {simulation.type.name} available — lease one from the Market first.
                           </div>
                         )}
-                        {simulation.result.profit < 0 && <span style={{ fontSize: 12, color: 'var(--yellow)' }}>⚠ Unprofitable at these settings</span>}
+                        {simulation.result.profit < 0 && <span style={{ fontSize: 12, color: 'var(--yellow)' }}><Glyph e="⚠" /> Unprofitable at these settings</span>}
                       </div>
                       <div style={{ fontSize: 12, color: canAfford ? 'var(--text-muted)' : 'var(--red)' }}>
-                        {canAfford ? '💸' : '⚠'} One-time launch cost: <strong>{formatMoney(lCost)}</strong>{!canAfford && ' — insufficient cash'}
+                        <Glyph e={canAfford ? '💸' : '⚠'} size={12} /> One-time launch cost: <strong>{formatMoney(lCost)}</strong>{!canAfford && ' — insufficient cash'}
                       </div>
                     </div>
                   );

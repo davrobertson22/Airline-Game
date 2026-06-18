@@ -2,6 +2,7 @@ import { useGame } from '../store/GameContext.jsx';
 import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { simulateCargoRoute, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
+import { Glyph, GlyphLabel } from './Icons.jsx';
 
 const ACCENT = '#e8833a';
 
@@ -10,7 +11,7 @@ const ACCENT = '#e8833a';
 export function FreightBadge() {
   return (
     <span style={{ background: `${ACCENT}22`, color: ACCENT, border: `1px solid ${ACCENT}55`, borderRadius: 4, padding: '2px 7px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-      📦 Freight
+      <Glyph e="📦" /> Freight
     </span>
   );
 }
@@ -18,7 +19,7 @@ export function FreightBadge() {
 export function PassengerBadge() {
   return (
     <span style={{ background: 'rgba(56,139,253,0.15)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,0.4)', borderRadius: 4, padding: '2px 7px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-      🧍 Passenger
+      <Glyph e="🧍" /> Passenger
     </span>
   );
 }
@@ -33,10 +34,10 @@ export default function CargoRoutesList() {
   if (cargoRoutes.length === 0) {
     return (
       <div className="empty-state" style={{ marginTop: 8 }}>
-        <div className="empty-state-icon">📦</div>
+        <div className="empty-state-icon"><Glyph e="📦" /></div>
         <div className="empty-state-text">No cargo routes yet.</div>
         <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
-          Buy a freighter from the Market, then open a freight route from the Planner (switch it to <strong>📦 Freight</strong>).
+          Buy a freighter from the Market, then open a freight route from the Planner (switch it to <strong><Glyph e="📦" /> Freight</strong>).
         </div>
       </div>
     );
@@ -90,7 +91,7 @@ export default function CargoRoutesList() {
                   <FreightBadge />
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                  {aircraft ? `${aircraft.name}${aircraft.tailNumber ? ` · ${aircraft.tailNumber}` : ''}` : '⚠ no freighter assigned'}
+                  {aircraft ? `${aircraft.name}${aircraft.tailNumber ? ` · ${aircraft.tailNumber}` : ''}` : <GlyphLabel size={12} text="⚠ no freighter assigned" />}
                   {type && ` · ${type.payloadTonnes}t payload`}
                   {sim && ` · ${sim.distance.toLocaleString()} km`}
                 </div>

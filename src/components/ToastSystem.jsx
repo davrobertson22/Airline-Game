@@ -1,4 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
+import { CheckIcon, AlertIcon, CloseIcon } from './Icons.jsx';
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -60,10 +61,10 @@ function ToastContainer({ toasts, dispatch }) {
 // ── Individual toast ──────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  success: { color: '#38d39f', icon: '✓' },
-  warning: { color: '#ffb43d', icon: '⚠' },
-  danger:  { color: '#ff5d6c', icon: '✕' },
-  info:    { color: '#3ea6ff', icon: 'ℹ' },
+  success: { color: 'var(--green)', icon: CheckIcon },
+  warning: { color: 'var(--yellow)', icon: AlertIcon },
+  danger:  { color: 'var(--red)',   icon: CloseIcon },
+  info:    { color: 'var(--accent)', icon: 'ℹ' },
 };
 
 function Toast({ toast, onDismiss }) {
@@ -92,7 +93,9 @@ function Toast({ toast, onDismiss }) {
       pointerEvents: 'all',
       animation: 'toast-slide-in .2s ease',
     }}>
-      <span style={{ color, flexShrink: 0, fontSize: 15, marginTop: 1, lineHeight: 1 }}>{icon}</span>
+      <span style={{ color, flexShrink: 0, fontSize: 15, marginTop: 1, lineHeight: 1, display: 'inline-flex' }}>
+        {typeof icon === 'function' ? (() => { const Ic = icon; return <Ic size={15} />; })() : icon}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {toast.title && (
           <div style={{ fontWeight: 600, fontSize: 13, color, marginBottom: 2 }}>{toast.title}</div>

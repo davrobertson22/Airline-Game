@@ -1,8 +1,9 @@
 // ── Board Objectives ─────────────────────────────────────────────────────────
 //
-// Two phases:
+// Three phases:
 //   'strategic'  — Year 1 milestones: build the foundation (operational goals)
 //   'financial'  — Year 2+ targets:   grow and optimise (KPI goals)
+//   'empire'     — Endgame ambitions: dominate the industry (scale goals)
 //
 // Each template has:
 //   id          unique string (stored in state)
@@ -22,6 +23,8 @@
 //     financialHistory  array of history entries (newest last)
 //     lastReport        the weekly tick report
 //     weekProfit        after-tax profit this tick
+//     cash              cash on hand after this tick ($)
+//     marketCap         player market cap after this tick ($)
 //     year              current year after advance
 //     week              current week after advance
 //   }
@@ -175,6 +178,118 @@ export const OBJECTIVE_TEMPLATES = [
     icon:   '🏆',
     reward: 750_000,
     check: ({ lastReport }) => (lastReport?.totalRevenue ?? 0) >= 2_000_000,
+  },
+
+  // ── Phase 3: Empire ────────────────────────────────────────────────────────
+  // Goal: dominate the industry at scale (the long game)
+
+  {
+    id:     'revenue_5m',
+    phase:  'empire',
+    title:  'Heavyweight',
+    desc:   'Generate $5M in a single week',
+    icon:   '💎',
+    reward: 1_500_000,
+    check: ({ lastReport }) => (lastReport?.totalRevenue ?? 0) >= 5_000_000,
+  },
+
+  {
+    id:     'revenue_10m',
+    phase:  'empire',
+    title:  'Mega Carrier',
+    desc:   'Generate $10M in a single week',
+    icon:   '👑',
+    reward: 3_000_000,
+    check: ({ lastReport }) => (lastReport?.totalRevenue ?? 0) >= 10_000_000,
+  },
+
+  {
+    id:     'weekly_profit_2m',
+    phase:  'empire',
+    title:  'Cash Machine',
+    desc:   'Bank $2M after-tax profit in a single week',
+    icon:   '💵',
+    reward: 2_000_000,
+    check: ({ weekProfit }) => (weekProfit ?? 0) >= 2_000_000,
+  },
+
+  {
+    id:     'pax_250k',
+    phase:  'empire',
+    title:  'People Mover',
+    desc:   'Fly 250K passengers in a single week',
+    icon:   '👥',
+    reward: 1_500_000,
+    check: ({ lastReport }) => (lastReport?.totalPassengers ?? 0) >= 250_000,
+  },
+
+  {
+    id:     'fleet_25',
+    phase:  'empire',
+    title:  'Sky Armada',
+    desc:   'Operate 25 or more aircraft',
+    icon:   '🛬',
+    reward: 1_500_000,
+    check: ({ fleet }) => fleet.filter(a => a.status !== 'retired').length >= 25,
+  },
+
+  {
+    id:     'fleet_50',
+    phase:  'empire',
+    title:  'Flag Carrier',
+    desc:   'Operate 50 or more aircraft',
+    icon:   '🏢',
+    reward: 4_000_000,
+    check: ({ fleet }) => fleet.filter(a => a.status !== 'retired').length >= 50,
+  },
+
+  {
+    id:     'countries_6',
+    phase:  'empire',
+    title:  'Global Network',
+    desc:   'Serve airports in 6 or more countries',
+    icon:   '🌐',
+    reward: 1_500_000,
+    check: ({ routes }) => {
+      const countries = new Set(
+        routes.flatMap(r => [
+          getAirport(r.origin)?.country,
+          getAirport(r.destination)?.country,
+        ]).filter(Boolean)
+      );
+      return countries.size >= 6;
+    },
+  },
+
+  {
+    id:     'annual_profit_25m',
+    phase:  'empire',
+    title:  'Banner Year',
+    desc:   'Earn $25M total profit over a rolling 52 weeks',
+    icon:   '📅',
+    reward: 3_000_000,
+    check: ({ financialHistory }) =>
+      financialHistory.reduce((s, h) => s + (h.profit ?? 0), 0) >= 25_000_000,
+  },
+
+  {
+    id:     'net_worth_100m',
+    phase:  'empire',
+    title:  'War Chest',
+    desc:   'Hold $100M in cash on hand',
+    icon:   '🏦',
+    reward: 3_000_000,
+    check: ({ cash }) => (cash ?? 0) >= 100_000_000,
+  },
+
+  {
+    id:     'market_cap_1b',
+    phase:  'empire',
+    title:  'Unicorn',
+    desc:   'Reach a $1B market capitalisation',
+    icon:   '🦄',
+    reward: 5_000_000,
+    check: ({ marketCap }) => (marketCap ?? 0) >= 1_000_000_000,
   },
 ];
 

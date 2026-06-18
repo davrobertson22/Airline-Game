@@ -13,6 +13,8 @@ import {
 import { formatMoney, weekToGameDate } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
+import InfoTip from './InfoTip.jsx';
+import { Glyph } from './Icons.jsx';
 
 // Category accent colors
 const CAT_COLORS = {
@@ -54,7 +56,7 @@ function AircraftPhoto({ src, alt, category }) {
         background: `linear-gradient(160deg, ${color}18 0%, transparent 100%)`,
         borderBottom: `1px solid ${color}30`,
       }}>
-        <div style={{ fontSize: 52, opacity: 0.25 }}>✈</div>
+        <div style={{ fontSize: 52, opacity: 0.25 }}><Glyph e="✈" /></div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, opacity: 0.7 }}>{alt}</div>
       </div>
     );
@@ -97,7 +99,7 @@ function PendingOrdersBar({ pendingOrders, year, week, onCancel }) {
         alignItems: 'center',
         gap: 8,
       }}>
-        <span>📦</span>
+        <span><Glyph e="📦" /></span>
         <span>On Order ({pendingOrders.length})</span>
       </div>
       <div style={{ padding: '8px 8px 4px' }}>
@@ -247,6 +249,12 @@ export default function Marketplace() {
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14 }}>
           Order aircraft to grow your fleet. New deliveries are staggered by type — widebodies take 4 weeks, narrowbodies 3, regional jets 2, turboprops 1.
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Filter by type
+          </span>
+          <InfoTip side="bottom" text="Tap a category to show only that class of aircraft, then use the manufacturer pills below to narrow further. Pick 'All' to clear a filter." />
+        </div>
         <div className="category-tabs">
           {categories.map(cat => {
             const isActive = activeCategory === cat;
@@ -258,7 +266,7 @@ export default function Marketplace() {
                 style={isActive && color ? { color, borderBottomColor: color } : {}}
                 onClick={() => { setActiveCategory(cat); setActiveMfr('All'); }}
               >
-                {cat !== 'All' && <span style={{ marginRight: 5 }}>{CAT_ICONS[cat]}</span>}
+                {cat !== 'All' && <span style={{ marginRight: 5, display: 'inline-flex' }}><Glyph e={CAT_ICONS[cat]} size={13} /></span>}
                 {cat}
               </button>
             );
@@ -266,9 +274,14 @@ export default function Marketplace() {
         </div>
 
         {/* Manufacturer filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Filter by manufacturer
+          </span>
+        </div>
         <div style={{
           display: 'flex', gap: 6, overflowX: 'auto',
-          paddingBottom: 4, marginTop: 10, scrollbarWidth: 'none',
+          paddingBottom: 4, marginTop: 6, scrollbarWidth: 'none',
         }}>
           {mfrsInCategory.map(mfr => {
             const isActive = safeMfr === mfr;
@@ -414,14 +427,14 @@ export default function Marketplace() {
                       background: 'rgba(163,113,247,0.12)', color: '#a98bff',
                       border: '1px solid rgba(163,113,247,0.3)',
                     }}>
-                      ⚙ Engine &amp; wingtip options available
+                      <Glyph e="⚙" /> Engine &amp; wingtip options available
                     </span>
                   </div>
                 )}
 
                 {/* Delivery note */}
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                  📅 Delivery in <strong>{nextDeliveryWeeks} week{nextDeliveryWeeks !== 1 ? 's' : ''}</strong>
+                  <Glyph e="📅" /> Delivery in <strong>{nextDeliveryWeeks} week{nextDeliveryWeeks !== 1 ? 's' : ''}</strong>
                   {onOrder > 0 && ` (${onOrder} already queued)`}
                 </div>
 
@@ -439,7 +452,7 @@ export default function Marketplace() {
                       </div>
                       <div style={{ fontSize: 11, color: cashWarning ? 'var(--red)' : 'var(--text-muted)', marginTop: 1 }}>
                         {isFinite(weeksOfCash)
-                          ? `${weeksOfCash} wks runway${cashWarning ? ' ⚠' : ''}`
+                          ? <>{weeksOfCash} wks runway{cashWarning && <> <Glyph e="⚠" size={11} /></>}</>
                           : 'No lease costs yet'}
                       </div>
                     </div>

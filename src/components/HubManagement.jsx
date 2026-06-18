@@ -1,3 +1,4 @@
+import { Glyph } from './Icons.jsx';
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
@@ -137,7 +138,7 @@ function HubCard({ code, hubData, gateCount, routeCount, connectingEst }) {
           </button>
           {needsGates && (
             <span style={{ fontSize: 12, color: 'var(--yellow)' }}>
-              ⚠ Need {nextTier.minGates - gateCount} more gates first
+              <Glyph e="⚠" /> Need {nextTier.minGates - gateCount} more gates first
             </span>
           )}
           {!needsGates && (
@@ -149,7 +150,7 @@ function HubCard({ code, hubData, gateCount, routeCount, connectingEst }) {
       )}
       {!canUpgrade && (
         <div style={{ fontSize: 12, color: tierDef.color, fontWeight: 600 }}>
-          ✓ Maximum hub tier reached
+          <Glyph e="✓" /> Maximum hub tier reached
         </div>
       )}
     </div>
@@ -180,12 +181,12 @@ function DesignatableCard({ code, gateCount, homeCountry }) {
         <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{airport?.city}</span>
         {gwScore >= 0.50 && (
           <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent)' }}>
-            ★ Major gateway
+            <Glyph e="★" /> Major gateway
           </span>
         )}
         {isForeign && (
           <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--yellow)' }}>
-            🔒 Foreign airport — hubs restricted to {homeCountry}
+            <Glyph e="🔒" /> Foreign airport — hubs restricted to {homeCountry}
           </span>
         )}
       </div>
@@ -268,7 +269,7 @@ export default function HubManagement() {
           Upgrade to higher tiers to capture more of this traffic and improve your reputation on all routes through that hub.
           You need at least <strong style={{ color: 'var(--text)' }}>10 gates</strong> to designate any hub, and <strong style={{ color: 'var(--text)' }}>20 gates</strong> for an International Gateway.
           {homeCountry && (
-            <span> 🔒 <strong style={{ color: 'var(--text)' }}>Political restriction:</strong> hubs may only be built in your home country (<strong style={{ color: 'var(--text)' }}>{homeCountry}</strong>).</span>
+            <span> <Glyph e="🔒" /> <strong style={{ color: 'var(--text)' }}>Political restriction:</strong> hubs may only be built in your home country (<strong style={{ color: 'var(--text)' }}>{homeCountry}</strong>).</span>
           )}
         </div>
       </div>
@@ -344,7 +345,7 @@ export default function HubManagement() {
       {/* Empty state */}
       {hubCodes.length === 0 && designatable.length === 0 && building.length === 0 && (
         <div className="empty-state" style={{ marginTop: 32 }}>
-          <div className="empty-state-icon">🏢</div>
+          <div className="empty-state-icon"><Glyph e="🏢" /></div>
           <div className="empty-state-text">No airports yet</div>
           <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
             Buy gates from the Gates tab to get started. You need 10 gates at an airport to designate it as a hub.

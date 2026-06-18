@@ -1,3 +1,4 @@
+import { Glyph } from './Icons.jsx';
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import {
@@ -179,7 +180,7 @@ export default function Loyalty() {
               background: 'rgba(56, 139, 253, 0.1)', border: '1px solid rgba(56, 139, 253, 0.3)',
               borderRadius: 6, padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)',
             }}>
-              ✅ Active at <strong style={{ color: 'var(--fg)' }}>{formatMoney(investment)}/week</strong>
+              <Glyph e="✅" /> Active at <strong style={{ color: 'var(--fg)' }}>{formatMoney(investment)}/week</strong>
             </div>
           )}
         </div>

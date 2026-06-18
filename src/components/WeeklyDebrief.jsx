@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney } from '../utils/simulation.js';
+import { AlertIcon, HeartIcon } from './Icons.jsx';
 
 export default function WeeklyDebrief() {
   const { state, dispatch } = useGame();
@@ -75,6 +76,7 @@ export default function WeeklyDebrief() {
     { label: 'Overhead & insurance',  v: n(r.totalHQCost) + n(r.totalHubInvestment) + n(r.totalInsurance) },
     { label: 'Loan payments',         v: n(r.loanPayments) },
     { label: 'Lease redelivery',      v: n(r.leaseRedelivery) },
+    { label: 'Seasonal reactivation', v: n(r.seasonalReactivation) },
     { label: 'Corporate tax',         v: n(r.corporateTax) },
   ];
   const knownCosts = costItems.reduce((s, i) => s + i.v, 0);
@@ -200,7 +202,7 @@ export default function WeeklyDebrief() {
         {/* Mechanical failures */}
         {mechanicalFailures.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <SectionLabel>⚠️ Mechanical Failures</SectionLabel>
+            <SectionLabel><AlertIcon size={12} /> Mechanical Failures</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {mechanicalFailures.map((f, i) => {
                 const affectedRoute = (routes ?? []).find(r => r.aircraftId === f.aircraftId);
@@ -255,8 +257,8 @@ export default function WeeklyDebrief() {
                   const name = comp?.name ?? ev.airlineId;
                   const [a, b] = ev.routeKey.split('-');
                   text = ev.isUpgrade
-                    ? `✈ ${name} upgraded service on ${a} → ${b}`
-                    : `✈ ${name} launched new service on ${a} → ${b}`;
+                    ? `${name} upgraded service on ${a} → ${b}`
+                    : `${name} launched new service on ${a} → ${b}`;
                 } else {
                   text = JSON.stringify(ev);
                 }
@@ -278,7 +280,7 @@ export default function WeeklyDebrief() {
         {/* Loyalty program snapshot */}
         {showLoyalty && (
           <div style={{ marginBottom: 16 }}>
-            <SectionLabel>❤️ Loyalty Program</SectionLabel>
+            <SectionLabel><HeartIcon size={12} /> Loyalty Program</SectionLabel>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
             }}>
@@ -355,7 +357,7 @@ function SectionLabel({ children }) {
     <div style={{
       fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
       letterSpacing: '.07em', color: 'var(--text-dim)',
-      marginBottom: 6,
+      marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5,
     }}>
       {children}
     </div>

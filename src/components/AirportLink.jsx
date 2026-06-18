@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AirportDetail from './AirportDetail.jsx';
+import { Glyph } from './Icons.jsx';
 
 /**
  * Renders an airport code (or custom children) as a clickable element that
@@ -59,7 +60,7 @@ export default function AirportLink({ code, children, style }) {
               className="btn btn-ghost"
               style={{ position: 'absolute', top: 12, right: 12, padding: '4px 10px', fontSize: 16, zIndex: 1 }}
             >
-              ✕
+              <Glyph e="✕" />
             </button>
             <AirportDetail code={code} onBack={() => setOpen(false)} backLabel="← Close" />
           </div>
