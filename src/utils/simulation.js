@@ -133,6 +133,103 @@ export function routePairKey(origin, destination) {
   return [origin, destination].sort().join('-');
 }
 
+// ─────────────────────────────────────────────
+// ROUTE GEOMETRY (multi-stop / "tag" flights)
+// ─────────────────────────────────────────────
+// A route is normally a single leg, origin → destination. A *tag* flight is one
+// aircraft flying through one or more intermediate stops (e.g. A → B → C). Such a
+// route carries an explicit ordered `stops` array; single-leg routes derive their
+// stops from origin/destination. These helpers are the single source of truth for
+// "what airports does this route touch, in what order" so the reducer, the
+// simulation, and the UI never re-derive it inconsistently.
+//
+// INVARIANTS
+//   - stops[0]              === origin
+//   - stops[stops.length-1] === destination
+//   - stops.length          >= 2  (a leg needs two ends)
+//   - every consecutive pair (stops[i], stops[i+1]) is one flown LEG
+//   - every ordered pair  (stops[i], stops[j]) with i<j is a sellable O&D SEGMENT
+//     → for A→B→C: legs are A-B, B-C; segments are A-B, B-C, AND through A-C.
+
+/**
+ * Maximum airports on one tag flight = 2 intermediate stops (3 legs). The sim,
+ * fees, and network model are all N-stop-capable; this is the *gameplay* cap, set
+ * here so the reducer and UI agree. Raise it in one place to allow longer chains.
+ */
+export const MAX_ROUTE_STOPS = 4;
+
+/** Ordered airport codes a route visits. Falls back to [origin, destination]. */
+export function routeStops(route) {
+  if (route && Array.isArray(route.stops) && route.stops.length >= 2) return route.stops;
+  return [route?.origin, route?.destination];
+}
+
+/** Flown legs as {from, to} pairs. Length = stops.length - 1. */
+export function routeLegs(route) {
+  const s = routeStops(route);
+  const legs = [];
+  for (let i = 0; i < s.length - 1; i++) legs.push({ from: s[i], to: s[i + 1] });
+  return legs;
+}
+
+/** True when the route has at least one intermediate stop (i.e. is a tag flight). */
+export function isMultiStop(route) {
+  return routeStops(route).length > 2;
+}
+
+/** Sum of leg distances (km) — total ground covered; drives fuel & crew cost. */
+export function routeTotalDistanceKm(route) {
+  return routeLegs(route).reduce((s, l) => s + routeDistanceKm(l.from, l.to), 0);
+}
+
+/** Longest single leg (km) — the binding constraint for aircraft range. */
+export function routeMaxLegKm(route) {
+  return routeLegs(route).reduce((m, l) => Math.max(m, routeDistanceKm(l.from, l.to)), 0);
+}
+
+/**
+ * Every sellable O&D market the route serves: all ordered (from, to) pairs.
+ * `legSpan` = how many legs the segment spans (1 = a local leg, >1 = through).
+ * For A→B→C: [{A,B,1}, {A,C,2}, {B,C,1}].
+ */
+export function routeSegments(route) {
+  const s = routeStops(route);
+  const segs = [];
+  for (let i = 0; i < s.length; i++) {
+    for (let j = i + 1; j < s.length; j++) {
+      segs.push({ from: s[i], to: s[j], legSpan: j - i, fromIdx: i, toIdx: j });
+    }
+  }
+  return segs;
+}
+
+/**
+ * Directional fare key for a tag-route segment (A→C is priced separately from
+ * C→A). Single-leg routes keep using routePairKey (sorted, direction-agnostic)
+ * so all existing pricing is untouched; only tag segments use this.
+ */
+export function routeSegmentKey(from, to) {
+  return `${from}>${to}`;
+}
+
+/**
+ * Ensure a route object carries an explicit, well-formed `stops` array and that
+ * origin/destination agree with its ends. Idempotent — safe to call on already
+ * normalized routes and on legacy single-leg routes. Used by save migration and
+ * when constructing new routes so downstream code can rely on `route.stops`.
+ */
+export function normalizeRouteStops(route) {
+  if (!route) return route;
+  const clean = routeStops(route).filter(Boolean);
+  if (clean.length < 2) return route;
+  return {
+    ...route,
+    stops:       clean,
+    origin:      clean[0],
+    destination: clean[clean.length - 1],
+  };
+}
+
 /** Build a full class-price set from an economy fare using the standard multipliers. */
 export function defaultClassPrices(economyFare) {
   const eco = Math.max(1, Math.round(Number(economyFare) || 1));
@@ -323,6 +420,32 @@ export function weeklyBlockHours(distKm, weeklyFrequency, type) {
 export function maxFrequency(distKm, type) {
   const bt = blockTimeHours(distKm, type);
   return bt > 0 ? Math.floor(MAX_WEEKLY_BLOCK_HOURS / (bt * 2)) : 0;
+}
+
+/**
+ * Legs-aware weekly block hours for a route (single-leg OR multi-stop).
+ * Sums each leg's block time (flight + turnaround) × frequency × 2 directions,
+ * so a tag flight correctly costs the block time of every sector it flies.
+ */
+export function routeBlockHours(route, type, weeklyFrequency) {
+  const f = weeklyFrequency ?? route.weeklyFrequency ?? 7;
+  return routeLegs(route).reduce(
+    (s, l) => s + blockTimeHours(routeDistanceKm(l.from, l.to), type) * f * 2, 0);
+}
+
+/**
+ * Legs-aware weekly landing + nav fees for a route. A round trip lands at every
+ * stop — interior stops twice (once each direction) — which summing the existing
+ * per-leg fee reproduces exactly: Σ legs (feeFrom + feeTo) × freq.
+ */
+export function routeLandingFee(route, type, weeklyFrequency) {
+  const f   = weeklyFrequency ?? route.weeklyFrequency ?? 7;
+  const cat = type?.category ?? 'Narrow Body';
+  return routeLegs(route).reduce((s, l) => {
+    const ft = getAirport(l.from)?.tier ?? 'major';
+    const tt = getAirport(l.to)?.tier   ?? 'major';
+    return s + weeklyLandingFee(cat, f, ft, tt);
+  }, 0);
 }
 
 /**
@@ -669,6 +792,209 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
 }
 
 // ─────────────────────────────────────────────
+// TAG (MULTI-STOP) ROUTE SIMULATION
+// ─────────────────────────────────────────────
+//
+// One aircraft flying A → B → C (and back). It sells THREE O&D markets:
+//   • local  A–B   (leg 1 only)
+//   • local  B–C   (leg 2 only)
+//   • through A–C  (BOTH legs — a through passenger occupies a seat on each)
+//
+// The hard part is the shared seat inventory: leg-1 seats are split between A–B
+// and A–C; leg-2 seats between B–C and A–C. We resolve it with a greedy
+// allocation by REVENUE PER SEAT-LEG (fare ÷ legs spanned). Dividing a through
+// fare by its leg span is exactly the right comparison — a through booking only
+// wins a scarce seat when its per-leg yield beats the locals it would displace,
+// which is optimal for two legs and near-optimal with integer rounding.
+//
+// Fidelity notes (intentional simplifications vs simulateRoute):
+//   • Two cabins (economy + premium); first/business/premiumEconomy seats are
+//     pooled into one "premium" bucket fed by the business demand segment.
+//   • No cross-cabin upsell/spill (kept separate so the leg constraint is clean).
+//   • Catering/handling/compensation use the whole-route distance and boarded
+//     pax rather than per-segment journeys.
+// These keep the allocation correct and testable; refine later if needed.
+
+/**
+ * Simulate one week of a multi-stop (tag) route.
+ *
+ * @param {object} route    - must carry stops:[A,B,C,...]; optional segmentPrices
+ *                            keyed by routeSegmentKey(from,to) → { economy, businessClass }
+ * @param {object} aircraft - fleet aircraft (.typeId, .ageWeeks, .config, .fuelMod)
+ * @param {object} [gameDate={month:6}]
+ * @returns {object|null}   null if an aircraft/airport is invalid or a leg exceeds range
+ */
+export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0) {
+  const type  = getAircraftType(aircraft.typeId);
+  if (!type) return null;
+  const stops = routeStops(route);
+  if (stops.length < 2) return null;
+  if (stops.some(c => !getAirport(c))) return null;
+
+  const config = aircraft.config ?? defaultConfig(type.seats);
+  const legs   = routeLegs(route);
+  const legDistKm = legs.map(l => distanceKm(getAirport(l.from), getAirport(l.to)));
+
+  // Range is bound by the LONGEST leg, not the total — that's why a stop extends reach.
+  const effectiveRange = effectiveRangeKm(aircraft, type);
+  if (Math.max(...legDistKm) > effectiveRange) return null;
+
+  const f = Math.max(1, route.weeklyFrequency ?? 7);
+
+  // ── Quality inputs (shared across segments; catering bonus is per-distance) ──
+  const { onTimeRate, customerRating, groundQualityBonus } = laborEffects(labor);
+  const serviceLevelMap = { basic: 'economy', standard: 'economy', premium: 'premium', luxury: 'business' };
+  const baseQuality = route.qualityScore ?? computeQualityScore({
+    onTimeRate,
+    serviceLevel:  serviceLevelMap[config.seatQuality ?? 'standard'] ?? 'economy',
+    fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52,
+    customerRating,
+  });
+  const spaceBonus    = configSpaceQualityBonus(config, type);
+  const cateringLevel = normalizeCateringLevel(route.cateringLevel);
+
+  // ── Per-leg seat capacity (one-way seats/week), economy vs pooled premium ──
+  const ecoSeatsPerFlight = config.economy ?? type.seats;
+  const bizSeatsPerFlight = (config.firstClass ?? 0) + (config.businessClass ?? 0) + (config.premiumEconomy ?? 0);
+  const ecoCap = legs.map(() => ecoSeatsPerFlight * f);   // remaining economy seats per leg
+  const bizCap = legs.map(() => bizSeatsPerFlight * f);   // remaining premium seats per leg
+
+  // ── Uncapped demand per sellable segment ──────────────────────────────────
+  const maturity = route.weeksOpen != null ? routeMaturityFactor(route.weeksOpen) : 1;
+  const segData = routeSegments(route).map(seg => {
+    const dist   = distanceKm(getAirport(seg.from), getAirport(seg.to));
+    const market = buildRouteMarket(seg.from, seg.to, gameDate, maturity);
+    const sp     = route.segmentPrices?.[routeSegmentKey(seg.from, seg.to)];
+    const eco    = Math.max(1, sp?.economy ?? market.referencePrice);
+    const biz    = Math.max(1, sp?.businessClass ?? eco * CLASS_FARE_MULTIPLIERS.businessClass);
+    const quality = Math.max(0, Math.min(100,
+      baseQuality + groundQualityBonus + spaceBonus
+      + cateringQualityBonus(cateringLevel, dist) + (route.hubQualityBonus ?? 0)));
+    const connectivityBonus = (seg.from === route.hub || seg.to === route.hub) ? 0.20 : 0;
+    const offer = {
+      airlineId: 'player', origin: seg.from, destination: seg.to,
+      economyPrice: eco, businessPrice: biz, weeklyFrequency: f,
+      seatsPerFlight: type.seats,
+      economySeats: 1e12, businessSeats: 1e12,   // huge → demand returns uncapped
+      qualityScore: quality, connectivityBonus,
+    };
+    const competitorOffers = COMPETITOR_AIRLINES
+      .map(c => buildCompetitorOffer(c, market)).filter(Boolean);
+    const [res] = computeMarketShare(market, [offer, ...competitorOffers]);
+    const legIdxs = [];
+    for (let k = seg.fromIdx; k < seg.toIdx; k++) legIdxs.push(k);
+    return {
+      from: seg.from, to: seg.to, dist, eco, biz, legIdxs, legSpan: seg.legSpan,
+      ecoDemand: res.leisurePax, bizDemand: res.businessPax,
+    };
+  });
+
+  // ── Greedy allocation of a shared cabin pool, by revenue per seat-leg ──────
+  const allocate = (cap, demandKey, fareKey) => {
+    const cands = segData
+      .map((d, i) => ({ i, qty: d[demandKey], fare: d[fareKey], legIdxs: d.legIdxs, legSpan: d.legSpan }))
+      .filter(c => c.qty > 0)
+      .sort((a, b) => (b.fare / b.legSpan) - (a.fare / a.legSpan));
+    const paxBySeg = new Array(segData.length).fill(0);
+    let totalPax = 0, totalRev = 0;
+    for (const c of cands) {
+      const avail = Math.min(...c.legIdxs.map(li => cap[li]));
+      const alloc = Math.max(0, Math.min(c.qty, avail));
+      if (alloc <= 0) continue;
+      for (const li of c.legIdxs) cap[li] -= alloc;
+      paxBySeg[c.i] = alloc;
+      totalPax += alloc;
+      totalRev += alloc * 2 * c.fare;   // ×2 = both directions (pax stored one-way)
+    }
+    return { paxBySeg, totalPax, totalRev };
+  };
+  const ecoAlloc = allocate(ecoCap.slice(), 'ecoDemand', 'eco');
+  const bizAlloc = allocate(bizCap.slice(), 'bizDemand', 'biz');
+
+  // ── Per-leg utilisation ───────────────────────────────────────────────────
+  const perLeg = legs.map((l, li) => {
+    const ecoUsed = segData.reduce((s, d, i) => s + (d.legIdxs.includes(li) ? ecoAlloc.paxBySeg[i] : 0), 0);
+    const bizUsed = segData.reduce((s, d, i) => s + (d.legIdxs.includes(li) ? bizAlloc.paxBySeg[i] : 0), 0);
+    const capOneWay = (ecoSeatsPerFlight + bizSeatsPerFlight) * f;
+    return {
+      from: l.from, to: l.to, distance: Math.round(legDistKm[li]),
+      ecoUsed, bizUsed, seats: capOneWay,
+      loadFactor: capOneWay > 0 ? (ecoUsed + bizUsed) / capOneWay : 0,
+    };
+  });
+
+  const totalDist      = legDistKm.reduce((s, d) => s + d, 0);
+  const totalPaxOneWay = ecoAlloc.totalPax + bizAlloc.totalPax;
+  let   totalRevenue   = ecoAlloc.totalRev + bizAlloc.totalRev;
+
+  // Two-class summary for the shared cost helpers (passengers are one-way).
+  const classSummary = {
+    economy:       { seats: ecoSeatsPerFlight * f, passengers: ecoAlloc.totalPax, revenue: ecoAlloc.totalRev },
+    businessClass: { seats: bizSeatsPerFlight * f, passengers: bizAlloc.totalPax, revenue: bizAlloc.totalRev },
+  };
+
+  // ── Operating costs ───────────────────────────────────────────────────────
+  // Each leg is flown f×2 sectors/week; total ground covered = Σ leg distances.
+  const sectorFactor    = f * 2;
+  const aircraftFuelMod = aircraft.fuelMod ?? 1.0;
+  const fuelCost = Math.round(totalDist * fuelCostPerKm(type) * sectorFactor * fuelMultiplier * aircraftFuelMod);
+  const crewCost = Math.round(totalDist * type.crewCostPerKm * sectorFactor);
+  const qualityCost =
+    (SEAT_QUALITY_COST_PER_ROUTE[config.seatQuality ?? 'standard'] ?? 0) +
+    (SERVICE_QUALITY_COST_PER_ROUTE[config.serviceQuality ?? 'standard'] ?? 0);
+
+  const catering        = routeCatering(cateringLevel, classSummary, totalDist);
+  const cateringCost    = catering.cost;
+  const cateringRevenue = catering.revenue;
+  totalRevenue += cateringRevenue;
+
+  const groundHandlingCost = weeklyGroundHandlingCost(classSummary);
+  const loungeCost         = weeklyLoungeCost(classSummary);
+  // Layover cost accrues per leg whose one-way block time clears the threshold.
+  const layoverCost = legDistKm.reduce(
+    (s, d) => s + weeklyLayoverCost(blockTimeHours(d, type), type.seats, type.category, f), 0);
+  const compensationCost = weeklyPassengerCompensation(totalPaxOneWay * 2, onTimeRate, totalDist);
+
+  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost
+    + groundHandlingCost + loungeCost + layoverCost + compensationCost;
+
+  const totalSeatLegsAvail = legs.length * (ecoSeatsPerFlight + bizSeatsPerFlight) * f;
+  const totalSeatLegsUsed  = perLeg.reduce((s, l) => s + l.ecoUsed + l.bizUsed, 0);
+
+  return {
+    tag:          true,
+    revenue:      Math.round(totalRevenue),
+    fuelCost,
+    crewCost,
+    qualityCost,
+    cateringCost,
+    cateringRevenue,
+    cateringLevel,
+    groundHandlingCost,
+    loungeCost,
+    layoverCost,
+    compensationCost,
+    totalOpCost,
+    profit:       Math.round(totalRevenue - totalOpCost),
+    passengers:   totalPaxOneWay,                       // one-way boarded pax (all segments)
+    loadFactor:   totalSeatLegsAvail > 0 ? totalSeatLegsUsed / totalSeatLegsAvail : 0,
+    distance:     Math.round(totalDist),                // total ground covered
+    maxLegKm:     Math.round(Math.max(...legDistKm)),
+    stops:        [...stops],
+    legs:         perLeg,
+    segments:     segData.map((d, i) => ({
+      from: d.from, to: d.to, legSpan: d.legSpan,
+      pax:      ecoAlloc.paxBySeg[i] + bizAlloc.paxBySeg[i],
+      ecoPax:   ecoAlloc.paxBySeg[i],
+      bizPax:   bizAlloc.paxBySeg[i],
+      ecoFare:  d.eco,
+      bizFare:  d.biz,
+    })),
+    classSummary,
+  };
+}
+
+// ─────────────────────────────────────────────
 // CARGO SIMULATION
 // ─────────────────────────────────────────────
 
@@ -923,6 +1249,7 @@ export function weeklyTick(state) {
     for (const route of routes) {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       if (!aircraft || aircraft.status === 'grounded') continue;
+      if (isMultiStop(route)) continue;   // tag routes self-contain their O&D split
       const rk = [route.origin, route.destination].sort().join('-');
       if (!routeGroups.has(rk)) routeGroups.set(rk, []);
       routeGroups.get(rk).push({ route, aircraft });
@@ -1024,6 +1351,67 @@ export function weeklyTick(state) {
     if (!aircraft) continue;
     if (aircraft.status === 'grounded') continue; // mechanical failure — no revenue this week
 
+    // ── Tag (multi-stop) route: self-contained O&D split via simulateTagRoute ──
+    // It already returns blended revenue/costs across all legs & segments. We
+    // apply the same demand multipliers and per-airport landing fees, but skip
+    // the single-leg connecting-demand model (tag/network feed is a later phase).
+    if (isMultiStop(route)) {
+      const stopsList = routeStops(route);
+      const tagHubQuality = Math.max(0, ...stopsList.map(c => {
+        const t = hubs[c]?.tier;
+        return t ? (HUB_TIERS[t]?.qualityBonus ?? 0) : 0;
+      }));
+      const tagRoute = tagHubQuality > 0 ? { ...route, hubQualityBonus: tagHubQuality } : route;
+      const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier);
+      if (!result) continue;
+
+      const cateringRev    = result.cateringRevenue ?? 0;
+      const combinedMult   = awarenessMultiplier * mktMultiplier * loyaltyMultiplier;
+      const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
+      const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
+
+      const type       = getAircraftType(aircraft.typeId);
+      const landingFee = routeLandingFee(route, type, route.weeklyFrequency);
+
+      totalRevenue        += routeRevenue;
+      totalFuel           += result.fuelCost;
+      totalCrew           += result.crewCost;
+      totalQuality        += result.qualityCost;
+      totalCatering        += result.cateringCost      ?? 0;
+      totalCateringRevenue += cateringRev;
+      totalGroundHandling += result.groundHandlingCost ?? 0;
+      totalLounge         += result.loungeCost         ?? 0;
+      totalLayover        += result.layoverCost        ?? 0;
+      totalCompensation   += result.compensationCost   ?? 0;
+      totalLandingFees    += landingFee;
+      totalPassengers     += result.passengers ?? 0;
+
+      const { maintenanceCostMultiplier } = laborEffects(labor);
+      const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
+        : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
+      const weeklyMaintCost = Math.round(
+        (type?.baseMaintenancePerWk ?? 0)
+        * maintenanceMultiplier(aircraft.ageWeeks ?? 0)
+        * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0)
+      );
+
+      routeResults.push({
+        routeId: route.id,
+        ...result,
+        revenue:       routeRevenue,
+        marketingLift: Math.round(result.revenue * (mktMultiplier   - 1)),
+        loyaltyLift:   Math.round(result.revenue * (loyaltyMultiplier - 1)),
+        allianceLift:  0,
+        landingFee,
+        profit:        Math.round(routeRevenue - result.totalOpCost - landingFee),
+        weeklyLeaseCost,
+        weeklyMaintCost,
+        trueProfit:    Math.round(routeRevenue - result.totalOpCost - landingFee - weeklyLeaseCost - weeklyMaintCost),
+        connecting:    { totalPax: 0, totalRevenue: 0 },
+      });
+      continue;
+    }
+
     // Inject hub quality bonus from the best hub on this route
     const originTier  = hubs[route.origin]?.tier;
     const destTier    = hubs[route.destination]?.tier;
@@ -1042,13 +1430,18 @@ export function weeklyTick(state) {
     // The cannibalizationMap factor reduces connecting demand on routes where a
     // direct flight (own or competitor) siphons off O&D passengers that previously
     // connected through the player's hubs.
+    // Guard the fare: a route missing its pair-pricing (malformed/legacy save)
+    // would pass undefined here, and the divisions inside computeConnectingDemand
+    // would yield NaN — which cascades into NaN revenue and permanently corrupts
+    // the save. Fall back to the market reference fare.
+    const connectingPrice = route.ticketPrice ?? referencePrice(route.origin, route.destination);
     const connectingRaw = computeConnectingDemand(
       route.origin,
       route.destination,
       hubs,
       routeCountByAirport[route.origin]      ?? 0,
       routeCountByAirport[route.destination] ?? 0,
-      route.ticketPrice,
+      connectingPrice,
       { weeklyFrequency: route.weeklyFrequency ?? 7, partnerHubCodes },
     );
     // Apply marketing + loyalty + alliance demand boosts to passenger revenue

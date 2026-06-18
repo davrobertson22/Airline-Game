@@ -180,9 +180,45 @@ const CONNECTION_LOAD_FACTOR    = 0.85;
 // ─── Graph construction ───────────────────────────────────────────────────────
 
 /**
+ * Expand player routes into individual flown LEGS so the network model sees every
+ * airport a multi-stop (tag) flight touches — not just its endpoints.
+ *
+ * A single-leg route passes through unchanged. A tag route A→B→C becomes two leg
+ * routes (A→B, B→C), each priced from the route's per-segment economy fare and
+ * tagged with `_tagParentId` so the connection enumerator can recognise (and skip)
+ * a tag's OWN through service — that O&D is already sold directly by
+ * simulateTagRoute, so re-counting it here would double-book the through market.
+ *
+ * Inline stop/leg derivation (no import from simulation.js) avoids a circular
+ * dependency, since simulation.js imports runNetworkTick from this module.
+ *
+ * @param {Array} routes - game state passenger routes (single-leg and/or tag)
+ * @returns {Array} leg-level pseudo-routes: { origin, destination, weeklyFrequency, ticketPrice, _tagParentId? }
+ */
+export function expandRoutesToLegs(routes = []) {
+  const out = [];
+  for (const r of routes) {
+    const stops = Array.isArray(r.stops) && r.stops.length >= 2 ? r.stops : [r.origin, r.destination];
+    if (stops.length <= 2) { out.push(r); continue; }   // single leg — unchanged
+    for (let i = 0; i < stops.length - 1; i++) {
+      const from = stops[i], to = stops[i + 1];
+      const segPrice = r.segmentPrices?.[`${from}>${to}`]?.economy;
+      out.push({
+        origin:          from,
+        destination:     to,
+        weeklyFrequency: r.weeklyFrequency ?? 7,
+        ticketPrice:     segPrice ?? referencePrice(from, to),
+        _tagParentId:    r.id ?? `${stops.join('>')}`,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Build an airport-keyed adjacency index from player routes + partner routes.
  *
- * @param {Array}  playerRoutes      - game state routes (each has origin, destination, weeklyFrequency, ticketPrice)
+ * @param {Array}  playerRoutes      - leg-level player routes (see expandRoutesToLegs)
  * @param {Array}  partnerRoutes     - partner NetworkRoute entries (built by buildPartnerRoutes)
  * @returns {Map<string, NetworkRoute[]>}  airport → all NetworkRoutes that touch it
  */
@@ -202,6 +238,7 @@ function buildAdjacencyIndex(playerRoutes, partnerRoutes) {
       weeklyFrequency: r.weeklyFrequency ?? 7,
       price:           r.ticketPrice ?? referencePrice(r.origin, r.destination),
       owner:           'player',
+      tagParentId:     r._tagParentId,   // present only for legs of a tag flight
     };
     addToIndex(r.origin,      nr);
     addToIndex(r.destination, nr);
@@ -326,6 +363,11 @@ function findConnectionsAtHub(hub, adjacencyIndex, playerRouteKeys, directRouteK
       // Skip trivial (same O&D as the legs themselves)
       if (origin === dest) continue;
 
+      // Skip a tag flight's OWN internal through service: both legs belong to the
+      // same multi-stop route, whose through O&D simulateTagRoute already sells.
+      // Counting it here would double-book that market.
+      if (leg1.tagParentId && leg1.tagParentId === leg2.tagParentId) continue;
+
       // Require player to own at least one leg (otherwise irrelevant)
       if (leg1.owner !== 'player' && leg2.owner !== 'player') continue;
 
@@ -411,13 +453,16 @@ function findConnectionsAtHub(hub, adjacencyIndex, playerRouteKeys, directRouteK
  * @returns {Connection[]}
  */
 export function buildAllConnections(playerRoutes, competitors, partnershipMap) {
+  // Expand tag flights into their legs so every airport they touch (including
+  // intermediate stops) is a real network node that can form/feed connections.
+  const legRoutes        = expandRoutesToLegs(playerRoutes);
   const partnerRoutes    = buildPartnerRoutes(competitors, Object.fromEntries(partnershipMap));
-  const playerRouteKeys  = new Set(playerRoutes.map(r => [r.origin, r.destination].sort().join('-')));
-  const adjacencyIndex   = buildAdjacencyIndex(playerRoutes, partnerRoutes);
+  const playerRouteKeys  = new Set(legRoutes.map(r => [r.origin, r.destination].sort().join('-')));
+  const adjacencyIndex   = buildAdjacencyIndex(legRoutes, partnerRoutes);
 
-  // Hub airports = all airports where the player has ≥2 routes
+  // Hub airports = every airport a player leg touches (intermediate stops included)
   const hubCandidates = new Set();
-  for (const r of playerRoutes) {
+  for (const r of legRoutes) {
     hubCandidates.add(r.origin);
     hubCandidates.add(r.destination);
   }

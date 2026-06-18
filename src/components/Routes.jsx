@@ -11,6 +11,7 @@ import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
+  isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
 } from '../utils/simulation.js';
 
 // ─── Route grouping ───────────────────────────────────────────────────────────
@@ -60,12 +61,16 @@ export default function Routes() {
     const t = getAircraftType(a.typeId);
     if (!t) return 0;
     return routes.filter(r => r.aircraftId === a.id)
-      .reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, t), 0);
+      .reduce((s, r) => s + routeBlockHours(r, t, r.weeklyFrequency), 0);
   };
   const availableFleet = fleet.filter(a => usedHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS);
   const idleCount      = fleet.filter(a => a.status === 'idle').length;
 
-  const routeGroups = groupRoutes(routes);
+  // Tag (multi-stop) routes are rendered in their own section; single-leg routes
+  // collapse into direction-agnostic city-pair groups as before.
+  const tagRoutes   = routes.filter(isMultiStop);
+  const flatRoutes  = routes.filter(r => !isMultiStop(r));
+  const routeGroups = groupRoutes(flatRoutes);
 
   // Per-group stats for filtering + sorting (runs simulation once per group here)
   const gd = currentGameDate(state);
@@ -311,7 +316,7 @@ export default function Routes() {
       )}
 
       {/* Route groups / compare table */}
-      {routeGroups.length === 0 && !showForm ? (
+      {routeGroups.length === 0 && tagRoutes.length === 0 && !showForm ? (
         <div className="empty-state">
           <div className="empty-state-icon">🗺️</div>
           <div className="empty-state-text">No routes yet.</div>
@@ -321,7 +326,7 @@ export default function Routes() {
               : 'Lease an aircraft from the Market first.'}
           </div>
         </div>
-      ) : visibleGroups.length === 0 ? (
+      ) : routeGroups.length > 0 && visibleGroups.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">🔍</div>
           <div className="empty-state-text">No routes match</div>
@@ -349,6 +354,18 @@ export default function Routes() {
         ))
       )}
 
+      {/* Multi-stop (tag) routes — own section, since they span several airports */}
+      {typeFilter !== 'freight' && tagRoutes.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--purple)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            🔗 Multi-stop Routes
+          </div>
+          {tagRoutes.map(route => (
+            <TagRouteCard key={route.id} route={route} onClose={handleClose} />
+          ))}
+        </div>
+      )}
+
       {/* Cargo routes (shown in the All view; the Freight tab shows them on their own) */}
       {typeFilter === 'all' && cargoCount > 0 && (
         <div style={{ marginTop: 28 }}>
@@ -357,6 +374,81 @@ export default function Routes() {
           </div>
           <CargoRoutesList />
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Multi-stop (tag) route card ──────────────────────────────────────────────
+
+function TagRouteCard({ route, onClose }) {
+  const { state } = useGame();
+  const { fleet } = state;
+  const gd = currentGameDate(state);
+
+  const aircraft = fleet.find(a => a.id === route.aircraftId);
+  const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+  const stops    = routeStops(route);
+  const sim      = aircraft ? simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0) : null;
+  const landingFee = type ? routeLandingFee(route, type, route.weeklyFrequency) : 0;
+  const profit   = sim ? sim.profit - landingFee : 0;
+
+  const loadColor = (lf) => lf >= 0.75 ? 'var(--green)' : lf >= 0.45 ? 'var(--yellow)' : 'var(--red)';
+
+  return (
+    <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--purple)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 2 }}>
+            {stops.map((c, i) => (
+              <span key={i}>
+                <AirportLink code={c} />
+                {i < stops.length - 1 && <span style={{ color: 'var(--text-muted)', margin: '0 8px', fontWeight: 400 }}>→</span>}
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {aircraft?.name ?? '—'}{type ? ` · ${type.name}` : ''}
+            {sim ? ` · ${sim.distance.toLocaleString()} km total · ${sim.legs.length} legs` : ''}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'rgba(163,113,247,0.14)', color: 'var(--purple)', border: '1px solid rgba(163,113,247,0.35)' }}>
+            {route.weeklyFrequency}× / wk
+          </span>
+          <button className="btn" style={{ padding: '3px 10px', fontSize: 11, background: 'rgba(248,81,73,0.1)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.3)' }}
+            onClick={() => onClose(route.id)}>Remove</button>
+        </div>
+      </div>
+
+      {sim ? (
+        <>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '10px 14px', marginBottom: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13 }}>
+            {[
+              { label: 'Pax / wk', value: sim.passengers.toLocaleString() },
+              { label: 'Blended load', value: formatPercent(sim.loadFactor), color: loadColor(sim.loadFactor) },
+              { label: 'Revenue / wk', value: '+' + formatMoney(sim.revenue), color: 'var(--green)' },
+              { label: 'Op cost / wk', value: '−' + formatMoney(sim.totalOpCost + landingFee), color: 'var(--red)' },
+              { label: 'Op profit / wk', value: (profit >= 0 ? '+' : '') + formatMoney(profit), color: profit >= 0 ? 'var(--green)' : 'var(--red)' },
+            ].map((c, i) => (
+              <div key={i}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{c.label}</div>
+                <div style={{ fontWeight: 700, color: c.color ?? 'var(--text)' }}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {sim.legs.map((l, i) => (
+              <div key={i} style={{ flex: '1 1 130px', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 12px', borderTop: `3px solid ${loadColor(l.loadFactor)}` }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>{l.from} → {l.to} · {l.distance.toLocaleString()} km</div>
+                <div style={{ fontWeight: 700, color: loadColor(l.loadFactor) }}>{formatPercent(l.loadFactor)}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aircraft unavailable — this route isn’t flying.</div>
       )}
     </div>
   );

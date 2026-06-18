@@ -10,14 +10,15 @@ import { routeLaunchCost } from '../data/overhead.js';
 
 export function ModeToggle({ mode, setMode }) {
   const opts = [
-    { id: 'passenger', label: 'Passenger', icon: '🧍' },
-    { id: 'freight',   label: 'Freight',   icon: '📦' },
+    { id: 'passenger', label: 'Passenger',  icon: '🧍' },
+    { id: 'tag',       label: 'Multi-stop', icon: '🔗' },
+    { id: 'freight',   label: 'Freight',    icon: '📦' },
   ];
   return (
     <div style={{ display: 'inline-flex', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 3, gap: 3, marginBottom: 12 }}>
       {opts.map(o => {
         const active = mode === o.id;
-        const accent = o.id === 'freight' ? '#e8833a' : 'var(--accent)';
+        const accent = o.id === 'freight' ? '#e8833a' : o.id === 'tag' ? 'var(--purple)' : 'var(--accent)';
         return (
           <button
             key={o.id}

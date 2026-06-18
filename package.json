@@ -6,7 +6,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:cargo": "node tools/cargo-test.mjs"
+    "test:cargo": "node tools/cargo-test.mjs",
+    "test:multistop": "node tools/multistop-test.mjs",
+    "test:multistop-edge": "node tools/multistop-edge-test.mjs",
+    "test:multistop-reducer": "node tools/reducer-tag-test.mjs",
+    "test:ui": "node --import ./tools/_register-loader.mjs tools/ui-smoke-test.mjs",
+    "test": "node tools/cargo-test.mjs && node tools/multistop-test.mjs && node tools/multistop-edge-test.mjs && node tools/reducer-tag-test.mjs && node --import ./tools/_register-loader.mjs tools/ui-smoke-test.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

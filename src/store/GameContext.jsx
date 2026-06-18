@@ -3,7 +3,10 @@ import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
-  routePairKey, defaultClassPrices, hydrateRoute,
+  routePairKey, defaultClassPrices, hydrateRoute, normalizeRouteStops,
+  routeStops, routeLegs, routeSegments, routeSegmentKey,
+  routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
+  MAX_ROUTE_STOPS,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
@@ -62,7 +65,7 @@ function freshState() {
     year: 1,
     fleet: [],         // { id, typeId, name, status, ageWeeks, config, ownershipType, fuelMod, rangeMod, maintMod, engineId, engineLabel, hasWingtips }
     pendingOrders: [], // { id, typeId, ownershipType, name, engineId, engineLabel, hasWingtips, fuelMod, rangeMod, maintMod, deliverAbsWeek, totalPrice }
-    routes: [],      // { id, origin, destination, aircraftId, weeklyFrequency, hub } — price lives in routePricing
+    routes: [],      // { id, origin, destination, stops:[origin,...,destination], aircraftId, weeklyFrequency, hub } — price lives in routePricing; stops carries intermediate tag-flight airports (single-leg routes have stops=[origin,destination])
     routePricing: {},// { [pairKey]: { economy, premiumEconomy, businessClass, firstClass } } — one price set per O&D pair
     routeCatering: {},// { [pairKey]: cateringLevel } — one catering level per O&D pair
     cargoRoutes: [], // { id, origin, destination, aircraftId, yieldPrice ($/tonne-km), weeklyFrequency, weeksOpen, hub, cargo:true }
@@ -513,6 +516,7 @@ function reducer(state, action) {
         id:              uid(),
         origin:          action.origin,
         destination:     action.destination,
+        stops:           [action.origin, action.destination],
         aircraftId:      action.aircraftId,
         weeklyFrequency: weeklyFrequency,
         weeksOpen:       0,
@@ -539,6 +543,130 @@ function reducer(state, action) {
         routePricing:  newRoutePricing,
         routeCatering: newRouteCatering,
         fleet:         updatedFleet,
+      };
+    }
+
+    // ─── Tag (multi-stop) passenger routes ──────────────────────────────────────
+    // One aircraft flying A→B→C(→…). Mirrors ADD_ROUTE's guards but applies them
+    // per LEG (range, restrictions, block hours) and per STOP (gates, slots), and
+    // stores directional per-segment fares on the route (route.segmentPrices).
+    case 'ADD_TAG_ROUTE': {
+      const aircraft = state.fleet.find(a => a.id === action.aircraftId);
+      const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+      if (!aircraft || !type) return state;
+      if (type.freighter) return state;   // freighters fly cargo routes only
+
+      // Stop list: need 3–MAX_ROUTE_STOPS distinct airports (use ADD_ROUTE for a
+      // single leg; the cap is the gameplay limit on intermediate stops).
+      const stops = (Array.isArray(action.stops) ? action.stops : []).filter(Boolean);
+      if (stops.length < 3 || stops.length > MAX_ROUTE_STOPS) return state;
+      if (new Set(stops).size !== stops.length) return state;   // no repeated airports
+
+      const proto = { stops, origin: stops[0], destination: stops[stops.length - 1] };
+      const legs  = routeLegs(proto);
+      for (const l of legs) {
+        if (l.from === l.to) return state;
+        if (!getAirport(l.from) || !getAirport(l.to)) return state;
+      }
+
+      const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
+
+      // ── Range: the LONGEST leg must be reachable (a stop extends total reach) ──
+      if (routeMaxLegKm(proto) > effectiveRangeKm(aircraft, type)) return state;
+
+      // ── Regulatory restrictions: evaluate EACH leg independently ──
+      const legPairFreq = (pk) => state.routes.reduce((s, r) =>
+        routeLegs(r).some(rl => routePairKey(rl.from, rl.to) === pk) ? s + (r.weeklyFrequency ?? 0) : s, 0);
+      for (const l of legs) {
+        const pk = routePairKey(l.from, l.to);
+        if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to),
+              legPairFreq(pk) + weeklyFrequency, type.category,
+              { routes: state.routes, excludeKey: pk })) return state;
+      }
+
+      // ── Block hours: cumulative across this aircraft's routes, legs-aware ──
+      const existingBlockHrs = state.routes
+        .filter(r => r.aircraftId === action.aircraftId)
+        .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
+      if (existingBlockHrs + routeBlockHours(proto, type, weeklyFrequency) > MAX_WEEKLY_BLOCK_HOURS) return state;
+
+      // ── Connectivity: a plane already flying can only extend from a served stop ──
+      const aircraftRoutes = state.routes.filter(r => r.aircraftId === action.aircraftId);
+      if (aircraftRoutes.length > 0) {
+        const served = new Set(aircraftRoutes.flatMap(r => routeStops(r)));
+        if (!stops.some(c => served.has(c))) return state;
+      }
+
+      // ── Gates + slots at EVERY stop (interior stops see two departures/cycle) ──
+      const gates = state.gates ?? {};
+      const incidentCount = (r, code) =>
+        routeLegs(r).reduce((n, l) => n + (l.from === code ? 1 : 0) + (l.to === code ? 1 : 0), 0);
+      const slotsUsedAt = (code) =>
+        state.routes.reduce((s, r) => s + incidentCount(r, code) * (r.weeklyFrequency ?? 0), 0);
+      const addIncident = {};
+      for (const l of legs) {
+        addIncident[l.from] = (addIncident[l.from] ?? 0) + 1;
+        addIncident[l.to]   = (addIncident[l.to]   ?? 0) + 1;
+      }
+      for (const code of stops) {
+        if (!(gates[code] > 0)) return state;   // no gate at this stop
+        if (slotsUsedAt(code) + addIncident[code] * weeklyFrequency > gates[code] * SLOTS_PER_GATE) return state;
+      }
+
+      // ── Launch cost (priced on total ground distance covered) ──
+      const totalDist  = legs.reduce((s, l) => s + routeDistanceKm(l.from, l.to), 0);
+      const launchCost = routeLaunchCost(totalDist);
+      if (state.cash < launchCost) return state;
+
+      // ── Default directional per-segment fares (player can edit via SET_SEGMENT_PRICE) ──
+      const segmentPrices = {};
+      for (const seg of routeSegments(proto)) {
+        const key = routeSegmentKey(seg.from, seg.to);
+        const eco = Math.max(1, Math.round(routeReferencePrice(seg.from, seg.to)));
+        segmentPrices[key] = action.segmentPrices?.[key] ?? defaultClassPrices(eco);
+      }
+
+      const newRoute = {
+        id:              uid(),
+        origin:          stops[0],
+        destination:     stops[stops.length - 1],
+        stops:           [...stops],
+        aircraftId:      action.aircraftId,
+        weeklyFrequency,
+        weeksOpen:       0,
+        launchCost,
+        hub:             state.hub,
+        segmentPrices,
+        cateringLevel:   normalizeCateringLevel(action.cateringLevel ?? state.defaultCateringLevel),
+      };
+      const updatedFleet = state.fleet.map(a =>
+        a.id === action.aircraftId ? { ...a, status: 'assigned' } : a
+      );
+      return {
+        ...state,
+        cash:   state.cash - launchCost,
+        routes: [...state.routes, newRoute],
+        fleet:  updatedFleet,
+      };
+    }
+
+    // Update one directional segment fare on a tag route.
+    case 'SET_SEGMENT_PRICE': {
+      const { routeId, from, to, classPrices } = action;
+      const key = routeSegmentKey(from, to);
+      return {
+        ...state,
+        routes: state.routes.map(r => {
+          if (r.id !== routeId || !r.segmentPrices?.[key]) return r;
+          const eco = Math.max(1, Math.round(Number(classPrices?.economy) || r.segmentPrices[key].economy || 1));
+          return {
+            ...r,
+            segmentPrices: {
+              ...r.segmentPrices,
+              [key]: { ...r.segmentPrices[key], ...classPrices, economy: eco },
+            },
+          };
+        }),
       };
     }
 
@@ -1800,7 +1928,7 @@ function reducer(state, action) {
 }
 
 // Exported for headless simulation/testing harnesses (no React required to use it).
-export { reducer as gameReducer, freshState };
+export { reducer as gameReducer, freshState, reconcileState };
 
 // ─────────────────────────────────────────────
 // CONTEXT + PROVIDER
@@ -1898,9 +2026,15 @@ function reconcileState(parsed) {
       routeCatering[key] = normalizeCateringLevel(r.cateringLevel);
     }
   }
-  const normalizedRoutes = migratedRoutes.map(
-    ({ ticketPrice, classPrices, cateringLevel, ...rest }) => rest
-  );
+  const normalizedRoutes = migratedRoutes.map((rIn) => {
+    // Strip legacy price/catering fields (single-leg routes keep these in
+    // routePricing/routeCatering by pair) and guarantee a well-formed stops[].
+    // Tag routes price per-segment on the route itself, so they retain their own
+    // segmentPrices (in ...rest) AND their per-route cateringLevel.
+    const { ticketPrice, classPrices, cateringLevel, ...rest } = rIn;
+    const base = rest.segmentPrices ? { ...rest, cateringLevel } : rest;
+    return normalizeRouteStops(base);
+  });
 
   return {
     ...parsed,

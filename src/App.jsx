@@ -20,6 +20,7 @@ import RouteMap from './components/RouteMap.jsx';
 import Operations from './components/Operations.jsx';
 import Loyalty from './components/Loyalty.jsx';
 import Alliances from './components/Alliances.jsx';
+import Wiki from './components/Wiki.jsx';
 import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 import { gameAdBreak } from './utils/ads.js';
@@ -45,6 +46,16 @@ function AllianceIcon({ size = 15 }) {
   );
 }
 
+function HelpIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
 const TABS = [
   { id: 'dashboard',   label: 'Dashboard',     Icon: DashboardIcon   },
   { id: 'map',         label: 'Map',           Icon: MapIcon         },
@@ -60,6 +71,7 @@ const TABS = [
   { id: 'alliances',   label: 'Alliances',    Icon: AllianceIcon    },
   { id: 'competition', label: 'Competition',  Icon: CompetitionIcon   },
   { id: 'finance',     label: 'Finance',       Icon: FinanceIcon     },
+  { id: 'wiki',        label: 'Help',          Icon: HelpIcon        },
 ];
 
 export default function App() {
@@ -194,6 +206,7 @@ function AppInner() {
     alliances:   <Alliances />,
     competition: <Competition />,
     finance:     <Finance />,
+    wiki:        <Wiki />,
   };
 
   return (
