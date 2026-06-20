@@ -1,8 +1,45 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
+
+// Downscale an uploaded image file to a small square PNG data URL so saved
+// games stay light (saves live in localStorage). The image is drawn "cover"
+// style into a 128×128 canvas, matching how the logo renders in-app.
+const LOGO_PX = 128;
+function fileToLogoDataURL(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Please choose an image file (PNG, JPG, SVG, etc.).'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("That image couldn't be loaded."));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = LOGO_PX;
+        canvas.height = LOGO_PX;
+        const ctx = canvas.getContext('2d');
+        // Cover-fit: scale to fill the square, center-crop the overflow.
+        const scale = Math.max(LOGO_PX / img.width, LOGO_PX / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (LOGO_PX - w) / 2, (LOGO_PX - h) / 2, w, h);
+        try {
+          resolve(canvas.toDataURL('image/png'));
+        } catch (err) {
+          reject(new Error("That image couldn't be processed."));
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
@@ -65,8 +102,27 @@ export default function SetupScreen() {
   const [hubSearch,         setHubSearch]         = useState('');
   const [logoId,            setLogoId]            = useState(AIRLINE_LOGOS[0].id);
   const [accentColor,       setAccentColor]       = useState(ACCENT_COLORS[0].hex);
+  const [customLogo,        setCustomLogo]        = useState(null);   // data URL or null
+  const [logoError,         setLogoError]         = useState('');
   const [enableObjectives,  setEnableObjectives]  = useState(true);
   const [step,              setStep]              = useState(1);
+  const fileInputRef = useRef(null);
+
+  const usingCustom = logoId === 'custom' && customLogo;
+
+  async function handleLogoFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';   // allow re-selecting the same file later
+    if (!file) return;
+    setLogoError('');
+    try {
+      const dataUrl = await fileToLogoDataURL(file);
+      setCustomLogo(dataUrl);
+      setLogoId('custom');
+    } catch (err) {
+      setLogoError(err.message || 'Could not use that image.');
+    }
+  }
 
   const STEPS = ['Brand', 'Home hub', 'Launch'];
   const canContinue = step !== 1 || airlineName.trim().length > 0;
@@ -78,8 +134,11 @@ export default function SetupScreen() {
       type:             'START_GAME',
       airlineName:      airlineName.trim(),
       hub,
-      logoId,
+      // If a custom upload is selected, keep a real preset id as a fallback
+      // and pass the image separately; otherwise use the chosen preset.
+      logoId:           usingCustom ? 'horizon' : logoId,
       logoColor:        accentColor,
+      customLogo:       usingCustom ? customLogo : null,
       enableObjectives,
     });
   }
@@ -160,6 +219,53 @@ export default function SetupScreen() {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
             }}>
+              {/* Upload-your-own tile */}
+              <button
+                type="button"
+                title="Upload your own logo"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '10px 6px',
+                  background: usingCustom ? 'var(--accent-dim)' : 'transparent',
+                  border: `2px solid ${usingCustom ? 'var(--accent)' : 'transparent'}`,
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  transition: 'border-color .12s, background .12s',
+                }}
+              >
+                {usingCustom ? (
+                  <AirlineLogo customSrc={customLogo} size={52} radius={10} />
+                ) : (
+                  <div style={{
+                    width: 52, height: 52, borderRadius: 10,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px dashed var(--border)',
+                    color: 'var(--text-dim)', fontSize: 22, fontWeight: 300,
+                  }}>
+                    <Glyph e="＋" />
+                  </div>
+                )}
+                <span style={{
+                  fontSize: 10,
+                  color: usingCustom ? 'var(--accent)' : 'var(--text-dim)',
+                  fontWeight: usingCustom ? 600 : 400,
+                  letterSpacing: '.3px',
+                }}>
+                  {usingCustom ? 'Custom' : 'Upload'}
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoFile}
+                style={{ display: 'none' }}
+              />
+
               {AIRLINE_LOGOS.map(logo => {
                 const selected = logoId === logo.id;
                 return (
@@ -195,10 +301,21 @@ export default function SetupScreen() {
               })}
             </div>
 
+            {logoError && (
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>
+                {logoError}
+              </div>
+            )}
+            {usingCustom && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                Using your uploaded logo. Pick any preset above to switch back.
+              </div>
+            )}
+
             {/* ── Colour picker ── */}
-            <div style={{ marginTop: 10 }}>
+            <div style={{ marginTop: 10, opacity: usingCustom ? 0.5 : 1 }}>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                Logo colour
+                Logo colour {usingCustom && <span style={{ fontStyle: 'italic' }}>(presets only)</span>}
               </div>
               <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                 {ACCENT_COLORS.map(c => {
@@ -241,12 +358,19 @@ export default function SetupScreen() {
                 alignItems: 'center',
                 gap: 10,
               }}>
-                <AirlineLogo id={logoId} size={38} accentColor={accentColor} />
+                <AirlineLogo
+                  id={logoId}
+                  customSrc={usingCustom ? customLogo : null}
+                  size={38}
+                  accentColor={accentColor}
+                />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{airlineName}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {AIRLINE_LOGOS.find(l => l.id === logoId)?.name} livery ·{' '}
-                    {ACCENT_COLORS.find(c => c.hex === accentColor)?.label ?? 'Custom'} accent
+                    {usingCustom
+                      ? 'Custom uploaded logo'
+                      : <>{AIRLINE_LOGOS.find(l => l.id === logoId)?.name} livery ·{' '}
+                          {ACCENT_COLORS.find(c => c.hex === accentColor)?.label ?? 'Custom'} accent</>}
                   </div>
                 </div>
               </div>

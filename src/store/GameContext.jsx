@@ -57,6 +57,7 @@ function freshState() {
     airlineName: '',
     logoId: 'horizon',
     logoColor: '#f5a623',
+    customLogo: null,   // data URL of a user-uploaded logo (overrides logoId when set)
     hub: '',
     homeCountry: '',  // ISO country code of starting hub — hubs restricted to this country
     cash: STARTING_CASH,
@@ -175,6 +176,7 @@ function reducer(state, action) {
         airlineName: action.airlineName,
         logoId:      action.logoId    ?? 'horizon',
         logoColor:   action.logoColor ?? '#f5a623',
+        customLogo:  action.customLogo ?? null,
         hub:         action.hub,
         homeCountry: getAirport(action.hub)?.country ?? '',
         gates:       { [action.hub]: 1 },

@@ -397,13 +397,44 @@ export const LOGO_MAP = Object.fromEntries(AIRLINE_LOGOS.map(l => [l.id, l]));
  *   size        — px size (width = height, default 40)
  *   radius      — corner radius; default 20% of size
  *   accentColor — hex color applied to the logo's main accent elements
+ *   customSrc   — data/image URL of a user-uploaded logo; when set it
+ *                 overrides the preset and is drawn clipped to the rounded
+ *                 square (so it matches the look of the built-in logos)
  *   style       — extra inline styles on the wrapping <svg>
  */
-export default function AirlineLogo({ id, size = 40, radius, accentColor, style, className }) {
+export default function AirlineLogo({ id, size = 40, radius, accentColor, customSrc, style, className }) {
   const uid  = useId().replace(/:/g, '');
   const gid  = `lg-${id}-${uid}`;
   const logo = LOGO_MAP[id];
   const r    = radius ?? Math.round(size * 0.2);
+
+  // ── User-uploaded custom logo ──────────────────────────────────────────────
+  if (customSrc) {
+    const cid = `clip-${uid}`;
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 40 40"
+        style={{ flexShrink: 0, display: 'block', ...style }}
+        className={className}
+      >
+        <defs>
+          <clipPath id={cid}>
+            <rect width="40" height="40" rx={r} />
+          </clipPath>
+        </defs>
+        <rect width="40" height="40" rx={r} fill="#15202f" />
+        <image
+          href={customSrc}
+          width="40"
+          height="40"
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={`url(#${cid})`}
+        />
+      </svg>
+    );
+  }
 
   if (!logo) {
     return (

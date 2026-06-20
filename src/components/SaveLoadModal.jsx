@@ -23,6 +23,7 @@ function writeSlot(i, state) {
     airlineName: state.airlineName,
     logoId:      state.logoId,
     logoColor:   state.logoColor,
+    customLogo:  state.customLogo ?? null,
     hub:         state.hub,
     cash:        state.cash,
     week:        state.week,
@@ -66,7 +67,7 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
       ) : (
         <div className="save-slot-body">
           <div className="save-slot-airline">
-            <AirlineLogo id={slot.logoId} size={26} radius={5} accentColor={slot.logoColor} />
+            <AirlineLogo id={slot.logoId} customSrc={slot.customLogo} size={26} radius={5} accentColor={slot.logoColor} />
             <div>
               <div className="save-slot-airline-name">{slot.airlineName}</div>
               <div className="save-slot-hub">{slot.hub}</div>

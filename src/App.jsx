@@ -231,7 +231,7 @@ function AppInner() {
           Tailwinds - Airline Manager
         </div>
         <div className="topbar-sep" />
-        <AirlineLogo id={state.logoId} size={28} radius={6} accentColor={state.logoColor} />
+        <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
         <div className="topbar-airline">{state.airlineName}</div>
         <div className="topbar-spacer" />
         <div className="topbar-kpis">
@@ -392,6 +392,7 @@ function AppInner() {
           airlineName={state.airlineName}
           logoId={state.logoId}
           logoColor={state.logoColor}
+          customLogo={state.customLogo}
           onContinue={() => dispatch({ type: 'ACKNOWLEDGE_VICTORY' })}
           onNewGame={handleReset}
         />
@@ -438,7 +439,7 @@ function VictoryStat({ label, value }) {
   );
 }
 
-function VictoryOverlay({ stats, airlineName, logoId, logoColor, onContinue, onNewGame }) {
+function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLogo, onContinue, onNewGame }) {
   const s = stats ?? {};
   return (
     <div style={{
@@ -452,7 +453,7 @@ function VictoryOverlay({ stats, airlineName, logoId, logoColor, onContinue, onN
       }}>
         <div style={{ marginBottom: 8, color: 'var(--accent)' }}><TrophyIcon size={52} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-          <AirlineLogo id={logoId} size={44} radius={8} accentColor={logoColor} />
+          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} />
         </div>
         <h2 style={{ fontSize: 26, marginBottom: 6, color: 'var(--green)' }}>You Control the Skies</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4, lineHeight: 1.5 }}>
