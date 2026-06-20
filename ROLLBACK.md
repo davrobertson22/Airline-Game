@@ -168,3 +168,19 @@ revert).
 Optional future polish (not done): tap-to-reveal values on chart fragments
 (Dashboard pie slices, Finance cost bars), which are currently hover-only with
 no fallback. This is per-chart feature work, not a tooltip swap.
+
+## Follow-up — Mobile disclaimer scrolls instead of pinned
+**Commit:** `_____` (fill in after committing)
+On mobile the AI-disclosure footer was permanently pinned, eating screen space.
+
+Changed:
+- `src/App.jsx` — render the `.app-footer` inside `.main-content` (so it scrolls
+  to the end) when `isMobile`; keep the pinned footer for desktop only
+  (`{!isMobile && …}`).
+- `src/index.css` — `.app-footer-inline` rule inside the mobile media block
+  (full-width margins + spacing).
+
+**Code revert:** `git revert <hash>`, or restore the single unconditional
+`<footer className="app-footer">` after `.main-content` and remove the
+`.app-footer-inline` rule. Desktop risk: none — desktop renders the original
+pinned footer unchanged.

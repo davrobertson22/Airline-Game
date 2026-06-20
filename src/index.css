@@ -1366,5 +1366,12 @@ tr:hover td { background: rgba(62,166,255,.05); }
   /* A touch more density so more of each row is visible before scrolling. */
   .main-content th,
   .main-content td { padding: 9px 10px; }
+
+  /* The disclaimer now lives at the end of the scrollable content on mobile
+     (rendered inside .main-content) rather than pinned. Pull it full-width to
+     the edges of the padded content area and give it a little breathing room. */
+  .app-footer-inline {
+    margin: 20px -12px 0;
+  }
 }
 
