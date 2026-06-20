@@ -27,5 +27,14 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-wide.png",
+      "sizes": "2898x1448",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Managing routes and fleet in Tailwinds"
+    }
   ]
 }
