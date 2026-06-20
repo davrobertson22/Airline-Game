@@ -4,6 +4,7 @@ import { getAirport } from '../data/airports.js';
 import { simulateRoute, simulateCargoRoute, formatMoney, currentGameDate } from '../utils/simulation.js';
 import { getAlliance } from '../data/alliances.js';
 import { Glyph } from './Icons.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 // ── Great-circle path as a single continuous segment ─────────────────────────
 // Keeps longitudes unwrapped (may exceed ±180) so Leaflet draws one smooth arc
@@ -88,6 +89,12 @@ export default function RouteMap() {
   const { state } = useGame();
   const { fleet, routes, cargoRoutes = [], hub, competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
+  // The map has a fixed inline height that a CSS media query can't reach, so we
+  // size it here. Shorter on phones so the route list below is reachable without
+  // a long scroll; unchanged (520) on desktop.
+  const isMobile = useIsMobile();
+  const mapHeight = isMobile ? 380 : 520;
+
   const mapElRef      = useRef(null);   // DOM node
   const mapRef        = useRef(null);   // Leaflet map instance
   const layersRef     = useRef([]);     // Active Leaflet layers (routes + markers)
@@ -153,6 +160,13 @@ export default function RouteMap() {
       setMapReady(false);
     };
   }, [ready]);
+
+  // Leaflet caches the container size, so when the height changes (e.g. crossing
+  // the mobile breakpoint or rotating the device) we must tell it to remeasure,
+  // otherwise tiles render into the old dimensions.
+  useEffect(() => {
+    if (mapRef.current) mapRef.current.invalidateSize();
+  }, [mapHeight]);
 
   // 3. Derive route data
   const gd = currentGameDate(state);
@@ -693,18 +707,18 @@ export default function RouteMap() {
 
         {/* Map container */}
         {error ? (
-          <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
+          <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
             <Glyph e="⚠" /> Could not load map: {error}
           </div>
         ) : !ready ? (
-          <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--text-muted)', fontSize: 13, gap: 10 }}>
+          <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--text-muted)', fontSize: 13, gap: 10 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
             </svg>
             Loading map tiles…
           </div>
         ) : (
-          <div ref={mapElRef} style={{ height: 520 }} />
+          <div ref={mapElRef} style={{ height: mapHeight }} />
         )}
       </div>
 

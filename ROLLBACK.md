@@ -99,5 +99,72 @@ Desktop risk: none — the only change outside the media query is the iOS meta t
 
 ---
 
-## Phases 3–6 — (not yet done)
-Will be appended here as each is completed: topbar, tables, route map, tooltips.
+## Phase 3 — Mobile topbar (overflow menu)
+**Commit:** `_____` (fill in after committing)
+On mobile (≤640px) the 6 ghost buttons collapse into a single "⋯" overflow
+menu; the brand mark and DATE KPI are hidden to fit; Cash + Next-Week stay.
+
+Changed:
+- `src/App.jsx` — wrapped the existing desktop ghost buttons in
+  `{!isMobile && (<> … </>)}` (unchanged output on desktop) and added an
+  `{isMobile && …}` overflow-menu block. Also added `useIsMobile` import and
+  `showMobileMenu` state.
+- `src/index.css` — added topbar rules **inside** the existing
+  `@media (max-width: 640px)` block (menu styles, hidden brand/date, etc.).
+
+**Code revert:** `git revert <hash>`. Desktop risk: none — the desktop branch
+renders the identical button markup; all new CSS is inside the mobile media query.
+
+**Also added earlier (manifest screenshot):** `public/screenshot-wide.png` +
+a `screenshots` entry in `public/manifest.webmanifest` (clears the desktop
+"richer install UI" warning). Harmless to keep; remove the file + that JSON key
+to revert.
+
+## Phase 4 — Mobile tables + page padding
+**Commit:** `_____` (fill in after committing)
+On mobile, wide data tables scroll horizontally (columns intact) instead of
+crushing; page padding tightened from 26px to 12px.
+
+Changed:
+- `src/index.css` — added, **inside** the `@media (max-width: 640px)` block:
+  reduced `.main-content` padding, made `.main-content table` a horizontal
+  scroll container (`display:block; overflow-x:auto; white-space:nowrap`), and
+  slightly reduced cell padding.
+- (Also widened the mobile `.topbar-airline` max-width 84px → 120px — tiny
+  Phase 3 follow-up, same media block.)
+
+**Code revert:** `git revert <hash>`, or delete the Phase 4 rules from the media
+block. Desktop risk: none — everything is inside the mobile media query.
+
+## Phase 5 — Route map responsive height
+**Commit:** `_____` (fill in after committing)
+The Map tab's container had a fixed inline `height: 520` (unreachable by CSS).
+
+Changed:
+- `src/components/RouteMap.jsx` — imported `useIsMobile`, derived
+  `mapHeight = isMobile ? 380 : 520`, replaced the three `height: 520` inline
+  styles with `height: mapHeight`, and added a `useEffect` that calls Leaflet's
+  `invalidateSize()` when `mapHeight` changes (so tiles remeasure on resize).
+
+**Code revert:** `git revert <hash>`, or set the three heights back to `520`,
+remove the `useIsMobile`/`mapHeight` lines and the `invalidateSize` effect.
+Desktop risk: none — on desktop `isMobile` is false so `mapHeight` is 520, the
+original value; the extra effect is a no-op when size doesn't change.
+
+Audit note: swept all components for fixed inline widths/heights that could
+break narrow layouts — none found beyond table min-widths already inside scroll
+wrappers.
+
+## Phase 6 — Tooltips: reviewed, no code change
+Inspected all 27 `title=` attributes. Outcome: **no changes made** (nothing to
+revert).
+- Most are action-button hints (Swap, Cancel, Delete, Acquire, map toggles) —
+  the tap performs the action; no info is lost on touch.
+- The informational ones have visible fallbacks (e.g. CateringSelector already
+  prints the selected option's description below the buttons).
+- The `InfoTip` component (used for real explanatory tooltips) is already
+  tap-friendly: `tabIndex={0}` + `.infotip:focus .infotip-bubble` in index.css.
+
+Optional future polish (not done): tap-to-reveal values on chart fragments
+(Dashboard pie slices, Finance cost bars), which are currently hover-only with
+no fallback. This is per-chart feature work, not a tooltip swap.

@@ -1291,7 +1291,7 @@ tr:hover td { background: rgba(62,166,255,.05); }
   .topbar-logo { display: none; }          /* hide "Tailwinds - Airline Manager" brand */
   .topbar-sep  { display: none; }
   .topbar-airline {
-    max-width: 84px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1346,5 +1346,25 @@ tr:hover td { background: rgba(62,166,255,.05); }
   .topbar-menu > * + * { border-top: 1px solid var(--border-subtle); }
   .topbar-menu > *:active { background: var(--surface3); }
   .topbar-menu-danger { color: var(--red); }
+
+  /* ── Page content + tables (Phase 4) ───────────────────────────────────────
+     Tighten the generous desktop page padding so cards get more width on a
+     phone. */
+  .main-content { padding: 12px; }
+
+  /* Wide data tables: rather than crushing columns into an unreadable mess on a
+     narrow screen, let each table scroll horizontally and keep its columns.
+     `display:block` turns the table into its own scroll container and
+     `white-space:nowrap` stops cells from wrapping so columns stay legible.
+     Scoped to mobile, so desktop tables are completely unaffected. */
+  .main-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  /* A touch more density so more of each row is visible before scrolling. */
+  .main-content th,
+  .main-content td { padding: 9px 10px; }
 }
 
