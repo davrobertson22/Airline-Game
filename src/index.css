@@ -282,6 +282,13 @@ td, th, .aircraft-stat-pill-value, .map-tip-val {
   text-align: center;
 }
 
+/* When the footer sits at the end of the scrollable content (no longer pinned),
+   stretch it to the edges of the padded .main-content (26px) so it reads as a
+   full-width footer flush with the bottom of the page. */
+.app-footer-inline {
+  margin: 26px -26px -26px;
+}
+
 /* page fade — single, fast */
 .main-content > * { animation: page-in .18s ease-out; }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -1371,7 +1378,7 @@ tr:hover td { background: rgba(62,166,255,.05); }
      (rendered inside .main-content) rather than pinned. Pull it full-width to
      the edges of the padded content area and give it a little breathing room. */
   .app-footer-inline {
-    margin: 20px -12px 0;
+    margin: 20px -12px -12px;
   }
 }
 

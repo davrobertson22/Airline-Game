@@ -169,18 +169,20 @@ Optional future polish (not done): tap-to-reveal values on chart fragments
 (Dashboard pie slices, Finance cost bars), which are currently hover-only with
 no fallback. This is per-chart feature work, not a tooltip swap.
 
-## Follow-up — Mobile disclaimer scrolls instead of pinned
+## Follow-up — Disclaimer scrolls instead of pinned (desktop + mobile)
 **Commit:** `_____` (fill in after committing)
-On mobile the AI-disclosure footer was permanently pinned, eating screen space.
+The AI-disclosure footer was permanently pinned at the bottom, taking up screen
+space. Now it sits at the end of the scrollable content on BOTH desktop and
+mobile (intentional desktop change, per request).
 
 Changed:
-- `src/App.jsx` — render the `.app-footer` inside `.main-content` (so it scrolls
-  to the end) when `isMobile`; keep the pinned footer for desktop only
-  (`{!isMobile && …}`).
-- `src/index.css` — `.app-footer-inline` rule inside the mobile media block
-  (full-width margins + spacing).
+- `src/App.jsx` — moved `<footer className="app-footer app-footer-inline">`
+  inside `.main-content` (end of scroll content); removed the pinned footer that
+  used to sit after `.main-content`.
+- `src/index.css` — base `.app-footer-inline` rule (full-width via -26px margins
+  offsetting `.main-content` padding) + a mobile override (-12px) in the media
+  block.
 
-**Code revert:** `git revert <hash>`, or restore the single unconditional
-`<footer className="app-footer">` after `.main-content` and remove the
-`.app-footer-inline` rule. Desktop risk: none — desktop renders the original
-pinned footer unchanged.
+**Code revert:** `git revert <hash>`, or move the `<footer className="app-footer">`
+back out to a sibling after `.main-content` and drop the `.app-footer-inline`
+rules. Note: this one DOES change desktop (by design).
