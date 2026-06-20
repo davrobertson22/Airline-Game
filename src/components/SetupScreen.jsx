@@ -3,47 +3,11 @@ import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
-
-// Downscale an uploaded image file to a small square PNG data URL so saved
-// games stay light (saves live in localStorage). The image is drawn "cover"
-// style into a 128×128 canvas, matching how the logo renders in-app.
-const LOGO_PX = 128;
-function fileToLogoDataURL(file) {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Please choose an image file (PNG, JPG, SVG, etc.).'));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that file.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("That image couldn't be loaded."));
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = LOGO_PX;
-        canvas.height = LOGO_PX;
-        const ctx = canvas.getContext('2d');
-        // Cover-fit: scale to fill the square, center-crop the overflow.
-        const scale = Math.max(LOGO_PX / img.width, LOGO_PX / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.drawImage(img, (LOGO_PX - w) / 2, (LOGO_PX - h) / 2, w, h);
-        try {
-          resolve(canvas.toDataURL('image/png'));
-        } catch (err) {
-          reject(new Error("That image couldn't be processed."));
-        }
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+import { fileToLogoDataURL } from '../utils/logoImage.js';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
-const ACCENT_COLORS = [
+export const ACCENT_COLORS = [
   { hex: '#ff3b3b', label: 'Crimson'    },
   { hex: '#ff6b35', label: 'Coral'      },
   { hex: '#ff8c00', label: 'Orange'     },

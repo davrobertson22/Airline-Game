@@ -23,6 +23,7 @@ import Alliances from './components/Alliances.jsx';
 import Wiki from './components/Wiki.jsx';
 import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
+import BrandingModal from './components/BrandingModal.jsx';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
 
@@ -102,6 +103,7 @@ function AppInner() {
   const [showTour, setShowTour] = useState(false);
   const [saveLoadMode, setSaveLoadMode] = useState(null); // 'save' | 'load' | null
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
+  const [showBranding, setShowBranding] = useState(false);
   const isMobile = useIsMobile();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const addToast = useToast();
@@ -234,8 +236,19 @@ function AppInner() {
           Tailwinds - Airline Manager
         </div>
         <div className="topbar-sep" />
-        <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
-        <div className="topbar-airline">{state.airlineName}</div>
+        <button
+          type="button"
+          onClick={() => setShowBranding(true)}
+          title="Edit airline branding"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'none', border: 'none', padding: 0, margin: 0,
+            cursor: 'pointer', color: 'inherit',
+          }}
+        >
+          <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
+          <div className="topbar-airline">{state.airlineName}</div>
+        </button>
         <div className="topbar-spacer" />
         <div className="topbar-kpis">
           <div className="topbar-kpi">
@@ -452,6 +465,9 @@ function AppInner() {
       {saveLoadMode && (
         <SaveLoadModal mode={saveLoadMode} onClose={() => setSaveLoadMode(null)} />
       )}
+
+      {/* Edit branding modal */}
+      {showBranding && <BrandingModal onClose={() => setShowBranding(false)} />}
 
       {/* New Game confirmation */}
       {showNewGameConfirm && (

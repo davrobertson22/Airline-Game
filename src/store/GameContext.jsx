@@ -436,6 +436,20 @@ function reducer(state, action) {
       };
     }
 
+    case 'SET_BRANDING': {
+      // Update airline name / logo / accent colour mid-game. Only fields that
+      // are provided are changed; customLogo may be explicitly set to null to
+      // clear an uploaded image and fall back to the chosen preset.
+      const next = { ...state };
+      if (typeof action.airlineName === 'string' && action.airlineName.trim()) {
+        next.airlineName = action.airlineName.trim();
+      }
+      if (typeof action.logoId === 'string')   next.logoId    = action.logoId;
+      if (typeof action.logoColor === 'string') next.logoColor = action.logoColor;
+      if ('customLogo' in action)              next.customLogo = action.customLogo ?? null;
+      return next;
+    }
+
     case 'ADD_ROUTE': {
       const aircraft = state.fleet.find(a => a.id === action.aircraftId);
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
