@@ -357,23 +357,14 @@ function AppInner() {
       {/* Page content */}
       <div className="main-content">
         {tabContent[activeTab]}
-        {/* On mobile the disclaimer scrolls in at the end of the page instead of
-            being permanently pinned, so it doesn't eat scarce screen space. */}
-        {isMobile && (
-          <footer className="app-footer app-footer-inline">
-            AI was used in the development of this game. While core mechanics were designed by humans,
-            much of the coding and scaling of designs were done through the use of LLMs.
-          </footer>
-        )}
-      </div>
-
-      {/* AI disclosure — pinned at the bottom on desktop only */}
-      {!isMobile && (
-        <footer className="app-footer">
+        {/* Disclaimer lives at the end of the scrollable content (desktop +
+            mobile) so it's reachable on scroll without permanently occupying
+            screen space. */}
+        <footer className="app-footer app-footer-inline">
           AI was used in the development of this game. While core mechanics were designed by humans,
           much of the coding and scaling of designs were done through the use of LLMs.
         </footer>
-      )}
+      </div>
 
       {/* Weekly debrief modal */}
       <WeeklyDebrief />
