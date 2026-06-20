@@ -1255,3 +1255,30 @@ tr:hover td { background: rgba(62,166,255,.05); }
 .infotip-bottom:focus .infotip-bubble {
   transform: translateX(-50%) translateY(0);
 }
+
+/* =============================================================================
+   MOBILE BREAKPOINT  (≤ 640px)
+   -----------------------------------------------------------------------------
+   Everything below this comment is mobile-only and scoped inside the media
+   query, so it has ZERO effect on desktop viewports (>640px) — desktop renders
+   exactly as it did before this block existed. Never move a rule out of here to
+   "fix" desktop; add a desktop rule above instead.
+
+   Phase 2 scope: viewport correctness only (dvh, input zoom). Topbar, tables,
+   route map and tooltips are handled in their own later phases/blocks.
+   ============================================================================= */
+@media (max-width: 640px) {
+  /* Use dynamic viewport height so the mobile browser's address bar doesn't
+     clip the footer / bottom of the app (the classic 100vh mobile bug). */
+  .app-layout   { height: 100dvh; }
+  .setup-screen { min-height: 100dvh; }
+
+  /* iOS Safari auto-zooms when focusing an input whose font-size is < 16px.
+     Bump form controls to 16px on mobile to prevent that jump. Desktop keeps
+     its original 13px (this rule never applies above 640px). */
+  .form-input,
+  .form-select {
+    font-size: 16px;
+  }
+}
+
