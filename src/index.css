@@ -1280,5 +1280,71 @@ tr:hover td { background: rgba(62,166,255,.05); }
   .form-select {
     font-size: 16px;
   }
+
+  /* ── Topbar (Phase 3) ──────────────────────────────────────────────────────
+     The desktop topbar packs a brand logo, airline name, date+cash KPIs, the
+     Next-Week button and 6 ghost buttons into 58px — far too much for a phone.
+     On mobile we drop the Tailwinds brand mark (the airline's own logo + name
+     still identify the game), hide the DATE KPI (Cash is what matters), and the
+     6 ghost buttons are replaced in JSX by a single "⋯" overflow menu. */
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar-logo { display: none; }          /* hide "Tailwinds - Airline Manager" brand */
+  .topbar-sep  { display: none; }
+  .topbar-airline {
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Keep CASH, drop DATE + its divider to save width. */
+  .topbar-kpis .topbar-kpi:first-child,
+  .topbar-kpis .topbar-kpi-divider { display: none; }
+  .topbar-kpi   { padding: 4px 8px; }
+  .btn-advance  { padding: 8px 12px; font-size: 12px; }
+
+  /* Overflow menu (mobile-only elements, rendered by App.jsx when isMobile). */
+  .topbar-menu-wrap { position: relative; display: inline-flex; }
+  .topbar-menu-btn {
+    font-size: 18px;
+    line-height: 1;
+    padding: 6px 10px;
+  }
+  .topbar-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+  }
+  .topbar-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 31;
+    min-width: 190px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .topbar-menu > * {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .topbar-menu > * + * { border-top: 1px solid var(--border-subtle); }
+  .topbar-menu > *:active { background: var(--surface3); }
+  .topbar-menu-danger { color: var(--red); }
 }
 
