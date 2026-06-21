@@ -283,6 +283,14 @@ export default function RouteDetail({ origin, dest, onBack }) {
   }, 0);
   const avgLoad      = playerSims.length ? playerSims.reduce((s, {result}) => s + result.loadFactor, 0) / playerSims.length : 0;
 
+  // Capacity-limited: aircraft are essentially full yet real demand is still being
+  // turned away. On such routes load won't rise by cutting fares (you're seat-bound,
+  // not demand-bound) — the levers are more frequency/aircraft, or higher fares for
+  // yield. Surfaced as a badge so a "stuck" load reads as physically full, not a bug.
+  const servedPaxAll    = shareResults.reduce((s, r) => s + (r.totalPax ?? 0), 0);
+  const unmetDemandAll  = Math.max(0, totalDemand - servedPaxAll);
+  const capacityLimited = playerRoutes.length > 0 && !isDormantNow && avgLoad >= 0.97 && unmetDemandAll > 0;
+
   // Catering — per-route setting, edited here for the whole pair
   const catRev    = playerSims.reduce((s, { result }) => s + (result.cateringRevenue ?? 0), 0);
   const catCost   = playerSims.reduce((s, { result }) => s + (result.cateringCost    ?? 0), 0);
@@ -356,8 +364,18 @@ export default function RouteDetail({ origin, dest, onBack }) {
               <Glyph e="🗓" /> Dormant · resumes {MONTH_NAMES[resumeMonth]}
             </div>
           ) : (
-            <div style={{ background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--green)', flexShrink: 0 }}>
-              <Glyph e="✈" /> Operating · {playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0)}× / wk
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+              <div style={{ background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>
+                <Glyph e="✈" /> Operating · {playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0)}× / wk
+              </div>
+              {capacityLimited && (
+                <div
+                  title={`Aircraft are essentially full and ~${unmetDemandAll.toLocaleString()} pax/wk can't get a seat. Add frequency/aircraft or raise fares — cutting price won't lift load.`}
+                  style={{ background: 'rgba(210,153,34,0.12)', border: '1px solid rgba(210,153,34,0.35)', borderRadius: 'var(--radius)', padding: '6px 14px', fontSize: 13, fontWeight: 600, color: 'var(--yellow)' }}
+                >
+                  <Glyph e="⚠" /> Capacity-limited · {unmetDemandAll.toLocaleString()} unserved/wk
+                </div>
+              )}
             </div>
           )
         )}
@@ -366,6 +384,12 @@ export default function RouteDetail({ origin, dest, onBack }) {
       {isDormantNow && (
         <div style={{ background: 'rgba(139,148,158,0.1)', border: '1px solid rgba(139,148,158,0.3)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--text-muted)' }}>
           <Glyph e="🗓" /> <strong>Out of season.</strong> This route is dormant until {MONTH_NAMES[resumeMonth]} — it earns no revenue and incurs no operating cost this month. The figures below are the in-season forecast for when it resumes.
+        </div>
+      )}
+
+      {capacityLimited && (
+        <div style={{ background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--text-muted)' }}>
+          <Glyph e="⚠" /> <strong style={{ color: 'var(--yellow)' }}>Capacity-limited.</strong> Your aircraft are essentially full and ~{unmetDemandAll.toLocaleString()} pax/wk can't get a seat. Cutting fares won't lift load here — you're seat-bound, not demand-bound. To carry more, add frequency or aircraft; to earn more on the seats you have, raise fares toward the point where load starts to dip.
         </div>
       )}
 
