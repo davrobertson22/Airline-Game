@@ -26,3 +26,6 @@ npm-debug.log*
 
 # Vite
 *.local
+
+# Scratch / temp preview scripts
+_logo_preview.mjs

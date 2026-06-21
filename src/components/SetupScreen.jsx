@@ -113,7 +113,16 @@ export default function SetupScreen() {
   return (
     <div className="setup-screen">
       <div className="setup-card" style={{ maxWidth: 600 }}>
-        <div className="setup-title"><Glyph e="✈" /> Tailwinds - Airline Manager</div>
+        <div className="setup-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img
+            src="/tailwinds-mark-color.png"
+            alt="Tailwinds"
+            width={Math.round(28 * 1.27)}
+            height={28}
+            style={{ flexShrink: 0, display: 'block', objectFit: 'contain' }}
+          />
+          Tailwinds - Airline Manager
+        </div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
           You're starting with $10,000,000 in equity to get started — use it wisely.

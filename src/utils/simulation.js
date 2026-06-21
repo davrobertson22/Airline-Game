@@ -677,6 +677,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     seatsPerFlight:    type.seats,
     economySeats,
     businessSeats:     (config.businessClass ?? 0) * route.weeklyFrequency,
+    // Total physical seats across ALL cabins. The demand model caps leisure
+    // demand at this (minus business pax) so excess leisure can fill premium-cabin
+    // and spare economy seats, rather than being thrown away at the economy cap.
+    totalSeats:        configBodies(config) * route.weeklyFrequency,
     qualityScore,
     connectivityBonus,
   };

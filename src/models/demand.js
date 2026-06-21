@@ -490,11 +490,14 @@ export function computeMarketShare(market, offers) {
       adjustedBusinessDemand * bShare * priceChokeFactor(bizPrice, market.referencePrice * BUSINESS_PRICE_MULTIPLIER)
     );
 
-    // Cap at capacity
-    const leisureCapped  = leisurePax  > offer.economySeats;
+    // Cap at capacity. Business is capped at its own cabin; leisure may then use
+    // ALL remaining physical seats (premium + economy), not just the economy cabin,
+    // so excess leisure demand fills spare seats instead of being discarded.
     const businessCapped = offer.businessPrice != null && businessPax > offer.businessSeats;
-    if (leisureCapped)  leisurePax  = offer.economySeats;
     if (businessCapped) businessPax = offer.businessSeats;
+    const leisureCapacity = Math.max(0, (offer.totalSeats ?? offer.economySeats) - businessPax);
+    const leisureCapped  = leisurePax  > leisureCapacity;
+    if (leisureCapped)  leisurePax  = leisureCapacity;
 
     const economyRevenue  = leisurePax  * offer.economyPrice;
     const businessRevenue = offer.businessPrice != null ? businessPax * offer.businessPrice : 0;
@@ -545,7 +548,13 @@ function _monopolyResult(market, offer) {
       * priceChokeFactor(offer.economyPrice, market.referencePrice)
   );
 
-  const leisurePax  = Math.min(leisureAdj,  offer.economySeats);
+  // Cap leisure at TOTAL physical capacity (minus business pax), not just the
+  // economy cabin. Leisure travelers also fill premium-economy/business seats via
+  // the cabin fan-out, and any excess should fill spare seats anywhere on the
+  // aircraft. Capping at economySeats alone froze load below 100% and made it
+  // insensitive to price whenever demand exceeded the economy cabin.
+  const leisureCapacity = Math.max(0, (offer.totalSeats ?? offer.economySeats) - businessPax);
+  const leisurePax  = Math.min(leisureAdj, leisureCapacity);
 
   const economyRevenue  = leisurePax  * offer.economyPrice;
   const businessRevenue = businessPax * (offer.businessPrice ?? 0);
