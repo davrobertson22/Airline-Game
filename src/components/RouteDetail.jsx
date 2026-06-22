@@ -113,7 +113,7 @@ function MarketSharePie({ slices }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function RouteDetail({ origin, dest, onBack }) {
+export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const { state, dispatch } = useGame();
   const gameDate  = { week: state.week, month: weekToMonth(state.week) };
   const hubs      = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
@@ -255,17 +255,22 @@ export default function RouteDetail({ origin, dest, onBack }) {
       const aircraft = state.fleet.find(a => a.id === route.aircraftId);
       if (!aircraft) return [];
       const type = getAircraftType(aircraft.typeId);
+      // Prefer the canonical engine result (same source as the Finance tab):
+      // it already accounts for competitor encroachment, marketing/loyalty lifts
+      // and landing fees, and carries weeklyLeaseCost / weeklyMaintCost / profit.
+      const rr = rrById[route.id];
+      if (rr) return [{ route, aircraft, type, result: rr }];
+      // Fallback for routes the engine skipped (grounded / dormant-seasonal).
       const result = simulateRoute(route, aircraft, gameDate, null, 1.0,
         demandAllocations.get(aircraft.id) ?? null);
       if (!result) return [];
-      // Attach fixed costs so the UI can show a fully-loaded profit indicator
       const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
         : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
       const weeklyMaintCost = type?.baseMaintenancePerWk ?? 0; // approximate (no maint mult here)
       return [{ route, aircraft, type, result: { ...result, weeklyLeaseCost, weeklyMaintCost,
         trueProfit: result.revenue - (result.totalOpCost ?? 0) - weeklyLeaseCost - weeklyMaintCost } }];
     });
-  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults]);
+  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults, rrById]);
 
   // result.passengers is one-way (per direction) — directly comparable to market demand.
   const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);
@@ -273,7 +278,9 @@ export default function RouteDetail({ origin, dest, onBack }) {
   const totalOpCost  = playerSims.reduce((s, { route, aircraft, type: aType, result }) => {
     const originAp = getAirport(route.origin);
     const destAp   = getAirport(route.destination);
-    const lf       = weeklyLandingFee(
+    // Use the engine's landing fee when available so this reconciles with Finance;
+    // otherwise recompute it (fallback path for grounded/dormant routes).
+    const lf = result.landingFee ?? weeklyLandingFee(
       aType?.category ?? 'Narrow Body',
       route.weeklyFrequency,
       originAp?.tier ?? 'major',

@@ -10,6 +10,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
 import InfoTip from './InfoTip.jsx';
+import { projectWeek } from '../utils/financeProjection.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
@@ -161,22 +162,48 @@ export default function Routes() {
   const flatRoutes  = routes.filter(r => !isMultiStop(r));
   const routeGroups = groupRoutes(flatRoutes);
 
-  // Per-group stats for filtering + sorting (runs simulation once per group here)
+  // ── Single source of truth ──────────────────────────────────────────────────
+  // Every per-route number on this screen (cards, filters, detail page) must come
+  // from the SAME canonical engine projection the Finance tab uses. Re-simulating
+  // standalone here ignores competitor encroachment, labor, fuel and revenue
+  // boosts, which made routes look profitable on the Routes screen while Finance
+  // correctly showed them losing money.
   const gd = currentGameDate(state);
+  const proj = useMemo(() => projectWeek(state), [state]);
+  const rrById = useMemo(() => {
+    const m = {};
+    for (const rr of proj.report?.routeResults ?? []) m[rr.routeId] = rr;
+    return m;
+  }, [proj]);
+
+  // Authoritative per-route result. Prefer the engine's routeResult (includes
+  // encroachment, marketing/loyalty lifts, landing fees). Routes the engine skips
+  // (grounded or dormant-seasonal) aren't in the report, so fall back to a
+  // standalone sim run with the same labor + fuel the engine used.
+  const engineResultFor = (route, aircraft) => {
+    if (!aircraft) return null;
+    const rr = rrById[route.id];
+    if (rr) return rr;
+    return simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier);
+  };
+
+  // Per-group stats for filtering + sorting
   const groupsWithStats = useMemo(() => routeGroups.map(group => {
     const sims = group.routes.map(route => {
       const ac     = fleet.find(a => a.id === route.aircraftId);
-      const result = ac ? simulateRoute(route, ac, gd) : null;
+      const result = engineResultFor(route, ac);
       return { route, result };
     });
-    const totalProfit  = sims.reduce((s, { result }) => s + (result?.profit    ?? 0), 0);
+    // Direct cost = operating cost + landing fee, so profit matches Finance "By Route".
     const totalRevenue = sims.reduce((s, { result }) => s + (result?.revenue   ?? 0), 0);
+    const totalCost    = sims.reduce((s, { result }) => s + (result?.totalOpCost ?? 0) + (result?.landingFee ?? 0), 0);
+    const totalProfit  = totalRevenue - totalCost;
     const totalPax     = sims.reduce((s, { result }) => s + (result?.passengers ?? 0), 0);
     const totalSeats   = sims.reduce((s, { result }) => s + (result?.configuredSeatsOneWay ?? 0), 0);
     const avgLoad = totalSeats > 0 ? totalPax / totalSeats : 0;  // totalPax is one-way; totalSeats is configured one-way capacity
     const distance = sims[0]?.result?.distance ?? 0;
     return { ...group, totalProfit, totalRevenue, avgLoad, distance };
-  }), [routes, fleet, state.week]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [routes, fleet, rrById]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If a route detail is selected, render that instead of the list
   if (detailPair) {
@@ -184,6 +211,7 @@ export default function Routes() {
       <RouteDetail
         origin={detailPair.origin}
         dest={detailPair.destination}
+        rrById={rrById}
         onBack={() => setDetailPair(null)}
       />
     );
@@ -458,6 +486,7 @@ export default function Routes() {
           <RouteGroupCard
             key={group.key}
             group={group}
+            getResult={engineResultFor}
             onClose={handleClose}
             onPriceChange={handlePriceChange}
             onAddFlights={() => addFlightsTo(group.origin, group.destination)}
@@ -682,21 +711,21 @@ function RouteCompareTable({ groups, onViewDetail }) {
 
 // ─── Route group card ─────────────────────────────────────────────────────────
 
-function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDetail }) {
+function RouteGroupCard({ group, getResult, onClose, onPriceChange, onAddFlights, onViewDetail }) {
   const { state, dispatch } = useGame();
   const { fleet } = state;
   const { origin, destination, routes } = group;
-  const gd = currentGameDate(state);
 
   const originAirport = getAirport(origin);
   const destAirport   = getAirport(destination);
   const refP          = referencePrice(origin, destination);
 
-  // Simulate each aircraft on this route
+  // Pull each aircraft's authoritative result from the engine projection (same
+  // source as the Finance tab) so this card never disagrees with it.
   const sims = routes.map(route => {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
-    const result   = aircraft ? simulateRoute(route, aircraft, gd) : null;
+    const result   = aircraft ? getResult(route, aircraft) : null;
     const bh       = type && result ? weeklyBlockHours(result.distance, route.weeklyFrequency, type) : 0;
     return { route, aircraft, type, result, blockHrs: bh };
   });
@@ -704,7 +733,8 @@ function RouteGroupCard({ group, onClose, onPriceChange, onAddFlights, onViewDet
   const dist        = sims[0]?.result?.distance;
   const totalFreq   = routes.reduce((s, r) => s + r.weeklyFrequency, 0);
   const totalRev    = sims.reduce((s, { result }) => s + (result?.revenue    ?? 0), 0);
-  const totalOp     = sims.reduce((s, { result }) => s + (result?.totalOpCost ?? 0), 0);
+  // Direct cost = operating cost + landing fee, matching Finance "By Route".
+  const totalOp     = sims.reduce((s, { result }) => s + (result?.totalOpCost ?? 0) + (result?.landingFee ?? 0), 0);
   const totalPax    = sims.reduce((s, { result }) => s + (result?.passengers  ?? 0), 0);
   const totalProfit = totalRev - totalOp;
 
@@ -1022,7 +1052,7 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
           {result ? `+${formatMoney(result.revenue)}` : '—'}
         </td>
         <td style={{ padding: '7px 8px', color: 'var(--red)' }}>
-          {result ? `−${formatMoney(result.totalOpCost)}` : '—'}
+          {result ? `−${formatMoney(result.totalOpCost + (result.landingFee ?? 0))}` : '—'}
         </td>
         <td style={{ padding: '7px 8px', color: bhColor, fontWeight: 600 }}>
           {blockHrs > 0 ? `${blockHrs.toFixed(1)}h` : '—'}
