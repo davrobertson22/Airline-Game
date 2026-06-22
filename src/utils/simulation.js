@@ -430,6 +430,18 @@ export const MAX_WEEKLY_BLOCK_HOURS = 140;
 /** Slot capacity of a single gate per week (departures from that airport). */
 export const SLOTS_PER_GATE = 50;
 
+/**
+ * Weekly slots consumed at `code` by cargo routes. Freighters use gates and
+ * slots exactly like passenger flights, so this is summed alongside passenger
+ * slot usage wherever capacity is displayed or enforced. Cargo routes have no
+ * seasonal dormancy, so every freight route counts year-round.
+ */
+export function cargoSlotsUsedAt(code, cargoRoutes = []) {
+  return (cargoRoutes ?? [])
+    .filter(r => r.origin === code || r.destination === code)
+    .reduce((s, r) => s + (r.weeklyFrequency ?? 0), 0);
+}
+
 // Average cruise speed by aircraft category (km/h)
 const CRUISE_SPEED_KMH = {
   'Turboprop':    500,

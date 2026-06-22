@@ -1764,6 +1764,9 @@ function reducer(state, action) {
         seasonalReactivation: seasonalReactivationCost,
         corporateTax:       corporateTax,
         depreciation:       weeklyDepreciation,
+        // Active-event demand swing applied to revenue this week. Folded into the
+        // chart's revenue line so profit = revenue − cost reconciles visually.
+        eventDemandAdj:     Math.round(eventDemandAdj),
         totalCost:          report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost,
         // profit = actual cash change this week (after tax, matches newCash delta)
         profit:             preTaxProfit - corporateTax,

@@ -470,8 +470,15 @@ function FinancialChart({ history, currentWeek }) {
   const n = history.length;
   if (n < 2) return null;
 
-  const revenues = history.map(h => h.revenue ?? 0);
-  const costs    = history.map(h => (h.totalCost ?? ((h.leases ?? 0) + (h.maintenance ?? 0) + (h.fuel ?? 0) + (h.crew ?? 0) + (h.quality ?? 0) + (h.gates ?? 0))) ?? 0);
+  // The three series must reconcile so the chart reads profit = revenue − cost.
+  // Profit is the true after-tax cash delta, which folds in two things the raw
+  // revenue/cost fields exclude: active-event demand swings (added to revenue)
+  // and corporate tax (a cost). Fold them back in here so the lines add up.
+  const revenues = history.map(h => (h.revenue ?? 0) + (h.eventDemandAdj ?? 0));
+  const costs    = history.map(h => {
+    const base = h.totalCost ?? ((h.leases ?? 0) + (h.maintenance ?? 0) + (h.fuel ?? 0) + (h.crew ?? 0) + (h.quality ?? 0) + (h.gates ?? 0));
+    return (base ?? 0) + (h.corporateTax ?? 0);
+  });
   const profits  = history.map(h => h.profit ?? 0);
 
   const allVals = [...revenues, ...costs, ...profits];

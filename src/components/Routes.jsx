@@ -13,7 +13,7 @@ import InfoTip from './InfoTip.jsx';
 import { projectWeek } from '../utils/financeProjection.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
-  weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE,
+  weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, cargoSlotsUsedAt,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths,
@@ -1115,7 +1115,7 @@ function airportRegion(airport) {
 
 function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const { state, dispatch } = useGame();
-  const { fleet, routes, hub, gates = {} } = state;
+  const { fleet, routes, hub, gates = {}, cargoRoutes = [] } = state;
 
   const isAddingFlights = initialOrigin != null && initialDest != null;
 
@@ -1175,7 +1175,8 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // Per-month peak so a dormant route frees its slots for a counter-seasonal route.
   const slotsUsedAt    = (code) => Math.max(0, ...newMonths.map(m =>
     routes.filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
-      .reduce((s, r) => s + r.weeklyFrequency, 0)));
+      .reduce((s, r) => s + r.weeklyFrequency, 0)))
+    + cargoSlotsUsedAt(code, cargoRoutes);
   const originSlotCap  = (gates[origin] ?? 0) * SLOTS_PER_GATE;
   const originSlotsUsed = slotsUsedAt(origin);
   const originSlotsOk  = gateAtOrigin && (originSlotsUsed + Number(frequency) <= originSlotCap);

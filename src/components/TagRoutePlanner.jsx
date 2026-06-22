@@ -9,6 +9,7 @@ import {
   currentGameDate, effectiveRangeKm, defaultClassPrices,
   routeLegs, routeSegments, routeSegmentKey, routeMaxLegKm, routeBlockHours,
   routeLandingFee, routeStops, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
+  cargoSlotsUsedAt,
 } from '../utils/simulation.js';
 import { ModeToggle } from './CargoRoutePlanner.jsx';
 import { Glyph } from './Icons.jsx';
@@ -48,7 +49,7 @@ function StopSelect({ value, onChange, gates, placeholder }) {
 
 export default function TagRoutePlanner({ mode, setMode }) {
   const { state, dispatch } = useGame();
-  const { fleet, routes, gates = {}, hub, cash } = state;
+  const { fleet, routes, gates = {}, hub, cash, cargoRoutes = [] } = state;
   const gd = currentGameDate(state);
 
   // Ordered stops: a tag flight needs ≥3 (origin + ≥1 stop + destination).
@@ -120,7 +121,8 @@ export default function TagRoutePlanner({ mode, setMode }) {
   const incident = {};
   for (const l of legs) { incident[l.from] = (incident[l.from] ?? 0) + 1; incident[l.to] = (incident[l.to] ?? 0) + 1; }
   const incidentCount = (r, code) => routeLegs(r).reduce((n, l) => n + (l.from === code ? 1 : 0) + (l.to === code ? 1 : 0), 0);
-  const slotsUsedAt = (code) => routes.reduce((s, r) => s + incidentCount(r, code) * (r.weeklyFrequency ?? 0), 0);
+  const slotsUsedAt = (code) => routes.reduce((s, r) => s + incidentCount(r, code) * (r.weeklyFrequency ?? 0), 0)
+    + cargoSlotsUsedAt(code, cargoRoutes);
   const gateProblem = ready ? validStops.find(c => !(gates[c] > 0)) : null;
   const slotProblem = ready ? validStops.find(c => slotsUsedAt(c) + (incident[c] ?? 0) * frequency > (gates[c] ?? 0) * SLOTS_PER_GATE) : null;
 

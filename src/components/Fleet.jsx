@@ -402,7 +402,7 @@ const CATEGORY_ORDER = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body']
 
 // ─── By Type view ─────────────────────────────────────────────────────────────
 
-function FleetByType({ fleet, routes }) {
+function FleetByType({ fleet, routes, cargoRoutes = [] }) {
   const gd = { year: 1, week: 1 }; // just for label purposes
   // Group by typeId
   const groups = {};
@@ -452,7 +452,7 @@ function FleetByType({ fleet, routes }) {
 
         // Avg utilisation
         const allBlockHrs = aircraft.map(a => {
-          const aRoutes = routes.filter(r => r.aircraftId === a.id);
+          const aRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === a.id);
           return type
             ? aRoutes.reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0)
             : 0;
@@ -532,7 +532,7 @@ function FleetByType({ fleet, routes }) {
 
 // ─── By Category view ─────────────────────────────────────────────────────────
 
-function FleetByCategory({ fleet, routes }) {
+function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
   const categories = CATEGORY_ORDER.filter(cat =>
     fleet.some(a => getAircraftType(a.typeId)?.category === cat)
   );
@@ -605,7 +605,7 @@ function FleetByCategory({ fleet, routes }) {
         // Avg utilisation
         const avgBlock = catFleet.reduce((s, a) => {
           const t = getAircraftType(a.typeId);
-          const aRoutes = routes.filter(r => r.aircraftId === a.id);
+          const aRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === a.id);
           const bh = t ? aRoutes.reduce((x, r) => x + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, t), 0) : 0;
           return s + bh;
         }, 0) / catFleet.length;
@@ -692,7 +692,7 @@ function FleetByCategory({ fleet, routes }) {
 
 export default function Fleet() {
   const { state, dispatch } = useGame();
-  const { fleet, routes, pendingOrders = [], year, week } = state;
+  const { fleet, routes, cargoRoutes = [], pendingOrders = [], year, week } = state;
   const [selectedId,    setSelectedId]    = useState(null);
   const [configuringId, setConfiguringId] = useState(null);
   const [search,        setSearch]        = useState('');
@@ -864,7 +864,7 @@ export default function Fleet() {
           const count = aircraft.length;
           const avgAgeYrs = aircraft.reduce((s, a) => s + (a.ageWeeks ?? 0), 0) / count / 52;
           const allBH = aircraft.map(a => {
-            const aRoutes = routes.filter(r => r.aircraftId === a.id);
+            const aRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === a.id);
             return type ? aRoutes.reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, type), 0) : 0;
           });
           const avgUtil = allBH.reduce((s, h) => s + h, 0) / count / MAX_WEEKLY_BLOCK_HOURS;
@@ -1084,12 +1084,12 @@ export default function Fleet() {
 
       {/* By Type view */}
       {viewMode === 'byType' && (
-        <FleetByType fleet={fleet} routes={routes} />
+        <FleetByType fleet={fleet} routes={routes} cargoRoutes={cargoRoutes} />
       )}
 
       {/* By Category view */}
       {viewMode === 'byCategory' && (
-        <FleetByCategory fleet={fleet} routes={routes} />
+        <FleetByCategory fleet={fleet} routes={routes} cargoRoutes={cargoRoutes} />
       )}
 
       {/* Aircraft list + detail panel */}
@@ -1123,10 +1123,12 @@ export default function Fleet() {
               const ageYrs = ageWks / 52;
               const ageColor = ageYrs < 5 ? 'var(--green)' : ageYrs < 12 ? 'var(--yellow)' : 'var(--red)';
 
-              // Block hours — sum across ALL routes for this aircraft
+              // Block hours — sum across ALL routes (passenger + cargo) for this aircraft
               const allRoutes = routes.filter(r => r.aircraftId === aircraft.id);
+              const allCargo  = cargoRoutes.filter(r => r.aircraftId === aircraft.id);
+              const assignedRoutes = [...allRoutes, ...allCargo];
               const blockHrs = type
-                ? allRoutes.reduce((s, r) => {
+                ? assignedRoutes.reduce((s, r) => {
                     const dist = routeDistanceKm(r.origin, r.destination);
                     return s + weeklyBlockHours(dist, r.weeklyFrequency, type);
                   }, 0)
@@ -1203,10 +1205,14 @@ export default function Fleet() {
                         <span className="badge" style={{ background: 'rgba(248,81,73,.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.4)' }}>
                           <Glyph e="🔧" /> Grounded {aircraft.groundedWeeksLeft > 0 ? `(${aircraft.groundedWeeksLeft}w)` : ''}
                         </span>
-                      ) : allRoutes.length > 0 ? (
-                        allRoutes.length === 1
-                          ? <span className="badge badge-green">{allRoutes[0].origin}→{allRoutes[0].destination}</span>
-                          : <span className="badge badge-green">{allRoutes.length} routes</span>
+                      ) : assignedRoutes.length > 0 ? (
+                        assignedRoutes.length === 1 ? (
+                          allCargo.length === 1
+                            ? <span className="badge" style={{ background: 'rgba(232,131,58,.15)', color: '#e8833a', border: '1px solid rgba(232,131,58,.4)' }}><Glyph e="📦" /> {allCargo[0].origin}→{allCargo[0].destination}</span>
+                            : <span className="badge badge-green">{allRoutes[0].origin}→{allRoutes[0].destination}</span>
+                        ) : (
+                          <span className="badge badge-green">{assignedRoutes.length} routes</span>
+                        )
                       ) : (
                         <span className="badge badge-yellow">Idle</span>
                       )}
