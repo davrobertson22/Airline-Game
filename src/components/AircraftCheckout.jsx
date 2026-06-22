@@ -139,6 +139,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const type = getAircraftType(typeId);
   if (!type) return null;
 
+  const isFreighter   = !!type.freighter;
   const catColor      = CAT_COLORS[type.category] || '#93a4ba';
   const configOptions = type.configOptions ?? {};
   const engines       = configOptions.engines ?? [];
@@ -210,7 +211,9 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
     (SEAT_QUALITY_COST_PER_ROUTE[seatQ] ?? 0) +
     (SERVICE_QUALITY_COST_PER_ROUTE[servQ] ?? 0);
 
-  const cabinConfig = {
+  // Freighters carry cargo, not passengers — no cabin layout to choose. Pass null
+  // so delivery falls back to the (irrelevant) default config.
+  const cabinConfig = isFreighter ? null : {
     firstClass:     first,
     businessClass:  biz,
     premiumEconomy: prem,
@@ -325,7 +328,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               <div style={{ fontWeight: 700, fontSize: 19 }}>{type.name}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
                 {type.manufacturer} · <span style={{ color: catColor }}>{type.category}</span>
-                {' · '}{type.seats} seats · {type.range.toLocaleString()} km range
+                {' · '}{isFreighter ? `${type.payloadTonnes}t payload` : `${type.seats} seats`} · {type.range.toLocaleString()} km range
               </div>
             </div>
             <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', marginLeft: 8 }}><Glyph e="✕" /></button>
@@ -443,7 +446,8 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             </section>
           )}
 
-          {/* ── Cabin configuration ──────────────────────────────────────── */}
+          {/* ── Cabin configuration (passenger aircraft only) ────────────── */}
+          {!isFreighter && (
           <section style={{ marginBottom: 18 }}>
             <div style={sectionTitle}>Cabin Configuration</div>
 
@@ -561,6 +565,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
               </span>
             </div>
           </section>
+          )}
 
           {/* ── Order summary ────────────────────────────────────────────── */}
           <section style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginBottom: 14 }}>

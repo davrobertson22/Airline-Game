@@ -4,6 +4,7 @@ import { useGame } from '../store/GameContext.jsx';
 import RouteDetail from './RouteDetail.jsx';
 import AirportLink from './AirportLink.jsx';
 import CargoRoutesList, { FreightBadge, PassengerBadge } from './CargoRoutesList.jsx';
+import CargoRoutePlanner from './CargoRoutePlanner.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -139,6 +140,9 @@ export default function Routes() {
   // Passenger vs Freight view
   const [typeFilter, setTypeFilter] = useState('all');
 
+  // Freight planner toggle (inline "Open Freight Route" form in the Freight view)
+  const [showCargoForm, setShowCargoForm] = useState(false);
+
   // View mode: 'cards' | 'compare'
   const [viewMode, setViewMode] = useState('cards');
 
@@ -271,9 +275,31 @@ export default function Routes() {
     </div>
   );
 
-  // Freight-only view: show just the cargo routes list.
+  // Freight-only view: cargo routes list + an inline freight planner.
   if (typeFilter === 'freight') {
-    return (<div>{typeToggle}<CargoRoutesList /></div>);
+    return (
+      <div>
+        {typeToggle}
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            {cargoCount} cargo route{cargoCount !== 1 ? 's' : ''}
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ background: '#e8833a', borderColor: '#e8833a' }}
+            onClick={() => setShowCargoForm(v => !v)}
+          >
+            <GlyphLabel size={12} text={showCargoForm ? '✕ Cancel' : '📦 Open Freight Route'} />
+          </button>
+        </div>
+        {showCargoForm && (
+          <div style={{ marginBottom: 16 }}>
+            <CargoRoutePlanner embedded onOpened={() => setShowCargoForm(false)} />
+          </div>
+        )}
+        <CargoRoutesList />
+      </div>
+    );
   }
 
   return (

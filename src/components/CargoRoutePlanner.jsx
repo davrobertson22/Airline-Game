@@ -115,7 +115,7 @@ const ACCENT = '#e8833a';
 
 // ─── Main cargo planner ─────────────────────────────────────────────────────────
 
-export default function CargoRoutePlanner({ mode, setMode }) {
+export default function CargoRoutePlanner({ mode, setMode, embedded = false, onOpened }) {
   const { state, dispatch } = useGame();
 
   const [origin, setOrigin]   = useState('');
@@ -179,6 +179,7 @@ export default function CargoRoutePlanner({ mode, setMode }) {
 
   function handleOpenRoute(aircraftId) {
     dispatch({ type: 'ADD_CARGO_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, yieldPrice: effectiveYield });
+    onOpened?.();
   }
   function handleSwap() { const o = origin; setOrigin(dest); setDest(o); setYieldPrice(null); }
 
@@ -187,7 +188,7 @@ export default function CargoRoutePlanner({ mode, setMode }) {
 
   return (
     <div>
-      <ModeToggle mode={mode} setMode={setMode} />
+      {!embedded && <ModeToggle mode={mode} setMode={setMode} />}
 
       {/* Route picker */}
       <div className="card" style={{ marginBottom: 12 }}>
