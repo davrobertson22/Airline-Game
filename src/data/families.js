@@ -220,6 +220,29 @@ export function activeFamilies(fleet) {
   return s;
 }
 
+// ─── Fleet complexity penalty ───────────────────────────────────────────────────
+//
+// Operating multiple aircraft families splits pilot pools and multiplies type
+// ratings, recurrent sim training and maintenance type-skills. We model this as a
+// surcharge on the affected labor groups: +2% per family BEYOND the first, so a
+// single-family carrier (e.g. all-737) pays no penalty, two families +2%, etc.
+
+/** Surcharge added to affected labor groups for each family beyond the first. */
+export const FLEET_COMPLEXITY_PCT_PER_EXTRA_FAMILY = 0.02;
+
+/** Labor groups whose fixed overhead is affected by fleet complexity. */
+export const COMPLEXITY_AFFECTED_GROUPS = ['pilots', 'maintenanceTeam'];
+
+/**
+ * Multiplier (≥ 1.0) applied to affected labor groups' fixed overhead.
+ * 1 family → 1.00, 2 → 1.02, 3 → 1.04, …
+ * @param {object[]} fleet - array of aircraft from game state
+ */
+export function fleetComplexityMultiplier(fleet) {
+  const extra = Math.max(0, activeFamilies(fleet).size - 1);
+  return 1 + FLEET_COMPLEXITY_PCT_PER_EXTRA_FAMILY * extra;
+}
+
 /**
  * Total weekly MRO base cost for all active families.
  * @param {object[]} fleet  - array of aircraft from game state

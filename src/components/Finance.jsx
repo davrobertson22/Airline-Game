@@ -10,7 +10,8 @@ import { getAircraftType } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getSeasonalProfile } from '../models/demand.js';
 import { LABOR_GROUPS, DEFAULT_LABOR_STATE, laborEffects } from '../data/labor.js';
-import { FAMILY_INFO, AIRCRAFT_FAMILY, activeFamilies as getActiveFamilies } from '../data/families.js';
+import { FAMILY_INFO, AIRCRAFT_FAMILY, activeFamilies as getActiveFamilies,
+         fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
 import {
   fuelIndexStatus, fuelIndexDelta, absoluteWeek,
   HEDGE_DURATIONS, HEDGE_COVERAGES,
@@ -1122,14 +1123,19 @@ function PLStatement({ proj }) {
               >
                 <SubSectionHeader label="Labor Overhead (fixed per aircraft)" />
                 {LABOR_GROUPS.map(g => {
-                  const gs   = labor[g.id] ?? { payMultiplier: 1.0, morale: 80 };
-                  const cost = fleet.length > 0 ? Math.round(g.baseWeeklyPerAircraft * gs.payMultiplier * fleet.length) : 0;
+                  const gs       = labor[g.id] ?? { payMultiplier: 1.0, morale: 80 };
+                  const complexityMult = fleetComplexityMultiplier(fleet);
+                  const famMult  = COMPLEXITY_AFFECTED_GROUPS.includes(g.id) ? complexityMult : 1.0;
+                  const cost = fleet.length > 0 ? Math.round(g.baseWeeklyPerAircraft * gs.payMultiplier * fleet.length * famMult) : 0;
                   return (
                     <tr key={g.id}>
                       <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
                         {g.emoji} {g.name}
                         <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
                           {gs.payMultiplier.toFixed(2)}× · morale {Math.round(gs.morale)}%
+                          {famMult > 1.0 && (
+                            <span style={{ color: 'var(--yellow)' }}> · +{Math.round((famMult - 1) * 100)}% fleet complexity</span>
+                          )}
                         </span>
                       </td>
                       {pw && <td />}

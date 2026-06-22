@@ -6,6 +6,8 @@ import {
 import {
   AIRCRAFT_FAMILY, FAMILY_INFO, FAMILY_CATEGORY_LABEL,
   activeFamilies as getActiveFamilies, weeklyFamilyBaseCost,
+  fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS,
+  FLEET_COMPLEXITY_PCT_PER_EXTRA_FAMILY,
 } from '../data/families.js';
 import { formatMoney, weeklyBlockHours, routeDistanceKm } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -120,11 +122,14 @@ function MoraleBar({ morale, payMultiplier }) {
 
 // ─── Labor group card ─────────────────────────────────────────────────────────
 
-function LaborCard({ group, groupState, fleetSize, headcount, dispatch }) {
+function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexityMult = 1.0, familyCount = 1 }) {
   const { payMultiplier, morale } = groupState;
-  const weeklyCostPerAircraft = Math.round(group.baseWeeklyPerAircraft * payMultiplier);
+  const affectedByComplexity  = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) && complexityMult > 1.0;
+  const famMult               = affectedByComplexity ? complexityMult : 1.0;
+  const weeklyCostPerAircraft = Math.round(group.baseWeeklyPerAircraft * payMultiplier * famMult);
   const totalWeeklyCost       = weeklyCostPerAircraft * fleetSize;
   const costPerHead           = headcount > 0 ? Math.round(totalWeeklyCost / headcount) : 0;
+  const complexityPct         = Math.round((complexityMult - 1) * 100);
 
   return (
     <div className="card" style={{ marginBottom: 10, padding: '14px 18px' }}>
@@ -162,6 +167,18 @@ function LaborCard({ group, groupState, fleetSize, headcount, dispatch }) {
           borderRadius: 4, padding: '5px 10px', marginBottom: 10,
         }}>
           ℹ Variable flight duty pay (hourly wages while airborne) is charged separately under Direct Operating Costs — this covers fixed overhead only.
+        </div>
+      )}
+
+      {/* Fleet-complexity surcharge note (pilots & maintenance) */}
+      {affectedByComplexity && fleetSize > 0 && (
+        <div style={{
+          fontSize: 11, color: 'var(--yellow)', background: 'var(--surface2)',
+          borderRadius: 4, padding: '5px 10px', marginBottom: 10,
+        }}>
+          ⚠ Fleet-complexity surcharge: +{complexityPct}% ({familyCount} aircraft families ·
+          {' '}+{Math.round(FLEET_COMPLEXITY_PCT_PER_EXTRA_FAMILY * 100)}% per family beyond the first).
+          Split pilot pools and extra type ratings raise this overhead.
         </div>
       )}
 
@@ -431,15 +448,17 @@ export default function Operations() {
   );
   const totalHeadcount = Object.values(headcounts).reduce((s, n) => s + n, 0);
 
-  // Total labor overhead per week
-  const totalLaborWeekly = LABOR_GROUPS.reduce((sum, g) => {
-    const payMult = labor[g.id]?.payMultiplier ?? 1.0;
-    return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleetSize);
-  }, 0);
-
   // Fleet complexity — families currently in use
   const familySet  = getActiveFamilies(fleet);
   const familyCost = weeklyFamilyBaseCost(fleet);
+  const complexityMult = fleetComplexityMultiplier(fleet);
+
+  // Total labor overhead per week (pilots & maintenance carry the complexity surcharge)
+  const totalLaborWeekly = LABOR_GROUPS.reduce((sum, g) => {
+    const payMult = labor[g.id]?.payMultiplier ?? 1.0;
+    const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(g.id) ? complexityMult : 1.0;
+    return sum + Math.round(g.baseWeeklyPerAircraft * payMult * fleetSize * famMult);
+  }, 0);
 
   // Count aircraft per family
   const familyCount = {};
@@ -498,6 +517,8 @@ export default function Operations() {
           fleetSize={fleetSize}
           headcount={headcounts[group.id] ?? 0}
           dispatch={dispatch}
+          complexityMult={complexityMult}
+          familyCount={familySet.size}
         />
       ))}
 

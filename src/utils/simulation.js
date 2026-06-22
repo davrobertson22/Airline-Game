@@ -3,7 +3,8 @@ import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 export { baseCityPairDemand } from './market.js';
 import { cargoCityPairDemand, cargoReferenceYield } from './market.js';
 import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
-import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO } from '../data/families.js';
+import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
+         fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
 import {
   calcHQCost,
   weeklyInsuranceCost,
@@ -1749,12 +1750,16 @@ export function weeklyTick(state) {
     fleetCosts.push({ aircraftId: aircraft.id, lease: leaseThisWk, maintenance: maint });
   }
 
-  // 3. Labor overhead (fixed per aircraft, scaled by pay multiplier for each group)
+  // 3. Labor overhead (fixed per aircraft, scaled by pay multiplier for each group).
+  //    Pilots & maintenance also carry a fleet-complexity surcharge: +2% per
+  //    aircraft family beyond the first (split pilot pools, extra type ratings).
+  const complexityMult = fleetComplexityMultiplier(fleet);
   let totalLaborCosts = 0;
   if (labor && fleet.length > 0) {
     for (const group of LABOR_GROUPS) {
       const payMult = labor[group.id]?.payMultiplier ?? 1.0;
-      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * fleet.length);
+      const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) ? complexityMult : 1.0;
+      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * fleet.length * famMult);
     }
   }
 
