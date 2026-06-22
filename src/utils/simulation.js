@@ -1401,6 +1401,7 @@ export function weeklyTick(state) {
       // Aggregate capacity across all aircraft in the group
       let totalEcoSeats = 0;
       let totalBizSeats = 0;
+      let totalSeatsAll = 0; // ALL cabins (incl. premium economy / first) × freq
       let totalFreq     = 0;
       let totalQuality  = 0;
       let hasBusinessCabin = false;
@@ -1414,6 +1415,7 @@ export function weeklyTick(state) {
         const biz  = (cfg.businessClass ?? 0) * freq;
         totalEcoSeats += eco;
         totalBizSeats += biz;
+        totalSeatsAll += configBodies(cfg) * freq;
         totalFreq     += freq;
         totalQuality  += computeQualityScore({
           onTimeRate:    laborEffects(labor).onTimeRate,
@@ -1442,6 +1444,7 @@ export function weeklyTick(state) {
         seatsPerFlight:    totalFreq > 0 ? Math.round((totalEcoSeats + totalBizSeats) / totalFreq) : 0,
         economySeats:      totalEcoSeats,
         businessSeats:     totalBizSeats,
+        totalSeats:        totalSeatsAll,
         qualityScore:      avgQuality,
         connectivityBonus: connBonus,
       };

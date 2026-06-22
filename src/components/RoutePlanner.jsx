@@ -597,6 +597,7 @@ export default function RoutePlanner() {
       seatsPerFlight: configBodies(cfg),
       economySeats: (cfg.economy ?? type.seats) * frequency,
       businessSeats: (cfg.businessClass ?? 0) * frequency,
+      totalSeats: configBodies(cfg) * frequency,
       qualityScore: Math.max(0, Math.min(100,
         computeQualityScore({ onTimeRate: 0.85, serviceLevel: serviceLevelMap[cfg.seatQuality ?? 'standard'] ?? 'economy', fleetAgeYears: 0, customerRating: 3.5 })
         + configSpaceQualityBonus(cfg, type)

@@ -178,6 +178,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           seatsPerFlight:    type.seats,
           economySeats:      (aircraft.config?.economy ?? type.seats) * totalFreq,
           businessSeats:     (aircraft.config?.businessClass ?? 0) * totalFreq,
+          totalSeats:        ((aircraft.config?.economy ?? type.seats) + (aircraft.config?.businessClass ?? 0) + (aircraft.config?.premiumEconomy ?? 0) + (aircraft.config?.firstClass ?? 0)) * totalFreq,
           qualityScore:      Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
         };
@@ -199,7 +200,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
     // Build combined demand allocation when there are multiple aircraft
     const demandAllocations = new Map(); // aircraftId → demandOverride
     if (playerRoutes.length > 1) {
-      let totalEcoSeats = 0, totalBizSeats = 0, totalFreq = 0;
+      let totalEcoSeats = 0, totalBizSeats = 0, totalSeatsAll = 0, totalFreq = 0;
       let hasBusinessCabin = false;
       const validSims = [];
       for (const route of playerRoutes) {
@@ -213,6 +214,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
         const biz  = (cfg.businessClass ?? 0) * freq;
         totalEcoSeats += eco;
         totalBizSeats += biz;
+        totalSeatsAll += ((cfg.economy ?? type.seats) + (cfg.businessClass ?? 0) + (cfg.premiumEconomy ?? 0) + (cfg.firstClass ?? 0)) * freq;
         totalFreq     += freq;
         if (biz > 0) hasBusinessCabin = true;
         validSims.push({ route, aircraft, type, cfg, freq, eco, biz });
@@ -229,6 +231,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           weeklyFrequency: totalFreq,
           seatsPerFlight: Math.round((totalEcoSeats + totalBizSeats) / totalFreq),
           economySeats: totalEcoSeats, businessSeats: totalBizSeats,
+          totalSeats: totalSeatsAll,
           qualityScore: shareResults.find(r => r.airlineId === 'player') ? 70 : 70,
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
         };
