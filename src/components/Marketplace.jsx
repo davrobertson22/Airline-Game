@@ -22,6 +22,7 @@ const CAT_COLORS = {
   'Regional Jet': '#38d39f',
   'Narrow Body':  '#3ea6ff',
   'Wide Body':    '#a98bff',
+  'Double Deck':  '#7c5cff',
   'Supersonic':   '#f778ba',
   'Freighter':    '#e8833a',
 };
@@ -31,8 +32,14 @@ const CAT_ICONS = {
   'Regional Jet': '✈',
   'Narrow Body':  '✈',
   'Wide Body':    '🛫',
+  'Double Deck':  '🛬',
   'Supersonic':   '💨',
   'Freighter':    '📦',
+};
+
+// Display labels for category filter tabs (falls back to the raw category key).
+const CAT_LABELS = {
+  'Double Deck': 'Double Decker',
 };
 
 const DELIVERY_LEAD = {
@@ -40,6 +47,7 @@ const DELIVERY_LEAD = {
   'Narrow Body':  3,
   'Regional Jet': 2,
   'Turboprop':    1,
+  'Double Deck':  5,
   'Supersonic':   4,
   'Freighter':    4,
 };
@@ -267,7 +275,7 @@ export default function Marketplace() {
                 onClick={() => { setActiveCategory(cat); setActiveMfr('All'); }}
               >
                 {cat !== 'All' && <span style={{ marginRight: 5, display: 'inline-flex' }}><Glyph e={CAT_ICONS[cat]} size={13} /></span>}
-                {cat}
+                {CAT_LABELS[cat] || cat}
               </button>
             );
           })}
@@ -344,7 +352,7 @@ export default function Marketplace() {
                     className="aircraft-cat-badge"
                     style={{ background: `${catColor}25`, color: catColor, border: `1px solid ${catColor}50` }}
                   >
-                    {type.category}
+                    {CAT_LABELS[type.category] || type.category}
                   </span>
                   {alreadyOwned > 0 && (
                     <span className="badge badge-blue" style={{ marginLeft: 6 }}>{alreadyOwned} in fleet</span>

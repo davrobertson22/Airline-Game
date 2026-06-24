@@ -2710,7 +2710,7 @@ export function getAircraftType(id) {
   return AIRCRAFT_TYPES.find(a => a.id === id);
 }
 
-export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body', 'Supersonic', 'Freighter'];
+export const AIRCRAFT_CATEGORIES = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body', 'Double Deck', 'Supersonic', 'Freighter'];
 
 // ─── Purchase pricing helpers ─────────────────────────────────────────────────
 
