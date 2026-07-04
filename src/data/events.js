@@ -516,9 +516,64 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// ── Event conflict logic ──────────────────────────────────────────────────────
+//
+// Each event is tagged with the "axis" it moves so contradictory events can
+// never run at the same time. Two axes are tracked:
+//
+//   demand  'up' | 'down'   — passenger appetite / sentiment
+//   scope   'global' | 'regional'
+//   fuel    'up' | 'down'   — jet-fuel cost direction
+//
+// Operational disruptions (weather, strikes, volcanic ash, IT outages, natural
+// disasters, political unrest) are capacity hits, NOT demand sentiment, so they
+// carry no axis and may co-occur with anything — including each other. That is
+// realistic: a holiday demand surge can coincide with a winter storm.
+export const EVENT_AXES = {
+  // Demand UP
+  travel_boom:       { demand: 'up',   scope: 'global'   },
+  holiday_surge:     { demand: 'up',   scope: 'global'   },
+  mega_conference:   { demand: 'up',   scope: 'global'   },
+  heatwave_escape:   { demand: 'up',   scope: 'global'   },
+  new_route_frenzy:  { demand: 'up',   scope: 'global'   },
+  competitor_crisis: { demand: 'up',   scope: 'global'   },
+  asia_boom:         { demand: 'up',   scope: 'regional' },
+  europe_surge:      { demand: 'up',   scope: 'regional' },
+  world_cup:         { demand: 'up',   scope: 'regional' },
+  tourism_campaign:  { demand: 'up',   scope: 'regional' },
+  // Demand DOWN
+  recession:         { demand: 'down', scope: 'global'   },
+  pandemic_scare:    { demand: 'down', scope: 'global'   },
+  fare_war:          { demand: 'down', scope: 'global'   },
+  us_slump:          { demand: 'down', scope: 'regional' },
+  currency_crisis:   { demand: 'down', scope: 'regional' },
+  // Fuel cost
+  fuel_spike:        { fuel: 'up'   },
+  fuel_drop:         { fuel: 'down' },
+};
+
+/**
+ * True if two event templates (by id) are logically contradictory and must
+ * not run simultaneously. Rules:
+ *   1. Opposite fuel-cost directions conflict.
+ *   2. Opposite demand directions conflict when EITHER event is global in
+ *      scope (a global swing can't coexist with the reverse anywhere; two
+ *      independent regional swings in different regions are fine).
+ */
+export function eventsConflict(idA, idB) {
+  const a = EVENT_AXES[idA];
+  const b = EVENT_AXES[idB];
+  if (!a || !b) return false;
+  if (a.fuel && b.fuel && a.fuel !== b.fuel) return true;
+  if (a.demand && b.demand && a.demand !== b.demand &&
+      (a.scope === 'global' || b.scope === 'global')) return true;
+  return false;
+}
+
 /**
  * Roll for new events this week. Returns an array of new event objects to add.
- * Won't add a second instance of an already-active event type.
+ * Won't add a second instance of an already-active event type, and won't add
+ * an event that logically contradicts a currently-active or newly-rolled one.
  */
 export function rollEvents(activeEvents = []) {
   const MAX_ACTIVE_EVENTS = 2;
@@ -529,6 +584,10 @@ export function rollEvents(activeEvents = []) {
     if (activeEvents.length + newEvents.length >= MAX_ACTIVE_EVENTS) break; // cap reached
     if (activeTypes.has(tmpl.id)) continue;          // already active
     if (Math.random() > tmpl.probability * EVENT_FREQUENCY) continue;  // didn't trigger
+
+    // Skip events that contradict something already active or just rolled.
+    const present = [...activeEvents.map(e => e.templateId), ...newEvents.map(e => e.templateId)];
+    if (present.some(id => eventsConflict(id, tmpl.id))) continue;
 
     const dur = randInt(tmpl.duration[0], tmpl.duration[1]);
     const { effects, resolvedDesc } = tmpl.generate();

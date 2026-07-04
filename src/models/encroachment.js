@@ -29,22 +29,22 @@ import { referencePrice, routePairKey } from '../utils/simulation.js';
 // ── Tunable knobs ────────────────────────────────────────────────────────────
 
 /** Player market cap ($) above which the airline is "on the radar" and routes can be contested. */
-export const ENCROACH_ACTIVATION_MARKETCAP = 400_000_000;
+export const ENCROACH_ACTIVATION_MARKETCAP = 250_000_000;
 
 /** A route is a "fat target" worth attacking when it runs at/above this load factor … */
-export const ENCROACH_TARGET_MIN_LF = 0.80;
+export const ENCROACH_TARGET_MIN_LF = 0.78;
 /** … AND the player prices it at/above this multiple of the reference fare. */
-export const ENCROACH_TARGET_MIN_FARE_RATIO = 1.35;
+export const ENCROACH_TARGET_MIN_FARE_RATIO = 1.25;
 
 /** Base weekly probability that a fat route draws a new entrant (scaled by how fat it is). */
-export const ENCROACH_BASE_ENTRY_PROB = 0.045;
+export const ENCROACH_BASE_ENTRY_PROB = 0.075;
 /** Cap on weekly entry probability for any single route. */
-export const ENCROACH_MAX_ENTRY_PROB = 0.18;
+export const ENCROACH_MAX_ENTRY_PROB = 0.28;
 
 /** Baseline weekly entry probability on ANY of the player's routes — even fairly
  *  priced ones — once the airline is on the radar. Models ordinary competitive entry,
  *  not just punishment for gouging. Kept low so it's occasional, not constant. */
-export const ENCROACH_RANDOM_ENTRY_PROB = 0.008;
+export const ENCROACH_RANDOM_ENTRY_PROB = 0.015;
 
 /** How far below the player's fare ratio an entrant prices (moderate undercut). */
 export const ENCROACH_UNDERCUT = 0.15;
@@ -54,17 +54,37 @@ export const ENCROACH_TIER_FLOOR = { budget: 0.70, legacy: 0.90, premium: 1.20 }
 export const ENCROACH_TIER_SEATS = { budget: 186, legacy: 220, premium: 260 };
 
 /** Entrant starts at this fraction of the player's frequency on the pair … */
-export const ENCROACH_START_FREQ_FRAC = 0.30;
+export const ENCROACH_START_FREQ_FRAC = 0.40;
 /** … and ramps toward this fraction (the share-split ceiling). */
-export const ENCROACH_CAP_FREQ_FRAC = 0.65;
+export const ENCROACH_CAP_FREQ_FRAC = 0.80;
 /** Weekly frequency ramp (additive share of freqCap). */
-export const ENCROACH_RAMP_PER_WEEK = 0.12;
+export const ENCROACH_RAMP_PER_WEEK = 0.18;
 
-/** If the player stops making the route attractive (drops fare/leaves), the entrant
- *  retreats after this many idle weeks. */
-export const ENCROACH_EXIT_IDLE_WEEKS = 12;
-/** Fare ratio below which the route is no longer worth contesting (player fought back). */
-export const ENCROACH_EXIT_FARE_RATIO = 1.05;
+/** If the player keeps the route un-fat for this many weeks, the entrant stops actively
+ *  contesting it — but it does NOT abandon the route. Instead it goes DORMANT: it keeps a
+ *  reduced, persistent presence and eases off on price (see dormant knobs below). */
+export const ENCROACH_EXIT_IDLE_WEEKS = 20;
+/** Fare ratio below which the route is no longer worth actively contesting (player fought back). */
+export const ENCROACH_EXIT_FARE_RATIO = 0.98;
+
+// ── Dormancy (entrenched-but-passive) ────────────────────────────────────────
+// A dormant entrant has decided the route isn't worth a price war, but it has sunk costs
+// (aircraft, slots, brand presence) and stays on as a minor competitor. It shrinks to a
+// token frequency and prices only mildly below the player rather than deeply undercutting,
+// so it keeps splitting some traffic without crushing the player's margins. If the player
+// lets the route get fat again, the entrant re-awakens and resumes aggressive contesting.
+
+/** Dormant entrant maintains this fraction of the player's frequency on the pair. */
+export const ENCROACH_DORMANT_FREQ_FRAC = 0.50;
+/** Dormant entrant eases its fare up to only this mild undercut of the player
+ *  (vs. the aggressive ENCROACH_UNDERCUT while actively contesting). */
+export const ENCROACH_DORMANT_UNDERCUT = 0.04;
+/** Per-week glide rate by which a dormant entrant eases frequency down and price up
+ *  toward the dormant targets (so the transition is gradual, not instant). */
+export const ENCROACH_DORMANT_EASE_PER_WEEK = 0.12;
+/** If a dormant route's fare ratio climbs back to/above this, the entrant re-awakens
+ *  and resumes aggressive contesting (defaults to the same bar as a fresh fat target). */
+export const ENCROACH_REACTIVATE_FARE_RATIO = ENCROACH_TARGET_MIN_FARE_RATIO;
 
 // ── Offer builder (consumed by simulateRoute / weeklyTick) ───────────────────
 
@@ -132,15 +152,48 @@ export function tickEncroachment({ routes = [], routePricing = {}, lastReport = 
 
   const activated = marketCap >= ENCROACH_ACTIVATION_MARKETCAP;
 
-  // 1. Update existing entrants (ramp / retreat); drop those whose route the player left.
+  // 1. Update existing entrants. While the route stays fat they ramp up; if the player
+  //    fights price down for long enough they go DORMANT (token presence, mild pricing)
+  //    rather than fully retreating; and a dormant entrant re-awakens if the lane turns
+  //    fat again. Only a player abandoning the route entirely removes the entrant.
   for (const key of Object.keys(next)) {
     const info = pairInfo[key];
     const e = next[key];
-    if (!info) { delete next[key]; continue; }                       // player no longer flies it
+    if (!info) { delete next[key]; continue; }                       // player no longer flies it → gone
+
+    const fatAgain   = info.fareRatio >= ENCROACH_REACTIVATE_FARE_RATIO;
     const attractive = info.fareRatio >= ENCROACH_EXIT_FARE_RATIO;
+    const tierFloor  = ENCROACH_TIER_FLOOR[e.tier] ?? 0.9;
+
+    // ── Dormant entrants: glide to a token footprint; re-awaken if the route turns fat. ──
+    if (e.dormant) {
+      if (fatAgain) {
+        const priceMultiplier = Math.max(tierFloor, info.fareRatio - ENCROACH_UNDERCUT);
+        next[key] = { ...e, dormant: false, idleWeeks: 0, priceMultiplier: +priceMultiplier.toFixed(4), weeksActive: (e.weeksActive ?? 0) + 1 };
+        events.push({ type: 'reawaken', pairKey: key, competitorId: e.competitorId, name: e.name, origin: info.origin, destination: info.destination });
+        continue;
+      }
+      const freqTarget  = Math.max(2, Math.round(info.totalFreq * ENCROACH_DORMANT_FREQ_FRAC));
+      const priceTarget = Math.max(tierFloor, info.fareRatio - ENCROACH_DORMANT_UNDERCUT);
+      // Shrink frequency toward the dormant floor (never below it).
+      const frequency = e.frequency > freqTarget
+        ? Math.max(freqTarget, e.frequency - Math.max(1, Math.round((e.frequency - freqTarget) * ENCROACH_DORMANT_EASE_PER_WEEK)))
+        : e.frequency;
+      // Ease fare UP toward a mild undercut — i.e. stop pricing aggressively. Never cut further while dormant.
+      const priceMultiplier = e.priceMultiplier < priceTarget
+        ? Math.min(priceTarget, +(e.priceMultiplier + Math.max(0.01, (priceTarget - e.priceMultiplier) * ENCROACH_DORMANT_EASE_PER_WEEK)).toFixed(4))
+        : e.priceMultiplier;
+      next[key] = { ...e, frequency, priceMultiplier, weeksActive: (e.weeksActive ?? 0) + 1 };
+      continue;
+    }
+
+    // ── Active entrants: ramp while attractive; fall dormant after the idle timeout. ──
     const idleWeeks = attractive ? 0 : (e.idleWeeks ?? 0) + 1;
-    if (idleWeeks >= ENCROACH_EXIT_IDLE_WEEKS) { delete next[key]; events.push({ type: 'exit', pairKey: key, competitorId: e.competitorId }); continue; }
-    // ramp frequency toward cap while attractive
+    if (idleWeeks >= ENCROACH_EXIT_IDLE_WEEKS) {
+      next[key] = { ...e, dormant: true, idleWeeks, weeksActive: (e.weeksActive ?? 0) + 1 };
+      events.push({ type: 'dormant', pairKey: key, competitorId: e.competitorId, name: e.name, origin: info.origin, destination: info.destination });
+      continue;
+    }
     const target = e.freqCap;
     const step   = Math.max(1, Math.round(target * ENCROACH_RAMP_PER_WEEK));
     const frequency = attractive ? Math.min(target, e.frequency + step) : e.frequency;

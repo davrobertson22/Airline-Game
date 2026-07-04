@@ -84,7 +84,32 @@ export function priceChokeFactor(price, refForClass) {
 export const ELASTICITY = {
   leisure: 1.8,   // raised from 1.5 — overpricing now meaningfully reduces demand
   business: 0.6,
+  connecting: 1.0, // connecting pax: less elastic than O&D leisure, but NOT captive
 };
+
+/**
+ * Price-response multiplier (0–1) for CONNECTING passengers.
+ *
+ * Connecting pax used to ignore price entirely — they paid whatever fare was set,
+ * so an overpriced route still earned full feed revenue. They should be *less*
+ * price-sensitive than pure origin–destination leisure travelers (they've committed
+ * to your network for the connection and have fewer one-hop alternatives), but they
+ * are not captive: as the fare climbs toward the cap, connecting demand tapers and
+ * reaches zero at PRICE_CAP_MULTIPLE × reference — exactly like direct demand.
+ *
+ *   price ≤ reference        → 1
+ *   price ≥ cap × reference  → 0
+ *   in between               → (ref/price)^ELASTICITY.connecting × priceChokeFactor
+ *
+ * @param {number} price     the fare being charged ($)
+ * @param {number} refPrice  the route economy reference fare ($)
+ * @returns {number} 0–1
+ */
+export function connectingPriceFactor(price, refPrice) {
+  const ref = Math.max(refPrice, 1);
+  if (price <= ref) return 1;
+  return Math.pow(ref / price, ELASTICITY.connecting) * priceChokeFactor(price, ref);
+}
 
 /**
  * Utility weights used in competitive market-share model.
@@ -856,23 +881,48 @@ export function computeConnectingDemand(
   // Compute distance once here and pass to both endpoints
   const distKm = routeDistance(origin, destination);
 
-  // Bug fix: connecting pax have no price elasticity in connectingAtEndpoint — they pay
-  // whatever ticketPrice is passed, regardless of how high. Cap the effective fare at
-  // 4× the market reference price so inflated ticket prices don't produce phantom
-  // revenue from connecting passengers who would never actually pay that fare.
-  // (Direct passengers are already handled by the elasticity model in computeMarketShare.)
-  const refPrice = referencePrice(origin, destination);
-  const cappedTicketPrice = Math.min(ticketPrice, refPrice * 4);
+  // Connecting passengers now respond to price. They are less elastic than pure O&D
+  // leisure travelers (see connectingPriceFactor), but an overpriced route still
+  // bleeds its feed: the factor tapers demand as the fare rises and hits zero at the
+  // price cap, mirroring direct demand. This replaces the old crude "cap the fare at
+  // 4× reference" revenue hack — the elasticity + choke do that job smoothly now, and
+  // pax counts (not just revenue) fall with price the way real connecting traffic does.
+  const refPrice    = referencePrice(origin, destination);
+  const priceFactor = connectingPriceFactor(ticketPrice, refPrice);
 
   const endpointOpts = { weeklyFrequency, distKm, partnerHubCodes };
-  const originSide = connectingAtEndpoint(origin,      hubsMap, playerRoutesAtOrigin, cappedTicketPrice, endpointOpts);
-  const destSide   = connectingAtEndpoint(destination, hubsMap, playerRoutesAtDest,   cappedTicketPrice, endpointOpts);
+  const originSide = _scaleConnecting(
+    connectingAtEndpoint(origin, hubsMap, playerRoutesAtOrigin, ticketPrice, endpointOpts),
+    priceFactor
+  );
+  const destSide = _scaleConnecting(
+    connectingAtEndpoint(destination, hubsMap, playerRoutesAtDest, ticketPrice, endpointOpts),
+    priceFactor
+  );
   return {
     totalPax:     originSide.pax + destSide.pax,
     totalRevenue: originSide.revenue + destSide.revenue,
     origin:       originSide,
     destination:  destSide,
+    priceFactor:  +priceFactor.toFixed(3),
   };
+}
+
+/**
+ * Scale a connecting-endpoint result by a 0–1 price-response factor, keeping the
+ * UI breakdown fields (external/internal pax) consistent with the scaled totals.
+ * @param {object} side    result from connectingAtEndpoint
+ * @param {number} factor  0–1 price response
+ * @returns {object}
+ */
+function _scaleConnecting(side, factor) {
+  if (factor >= 1) return side;
+  const scaled = { ...side };
+  scaled.pax     = Math.round(side.pax     * factor);
+  scaled.revenue = Math.round(side.revenue * factor);
+  if (side.externalPax != null) scaled.externalPax = Math.round(side.externalPax * factor);
+  if (side.internalPax != null) scaled.internalPax = Math.round(side.internalPax * factor);
+  return scaled;
 }
 
 /**
