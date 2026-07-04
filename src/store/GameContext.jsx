@@ -997,6 +997,49 @@ function reducer(state, action) {
       };
     }
 
+    // Bulk pricing: shift fares by a percentage across many routes at once.
+    // action: { routeIds: [...], pct: { economy?, premiumEconomy?, businessClass?, firstClass? } }
+    // Each pct value is a percentage delta (e.g. +10 raises that class's fare 10%,
+    // -5 cuts it 5%). Pricing belongs to the O&D pair, so we resolve the affected
+    // pairs from the route ids and adjust each pair's price set once (covering every
+    // aircraft on it). New fares are clamped to each class's [1, cap] range.
+    case 'BULK_ADJUST_PRICING': {
+      const bulkIds = new Set(action.routeIds ?? []);
+      const pct = action.pct ?? {};
+      // Only keep classes with a real, non-zero numeric adjustment.
+      const activePct = {};
+      for (const [k, v] of Object.entries(pct)) {
+        const n = Number(v);
+        if (!isNaN(n) && n !== 0) activePct[k] = n;
+      }
+      if (bulkIds.size === 0 || Object.keys(activePct).length === 0) return state;
+
+      // Resolve each affected O&D pair to a representative route (for origin/dest
+      // so we can compute the per-class ceiling) — dedupes multi-aircraft pairs.
+      const pairs = new Map(); // key -> { origin, destination }
+      for (const r of state.routes) {
+        if (!bulkIds.has(r.id)) continue;
+        const key = routePairKey(r.origin, r.destination);
+        if (!pairs.has(key)) pairs.set(key, { origin: r.origin, destination: r.destination });
+      }
+      if (pairs.size === 0) return state;
+
+      const nextPricing = { ...(state.routePricing ?? {}) };
+      for (const [key, { origin, destination }] of pairs) {
+        const refP = mktReferencePrice(origin, destination);
+        const prev = nextPricing[key] ?? defaultClassPrices(refP);
+        const updated = { ...prev };
+        for (const [cls, delta] of Object.entries(activePct)) {
+          const base = prev[cls] ?? defaultClassPrices(refP)[cls];
+          if (base == null) continue;
+          const raw = Math.round(base * (1 + delta / 100));
+          updated[cls] = clampClassPrice(raw, refP, cls);
+        }
+        nextPricing[key] = updated;
+      }
+      return { ...state, routePricing: nextPricing };
+    }
+
     case 'UPDATE_FREQUENCY': {
       const targetRoute = state.routes.find(r => r.id === action.routeId);
       if (!targetRoute) return state;
@@ -1584,6 +1627,20 @@ function reducer(state, action) {
             type: 'warning', icon: '🪧',
             title: `${ev.name} entered ${ev.origin}–${ev.destination}`,
             message: `${ev.name} sees your fares on ${ev.origin}–${ev.destination} and has launched a competing service. Expect to lose some traffic unless you respond on price or frequency.`,
+            duration: 9000,
+          });
+        } else if (ev.type === 'dormant') {
+          newToasts.push({
+            type: 'success', icon: '🏳️',
+            title: `${ev.name} backed off ${ev.origin}–${ev.destination}`,
+            message: `${ev.name} has stopped fighting you on price on ${ev.origin}–${ev.destination}. It's keeping a small presence there but no longer undercutting hard — raise fares too far and it'll come back swinging.`,
+            duration: 8000,
+          });
+        } else if (ev.type === 'reawaken') {
+          newToasts.push({
+            type: 'warning', icon: '🪧',
+            title: `${ev.name} is contesting ${ev.origin}–${ev.destination} again`,
+            message: `Your fares on ${ev.origin}–${ev.destination} got fat again and ${ev.name} has resumed aggressive pricing and frequency on the route.`,
             duration: 9000,
           });
         } else if (ev.type === 'exit') {

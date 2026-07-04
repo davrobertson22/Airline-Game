@@ -10,6 +10,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
 import InfoTip from './InfoTip.jsx';
+import { useToast } from './ToastSystem.jsx';
 import { projectWeek } from '../utils/financeProjection.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
@@ -124,7 +125,12 @@ function groupRoutes(routes) {
 
 export default function Routes() {
   const { state, dispatch } = useGame();
+  const addToast = useToast();
   const { fleet, routes, hub, pendingOrders = [], cargoRoutes = [] } = state;
+
+  // Bulk pricing: explicit card selection + the occupancy-filter modal
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   // Detail view: null = list, { origin, destination } = route detail page
   const [detailPair, setDetailPair] = useState(null);
@@ -202,7 +208,28 @@ export default function Routes() {
     const totalSeats   = sims.reduce((s, { result }) => s + (result?.configuredSeatsOneWay ?? 0), 0);
     const avgLoad = totalSeats > 0 ? totalPax / totalSeats : 0;  // totalPax is one-way; totalSeats is configured one-way capacity
     const distance = sims[0]?.result?.distance ?? 0;
-    return { ...group, totalProfit, totalRevenue, avgLoad, distance };
+
+    // Per-class occupancy across every aircraft on the pair: sum one-way pax and
+    // weekly one-way capacity per cabin, then divide. classSummary[cls].seats is
+    // per-flight, so weekly capacity = seats × that aircraft's frequency.
+    // classLoads[cls] is null when the pair has no seats in that cabin, so the
+    // filter can skip it rather than treat it as 0%.
+    const classPax = { economy: 0, premiumEconomy: 0, businessClass: 0, firstClass: 0 };
+    const classCap = { economy: 0, premiumEconomy: 0, businessClass: 0, firstClass: 0 };
+    for (const { route, result } of sims) {
+      const cs = result?.classSummary;
+      if (!cs) continue;
+      const freq = route.weeklyFrequency ?? 1;
+      for (const cls of Object.keys(classPax)) {
+        classPax[cls] += cs[cls]?.passengers ?? 0;
+        classCap[cls] += (cs[cls]?.seats ?? 0) * freq;
+      }
+    }
+    const classLoads = {};
+    for (const cls of Object.keys(classPax)) {
+      classLoads[cls] = classCap[cls] > 0 ? classPax[cls] / classCap[cls] : null;
+    }
+    return { ...group, totalProfit, totalRevenue, totalPax, avgLoad, distance, classLoads };
   }), [routes, fleet, rrById]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If a route detail is selected, render that instead of the list
@@ -256,6 +283,10 @@ export default function Routes() {
     return b.totalProfit - a.totalProfit; // default
   });
 
+  // Groups the player has explicitly ticked (across the full list, not just the
+  // current filter view, so a selection survives a filter change).
+  const selectedGroups = groupsWithStats.filter(g => selectedKeys.has(g.key));
+
   function handleClose(routeId) {
     if (window.confirm('Remove this aircraft from the route? It will be freed for other assignments.')) {
       dispatch({ type: 'CLOSE_ROUTE', routeId });
@@ -268,6 +299,34 @@ export default function Routes() {
       dispatch({ type: 'UPDATE_TICKET_PRICE', routeId, ticketPrice: price });
     }
   }
+
+  // Apply a per-class % fare change to a set of route groups (one dispatch covers
+  // every aircraft on each pair). `pctRaw` maps class → string from the % inputs.
+  function applyPctToGroups(groupsToAdjust, pctRaw) {
+    const pct = {};
+    for (const [cls, v] of Object.entries(pctRaw ?? {})) {
+      const n = parseFloat(v);
+      if (!isNaN(n) && n !== 0) pct[cls] = n;
+    }
+    const routeIds = groupsToAdjust.flatMap(g => g.routes.map(r => r.id));
+    if (routeIds.length === 0 || Object.keys(pct).length === 0) return;
+    dispatch({ type: 'BULK_ADJUST_PRICING', routeIds, pct });
+    const parts = Object.entries(pct).map(([cls, n]) => `${CLASS_LABELS[cls]} ${n > 0 ? '+' : ''}${n}%`);
+    addToast({
+      type: 'success',
+      title: 'Pricing updated',
+      message: `${groupsToAdjust.length} route${groupsToAdjust.length !== 1 ? 's' : ''}: ${parts.join(', ')}`,
+    });
+  }
+
+  function toggleSelect(key) {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedKeys(new Set()); }
 
   function openNewRoute() {
     setFormMode('new');
@@ -367,6 +426,16 @@ export default function Routes() {
               ))}
             </div>
           )}
+          {routeGroups.length > 0 && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              onClick={() => setShowBulkModal(true)}
+              title="Adjust fares across many routes at once, filtered by cabin occupancy"
+            >
+              <GlyphLabel size={12} text="⚖️ Bulk Pricing" />
+            </button>
+          )}
           <button
             className="btn btn-primary"
             onClick={showForm && !isAddingFlights ? closeForm : openNewRoute}
@@ -455,6 +524,37 @@ export default function Routes() {
         />
       )}
 
+      {/* Bulk-edit selection bar — appears when one or more cards are ticked */}
+      {selectedGroups.length > 0 && (
+        <SelectionActionBar
+          groups={selectedGroups}
+          onApplyToGroups={(g, pct) => { applyPctToGroups(g, pct); clearSelection(); }}
+          onClear={clearSelection}
+        />
+      )}
+
+      {/* Select-all helper — only in cards view when there are visible routes */}
+      {viewMode === 'cards' && visibleGroups.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={visibleGroups.every(g => selectedKeys.has(g.key))}
+              ref={el => { if (el) el.indeterminate = !visibleGroups.every(g => selectedKeys.has(g.key)) && visibleGroups.some(g => selectedKeys.has(g.key)); }}
+              onChange={e => {
+                setSelectedKeys(prev => {
+                  const next = new Set(prev);
+                  if (e.target.checked) visibleGroups.forEach(g => next.add(g.key));
+                  else visibleGroups.forEach(g => next.delete(g.key));
+                  return next;
+                });
+              }}
+            />
+            Select all {visibleGroups.length} shown
+          </label>
+        </div>
+      )}
+
       {/* Route groups / compare table */}
       {routeGroups.length === 0 && tagRoutes.length === 0 && !showForm ? (
         <div className="empty-state">
@@ -487,6 +587,8 @@ export default function Routes() {
             key={group.key}
             group={group}
             getResult={engineResultFor}
+            selected={selectedKeys.has(group.key)}
+            onToggleSelect={() => toggleSelect(group.key)}
             onClose={handleClose}
             onPriceChange={handlePriceChange}
             onAddFlights={() => addFlightsTo(group.origin, group.destination)}
@@ -515,6 +617,15 @@ export default function Routes() {
           </div>
           <CargoRoutesList />
         </div>
+      )}
+
+      {/* Filter-based bulk pricing modal */}
+      {showBulkModal && (
+        <BulkPricingModal
+          allGroups={groupsWithStats}
+          onApplyToGroups={applyPctToGroups}
+          onClose={() => setShowBulkModal(false)}
+        />
       )}
     </div>
   );
@@ -711,7 +822,7 @@ function RouteCompareTable({ groups, onViewDetail }) {
 
 // ─── Route group card ─────────────────────────────────────────────────────────
 
-function RouteGroupCard({ group, getResult, onClose, onPriceChange, onAddFlights, onViewDetail }) {
+function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, onPriceChange, onAddFlights, onViewDetail }) {
   const { state, dispatch } = useGame();
   const { fleet } = state;
   const { origin, destination, routes } = group;
@@ -754,10 +865,18 @@ function RouteGroupCard({ group, getResult, onClose, onPriceChange, onAddFlights
     dispatch({ type: 'SET_ROUTE_CATERING', routeIds: routes.map(r => r.id), level });
 
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
+    <div className="card" style={{ marginBottom: 12, borderLeft: selected ? '3px solid var(--accent)' : undefined }}>
       {/* ── Route header ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <input
+            type="checkbox"
+            checked={!!selected}
+            onChange={onToggleSelect}
+            title="Select this route for bulk pricing"
+            style={{ marginTop: 4, cursor: 'pointer', flexShrink: 0 }}
+          />
+          <div>
           <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 2 }}>
             <AirportLink code={origin} />
             <span style={{ color: 'var(--text-muted)', margin: '0 8px', fontWeight: 400 }}>→</span>
@@ -767,6 +886,7 @@ function RouteGroupCard({ group, getResult, onClose, onPriceChange, onAddFlights
             {originAirport?.city} → {destAirport?.city}
             {dist ? ` · ${dist.toLocaleString()} km` : ''}
             {' · '}ref ${refP}
+          </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -914,6 +1034,254 @@ const CLASS_COLORS = {
   businessClass:  'var(--accent)',
   firstClass:     'var(--purple)',
 };
+
+// ─── Bulk pricing helpers ─────────────────────────────────────────────────────
+
+// Union of cabins that actually carry seats across a set of route groups, in the
+// canonical first→economy order. Used to decide which class controls to show.
+function classesPresentIn(groups) {
+  const present = new Set();
+  for (const g of groups) {
+    for (const cls of CLASS_ORDER) {
+      if (g.classLoads?.[cls] != null) present.add(cls);
+    }
+  }
+  return CLASS_ORDER.filter(cls => present.has(cls));
+}
+
+// Sum of aircraft deployments across a set of groups (for "N aircraft" labels).
+function aircraftCountIn(groups) {
+  return groups.reduce((s, g) => s + g.routes.length, 0);
+}
+
+// A row of per-class percentage inputs. `values` maps class → string; empty/0 means
+// "leave this cabin unchanged". onChange(cls, rawString) bubbles edits up.
+function PerClassPercentRow({ classes, values, onChange }) {
+  if (classes.length === 0) {
+    return <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No priced cabins in this selection.</div>;
+  }
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      {classes.map(cls => {
+        const v = values[cls] ?? '';
+        const n = parseFloat(v);
+        const tint = !isNaN(n) && n !== 0 ? (n > 0 ? 'var(--green)' : 'var(--red)') : 'var(--border)';
+        return (
+          <label key={cls} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 }}>
+            <span style={{ color: CLASS_COLORS[cls], fontWeight: 600 }}>{CLASS_LABELS[cls]}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <input
+                type="number"
+                inputMode="numeric"
+                step="1"
+                placeholder="0"
+                value={v}
+                onChange={e => onChange(cls, e.target.value)}
+                style={{
+                  width: 64, padding: '5px 7px', fontSize: 13, textAlign: 'right',
+                  background: 'var(--surface)', color: 'var(--text)',
+                  border: `1px solid ${tint}`, borderRadius: 6,
+                }}
+              />
+              <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Filter-based bulk pricing modal ──────────────────────────────────────────
+//
+// Lets the player target routes by per-class occupancy (load-factor) range, then
+// shift fares by a percentage on every matching route at once.
+function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
+  const presentClasses = classesPresentIn(allGroups);
+
+  // Per-class occupancy filter: { enabled, min, max } as percentages (0–100).
+  const [filters, setFilters] = useState(() => {
+    const f = {};
+    for (const cls of presentClasses) f[cls] = { enabled: false, min: 0, max: 60 };
+    return f;
+  });
+  // Per-class percentage adjustments (string inputs).
+  const [pct, setPct] = useState({});
+
+  const enabledClasses = presentClasses.filter(cls => filters[cls]?.enabled);
+
+  // A group matches when, for every enabled class filter, the group has seats in
+  // that cabin and its occupancy falls within [min, max]. No filters ⇒ match all.
+  const matching = allGroups.filter(g => {
+    if (enabledClasses.length === 0) return true;
+    return enabledClasses.every(cls => {
+      const lf = g.classLoads?.[cls];
+      if (lf == null) return false;
+      const pctLf = lf * 100;
+      return pctLf >= filters[cls].min && pctLf <= filters[cls].max;
+    });
+  });
+
+  const adjustedClasses = Object.entries(pct)
+    .filter(([, v]) => { const n = parseFloat(v); return !isNaN(n) && n !== 0; })
+    .map(([k]) => k);
+
+  const canApply = matching.length > 0 && adjustedClasses.length > 0;
+
+  const setFilter = (cls, patch) =>
+    setFilters(f => ({ ...f, [cls]: { ...f[cls], ...patch } }));
+
+  const label = { fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2500,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="card"
+        style={{ width: 560, maxWidth: '100%', maxHeight: '88vh', overflowY: 'auto' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}><Glyph e="⚖️" /> Bulk Pricing by Occupancy</div>
+          <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+          Target routes by how full each cabin is, then shift those fares by a percentage.
+          A typical move: find cabins running under ~50% full and cut fares to fill them, or
+          raise fares on cabins running hot.
+        </div>
+
+        {/* ── Occupancy criteria ─────────────────────────────────────────── */}
+        <div style={{ ...label, marginBottom: 8 }}>1 · Match by cabin occupancy</div>
+        {presentClasses.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>No passenger routes to filter.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+            {presentClasses.map(cls => {
+              const f = filters[cls];
+              return (
+                <div key={cls} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                  padding: '8px 10px', borderRadius: 8,
+                  background: f.enabled ? 'var(--surface2)' : 'transparent',
+                  border: `1px solid ${f.enabled ? CLASS_COLORS[cls] : 'var(--border)'}`,
+                  opacity: f.enabled ? 1 : 0.7,
+                }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={f.enabled} onChange={e => setFilter(cls, { enabled: e.target.checked })} />
+                    <span style={{ color: CLASS_COLORS[cls], fontWeight: 700, fontSize: 13 }}>{CLASS_LABELS[cls]}</span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, opacity: f.enabled ? 1 : 0.5 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>load</span>
+                    <input type="number" min="0" max="100" value={f.min} disabled={!f.enabled}
+                      onChange={e => setFilter(cls, { min: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
+                      style={{ width: 56, padding: '4px 6px', textAlign: 'right', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6 }} />
+                    <span style={{ color: 'var(--text-muted)' }}>%–</span>
+                    <input type="number" min="0" max="100" value={f.max} disabled={!f.enabled}
+                      onChange={e => setFilter(cls, { max: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
+                      style={{ width: 56, padding: '4px 6px', textAlign: 'right', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6 }} />
+                    <span style={{ color: 'var(--text-muted)' }}>%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Matching count ─────────────────────────────────────────────── */}
+        <div style={{
+          padding: '8px 12px', borderRadius: 8, marginBottom: 18, fontSize: 13,
+          background: matching.length > 0 ? 'rgba(56,139,253,0.10)' : 'var(--surface2)',
+          border: `1px solid ${matching.length > 0 ? 'rgba(56,139,253,0.3)' : 'var(--border)'}`,
+        }}>
+          {enabledClasses.length === 0
+            ? <><b>{matching.length}</b> city pair{matching.length !== 1 ? 's' : ''} ({aircraftCountIn(matching)} aircraft) — all routes, no occupancy filter set.</>
+            : <><b>{matching.length}</b> city pair{matching.length !== 1 ? 's' : ''} ({aircraftCountIn(matching)} aircraft) match your occupancy criteria.</>}
+        </div>
+
+        {/* ── Adjustment ─────────────────────────────────────────────────── */}
+        <div style={{ ...label, marginBottom: 8 }}>2 · Adjust fares by %</div>
+        <div style={{ marginBottom: 18 }}>
+          <PerClassPercentRow
+            classes={presentClasses}
+            values={pct}
+            onChange={(cls, v) => setPct(p => ({ ...p, [cls]: v }))}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
+            Positive raises fares, negative cuts them. Blank cabins are left unchanged. New fares are capped at the per-cabin ceiling.
+          </div>
+        </div>
+
+        {/* ── Actions ────────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            disabled={!canApply}
+            title={!canApply ? 'Set at least one fare adjustment and match at least one route' : ''}
+            onClick={() => { onApplyToGroups(matching, pct); onClose(); }}
+          >
+            Apply to {matching.length} route{matching.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Selection action bar ─────────────────────────────────────────────────────
+//
+// Appears when the player has ticked one or more route cards. Offers the same
+// per-class % adjustment, applied only to the explicitly selected routes.
+function SelectionActionBar({ groups, onApplyToGroups, onClear }) {
+  const [pct, setPct] = useState({});
+  const classes = classesPresentIn(groups);
+
+  const adjustedClasses = Object.entries(pct)
+    .filter(([, v]) => { const n = parseFloat(v); return !isNaN(n) && n !== 0; })
+    .map(([k]) => k);
+
+  const apply = () => {
+    onApplyToGroups(groups, pct);
+    setPct({});
+  };
+
+  return (
+    <div style={{
+      position: 'sticky', top: 8, zIndex: 50, marginBottom: 14,
+      display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap',
+      padding: '12px 16px', borderRadius: 10,
+      background: 'var(--surface2)', border: '1px solid var(--accent)',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        {groups.length} selected
+        <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{aircraftCountIn(groups)} aircraft</div>
+      </div>
+      <PerClassPercentRow
+        classes={classes}
+        values={pct}
+        onChange={(cls, v) => setPct(p => ({ ...p, [cls]: v }))}
+      />
+      <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+        <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={onClear}>Clear</button>
+        <button
+          className="btn btn-primary"
+          style={{ fontSize: 13 }}
+          disabled={adjustedClasses.length === 0}
+          onClick={apply}
+        >
+          Apply % to selected
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Per-class pricing panel ──────────────────────────────────────────────────
 
