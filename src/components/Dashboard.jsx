@@ -19,17 +19,31 @@ export default function Dashboard() {
   }, 0);
 
   const gd = currentGameDate(state);
-  const routeResults = useMemo(() => routes.map(route => {
-    const aircraft = fleet.find(a => a.id === route.aircraftId);
-    const result   = aircraft ? simulateRoute(route, aircraft, gd) : null;
-    return { route, result };
-  }), [routes, fleet, state.week]);
 
   // Canonical projection — the SAME single-source-of-truth used by the Finance page,
   // so the Dashboard's revenue/profit always agree with Finance. Runs the real engine
   // (so cargo, all fixed costs, loan interest and tax are included) rather than a
   // home-grown estimate.
   const proj = useMemo(() => projectWeek(state), [state]);
+
+  // Per-route results read from the SAME engine projection the Routes and Finance
+  // screens use — never a standalone re-simulation. A bare simulateRoute() here
+  // ignored competitor encroachment, labor, the fuel-price multiplier and revenue
+  // lifts, so the Dashboard's "Top Routes" profit/revenue/load disagreed with every
+  // other screen and, because the memo only tracked state.week, froze (e.g. a load
+  // factor stuck at its old value) when the player changed fares mid-week. Prefer the
+  // engine's routeResult; fall back to a standalone sim only for routes the engine
+  // skips (grounded / dormant-seasonal), using the same labor + fuel the engine used.
+  const routeResults = useMemo(() => {
+    const rrById = {};
+    for (const rr of proj.report?.routeResults ?? []) rrById[rr.routeId] = rr;
+    return routes.map(route => {
+      const aircraft = fleet.find(a => a.id === route.aircraftId);
+      const result = !aircraft ? null
+        : (rrById[route.id] ?? simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier));
+      return { route, result };
+    });
+  }, [routes, fleet, proj, gd, state.labor]);
 
   const projectedRevenue = proj.effectiveRevenue;   // all-in weekly revenue (incl. cargo)
   const projectedProfit  = proj.netCash;            // fully-loaded weekly cash bottom line
