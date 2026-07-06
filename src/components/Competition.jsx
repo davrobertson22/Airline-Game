@@ -5,6 +5,7 @@ import AirportLink from './AirportLink.jsx';
 import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE } from '../utils/simulation.js';
 import { computeQualityScore } from '../models/demand.js';
 import { ARCHETYPES, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
+import { getAlliance, effectiveAllianceId } from '../data/alliances.js';
 import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
@@ -533,7 +534,9 @@ function CompetitiveHints({ playerRoute, playerQual, competitors, routeKey, refP
 function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle, onAcquire }) {
   const tier   = TIER_META[carrier.tier] ?? { label: carrier.tier, color: 'var(--text-muted)' };
   const routes = Object.entries(carrier.routes).sort(([a], [b]) => a.localeCompare(b));
-  const arch   = carrier._archetype ? ARCHETYPES[carrier._archetype] : null;
+  const arch     = carrier._archetype ? ARCHETYPES[carrier._archetype] : null;
+  const alliance = getAlliance(effectiveAllianceId(carrier));
+  const atWar    = carrier._fareWars && Object.keys(carrier._fareWars).length > 0;
 
   const acquisitionCost = acquisitionPrice(carrier);
   const canAfford       = acquisitionCost !== null && playerCash >= acquisitionCost;
@@ -573,6 +576,26 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
               <GlyphLabel size={12} text="🛫 Startup" />
             </span>
           )}
+          {atWar && (
+            <span
+              title="This carrier is waging a fare war on a route you share — it is pricing below cost to push you off."
+              style={{ fontSize: 11, fontWeight: 700, color: '#fb923c',
+                       padding: '1px 7px', borderRadius: 10,
+                       border: '1px solid rgba(251,146,60,0.5)', background: 'rgba(251,146,60,0.12)' }}>
+              <GlyphLabel size={12} text="🔥 Fare war" />
+            </span>
+          )}
+          {alliance && (
+            <span
+              title={alliance.name}
+              style={{ fontSize: 11, fontWeight: 600, color: alliance.color ?? 'var(--text-muted)',
+                       padding: '1px 7px', borderRadius: 10, border: '1px solid var(--border)' }}>
+              <GlyphLabel size={12} text={`${alliance.icon} ${alliance.name}`} />
+            </span>
+          )}
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            hub {carrier.homeHub}{carrier.secondaryHub ? ` +${carrier.secondaryHub}` : ''}
+          </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{routes.length} routes</span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· quality {carrier.baseQualityScore}/100</span>
           {hasMarketCap && (

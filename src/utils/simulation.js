@@ -31,6 +31,7 @@ import {
 import {
   ALLIANCES,
   getAlliance,
+  allianceMembers,
   partnerInterlineRevenue,
 } from '../data/alliances.js';
 import { runNetworkTick } from '../models/network.js';
@@ -1293,9 +1294,11 @@ export function weeklyTick(state) {
     servedAirports.add(r.destination);
   }
 
-  // IDs of alliance and codeshare partners
+  // IDs of alliance and codeshare partners. Alliance membership is DYNAMIC:
+  // carriers join/leave blocs over time, so partners are read from live
+  // competitor state (allianceMembers) rather than the static founding list.
   const allianceDef         = allianceMembership ? getAlliance(allianceMembership.allianceId) : null;
-  const alliancePartnerIds  = allianceDef?.memberIds ?? [];
+  const alliancePartnerIds  = allianceDef ? allianceMembers(allianceDef.id, competitors).map(c => c.id) : [];
   const codesharePartnerIds = codeshareAgreements.map(a => a.competitorId);
   const allPartnerIds       = new Set([...alliancePartnerIds, ...codesharePartnerIds]);
 

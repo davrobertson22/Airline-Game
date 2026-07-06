@@ -12,7 +12,8 @@ import {
   COMPETITOR_AIRLINES,
 } from '../src/models/demand.js';
 import { tickCompetitorAI, retainedProfit, ARCHETYPES } from '../src/models/competitorAI.js';
-import { computeMarketCap } from '../src/utils/market.js';
+import { computeMarketCap, referencePrice } from '../src/utils/market.js';
+import { ALLIANCES } from '../src/data/alliances.js';
 
 let failures = 0;
 function check(name, cond, detail = '') {
@@ -102,6 +103,49 @@ if (probe) {
   const duo  = computeCompetitorRoutePnL(probe, key, probe.routes[key], 6, new Map([[key, 3]]));
   check('demand splits under competition', duo.pax <= solo.pax, `${duo.pax} vs ${solo.pax}`);
 }
+
+// New-dynamics checks over the same 6-year run.
+console.log('── New dynamics ──');
+check('quality stayed within tier bounds',
+  comps.every(c => c.baseQualityScore >= 20 && c.baseQualityScore <= 100),
+  comps.filter(c => c.baseQualityScore < 20 || c.baseQualityScore > 100).map(c => `${c.id}:${c.baseQualityScore}`).join(','));
+check('some carriers changed quality', (counts.quality ?? 0) > 0 || comps.some(c => (c._qualityInvested ?? 0) > 0));
+check('alliance membership evolved', (counts.allianceJoin ?? 0) > 0, `joins=${counts.allianceJoin ?? 0}`);
+check('alliance ids valid', comps.every(c => c.allianceId == null || ALLIANCES.some(a => a.id === c.allianceId)));
+check('secondary hubs appeared', (counts.secondHub ?? 0) > 0, `secondHubs=${counts.secondHub ?? 0}`);
+check('second hubs are 3-letter codes ≠ home hub',
+  comps.every(c => !c.secondaryHub || (/^[A-Z]{3}$/.test(c.secondaryHub) && c.secondaryHub !== c.homeHub)));
+
+// ── Fare war: deterministic provocation ─────────────────────────────────────
+console.log('── Fare war provocation ──');
+const refP = referencePrice('JFK', 'LHR');
+let warrior = {
+  id: 'wartest', name: 'War Test Air', homeHub: 'LHR', tier: 'legacy', logoId: 'eagle',
+  baseQualityScore: 65, cash: 60_000_000, weeklyStats: null,
+  routes: { 'JFK-LHR': { frequency: 7, priceMultiplier: 1.05 } },
+  _archetype: 'aggressive',
+  profitHistory: [1_000_000],
+};
+// player deeply undercuts on the shared route
+const cheapPlayer = [{ origin: 'JFK', destination: 'LHR', ticketPrice: Math.round(refP * 0.7), weeklyFrequency: 14 }];
+let warStarted = false, warPricingApplied = false, warEnded = false;
+let pool = [warrior];
+for (let wk = 1; wk <= 80; wk++) {
+  const r = tickCompetitorAI(pool, {
+    weekNumber: wk, month: 6, playerRoutes: cheapPlayer,
+    playerHubs: ['JFK'], playerMarketCap: 500_000_000,
+  });
+  pool = r.competitors.map(c => ({ ...c, cash: Math.max(c.cash, 40_000_000), profitHistory: [1_000_000] }));
+  for (const e of r.events) {
+    if (e.type === 'fareWar')    warStarted = true;
+    if (e.type === 'fareWarEnd') warEnded = true;
+  }
+  const w = pool.find(c => c.id === 'wartest');
+  if (w && warStarted && w.routes['JFK-LHR'] && w.routes['JFK-LHR'].priceMultiplier < 0.9) warPricingApplied = true;
+}
+check('fare war declared when player undercuts', warStarted);
+check('war pricing dives below normal floor', warPricingApplied);
+check('fare war eventually ends', warEnded);
 
 console.log('events over 6y:', JSON.stringify(counts));
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILURES`);

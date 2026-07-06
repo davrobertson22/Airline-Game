@@ -21,8 +21,9 @@
 // from GameContext, before competitor weekly stats are computed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { baseCityPairDemand, routeDistance } from '../utils/market.js';
+import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/market.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { ALLIANCES } from '../data/alliances.js';
 import {
   pickCompetitorAircraftType,
   tailsForRoute,
@@ -86,6 +87,42 @@ const BANKRUPT_DISTRESS_WKS = 15;
 
 /** Weekly probability of an AI-vs-AI merger being attempted (needs candidates). */
 const MERGER_PROB = 0.025;
+
+// ── Fare wars ────────────────────────────────────────────────────────────────
+
+/** Chance (per action week) a provoked carrier declares a fare war. */
+const FARE_WAR_PROB = 0.30;
+/** How far below the player's fare ratio a warring carrier prices. */
+const FARE_WAR_UNDERCUT = 0.15;
+/** Absolute fare-ratio floors during a war — below normal tier floors (that's the point). */
+const FARE_WAR_FLOOR = { budget: 0.50, legacy: 0.62, premium: 0.85 };
+/** War duration: base + random extra weeks. */
+const FARE_WAR_MIN_WEEKS = 6;
+const FARE_WAR_EXTRA_WEEKS = 8;
+
+// ── Quality investment ───────────────────────────────────────────────────────
+
+/** Quality score ceilings/floors by tier — investment can't escape your business model. */
+const QUALITY_CAP   = { budget: 55, legacy: 82, premium: 96 };
+const QUALITY_FLOOR = { budget: 28, legacy: 48, premium: 62 };
+/** Cash cost per quality point invested. */
+const QUALITY_INVEST_COST = 400_000;
+
+// ── Alliances & hubs ─────────────────────────────────────────────────────────
+
+/** Chance (per action week) an unallied healthy carrier joins an alliance.
+ *  Budget carriers rarely do — the LCC model goes it alone, like real life. */
+const ALLIANCE_JOIN_PROB = { budget: 0.015, legacy: 0.06, premium: 0.06 };
+/** Chance (per action week) a fire-sale carrier is expelled from its alliance. */
+const ALLIANCE_EXPEL_PROB = 0.25;
+/** Max members per alliance bloc. */
+const ALLIANCE_MAX_MEMBERS = 8;
+/** Quality-score bonus a carrier's offers get from alliance membership. */
+export const ALLIANCE_OFFER_QUALITY_BONUS = 3;
+
+/** Network size + cash needed before a carrier opens a second hub. */
+const SECOND_HUB_MIN_ROUTES = 10;
+const SECOND_HUB_MIN_TOUCHES = 4;
 
 /**
  * Dividend retention: above this cash pile, a carrier pays most of its profit
@@ -202,11 +239,40 @@ export function tickCompetitorAI(competitors, ctx) {
 
     // Lazy init (new games AND old saves migrate transparently).
     if (!c._archetype) c._archetype = assignArchetype(c);
+    if (c.allianceId === undefined) {
+      c.allianceId = ALLIANCES.find(a => a.memberIds.includes(c.id))?.id ?? null;
+    }
     const arch = ARCHETYPES[c._archetype] ?? ARCHETYPES.balanced;
 
     const lastProfit = (c.profitHistory && c.profitHistory.length)
       ? c.profitHistory[c.profitHistory.length - 1] : 0;
     const reserve = CASH_RESERVE[c.tier] ?? 8_000_000;
+
+    // ── Fare-war upkeep (every week) ─────────────────────────────────────────
+    if (c._fareWars && Object.keys(c._fareWars).length) {
+      const wars = {};
+      for (const [key, w] of Object.entries(c._fareWars)) {
+        const [a, b] = key.split('-');
+        if (!playerPairs.has(key) || !c.routes[key]) {
+          // The player abandoned the lane (or the carrier cut it) — war over.
+          events.push({ type: 'fareWarEnd', airlineId: c.id, name: c.name, routeKey: key,
+            description: `${c.name} ended its fare war on ${a} → ${b} — the battle for the route is over.` });
+          continue;
+        }
+        if ((c.cash ?? 0) < reserve * 0.3) {
+          events.push({ type: 'fareWarEnd', airlineId: c.id, name: c.name, routeKey: key, capitulated: true,
+            description: `${c.name} capitulated — it can no longer afford the fare war on ${a} → ${b}.` });
+          continue;
+        }
+        if (w.weeksLeft <= 1) {
+          events.push({ type: 'fareWarEnd', airlineId: c.id, name: c.name, routeKey: key,
+            description: `${c.name} called a truce on ${a} → ${b}; fares are returning to normal.` });
+          continue;
+        }
+        wars[key] = { ...w, weeksLeft: w.weeksLeft - 1 };
+      }
+      c._fareWars = wars;
+    }
 
     // ── Distress / fire-sale bookkeeping (every week) ────────────────────────
     const distressed = (c.cash ?? 0) < reserve * 0.5 && lastProfit < 0;
@@ -244,8 +310,9 @@ export function tickCompetitorAI(competitors, ctx) {
       if (!p) continue;
       lossMap[key] = p.profit < 0 ? (lossMap[key] ?? 0) + arch.actEvery : 0;
     }
+    const inWar = (k) => !!(c._fareWars && c._fareWars[k]);   // war losses are deliberate — don't cut
     const cuttable = routeKeys
-      .filter(k => (lossMap[k] ?? 0) >= LOSS_WEEKS_TO_CUT)
+      .filter(k => (lossMap[k] ?? 0) >= LOSS_WEEKS_TO_CUT && !inWar(k))
       .sort((a, b) => (pnl[a]?.profit ?? 0) - (pnl[b]?.profit ?? 0));
     let cutsAllowed = cash < 0 ? 2 : 1;
     // A broke carrier retrenches even routes that haven't hit the loss timer yet.
@@ -302,7 +369,106 @@ export function tickCompetitorAI(competitors, ctx) {
       }
     }
 
-    // 3. Expansion: one new route per action week, if healthy and funded.
+    // 3. Quality investment: winners polish the product, losers cut service.
+    const qCap   = QUALITY_CAP[c.tier]   ?? 82;
+    const qFloor = QUALITY_FLOOR[c.tier] ?? 48;
+    let quality  = c.baseQualityScore;
+    if (c.fireSale || (c._distressWeeks ?? 0) >= 6) {
+      if (quality > qFloor) {
+        quality -= 1;   // service cuts: catering, cleaning, staffing
+        if ((quality - qFloor) % 5 === 0) {
+          events.push({ type: 'quality', airlineId: c.id, name: c.name, direction: 'down',
+            description: `${c.name} is slashing service standards to conserve cash — passengers are noticing.` });
+        }
+      }
+    } else if ((lastProfit > 0 || cash > reserve * 2) && cash - QUALITY_INVEST_COST > reserve * 1.5 && quality < qCap) {
+      quality += 1;
+      cash    -= QUALITY_INVEST_COST;
+      const invested = (c._qualityInvested ?? 0) + 1;
+      c._qualityInvested = invested;
+      if (invested % 5 === 0) {
+        events.push({ type: 'quality', airlineId: c.id, name: c.name, direction: 'up',
+          description: `${c.name} completed a cabin & service upgrade program — its quality reputation is climbing.` });
+      }
+    }
+    c.baseQualityScore = quality;
+
+    // 4. Alliance diplomacy: healthy loners join blocs; broke members get expelled.
+    if (!c.allianceId && (lastProfit > 0 || cash > reserve * 2)
+        && weekNumber >= 13 && Math.random() < (ALLIANCE_JOIN_PROB[c.tier] ?? 0.05)) {
+      const counts = {};
+      for (const other of competitors) {
+        const aid = other.allianceId ?? ALLIANCES.find(a => a.memberIds.includes(other.id))?.id ?? null;
+        if (aid) {
+          counts[aid] = counts[aid] ?? { total: 0, sameTier: 0 };
+          counts[aid].total += 1;
+          if (other.tier === c.tier) counts[aid].sameTier += 1;
+        }
+      }
+      // Join the bloc with the most same-tier members that still has room.
+      const open = ALLIANCES.filter(a => (counts[a.id]?.total ?? 0) < ALLIANCE_MAX_MEMBERS);
+      if (open.length) {
+        const pick = open.sort((a, b) =>
+          (counts[b.id]?.sameTier ?? 0) - (counts[a.id]?.sameTier ?? 0)
+          || (counts[a.id]?.total ?? 0) - (counts[b.id]?.total ?? 0))[0];
+        c.allianceId = pick.id;
+        events.push({ type: 'allianceJoin', airlineId: c.id, name: c.name, allianceId: pick.id,
+          description: `${c.name} joined ${pick.name}.` });
+      }
+    } else if (c.allianceId && c.fireSale && Math.random() < ALLIANCE_EXPEL_PROB) {
+      const aName = ALLIANCES.find(a => a.id === c.allianceId)?.name ?? c.allianceId;
+      events.push({ type: 'allianceLeave', airlineId: c.id, name: c.name, allianceId: c.allianceId,
+        description: `${aName} expelled the struggling ${c.name} from the alliance.` });
+      c.allianceId = null;
+    }
+
+    // 5. Fare war declaration: aggressive/fortress carriers punish undercutting
+    //    or an invasion of their hub — deliberately pricing below cost for weeks.
+    const warCapable = (c._archetype === 'aggressive' || c._archetype === 'fortress')
+      && !(c._fareWars && Object.keys(c._fareWars).length)
+      && cash > reserve * 2
+      && playerNotice >= 0.5;
+    if (warCapable && Math.random() < FARE_WAR_PROB) {
+      let warKey = null;
+      for (const key of Object.keys(routes)) {
+        const pInfo = playerPairs.get(key);
+        if (!pInfo?.price) continue;
+        const [a, b] = key.split('-');
+        const refP = referencePrice(a, b);
+        if (!refP) continue;
+        const playerRatio = pInfo.price / refP;
+        const undercutting = playerRatio < routes[key].priceMultiplier - 0.08;
+        const hubInvasion  = key.includes(c.homeHub) || (c.secondaryHub && key.includes(c.secondaryHub));
+        if (undercutting || (c._archetype === 'fortress' && hubInvasion)) { warKey = key; break; }
+      }
+      if (warKey) {
+        const [a, b] = warKey.split('-');
+        c._fareWars = {
+          ...(c._fareWars ?? {}),
+          [warKey]: { weeksLeft: FARE_WAR_MIN_WEEKS + Math.floor(Math.random() * FARE_WAR_EXTRA_WEEKS) },
+        };
+        events.push({ type: 'fareWar', airlineId: c.id, name: c.name, routeKey: warKey,
+          description: `${c.name} declared a fare war on ${a} → ${b} — it is slashing fares below cost to drive you off the route.` });
+      }
+    }
+
+    // 6. Second hub: a thriving carrier turns its busiest focus city into a hub.
+    if (!c.secondaryHub && Object.keys(routes).length >= SECOND_HUB_MIN_ROUTES && cash > reserve * 3) {
+      const touch = {};
+      for (const key of Object.keys(routes)) {
+        for (const code of key.split('-')) {
+          if (code !== c.homeHub) touch[code] = (touch[code] ?? 0) + 1;
+        }
+      }
+      const [bestCode, touches] = Object.entries(touch).sort(([, x], [, y]) => y - x)[0] ?? [null, 0];
+      if (bestCode && touches >= SECOND_HUB_MIN_TOUCHES) {
+        c.secondaryHub = bestCode;
+        events.push({ type: 'secondHub', airlineId: c.id, name: c.name, airport: bestCode,
+          description: `${c.name} designated ${bestCode} as its second hub and will build out a network there.` });
+      }
+    }
+
+    // 7. Expansion: one new route per action week, if healthy and funded.
     const roomToGrow = Object.keys(routes).length < (MAX_ROUTES[c.tier] ?? 26);
     const healthy    = lastProfit > 0 || cash > reserve * 2;
     if (roomToGrow && healthy && cash > reserve) {
@@ -357,8 +523,14 @@ export function tickCompetitorAI(competitors, ctx) {
     const targets = updated
       .filter(c => c.fireSale || (c._distressWeeks ?? 0) >= 6)
       .sort((a, b) => (a.marketCap ?? 0) - (b.marketCap ?? 0));
-    const buyer  = buyers[0];
-    const target = targets.find(t => t.id !== buyer?.id
+    // Alliance solidarity: a distressed member's allies get first shot at the rescue.
+    const target0 = targets[0];
+    const allyBuyer = target0?.allianceId
+      ? buyers.find(b => b.id !== target0.id && b.allianceId === target0.allianceId
+          && (target0.marketCap ?? 20_000_000) * 0.9 < (b.cash ?? 0) * 0.8)
+      : null;
+    const buyer  = allyBuyer ?? buyers[0];
+    const target = allyBuyer ? target0 : targets.find(t => t.id !== buyer?.id
       && (t.marketCap ?? 20_000_000) * 0.9 < (buyer?.cash ?? 0) * 0.8);
     if (buyer && target) {
       const price = Math.round(Math.max(5_000_000, (target.marketCap ?? 10_000_000)) * 0.9);
@@ -418,6 +590,32 @@ export function tickCompetitorAI(competitors, ctx) {
   // ── Weekly price reactions on shared routes (existing behaviour) ──────────
   updated = tickCompetitorPricing(updated, playerRoutes);
 
+  // ── Fare-war pricing override ──────────────────────────────────────────────
+  // Applied AFTER normal pricing so a war always wins: the warring carrier
+  // tracks the player's fare down to a deep undercut, below its usual tier
+  // floor. It loses money doing this — that's the point.
+  updated = updated.map(c => {
+    const wars = c._fareWars;
+    if (!wars || !Object.keys(wars).length) return c;
+    const routes = { ...c.routes };
+    let changed = false;
+    for (const key of Object.keys(wars)) {
+      const cfg = routes[key];
+      const pInfo = playerPairs.get(key);
+      if (!cfg || !pInfo?.price) continue;
+      const [a, b] = key.split('-');
+      const refP = referencePrice(a, b);
+      if (!refP) continue;
+      const floor = FARE_WAR_FLOOR[c.tier] ?? 0.62;
+      const warMult = Math.max(floor, +(pInfo.price / refP - FARE_WAR_UNDERCUT).toFixed(4));
+      if (Math.abs(warMult - cfg.priceMultiplier) > 0.001) {
+        routes[key] = { ...cfg, priceMultiplier: warMult };
+        changed = true;
+      }
+    }
+    return changed ? { ...c, routes } : c;
+  });
+
   return { competitors: updated, events };
 }
 
@@ -431,9 +629,10 @@ function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerH
   const arch = airline._archetype ?? 'balanced';
   const hub  = airline.homeHub;
 
-  // Bases: fortress builds only from its hub; growth archetypes also expand
+  // Bases: fortress builds only from its hub(s); growth archetypes also expand
   // from their busiest network airports (focus cities).
   const bases = new Set([hub]);
+  if (airline.secondaryHub) bases.add(airline.secondaryHub);
   if (arch === 'expansionist' || arch === 'aggressive' || arch === 'copycat') {
     const touch = {};
     for (const key of Object.keys(routes)) {

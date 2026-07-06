@@ -2134,24 +2134,34 @@ const TIER_FIXED_PER_ROUTE = {
 
 /**
  * Per-departure airport cost per seat ($): landing fees, gate usage, and
- * ground handling, approximated the way the player pays them.
+ * ground handling. Budget carriers use secondary airports and 25-minute
+ * turns; premium carriers pay for prime slots and lounges.
  */
-const AIRPORT_COST_PER_SEAT = 16;
+const AIRPORT_COST_PER_SEAT = { budget: 11, legacy: 16, premium: 18 };
 
 /**
  * Per-passenger service cost ($): catering, distribution/booking fees,
- * loyalty accrual, compensation reserve.
+ * loyalty accrual, compensation reserve. LCCs strip nearly all of it
+ * (no meals, direct web sales); premium carriers spend heavily.
  */
-const PAX_SERVICE_COST = 28;
+const PAX_SERVICE_COST = { budget: 10, legacy: 28, premium: 42 };
+
+/**
+ * Ancillary revenue per passenger ($): bags, seat selection, onboard sales.
+ * The LCC model earns a large chunk of its money here — it's what makes a
+ * 0.76× fare viable, mirroring real low-cost economics.
+ */
+const PAX_ANCILLARY_REVENUE = { budget: 13, legacy: 4, premium: 2 };
 
 /**
  * Uplift on the raw fuel+crew per-km cost covering maintenance consumables,
  * ownership/insurance, and dispatch — brings competitor unit costs in line
  * with what the player actually pays, so route margins are airline-realistic
  * (fat monopolies, thin contested lanes, losses on mistakes) instead of the
- * old ~50%+ margins that let every carrier bank cash forever.
+ * old ~50%+ margins that let every carrier bank cash forever. Budget fleets
+ * fly one aircraft type at high utilisation → lower uplift.
  */
-const OP_COST_UPLIFT = 1.55;
+const OP_COST_UPLIFT = { budget: 1.42, legacy: 1.55, premium: 1.62 };
 
 /**
  * Weekly corporate overhead: base + per-route admin (mildly super-linear, so
@@ -2233,10 +2243,11 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const paxOneWay    = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
   const weeklyPax    = paxOneWay * 2;
 
-  const revenue     = weeklyPax * price;
-  const opCost      = dist * opPerKm * OP_COST_UPLIFT * flightsPerWk;
-  const airportCost = seats * AIRPORT_COST_PER_SEAT * flightsPerWk;
-  const paxCost     = weeklyPax * PAX_SERVICE_COST;
+  const tier        = competitor.tier ?? 'legacy';
+  const revenue     = weeklyPax * (price + (PAX_ANCILLARY_REVENUE[tier] ?? 4));
+  const opCost      = dist * opPerKm * (OP_COST_UPLIFT[tier] ?? 1.55) * flightsPerWk;
+  const airportCost = seats * (AIRPORT_COST_PER_SEAT[tier] ?? 16) * flightsPerWk;
+  const paxCost     = weeklyPax * (PAX_SERVICE_COST[tier] ?? 28);
   const fixed       = type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
   const cost        = Math.round(opCost + airportCost + paxCost + fixed);
 
@@ -2324,8 +2335,14 @@ export function buildCompetitorOffer(competitor, market) {
     seatsPerFlight,
     economySeats:      seatsPerFlight  * config.frequency,
     businessSeats:     businessPerFlight * config.frequency,
-    qualityScore:      competitor.baseQualityScore,
-    connectivityBonus: computeConnectivityBonus(competitor.homeHub, market.origin, market.destination),
+    // Alliance members' offers read slightly better to passengers (network
+    // reach, lounges, miles) — keep in sync with ALLIANCE_OFFER_QUALITY_BONUS
+    // in competitorAI.js.
+    qualityScore:      competitor.baseQualityScore + (competitor.allianceId ? 3 : 0),
+    connectivityBonus: computeConnectivityBonus(competitor.homeHub, market.origin, market.destination)
+                       + (competitor.secondaryHub
+                          ? computeConnectivityBonus(competitor.secondaryHub, market.origin, market.destination)
+                          : 0),
   };
 }
 

@@ -39,6 +39,7 @@ import {
   computeMarketShare,
   BUSINESS_PRICE_MULTIPLIER,
 } from './demand.js';
+import { allianceMembers } from '../data/alliances.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -308,12 +309,16 @@ export function buildPartnerRoutes(competitors, partnershipMap) {
  * @param {object}      [jvRoutes]           - { [competitorId]: true } for JV partners
  * @returns {Map<string, string>}
  */
-export function buildPartnershipMap(allianceMembership, codeshareAgreements, allianceDef, jvRoutes = {}) {
+export function buildPartnershipMap(allianceMembership, codeshareAgreements, allianceDef, jvRoutes = {}, competitors = []) {
   const map = new Map();
 
-  // Alliance members (weaker than codeshare)
+  // Alliance members (weaker than codeshare). Membership is dynamic — read
+  // from live competitor state, seeded by the founding memberIds list.
   if (allianceDef) {
-    for (const id of (allianceDef.memberIds ?? [])) {
+    const liveIds = competitors.length
+      ? allianceMembers(allianceDef.id, competitors).map(c => c.id)
+      : (allianceDef.memberIds ?? []);
+    for (const id of liveIds) {
       map.set(id, 'alliance');
     }
   }
@@ -880,6 +885,7 @@ export function runNetworkTick(state) {
     codeshareAgreements,
     allianceDef,
     jointVentures,
+    competitors,
   );
 
   // Index every competitor by the O&D pairs they fly nonstop, so the partner-feed

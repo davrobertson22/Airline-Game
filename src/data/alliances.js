@@ -138,6 +138,33 @@ export function getAlliance(id) {
 }
 
 /**
+ * A competitor's CURRENT alliance. Membership is dynamic — carriers join and
+ * leave blocs via the adaptive AI (competitor.allianceId). The static
+ * memberIds lists above only seed founding members for carriers that haven't
+ * been touched by the AI yet (fresh games / old saves).
+ *
+ * @param {object} competitor
+ * @returns {string|null} alliance id
+ */
+export function effectiveAllianceId(competitor) {
+  if (!competitor) return null;
+  if (competitor.allianceId !== undefined) return competitor.allianceId;
+  return ALLIANCES.find(a => a.memberIds.includes(competitor.id))?.id ?? null;
+}
+
+/**
+ * Live member list of an alliance: every surviving competitor whose effective
+ * membership matches. Replaces reading alliance.memberIds directly.
+ *
+ * @param {string} allianceId
+ * @param {object[]} competitors  state.competitors
+ * @returns {object[]} competitor objects
+ */
+export function allianceMembers(allianceId, competitors = []) {
+  return competitors.filter(c => effectiveAllianceId(c) === allianceId);
+}
+
+/**
  * Check whether a player meets the eligibility requirements to join an alliance.
  *
  * @param {object} alliance      - Alliance definition from ALLIANCES

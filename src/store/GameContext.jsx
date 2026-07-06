@@ -1790,6 +1790,10 @@ function reducer(state, action) {
           newToasts.push({ type: 'info', title: '🛫 New Entrant', message: ev.description, duration: 8000 });
         } else if (ev.type === 'fireSale') {
           newToasts.push({ type: 'info', title: `💸 ${ev.name} In Trouble`, message: `${ev.description} Check the Competition tab for a discounted acquisition.`, duration: 9000 });
+        } else if (ev.type === 'fareWar') {
+          newToasts.push({ type: 'danger', title: `🔥 Fare War — ${ev.name}`, message: ev.description, duration: 10000 });
+        } else if (ev.type === 'fareWarEnd') {
+          newToasts.push({ type: 'info', title: `🕊️ Fare War Over — ${ev.name}`, message: ev.description, duration: 7000 });
         }
       }
 

@@ -13,6 +13,7 @@ import {
   countAdjacentRoutes,
   checkAllianceEligibility,
   partnerInterlineRevenue,
+  allianceMembers,
 } from '../data/alliances.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,10 +66,8 @@ export default function Alliances() {
 
   // Weekly partnership revenue summary
   const allianceInterline = currentAlliance
-    ? currentAlliance.memberIds.reduce((sum, id) => {
-        const comp = competitors.find(c => c.id === id);
-        return comp ? sum + partnerInterlineRevenue(comp, servedAirports, currentAlliance.interlineFraction) : sum;
-      }, 0)
+    ? allianceMembers(currentAlliance.id, competitors).reduce((sum, comp) =>
+        sum + partnerInterlineRevenue(comp, servedAirports, currentAlliance.interlineFraction), 0)
     : 0;
 
   const codeshareInterline = codeshareAgreements.reduce((sum, a) => {
@@ -168,7 +167,7 @@ export default function Alliances() {
         competitors={competitors}
         codeshareAgreements={codeshareAgreements}
         servedAirports={servedAirports}
-        alliancePartnerIds={currentAlliance?.memberIds ?? []}
+        alliancePartnerIds={currentAlliance ? allianceMembers(currentAlliance.id, competitors).map(c => c.id) : []}
         state={state}
         dispatch={dispatch}
       />
@@ -184,9 +183,8 @@ function AllianceCard({
 }) {
   const [confirmLeave, setConfirmLeave] = useState(false);
 
-  const memberComps = alliance.memberIds
-    .map(id => competitors.find(c => c.id === id))
-    .filter(Boolean);
+  // Live membership — carriers join and leave blocs as the game evolves.
+  const memberComps = allianceMembers(alliance.id, competitors);
 
   const weeklyInterline = memberComps.reduce(
     (s, c) => s + partnerInterlineRevenue(c, servedAirports, alliance.interlineFraction),
