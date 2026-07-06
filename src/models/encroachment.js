@@ -1,12 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE ENCROACHMENT
 //
-// Until the player is small, they fly uncontested (the early monopoly grace period).
-// Once the airline is big enough to be "on the radar", AI competitors start entering
-// the player's most lucrative routes — the ones run near-full at fat fares — splitting
-// the demand pool with them. An entrant undercuts modestly and ramps up frequency over
-// several weeks (moderate pressure), so over-pricing a monopoly route now invites a
-// rival rather than printing money forever.
+// AI competitors enter the player's most lucrative routes — the ones run
+// near-full at fat fares — splitting the demand pool with them. Fat targets are
+// attackable from week 1 (entry probability scales up with the player's market
+// cap), and once the airline is on the radar even fairly-priced routes carry a
+// small baseline entry chance. An entrant undercuts modestly and ramps up
+// frequency over several weeks (moderate pressure), so over-pricing a monopoly
+// route invites a rival rather than printing money forever.
 //
 // The whole system is driven by a few tunable constants below.
 //
@@ -28,8 +29,19 @@ import { referencePrice, routePairKey } from '../utils/simulation.js';
 
 // ── Tunable knobs ────────────────────────────────────────────────────────────
 
-/** Player market cap ($) above which the airline is "on the radar" and routes can be contested. */
+/** Player market cap ($) at which encroachment pressure reaches FULL strength.
+ *  There is no longer a hard grace-period gate: fat routes can be contested from
+ *  week 1 (real markets punish gouging regardless of who flies the route), with
+ *  entry probability scaled down for small airlines via ENCROACH_SIZE_PROB_FLOOR. */
 export const ENCROACH_ACTIVATION_MARKETCAP = 250_000_000;
+
+/** Entry-probability multiplier for a brand-new airline (market cap ≈ 0),
+ *  ramping linearly to 1.0 at ENCROACH_ACTIVATION_MARKETCAP. */
+export const ENCROACH_SIZE_PROB_FLOOR = 0.30;
+
+/** Market cap above which even fairly-priced routes carry the small baseline
+ *  entry chance (ordinary competitive entry, not gouging punishment). */
+export const ENCROACH_RANDOM_ENTRY_MARKETCAP = 100_000_000;
 
 /** A route is a "fat target" worth attacking when it runs at/above this load factor … */
 export const ENCROACH_TARGET_MIN_LF = 0.78;
@@ -150,7 +162,13 @@ export function tickEncroachment({ routes = [], routePricing = {}, lastReport = 
     if (lf != null) { pairInfo[key].lfSum += lf; pairInfo[key].lfN += 1; }
   }
 
-  const activated = marketCap >= ENCROACH_ACTIVATION_MARKETCAP;
+  // Size-scaled pressure: small airlines draw entrants more slowly, but no one
+  // is invisible. 0.30× at launch → 1.0× at full activation market cap.
+  const sizeFactor = Math.min(1,
+    ENCROACH_SIZE_PROB_FLOOR + (1 - ENCROACH_SIZE_PROB_FLOOR) * (marketCap / ENCROACH_ACTIVATION_MARKETCAP));
+  // Ordinary (non-gouging) baseline entry only applies once the airline is big
+  // enough to be on the industry's radar.
+  const randomEntryActive = marketCap >= ENCROACH_RANDOM_ENTRY_MARKETCAP;
 
   // 1. Update existing entrants. While the route stays fat they ramp up; if the player
   //    fights price down for long enough they go DORMANT (token presence, mild pricing)
@@ -200,21 +218,24 @@ export function tickEncroachment({ routes = [], routePricing = {}, lastReport = 
     next[key] = { ...e, frequency, weeksActive: (e.weeksActive ?? 0) + 1, idleWeeks };
   }
 
-  // 2. Consider new entrants on fat, uncontested routes (only once activated).
-  if (activated && competitors.length > 0) {
+  // 2. Consider new entrants on fat, uncontested routes. Fat targets are
+  //    attackable from week 1 (scaled by airline size); the ordinary baseline
+  //    entry chance additionally requires being on the radar.
+  if (competitors.length > 0) {
     for (const key of Object.keys(pairInfo)) {
       if (next[key]) continue; // already contested
       const info = pairInfo[key];
       const lf = info.lfN > 0 ? info.lfSum / info.lfN : 0;
 
-      // Every route carries a small baseline entry chance (ordinary competition).
+      // Radar-visible routes carry a small baseline entry chance (ordinary competition).
       // Fat routes — run near-full at gouging fares — attract entrants far faster.
-      let prob = ENCROACH_RANDOM_ENTRY_PROB;
+      let prob = randomEntryActive ? ENCROACH_RANDOM_ENTRY_PROB : 0;
       if (lf >= ENCROACH_TARGET_MIN_LF && info.fareRatio >= ENCROACH_TARGET_MIN_FARE_RATIO) {
         const fatness = Math.min(2.0, info.fareRatio - 1.0);
         prob = Math.max(prob, Math.min(ENCROACH_MAX_ENTRY_PROB, ENCROACH_BASE_ENTRY_PROB * (1 + fatness * 2)));
       }
-      if (Math.random() >= prob) continue;
+      prob *= sizeFactor;
+      if (prob <= 0 || Math.random() >= prob) continue;
 
       // Pick a challenger. Growth-hungry personalities (aggressive/expansionist/
       // copycat) jump on fat routes first; otherwise prefer a budget carrier

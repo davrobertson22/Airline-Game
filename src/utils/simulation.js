@@ -1,7 +1,7 @@
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 export { baseCityPairDemand } from './market.js';
-import { cargoCityPairDemand, cargoReferenceYield } from './market.js';
+import { cargoCityPairDemand, cargoReferenceYield, referencePrice } from './market.js';
 import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
@@ -60,15 +60,13 @@ function toRad(d) { return d * Math.PI / 180; }
 /**
  * Market reference price for a route ($ one-way, economy).
  * Players can price above or below this — demand adjusts via elasticity.
+ *
+ * Re-exported from market.js — single source of truth shared with competitor
+ * economics. (Previously this file carried its own ×1.1-boosted copy while
+ * competitors used the ×0.95 market.js version, giving the player a hidden
+ * ~15% fare advantage.)
  */
-export function referencePrice(originCode, destCode) {
-  const o = getAirport(originCode);
-  const d = getAirport(destCode);
-  if (!o || !d) return 200;
-  const dist = distanceKm(o, d);
-  // Reference fares boosted 10% across the board to lift baseline yields.
-  return Math.round((80 + dist * 0.09) * 1.1);
-}
+export { referencePrice };
 
 // ─────────────────────────────────────────────
 // CABIN CLASS CONSTANTS

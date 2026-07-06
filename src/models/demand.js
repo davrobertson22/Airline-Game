@@ -53,6 +53,15 @@ export const BUSINESS_PRICE_MULTIPLIER = 3.5;
 export const PRICE_CAP_MULTIPLE = 3;
 
 /**
+ * Competitive fare compression: each rival on a city pair drags the effective
+ * reference fare down (competition compresses yields, not just passenger
+ * splits). Applied inside computeMarketShare's competitive branch — symmetric
+ * for player and AI carriers.
+ */
+export const COMPETITIVE_FARE_COMPRESSION_PER_RIVAL = 0.05; // −5% per extra carrier
+export const COMPETITIVE_FARE_COMPRESSION_FLOOR    = 0.90;  // max −10%
+
+/**
  * Demand multiplier (0–1) that forces demand toward zero as a fare climbs from
  * its reference price up to the cap (PRICE_CAP_MULTIPLE × reference).
  *
@@ -82,9 +91,14 @@ export function priceChokeFactor(price, refForClass) {
  * A ratio of (refPrice / yourPrice) is raised to this power.
  */
 export const ELASTICITY = {
-  leisure: 1.8,   // raised from 1.5 — overpricing now meaningfully reduces demand
-  business: 0.6,
-  connecting: 1.0, // connecting pax: less elastic than O&D leisure, but NOT captive
+  // Firm end of empirical airline elasticities. Leisure/economy demand runs
+  // ~-1.5 to -2.1 in the literature (short-haul leisure is the most elastic —
+  // travelers substitute driving, rail, or simply not going). At 2.0, pricing
+  // a monopoly route 25% over reference cuts leisure demand ~36%, so gouging
+  // costs revenue rather than printing it.
+  leisure: 2.0,    // was 1.8 (originally 1.5)
+  business: 0.7,   // was 0.6 — business is inelastic, but not immune (~-0.7)
+  connecting: 1.2, // was 1.0 — connecting pax have hub alternatives; less captive
 };
 
 /**
@@ -222,7 +236,7 @@ export const SEASONALITY = SEASONAL_PROFILES.generic;
  * @property {number}  leisureDemand      - price-sensitive segment (pax/week)
  * @property {number}  businessDemand     - quality/freq-sensitive segment (pax/week)
  * @property {number}  seasonalityFactor  - 0.8–1.3 multiplier for current month
- * @property {number}  maturityFactor     - 0–1, ramps to 1 over ~8 weeks on a new route
+ * @property {number}  maturityFactor     - 0–1, ramps to 1 over 26 weeks on a new route
  * @property {number}  referencePrice     - market equilibrium economy price ($)
  * @property {number}  distanceKm
  */
@@ -476,6 +490,19 @@ export function computeMarketShare(market, offers) {
   // across all carriers, so pricing above the reference price shrinks the pie rather
   // than just redistributing share.  Each airline's effective demand is:
   //   market.demand × elasticityFactor × softmaxShare
+  //
+  // Competitive fare compression: rivals lower what travelers consider a "normal"
+  // fare on the pair (real-world yields compress when a second carrier enters, on
+  // top of the passenger split). The elasticity/choke reference drifts down 5% per
+  // additional carrier, floored at −10% — so holding monopoly-era fares in a
+  // contested market shrinks demand instead of merely splitting it.
+  const fareCompression = Math.max(
+    COMPETITIVE_FARE_COMPRESSION_FLOOR,
+    1 - COMPETITIVE_FARE_COMPRESSION_PER_RIVAL * (offers.length - 1)
+  );
+  const compressedRef    = market.referencePrice * fareCompression;
+  const compressedBizRef = compressedRef * BUSINESS_PRICE_MULTIPLIER;
+
   const leisureUtils  = offers.map(o => computeUtility(o, market, 'leisure'));
   const businessUtils = offers.map(o => computeUtility(o, market, 'business'));
   const leisureShares  = softmax(leisureUtils);
@@ -488,10 +515,11 @@ export function computeMarketShare(market, offers) {
     return s + p * businessShares[i];
   }, 0);
 
-  // Elasticity factors: demand shrinks when average market price is above reference
-  const leisureElasticityFactor  = Math.pow(market.referencePrice / Math.max(avgLeisurePrice,  1), ELASTICITY.leisure);
+  // Elasticity factors: demand shrinks when average market price is above the
+  // (competition-compressed) reference
+  const leisureElasticityFactor  = Math.pow(compressedRef / Math.max(avgLeisurePrice,  1), ELASTICITY.leisure);
   const businessElasticityFactor = Math.pow(
-    (market.referencePrice * BUSINESS_PRICE_MULTIPLIER) / Math.max(avgBusinessPrice, 1),
+    compressedBizRef / Math.max(avgBusinessPrice, 1),
     ELASTICITY.business
   );
   const adjustedLeisureDemand  = Math.round(market.leisureDemand  * Math.min(1.5, leisureElasticityFactor));
@@ -509,10 +537,10 @@ export function computeMarketShare(market, offers) {
       ? offer.businessPrice
       : offer.economyPrice * BUSINESS_PRICE_MULTIPLIER;
     let leisurePax  = Math.round(
-      adjustedLeisureDemand  * lShare * priceChokeFactor(offer.economyPrice, market.referencePrice)
+      adjustedLeisureDemand  * lShare * priceChokeFactor(offer.economyPrice, compressedRef)
     );
     let businessPax = Math.round(
-      adjustedBusinessDemand * bShare * priceChokeFactor(bizPrice, market.referencePrice * BUSINESS_PRICE_MULTIPLIER)
+      adjustedBusinessDemand * bShare * priceChokeFactor(bizPrice, compressedBizRef)
     );
 
     // Cap at capacity. Business is capped at its own cabin; leisure may then use
@@ -2351,12 +2379,20 @@ export function buildCompetitorOffer(competitor, market) {
 /**
  * Ramp-up factor for a newly opened route.
  * Returns a 0–1 maturity multiplier based on weeks since route launch.
- * Reaches ~95% by week 8, full demand by week 12.
+ *
+ * Real-world route spool-up takes 6–18 months: schedules load into GDS,
+ * corporate contracts get signed, connecting itineraries appear, and local
+ * awareness builds. Modelled as a square-root ramp — fastest gains in the
+ * first weeks (the route becomes bookable), then a long tail to full demand.
+ *
+ * Launch: 30% of demand · ~65% by week 6 · ~79% by week 13 · 100% at week 26.
+ * New routes burn cash before they earn — opening one is an investment, not
+ * an instant profit source.
  *
  * @param {number} weeksOpen
  * @returns {number}
  */
 export function routeMaturityFactor(weeksOpen) {
-  if (weeksOpen >= 12) return 1;
-  return Math.min(1, 0.45 + (weeksOpen / 12) * 0.55);
+  if (weeksOpen >= 26) return 1;
+  return Math.min(1, 0.30 + 0.70 * Math.sqrt(weeksOpen / 26));
 }
