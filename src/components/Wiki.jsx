@@ -283,11 +283,15 @@ const WIKI = [
     blurb: 'Track rivals and acquire them',
     blocks: [
       { p: 'The Competition tab is your view of the rest of the industry — a leaderboard of competitors with their cash, fleet size and quality scores, plus their route networks.' },
+      { h: 'Living rivals' },
+      { p: 'Every rival runs its own airline. Each has a **personality** — Aggressive carriers attack busy routes (including yours), Copycats follow you onto proven markets, Fortress carriers defend their home hub, Niche players hunt under-served pairs, and Expansionists grow fast and thin. They open routes where they see profit, add capacity when you out-schedule them, cut routes that keep losing money, and react to your fares every week.' },
       { h: 'Head-to-head' },
-      { p: 'On routes you both fly, you can see **contested-route** comparisons: who has the better price, quality and market share. Use this to decide where to attack and where to retreat. If a rival out-scores you on quality, consider upgrading your cabins.' },
+      { p: 'On routes you both fly, you can see **contested-route** comparisons: who has the better price, quality and market share. Use this to decide where to attack and where to retreat. If a rival out-scores you on quality, consider upgrading your cabins. Remember that every carrier on a city pair splits its passenger pool — crowded lanes are thin for everyone.' },
+      { h: 'Boom, bust and consolidation' },
+      { p: 'Rivals that overreach bleed cash. A struggling carrier enters a **fire sale** (buy it at a discount instead of a premium), and prolonged distress ends in **bankruptcy**. Strong airlines sometimes acquire weak ones, and brand-new startups appear mid-game to fill the gaps.' },
       { h: 'Acquisitions' },
       { p: 'As you grow and rivals weaken, you can **acquire** competitors. The **Acquisition Summary** previews the cost and the fleet and gates that would transfer to you. Buying out a competitor folds their network into yours.' },
-      { warn: 'Acquiring every competitor is how you win the game — but each purchase is a big cash outlay. Make sure the takeover strengthens you rather than overextending your balance sheet.' },
+      { warn: 'You win when no rival remains standing — acquire them, or outlast them as they collapse. Each purchase is a big cash outlay, so make sure a takeover strengthens you rather than overextending your balance sheet.' },
     ],
   },
   {

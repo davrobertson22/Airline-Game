@@ -12,6 +12,7 @@ import {
 } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import CabinTemplatePicker from './CabinTemplatePicker.jsx';
 
 const CAT_COLORS = {
   'Turboprop':    '#ffb43d',
@@ -174,6 +175,19 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   function setBiz(v)   { setBizRaw(v);   setEcoRaw(e => clampEco(first, v,   prem, e)); }
   function setPrem(v)  { setPremRaw(v);  setEcoRaw(e => clampEco(first, biz,  v,   e)); }
   function setEco(v)   { setEcoRaw(v); }
+
+  // Apply a saved cabin template (clamped defensively to this type's floor space)
+  function applyTemplate(cfg) {
+    const f = Math.max(0, cfg.firstClass ?? 0);
+    const b = Math.max(0, cfg.businessClass ?? 0);
+    const p = Math.max(0, cfg.premiumEconomy ?? 0);
+    setFirstRaw(f);
+    setBizRaw(b);
+    setPremRaw(p);
+    setEcoRaw(clampEco(f, b, p, Math.max(0, cfg.economy ?? 0)));
+    setSeatQ(cfg.seatQuality ?? 'standard');
+    setServQ(cfg.serviceQuality ?? 'standard');
+  }
 
   const usedUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
                   + biz   * CLASS_SPACE_MULTIPLIERS.businessClass
@@ -450,6 +464,13 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
           {!isFreighter && (
           <section style={{ marginBottom: 18 }}>
             <div style={sectionTitle}>Cabin Configuration</div>
+
+            {/* Saved templates */}
+            <CabinTemplatePicker
+              typeId={typeId}
+              currentConfig={{ firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco, seatQuality: seatQ, serviceQuality: servQ }}
+              onApply={applyTemplate}
+            />
 
             {/* Seat bar */}
             <div style={{ height: 12, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>

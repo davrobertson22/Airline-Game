@@ -1,5 +1,6 @@
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState } from 'react';
+import CabinTemplatePicker from './CabinTemplatePicker.jsx';
 import { useGame } from '../store/GameContext.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import {
@@ -62,6 +63,23 @@ export default function FleetConfig({ aircraftId, onClose }) {
   const [ecoSeats, setEcoSeats] = useState(current.economy    ?? maxSeats);
   const [seatQ,  setSeatQ]  = useState(current.seatQuality    ?? 'standard');
   const [servQ,  setServQ]  = useState(current.serviceQuality ?? 'standard');
+
+  // Apply a saved cabin template (economy clamped to remaining floor space)
+  function applyTemplate(cfg) {
+    const f = Math.max(0, cfg.firstClass ?? 0);
+    const b = Math.max(0, cfg.businessClass ?? 0);
+    const p = Math.max(0, cfg.premiumEconomy ?? 0);
+    const premUnits = f * CLASS_SPACE_MULTIPLIERS.firstClass
+                    + b * CLASS_SPACE_MULTIPLIERS.businessClass
+                    + p * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
+    const maxE = Math.max(0, Math.floor(maxSeats - premUnits));
+    setFirst(f);
+    setBiz(b);
+    setPrem(p);
+    setEcoSeats(Math.min(Math.max(0, cfg.economy ?? 0), maxE));
+    setSeatQ(cfg.seatQuality ?? 'standard');
+    setServQ(cfg.serviceQuality ?? 'standard');
+  }
 
   // Premium classes take more floor space: First=2×, Business=1.5×, PremEco=1.25×.
   const premiumUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
@@ -137,6 +155,12 @@ export default function FleetConfig({ aircraftId, onClose }) {
             Set each cabin's seat count. Leaving floor space empty trades seats for more
             range and a roomier, higher-quality cabin. Each seat moved costs $2,500 to refit.
           </div>
+
+          <CabinTemplatePicker
+            typeId={aircraft.typeId}
+            currentConfig={nextConfig}
+            onApply={applyTemplate}
+          />
 
           <ClassInput
             label="First Class"

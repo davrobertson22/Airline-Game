@@ -20,13 +20,13 @@ import {
   COMPETITOR_AIRLINES,
   initializeCompetitorRoutes,
   sampleAndInitializeCompetitors,
-  tickCompetitorGrowth,
-  tickCompetitorPricing,
   computeCompetitorWeeklyStats,
+  buildPairIncumbents,
   HUB_TIERS,
   HUB_MIN_GATES,
   HUB_TIER_COUNT,
 } from '../models/demand.js';
+import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import {
@@ -89,7 +89,7 @@ function freshState() {
     hedgeContracts: [],                       // active fuel hedge contracts
     loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
     phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
-    competitors: sampleAndInitializeCompetitors(15),
+    competitors: sampleAndInitializeCompetitors(25),
     encroachments: {},           // { [pairKey]: entrant } — AI carriers contesting player routes
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
@@ -101,6 +101,7 @@ function freshState() {
     sharePrice:        STARTING_CASH * 1.5 / TOTAL_SHARES,  // player share price ($)
     objectives:        [],   // [{ id, completed, completedWeek, completedYear }]
     objectivesEnabled: true, // can be disabled at setup
+    cabinTemplates:    [],   // saved cabin configs: { id, name, typeId, config: { firstClass, businessClass, premiumEconomy, economy, seatQuality, serviceQuality } }
   };
 }
 
@@ -424,6 +425,34 @@ function reducer(state, action) {
         fleet: state.fleet.map(a =>
           a.id === action.aircraftId ? { ...a, config: action.config } : a
         ),
+      };
+    }
+
+    case 'SAVE_CABIN_TEMPLATE': {
+      // action: { name, typeId, config }
+      const name = (action.name ?? '').trim();
+      if (!name || !action.typeId || !action.config) return state;
+      const templates = state.cabinTemplates ?? [];
+      // Same name + same type overwrites the existing template
+      const existing = templates.find(t => t.typeId === action.typeId && t.name.toLowerCase() === name.toLowerCase());
+      const template = {
+        id:     existing?.id ?? uid(),
+        name,
+        typeId: action.typeId,
+        config: { ...action.config },
+      };
+      return {
+        ...state,
+        cabinTemplates: existing
+          ? templates.map(t => (t.id === existing.id ? template : t))
+          : [...templates, template],
+      };
+    }
+
+    case 'DELETE_CABIN_TEMPLATE': {
+      return {
+        ...state,
+        cabinTemplates: (state.cabinTemplates ?? []).filter(t => t.id !== action.templateId),
       };
     }
 
@@ -1214,7 +1243,8 @@ function reducer(state, action) {
       // acquired for $0 (which would also hand the player their cash for free).
       const targetValue = target.marketCap
         ?? computeMarketCap(target.profitHistory ?? [], target.cash ?? 0, target.baseQualityScore ?? 50).marketCap;
-      const acquisitionCost = Math.round(targetValue * 1.25);
+      // Distressed carriers sell at a discount (fire sale) instead of a premium.
+      const acquisitionCost = Math.round(targetValue * (target.fireSale ? FIRE_SALE_PREMIUM : 1.25));
       if (state.cash < acquisitionCost) return state;  // can't afford — ignore
 
       // ── Inherit the competitor's REAL fleet ────────────────────────────────
@@ -1707,18 +1737,36 @@ function reducer(state, action) {
 
       // Advance competitor networks (graceful fallback for old saves missing competitors)
       const currentCompetitors = state.competitors
-        ?? sampleAndInitializeCompetitors(15);
+        ?? sampleAndInitializeCompetitors(25);
       const weekNumber = (state.year - 1) * 52 + state.week;
-      const { competitors: grownCompetitors, events: competitorEvents } =
-        tickCompetitorGrowth(currentCompetitors, weekNumber);
-      // Competitors react to player pricing on shared routes
-      const reactedCompetitors = tickCompetitorPricing(grownCompetitors, state.routes);
 
-      // Simulate competitor networks, accumulate cash, and track profit history for market cap
+      // Adaptive competitor AI: expansion, cuts, capacity responses, pricing
+      // reactions, distress/fire sales, bankruptcies, mergers, and startups.
+      const aiPlayerRoutes = state.routes.map(r => ({
+        origin:          r.origin,
+        destination:     r.destination,
+        weeklyFrequency: r.weeklyFrequency,
+        ticketPrice:     state.routePricing?.[routePairKey(r.origin, r.destination)]?.economy
+                           ?? r.ticketPrice,
+      }));
+      const { competitors: aiCompetitors, events: competitorEvents } =
+        tickCompetitorAI(currentCompetitors, {
+          weekNumber,
+          month:           gameMonth,
+          playerRoutes:    aiPlayerRoutes,
+          playerHubs:      Object.keys(state.hubs ?? {}),
+          playerMarketCap: state.marketCap ?? 0,
+        });
+
+      // Simulate competitor networks, accumulate cash, and track profit history
+      // for market cap. Demand on each city pair is shared across every carrier
+      // (player included) flying it, and cash-rich carriers pay out dividends
+      // instead of hoarding (keeps late-game acquisitions attainable).
       const approxMonth = gameMonth;
-      const updatedCompetitors = reactedCompetitors.map(c => {
-        const stats            = computeCompetitorWeeklyStats(c, approxMonth);
-        const newCompCash      = (c.cash ?? 0) + stats.weeklyProfit;
+      const compPairCounts = buildPairIncumbents(aiCompetitors, state.routes);
+      const updatedCompetitors = aiCompetitors.map(c => {
+        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts);
+        const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =
           computeMarketCap(newProfitHistory, newCompCash, c.baseQualityScore);
@@ -1731,6 +1779,26 @@ function reducer(state, action) {
           sharePrice:    compSharePrice,
         };
       });
+
+      // Dramatic market news → toasts (launch/boost/cut stay in the debrief feed).
+      for (const ev of competitorEvents) {
+        if (ev.type === 'bankrupt') {
+          newToasts.push({ type: 'warning', title: `✈️ ${ev.name} Collapses`, message: ev.description, duration: 9000 });
+        } else if (ev.type === 'merger') {
+          newToasts.push({ type: 'info', title: '🤝 Industry Consolidation', message: ev.description, duration: 9000 });
+        } else if (ev.type === 'startup') {
+          newToasts.push({ type: 'info', title: '🛫 New Entrant', message: ev.description, duration: 8000 });
+        } else if (ev.type === 'fireSale') {
+          newToasts.push({ type: 'info', title: `💸 ${ev.name} In Trouble`, message: `${ev.description} Check the Competition tab for a discounted acquisition.`, duration: 9000 });
+        }
+      }
+
+      // Victory can now arrive without a final acquisition: if the last rival
+      // goes bankrupt or is absorbed, the skies belong to the player.
+      const rivalsGone = updatedCompetitors.length === 0 && (currentCompetitors?.length ?? 0) > 0;
+      const lastRivalName = rivalsGone
+        ? (competitorEvents.find(e => e.type === 'bankrupt' || e.type === 'merger')?.name ?? null)
+        : null;
 
       // ── Tick codeshare agreement durations (expire old ones) ─────────────
       const tickedCodeshares = (state.codeshareAgreements ?? [])
@@ -1988,6 +2056,19 @@ function reducer(state, action) {
         consecutiveNegativeWeeks: newConsecutiveNegativeWeeks,
         marketCap:                newMarketCap,
         sharePrice:               newSharePrice,
+        // Last rival collapsed or was absorbed → the player owns the skies.
+        gameWon:             state.gameWon || rivalsGone,
+        victoryAcknowledged: (rivalsGone && !state.gameWon) ? false : state.victoryAcknowledged,
+        victoryStats:        (rivalsGone && !state.gameWon) ? {
+          marketCap:   newMarketCap ?? state.marketCap ?? null,
+          cash:        newCash + objectiveCashBonus,
+          fleetCount:  finalFleet.filter(a => a.status !== 'retired').length,
+          routeCount:  finalRoutes.length,
+          airports:    Object.values(state.gates ?? {}).filter(n => n > 0).length,
+          weeksPlayed: (newYear - 1) * 52 + newWeek,
+          year:        newYear,
+          lastRival:   lastRivalName,
+        } : state.victoryStats,
       };
     } catch (err) {
       console.error('[ADVANCE_WEEK] reducer threw:', err);
@@ -2145,7 +2226,7 @@ function reconcileState(parsed) {
   // 4. Migrate missing competitors.
   const competitors = (parsed.competitors?.length > 0)
     ? parsed.competitors
-    : sampleAndInitializeCompetitors(15);
+    : sampleAndInitializeCompetitors(25);
 
   // 5. Carry through pendingOrders (default to empty array for old saves).
   const pendingOrders = parsed.pendingOrders ?? [];
@@ -2232,6 +2313,7 @@ function reconcileState(parsed) {
     missedLoanPayments:       parsed.missedLoanPayments       ?? 0,
     consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,
     bankruptcyReason:         parsed.bankruptcyReason         ?? null,
+    cabinTemplates:           parsed.cabinTemplates           ?? [],
     // Market cap — compute on load if missing (old saves)
     marketCap:   parsed.marketCap   ?? (() => {
       const ph = (parsed.financialHistory ?? []).slice(-12).map(h => h.profit);

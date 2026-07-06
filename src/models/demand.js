@@ -30,7 +30,7 @@
  */
 
 import { baseCityPairDemand, referencePrice, routeDistance } from '../utils/market.js';
-import { getAirport, getAirportScores } from '../data/airports.js';
+import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -677,6 +677,32 @@ export const COMPETITOR_AIRLINES = [
   { id: 'patagoniafirst',   name: 'Patagonia First',      homeHub: 'SCL', tier: 'premium', logoId: 'crown',   baseQualityScore: 76, cash: 48_000_000, weeklyStats: null, routes: {} },
   { id: 'oceaniaprestige',  name: 'Oceania Prestige',     homeHub: 'AKL', tier: 'premium', logoId: 'compass', baseQualityScore: 78, cash: 52_000_000, weeklyStats: null, routes: {} },
   { id: 'capediamonds',     name: 'Cape Diamonds',        homeHub: 'CPT', tier: 'premium', logoId: 'sapphire',baseQualityScore: 77, cash: 50_000_000, weeklyStats: null, routes: {} },
+
+  // ── Legacy (wave 3 — procedural starter networks) ─────────────────────────
+  { id: 'cascadia',         name: 'Cascadia Airways',     homeHub: 'SEA', tier: 'legacy',  logoId: 'arctic',  baseQualityScore: 66, cash: 36_000_000, weeklyStats: null, routes: {} },
+  { id: 'rockymountain',    name: 'Rocky Mountain Air',   homeHub: 'DEN', tier: 'legacy',  logoId: 'summit',  baseQualityScore: 64, cash: 34_000_000, weeklyStats: null, routes: {} },
+  { id: 'lonestar',         name: 'Lone Star Airlines',   homeHub: 'DFW', tier: 'legacy',  logoId: 'horizon', baseQualityScore: 65, cash: 38_000_000, weeklyStats: null, routes: {} },
+  { id: 'morningcalm',      name: 'Morning Calm Air',     homeHub: 'ICN', tier: 'legacy',  logoId: 'jade',    baseQualityScore: 70, cash: 46_000_000, weeklyStats: null, routes: {} },
+  { id: 'mandarinwings',    name: 'Mandarin Wings',       homeHub: 'PEK', tier: 'legacy',  logoId: 'compass', baseQualityScore: 66, cash: 44_000_000, weeklyStats: null, routes: {} },
+  { id: 'nusantara',        name: 'Nusantara Air',        homeHub: 'CGK', tier: 'legacy',  logoId: 'comet',   baseQualityScore: 62, cash: 30_000_000, weeklyStats: null, routes: {} },
+  { id: 'volgaair',         name: 'Volga Air',            homeHub: 'SVO', tier: 'legacy',  logoId: 'eagle',   baseQualityScore: 60, cash: 28_000_000, weeklyStats: null, routes: {} },
+  { id: 'pennine',          name: 'Pennine Airways',      homeHub: 'MAN', tier: 'legacy',  logoId: 'phoenix', baseQualityScore: 63, cash: 30_000_000, weeklyStats: null, routes: {} },
+
+  // ── Budget (wave 3) ────────────────────────────────────────────────────────
+  { id: 'fjordlow',         name: 'Fjord Low',            homeHub: 'OSL', tier: 'budget',  logoId: 'arctic',  baseQualityScore: 38, cash:  9_000_000, weeklyStats: null, routes: {} },
+  { id: 'vistulajet',       name: 'VistulaJet',           homeHub: 'WAW', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 36, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'tagusjet',         name: 'TagusJet',             homeHub: 'LIS', tier: 'budget',  logoId: 'prism',   baseQualityScore: 37, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'redseaexpress',    name: 'Red Sea Express',      homeHub: 'JED', tier: 'budget',  logoId: 'phoenix', baseQualityScore: 35, cash:  9_000_000, weeklyStats: null, routes: {} },
+  { id: 'naijajet',         name: 'NaijaJet',             homeHub: 'LOS', tier: 'budget',  logoId: 'bolt',    baseQualityScore: 34, cash:  7_000_000, weeklyStats: null, routes: {} },
+  { id: 'saigonsky',        name: 'Saigon Sky',           homeHub: 'SGN', tier: 'budget',  logoId: 'prism',   baseQualityScore: 37, cash:  8_000_000, weeklyStats: null, routes: {} },
+  { id: 'islasol',          name: 'Isla Sol',             homeHub: 'CUN', tier: 'budget',  logoId: 'phoenix', baseQualityScore: 39, cash: 10_000_000, weeklyStats: null, routes: {} },
+
+  // ── Premium (wave 3) ───────────────────────────────────────────────────────
+  { id: 'kansairoyal',      name: 'Kansai Royal',         homeHub: 'KIX', tier: 'premium', logoId: 'crown',   baseQualityScore: 83, cash: 64_000_000, weeklyStats: null, routes: {} },
+  { id: 'bavariaprestige',  name: 'Bavaria Prestige',     homeHub: 'MUC', tier: 'premium', logoId: 'sapphire',baseQualityScore: 82, cash: 62_000_000, weeklyStats: null, routes: {} },
+  { id: 'levantluxe',       name: 'Levant Luxe',          homeHub: 'TLV', tier: 'premium', logoId: 'crown',   baseQualityScore: 78, cash: 50_000_000, weeklyStats: null, routes: {} },
+  { id: 'andesgold',        name: 'Andes Gold',           homeHub: 'LIM', tier: 'premium', logoId: 'summit',  baseQualityScore: 75, cash: 44_000_000, weeklyStats: null, routes: {} },
+  { id: 'abyssiniancrown',  name: 'Abyssinian Crown',     homeHub: 'ADD', tier: 'premium', logoId: 'crown',   baseQualityScore: 74, cash: 40_000_000, weeklyStats: null, routes: {} },
 ];
 
 // ─── Hub tiers ────────────────────────────────────────────────────────────────
@@ -1430,7 +1456,7 @@ function newTailId(airlineId) { return `${airlineId}-t${(++_tailSeq).toString(36
  * Build a tail for a competitor route. `aged` true gives a used airframe (start
  * of game); false gives a fresh delivery (mid-game expansion).
  */
-function makeCompetitorTail(airlineId, typeId, routeKey, aged) {
+export function makeCompetitorTail(airlineId, typeId, routeKey, aged) {
   return {
     id:       newTailId(airlineId),
     typeId,
@@ -1458,17 +1484,84 @@ export function buildCompetitorFleet(airline) {
   return { ...airline, routes, fleet };
 }
 
+// ─── Procedural starter networks ─────────────────────────────────────────────
+
+/** Per-tier default price multiplier (jittered per route in generateStarterRoutes). */
+export const TIER_PRICE_MULT = { budget: 0.76, legacy: 1.04, premium: 1.45 };
+
+/** Starting network size by tier for procedurally generated carriers. */
+const TIER_STARTER_ROUTES = { budget: 7, legacy: 6, premium: 5 };
+
+let _bigAirportCache = null;
+/** Mega + major airports — the candidate destination pool for AI route planning. */
+export function bigAirports() {
+  if (!_bigAirportCache) {
+    _bigAirportCache = AIRPORTS.filter(a => a.tier === 'mega' || a.tier === 'major');
+  }
+  return _bigAirportCache;
+}
+
+/**
+ * Generate a plausible starting network for a carrier with no scripted routes:
+ * the top-demand city pairs from its home hub that its tier's aircraft can fly,
+ * with distance-appropriate frequency and tier pricing. Short/medium routes are
+ * mildly preferred so young networks look regional-first, like real carriers.
+ *
+ * @param {CompetitorAirline} airline
+ * @param {number} [count]  routes to open (defaults by tier)
+ * @returns {object} routes map { routeKey: { frequency, priceMultiplier } }
+ */
+export function generateStarterRoutes(airline, count) {
+  const n   = count ?? TIER_STARTER_ROUTES[airline.tier] ?? 6;
+  const hub = airline.homeHub;
+  const priceBase = TIER_PRICE_MULT[airline.tier] ?? 1.0;
+
+  const scored = [];
+  for (const ap of bigAirports()) {
+    if (ap.code === hub) continue;
+    const dist = routeDistance(hub, ap.code);
+    if (!dist || dist < 300) continue;
+    if (!pickCompetitorAircraftType(dist, airline.tier)) continue;   // out of range
+    const demand = baseCityPairDemand(hub, ap.code);
+    if (!demand) continue;
+    // Prefer dense pairs; mild haircut for very long stage lengths.
+    scored.push({ code: ap.code, dist, demand, score: demand / (1 + dist / 9000) });
+  }
+  scored.sort((a, b) => b.score - a.score);
+
+  // Sample from the top of the list with light randomness so two carriers
+  // sharing a hub don't build identical networks.
+  const pool = scored.slice(0, Math.max(n * 2, 12));
+  for (let i = pool.length - 1; i > 0; i--) {
+    if (Math.random() < 0.35) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+  }
+
+  const routes = {};
+  for (const cand of pool.slice(0, n)) {
+    const key   = [hub, cand.code].sort().join('-');
+    const seats = TIER_SEAT_TARGET[airline.tier] ?? 200;
+    const freq  = Math.max(3, Math.min(21, Math.round(cand.demand / (seats * 0.75))));
+    const priceMultiplier = +(priceBase * (0.97 + Math.random() * 0.06)).toFixed(3);
+    routes[key] = { frequency: freq, priceMultiplier };
+  }
+  return routes;
+}
+
 /**
  * Populate each competitor's `routes` map with their starting network, then
  * build their owned fleet. Mutates routes in place and attaches `fleet`.
+ * Carriers without a scripted default network get a procedural one.
  *
  * @param {CompetitorAirline[]} [competitors]  defaults to COMPETITOR_AIRLINES
  * @returns {CompetitorAirline[]}  carriers with routes + fleet populated
  */
 export function initializeCompetitorRoutes(competitors = COMPETITOR_AIRLINES) {
   return competitors.map(airline => {
-    const defaults = COMPETITOR_DEFAULT_ROUTES[airline.id];
-    if (defaults) Object.assign(airline.routes, defaults);
+    const defaults = COMPETITOR_DEFAULT_ROUTES[airline.id] ?? generateStarterRoutes(airline);
+    Object.assign(airline.routes, defaults);
     return buildCompetitorFleet(airline);
   });
 }
@@ -2006,13 +2099,13 @@ function sampleCompetitors(n = 15) {
 }
 
 /**
- * Sample 15 competitors, jitter their personalities, and initialize their routes.
+ * Sample N competitors, jitter their personalities, and initialize their routes.
  * Drop-in replacement for the old `initializeCompetitorRoutes(COMPETITOR_AIRLINES.map(...))`.
  *
- * @param {number} [count=15]
+ * @param {number} [count=25]
  * @returns {CompetitorAirline[]}
  */
-export function sampleAndInitializeCompetitors(count = 15) {
+export function sampleAndInitializeCompetitors(count = 25) {
   const sampled = sampleCompetitors(count).map(c => jitterCompetitor({ ...c, routes: {} }));
   return initializeCompetitorRoutes(sampled);
 }
@@ -2040,64 +2133,158 @@ const TIER_FIXED_PER_ROUTE = {
 };
 
 /**
+ * Per-departure airport cost per seat ($): landing fees, gate usage, and
+ * ground handling, approximated the way the player pays them.
+ */
+const AIRPORT_COST_PER_SEAT = 16;
+
+/**
+ * Per-passenger service cost ($): catering, distribution/booking fees,
+ * loyalty accrual, compensation reserve.
+ */
+const PAX_SERVICE_COST = 28;
+
+/**
+ * Uplift on the raw fuel+crew per-km cost covering maintenance consumables,
+ * ownership/insurance, and dispatch — brings competitor unit costs in line
+ * with what the player actually pays, so route margins are airline-realistic
+ * (fat monopolies, thin contested lanes, losses on mistakes) instead of the
+ * old ~50%+ margins that let every carrier bank cash forever.
+ */
+const OP_COST_UPLIFT = 1.55;
+
+/**
+ * Weekly corporate overhead: base + per-route admin (mildly super-linear, so
+ * sprawling networks carry real HQ drag like the player's overhead ladder).
+ */
+function competitorOverhead(routeCount) {
+  return 150_000 + 40_000 * Math.pow(routeCount, 1.15);
+}
+
+/**
+ * Build a map of pairKey → number of carriers serving that O&D (player included).
+ * Feeds demand-splitting in competitor economics: carriers sharing a city pair
+ * share its passenger pool instead of each pretending to fly a monopoly.
+ *
+ * @param {CompetitorAirline[]} competitors
+ * @param {Array<{origin:string,destination:string}>} [playerRoutes]
+ * @returns {Map<string, number>}
+ */
+export function buildPairIncumbents(competitors, playerRoutes = []) {
+  const counts = new Map();
+  const seenPlayer = new Set();
+  for (const r of playerRoutes) {
+    const key = [r.origin, r.destination].sort().join('-');
+    if (!seenPlayer.has(key)) { counts.set(key, 1); seenPlayer.add(key); }
+  }
+  for (const c of competitors) {
+    for (const key of Object.keys(c.routes ?? {})) {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * Weekly P&L for ONE competitor route. Single source of truth for competitor
+ * economics — used by the aggregate stats below and by the adaptive AI when
+ * deciding which routes to cut or defend.
+ *
+ * Demand model: baseCityPairDemand × seasonality × price elasticity, SPLIT
+ * across all carriers serving the pair (a duopoly grows the market a little,
+ * but each carrier gets far less than the whole pool).
+ * Cost model: per-km op cost + per-seat airport fees + lease/maintenance.
+ *
+ * @param {CompetitorAirline} competitor
+ * @param {string} routeKey
+ * @param {object} cfg              route config { frequency, priceMultiplier, aircraftType?, tails? }
+ * @param {number} [month=1]
+ * @param {Map<string,number>|null} [pairCounts]  from buildPairIncumbents (null = monopoly)
+ * @returns {{ revenue, cost, profit, pax, flights, loadFactor }|null}
+ */
+export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, pairCounts = null) {
+  const ac      = TIER_AIRCRAFT[competitor.tier]        ?? TIER_AIRCRAFT.legacy;
+  const fixedPR = TIER_FIXED_PER_ROUTE[competitor.tier] ?? 200_000;
+
+  const [a, b] = routeKey.split('-');
+  const dist  = routeDistance(a, b);
+  const refP  = referencePrice(a, b);
+  const baseD = baseCityPairDemand(a, b);
+  if (!dist || !refP || !baseD) return null;
+
+  const type    = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
+  const seats   = type?.seats ?? ac.seats;
+  const opPerKm = type ? (fuelCostPerKm(type) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
+  const tails   = cfg.tails ?? 1;
+
+  const seasonal     = getSeasonalProfile(a, b)[month] ?? 1;
+  const price        = Math.round(refP * cfg.priceMultiplier);
+  const flightsPerWk = cfg.frequency * 2;                          // bidirectional
+  const capOneWay    = seats * cfg.frequency;
+  const priceRatio   = refP / Math.max(price, 1);
+
+  // Competition split: n carriers share a pool that expands mildly with entry
+  // (competition stimulates some demand), so each incumbent's slice shrinks
+  // fast as a pair gets crowded: 1 → 100%, 2 → ~54%, 3 → ~37%, 4 → ~29%.
+  const nCarriers = Math.max(1, pairCounts?.get(routeKey) ?? 1);
+  const shareOfPool = Math.pow(nCarriers, 0.15) / nCarriers;
+
+  const demandOneWay = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal * shareOfPool);
+  const paxOneWay    = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
+  const weeklyPax    = paxOneWay * 2;
+
+  const revenue     = weeklyPax * price;
+  const opCost      = dist * opPerKm * OP_COST_UPLIFT * flightsPerWk;
+  const airportCost = seats * AIRPORT_COST_PER_SEAT * flightsPerWk;
+  const paxCost     = weeklyPax * PAX_SERVICE_COST;
+  const fixed       = type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
+  const cost        = Math.round(opCost + airportCost + paxCost + fixed);
+
+  return {
+    revenue:    Math.round(revenue),
+    cost,
+    profit:     Math.round(revenue) - cost,
+    pax:        weeklyPax,
+    flights:    flightsPerWk,
+    loadFactor: capOneWay > 0 ? paxOneWay / capOneWay : 0,
+  };
+}
+
+/**
  * Simulate one week of a competitor's entire network.
  * Returns aggregated flights, passengers, revenue, cost, and profit.
- *
- * Demand model: baseCityPairDemand × seasonality, adjusted for price elasticity.
- * Cost model: per-km op cost × distance × weekly flights + fixed lease per route.
+ * Includes corporate overhead on top of per-route costs.
  *
  * @param {CompetitorAirline} competitor
  * @param {number} [month=1]  current game month (1-12) for seasonality
+ * @param {Map<string,number>|null} [pairCounts]  from buildPairIncumbents;
+ *   when provided, demand splits across carriers sharing each pair.
  * @returns {{ weeklyFlights, weeklyPax, weeklyRevenue, weeklyCost, weeklyProfit }}
  */
-export function computeCompetitorWeeklyStats(competitor, month = 1) {
-  const ac       = TIER_AIRCRAFT[competitor.tier]      ?? TIER_AIRCRAFT.legacy;
-  const fixedPR  = TIER_FIXED_PER_ROUTE[competitor.tier] ?? 200_000;
-
+export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts = null) {
   let totalFlights = 0;
   let totalPax     = 0;
   let totalRevenue = 0;
-  let totalOpCost  = 0;
-  let fixedCosts   = 0;
+  let totalCost    = 0;
+  let routeCount   = 0;
 
   for (const [routeKey, cfg] of Object.entries(competitor.routes)) {
-    const [a, b] = routeKey.split('-');
-    const dist  = routeDistance(a, b);
-    const refP  = referencePrice(a, b);
-    const baseD = baseCityPairDemand(a, b);
-    if (!dist || !refP || !baseD) continue;
-
-    // Use the route's real assigned aircraft if present; else fall back to the
-    // tier-average so legacy saves without fleets still compute.
-    const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
-    const seats  = type?.seats ?? ac.seats;
-    const opPerKm = type ? (fuelCostPerKm(type) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
-    const tails  = cfg.tails ?? 1;
-
-    const seasonal      = getSeasonalProfile(a, b)[month] ?? 1;
-    const price         = Math.round(refP * cfg.priceMultiplier);
-    const flightsPerWk  = cfg.frequency * 2;                          // bidirectional
-    const capOneWay     = seats * cfg.frequency;
-    const priceRatio    = refP / Math.max(price, 1);
-    const demandOneWay  = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal);
-    const paxOneWay     = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
-    const weeklyPax     = paxOneWay * 2;
-
-    totalFlights += flightsPerWk;
-    totalPax     += weeklyPax;
-    totalRevenue += weeklyPax * price;
-    totalOpCost  += dist * opPerKm * flightsPerWk;
-    // Fixed cost = per-tail weekly lease + maintenance (real fleet), else tier flat.
-    fixedCosts   += type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
+    const p = computeCompetitorRoutePnL(competitor, routeKey, cfg, month, pairCounts);
+    if (!p) continue;
+    routeCount   += 1;
+    totalFlights += p.flights;
+    totalPax     += p.pax;
+    totalRevenue += p.revenue;
+    totalCost    += p.cost;
   }
 
-  const totalCost   = Math.round(totalOpCost + fixedCosts);
-  const weeklyProfit = Math.round(totalRevenue) - totalCost;
+  totalCost += Math.round(competitorOverhead(routeCount));
+  const weeklyProfit = totalRevenue - totalCost;
 
   return {
     weeklyFlights: totalFlights,
-    weeklyPax:     Math.round(totalPax),
-    weeklyRevenue: Math.round(totalRevenue),
+    weeklyPax:     totalPax,
+    weeklyRevenue: totalRevenue,
     weeklyCost:    totalCost,
     weeklyProfit,
   };

@@ -19,6 +19,7 @@ import { cateringQualityBonus, normalizeCateringLevel } from '../data/catering.j
 import CateringSelector from './CateringSelector.jsx';
 import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
 import TagRoutePlanner from './TagRoutePlanner.jsx';
+import RouteFinder from './RouteFinder.jsx';
 import InfoTip from './InfoTip.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 
@@ -636,6 +637,9 @@ export default function RoutePlanner() {
     <div>
 
       <ModeToggle mode={mode} setMode={setMode} />
+
+      {/* ── Route Finder: discover unserved routes by demand ── */}
+      <RouteFinder onPick={(o, d) => { setOrigin(o); setDest(d); setPrice(null); }} />
 
       {/* ── Route picker ── */}
       <div className="card" style={{ marginBottom: 12 }}>

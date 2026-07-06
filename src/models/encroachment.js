@@ -216,12 +216,17 @@ export function tickEncroachment({ routes = [], routePricing = {}, lastReport = 
       }
       if (Math.random() >= prob) continue;
 
-      // Pick a challenger. Prefer a budget carrier (sharper undercut) ~half the time.
-      const pool = competitors.filter(Boolean);
+      // Pick a challenger. Growth-hungry personalities (aggressive/expansionist/
+      // copycat) jump on fat routes first; otherwise prefer a budget carrier
+      // (sharper undercut) ~half the time.
+      const pool   = competitors.filter(Boolean);
+      const hungry = pool.filter(c =>
+        c._archetype === 'aggressive' || c._archetype === 'expansionist' || c._archetype === 'copycat');
       const budgets = pool.filter(c => c.tier === 'budget');
-      const chosen = (budgets.length && Math.random() < 0.5)
-        ? budgets[Math.floor(Math.random() * budgets.length)]
-        : pool[Math.floor(Math.random() * pool.length)];
+      const pickFrom = (hungry.length && Math.random() < 0.45) ? hungry
+        : (budgets.length && Math.random() < 0.5) ? budgets
+        : pool;
+      const chosen = pickFrom[Math.floor(Math.random() * pickFrom.length)];
       if (!chosen) continue;
 
       const tier  = chosen.tier ?? 'legacy';

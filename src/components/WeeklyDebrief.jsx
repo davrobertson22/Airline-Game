@@ -246,7 +246,7 @@ export default function WeeklyDebrief() {
           <div style={{ marginBottom: 16 }}>
             <SectionLabel>Competitor Activity</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {compEvents.slice(0, 3).map((ev, i) => {
+              {compEvents.slice(0, 6).map((ev, i) => {
                 let text;
                 if (typeof ev === 'string') {
                   text = ev;
