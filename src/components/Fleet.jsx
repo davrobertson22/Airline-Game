@@ -744,6 +744,8 @@ export default function Fleet() {
   const { fleet, routes, cargoRoutes = [], pendingOrders = [], year, week } = state;
   const [selectedId,    setSelectedId]    = useState(null);
   const [configuringId, setConfiguringId] = useState(null);
+  const [checkedIds,    setCheckedIds]    = useState([]);   // bulk selection
+  const [bulkConfigIds, setBulkConfigIds] = useState(null); // array of ids → bulk configure modal
   const [search,        setSearch]        = useState('');
   const [filterChip,    setFilterChip]    = useState('all'); // all | idle | grounded | leased | owned
   const [filterTypeId,  setFilterTypeId]  = useState(null); // null = all types, or a typeId string
@@ -855,6 +857,86 @@ export default function Fleet() {
     if (filterChip === 'owned')    return a.ownershipType === 'owned';
     return true;
   });
+
+  // ── Bulk selection ──────────────────────────────────────────────────────
+  const checkedAircraft   = fleet.filter(a => checkedIds.includes(a.id));
+  const allVisibleChecked = visibleFleet.length > 0 && visibleFleet.every(a => checkedIds.includes(a.id));
+  const checkedTypeIds    = [...new Set(checkedAircraft.map(a => a.typeId))];
+  const canBulkConfigure  = checkedAircraft.length > 0 && checkedTypeIds.length === 1;
+  const checkedOwned      = checkedAircraft.filter(a => a.ownershipType === 'owned');
+
+  function toggleChecked(id) {
+    setCheckedIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  }
+
+  function toggleAllVisible() {
+    setCheckedIds(ids => allVisibleChecked
+      ? ids.filter(id => !visibleFleet.some(a => a.id === id))
+      : [...new Set([...ids, ...visibleFleet.map(a => a.id)])]);
+  }
+
+  function sellValue(a) {
+    const type      = getAircraftType(a.typeId);
+    const ageYears  = (a.ageWeeks ?? 0) / 52;
+    const remaining = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
+    const nav       = Math.round((type?.purchasePrice ?? 0) * remaining);
+    return nav - Math.round(nav * 0.05);
+  }
+
+  function handleBulkSell() {
+    if (checkedOwned.length === 0) return;
+    const proceeds   = checkedOwned.reduce((s, a) => s + sellValue(a), 0);
+    const routeCount = checkedOwned.reduce((s, a) =>
+      s + routes.filter(r => r.aircraftId === a.id).length
+        + cargoRoutes.filter(r => r.aircraftId === a.id).length, 0);
+    const names = checkedOwned.slice(0, 8).map(a => a.name).join(', ')
+                + (checkedOwned.length > 8 ? `, +${checkedOwned.length - 8} more` : '');
+
+    let msg = '';
+    if (routeCount > 0) msg += `These aircraft fly ${routeCount} route${routeCount > 1 ? 's' : ''} — selling will close all of them.\n\n`;
+    msg += `${names}\n\n`;
+    msg += `Net proceeds (after 5% fee): ${formatMoney(proceeds)}\n\n`;
+    msg += `Sell ${checkedOwned.length} owned aircraft?`;
+
+    if (window.confirm(msg)) {
+      for (const a of checkedOwned) dispatch({ type: 'SELL_AIRCRAFT', aircraftId: a.id });
+      setCheckedIds([]);
+      setSelectedId(null);
+    }
+  }
+
+  function handleBulkRetire() {
+    if (checkedAircraft.length === 0) return;
+    let totalPenalty = 0;
+    let routeCount   = 0;
+    for (const a of checkedAircraft) {
+      const type      = getAircraftType(a.typeId);
+      const weeksLeft = a.leaseRemainingWeeks ?? 0;
+      if (a.ownershipType === 'lease' && weeksLeft > 0) {
+        totalPenalty += Math.round((type?.weeklyLease ?? 0) * weeksLeft * 0.5);
+      }
+      routeCount += routes.filter(r => r.aircraftId === a.id).length
+                  + cargoRoutes.filter(r => r.aircraftId === a.id).length;
+    }
+    const leasedCount = checkedAircraft.filter(a => a.ownershipType !== 'owned').length;
+    const ownedCount  = checkedAircraft.length - leasedCount;
+    const names = checkedAircraft.slice(0, 8).map(a => a.name).join(', ')
+                + (checkedAircraft.length > 8 ? `, +${checkedAircraft.length - 8} more` : '');
+
+    let msg = '';
+    if (routeCount > 0) msg += `These aircraft fly ${routeCount} route${routeCount > 1 ? 's' : ''} — removing them will close all of them.\n\n`;
+    msg += `${names}\n\n`;
+    if (leasedCount > 0) msg += `${leasedCount} leased aircraft will be returned.\n`;
+    if (ownedCount  > 0) msg += `${ownedCount} owned aircraft will be retired (no sale proceeds — use Sell to get cash back).\n`;
+    if (totalPenalty > 0) msg += `\nTotal early lease termination penalties: ${formatMoney(totalPenalty)}\n`;
+    msg += `\nRemove ${checkedAircraft.length} aircraft from the fleet?`;
+
+    if (window.confirm(msg)) {
+      for (const a of checkedAircraft) dispatch({ type: 'RETIRE_AIRCRAFT', aircraftId: a.id });
+      setCheckedIds([]);
+      setSelectedId(null);
+    }
+  }
 
   const chipCounts = {
     all:      fleet.length,
@@ -1142,10 +1224,86 @@ export default function Fleet() {
       )}
 
       {/* Aircraft list + detail panel */}
-      {viewMode === 'list' && <><div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {viewMode === 'list' && <>
+      {/* Bulk action bar */}
+      {checkedAircraft.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '10px 14px', marginBottom: 10, borderRadius: 8,
+          background: 'rgba(56,139,253,0.08)', border: '1px solid var(--accent-dim)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+            {checkedAircraft.length} selected
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {checkedOwned.length} owned · {checkedAircraft.length - checkedOwned.length} leased
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              style={{
+                fontSize: 12, padding: '5px 12px',
+                background: canBulkConfigure ? 'rgba(56,139,253,0.15)' : 'var(--surface3)',
+                color: canBulkConfigure ? 'var(--accent)' : 'var(--text-dim)',
+                border: `1px solid ${canBulkConfigure ? 'rgba(56,139,253,0.4)' : 'var(--border)'}`,
+                cursor: canBulkConfigure ? 'pointer' : 'not-allowed',
+              }}
+              disabled={!canBulkConfigure}
+              title={canBulkConfigure ? 'Apply one cabin layout to all selected aircraft' : 'Select aircraft of a single type to bulk-configure'}
+              onClick={() => canBulkConfigure && setBulkConfigIds(checkedAircraft.map(a => a.id))}
+            >
+              <Glyph e="⚙" /> Configure ({checkedAircraft.length})
+            </button>
+            <button
+              className="btn"
+              style={{
+                fontSize: 12, padding: '5px 12px',
+                background: checkedOwned.length > 0 ? 'rgba(63,185,80,0.12)' : 'var(--surface3)',
+                color: checkedOwned.length > 0 ? 'var(--green)' : 'var(--text-dim)',
+                border: `1px solid ${checkedOwned.length > 0 ? 'rgba(63,185,80,0.35)' : 'var(--border)'}`,
+                cursor: checkedOwned.length > 0 ? 'pointer' : 'not-allowed',
+              }}
+              disabled={checkedOwned.length === 0}
+              title={checkedOwned.length > 0 ? 'Sell all selected owned aircraft at NAV minus 5% fee' : 'Only owned aircraft can be sold'}
+              onClick={handleBulkSell}
+            >
+              Sell owned ({checkedOwned.length})
+            </button>
+            <button
+              className="btn"
+              style={{
+                fontSize: 12, padding: '5px 12px',
+                background: 'rgba(248,81,73,0.08)', color: 'var(--red)',
+                border: '1px solid rgba(248,81,73,0.3)', cursor: 'pointer',
+              }}
+              title="Return leased / retire owned aircraft"
+              onClick={handleBulkRetire}
+            >
+              Return / Retire ({checkedAircraft.length})
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setCheckedIds([])}
+            >
+              <Glyph e="✕" /> Clear
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <table>
           <thead>
             <tr>
+              <th style={{ width: 34, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleChecked}
+                  onChange={toggleAllVisible}
+                  title={allVisibleChecked ? 'Deselect all' : 'Select all visible'}
+                  style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                />
+              </th>
               <th style={{ width: 88 }}></th>
               <th>Aircraft</th>
               <th>Type</th>
@@ -1158,7 +1316,7 @@ export default function Fleet() {
           </thead>
           <tbody>
             {visibleFleet.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: 13 }}>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: 13 }}>
                 No aircraft match — <button className="btn btn-ghost" style={{ fontSize: 12, display: 'inline' }} onClick={() => { setSearch(''); setFilterChip('all'); }}>clear filters</button>
               </td></tr>
             ) : null}
@@ -1217,6 +1375,17 @@ export default function Fleet() {
                   }}
                   onClick={() => setSelectedId(isSelected ? null : aircraft.id)}
                 >
+                  <td
+                    style={{ textAlign: 'center', padding: '6px 4px' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedIds.includes(aircraft.id)}
+                      onChange={() => toggleChecked(aircraft.id)}
+                      style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
+                  </td>
                   <td style={{ padding: '6px 8px 6px 12px' }}>
                     <AircraftThumb type={type} />
                   </td>
@@ -1316,6 +1485,14 @@ export default function Fleet() {
         <FleetConfig
           aircraftId={configuringId}
           onClose={() => setConfiguringId(null)}
+        />
+      )}
+
+      {/* Bulk FleetConfig modal */}
+      {bulkConfigIds && (
+        <FleetConfig
+          aircraftIds={bulkConfigIds}
+          onClose={() => { setBulkConfigIds(null); setCheckedIds([]); }}
         />
       )}
     </div>
