@@ -140,6 +140,54 @@ export function retainedProfit(cash, profit) {
   return Math.round(profit * DIVIDEND_RETENTION);
 }
 
+// ── Competitor marketing (share of voice) ────────────────────────────────────
+//
+// Every carrier projects a marketing "voice" at the airports it serves —
+// heaviest at its home hub, a small station presence everywhere else, scaled
+// by tier and cut when distressed. On top of that, carriers can run ad
+// BLITZES: time-limited campaigns (paid weekly from real cash) launched to
+// counter a player campaign at their hub, or occasionally unprovoked.
+// The player's targeted campaigns compete against this voice (see
+// shareOfVoiceFactor / competitorPressureDrag in overhead.js).
+
+const MKT_HUB_SPEND     = { budget:  90_000, legacy: 220_000, premium: 300_000 };
+const MKT_STATION_SPEND = { budget:   8_000, legacy:  18_000, premium:  25_000 };
+const BLITZ_MAX_MULT    = 3;         // blitz spend cap: 3× the carrier's hub baseline
+const BLITZ_MIN_WEEKS   = 6;
+const BLITZ_EXTRA_WEEKS = 8;
+/** Player campaign spend at a carrier's hub that provokes a counter-blitz. */
+const BLITZ_PROVOKE_SPEND = 100_000;
+/** Weekly counter-blitz probability by archetype (when provoked + healthy). */
+const BLITZ_PROB = { fortress: 0.20, aggressive: 0.15, expansionist: 0.08, copycat: 0.06, niche: 0.03, balanced: 0.06 };
+/** Weekly probability of an unprovoked hub brand campaign (healthy carriers). */
+const BLITZ_UNPROVOKED_PROB = 0.012;
+
+/**
+ * Total competitor marketing spend ($/wk) per airport, for share-of-voice.
+ * Pure derivation from competitor state — call each tick, nothing stored.
+ * @returns {{[airportCode: string]: number}}
+ */
+export function competitorMarketingSpend(competitors) {
+  const voice = {};
+  const add = (code, amt) => { if (code && amt > 0) voice[code] = (voice[code] ?? 0) + amt; };
+  for (const c of competitors ?? []) {
+    if (!c) continue;
+    const healthMult = c.fireSale ? 0.25 : (c._distressWeeks ?? 0) > 3 ? 0.5 : 1;
+    add(c.homeHub, (MKT_HUB_SPEND[c.tier] ?? 150_000) * healthMult);
+    if (c.secondaryHub) add(c.secondaryHub, (MKT_HUB_SPEND[c.tier] ?? 150_000) * 0.6 * healthMult);
+    const station = (MKT_STATION_SPEND[c.tier] ?? 15_000) * healthMult;
+    for (const key of Object.keys(c.routes ?? {})) {
+      const [a, b] = key.split('-');
+      if (a !== c.homeHub) add(a, station);
+      if (b !== c.homeHub) add(b, station);
+    }
+    for (const [code, blitz] of Object.entries(c._mktBlitz ?? {})) {
+      add(code, (blitz.spend ?? 0));
+    }
+  }
+  return voice;
+}
+
 /** Weekly probability of a startup airline launching (gated by roster size). */
 const STARTUP_PROB    = 0.020;
 const MAX_ROSTER      = 28;
@@ -209,6 +257,7 @@ export function tickCompetitorAI(competitors, ctx) {
     playerRoutes = [],
     playerHubs = [],
     playerMarketCap = 0,
+    playerCampaignSpend = {},   // { [airportCode]: $/wk } — player's targeted marketing
   } = ctx ?? {};
 
   const events = [];
@@ -272,6 +321,42 @@ export function tickCompetitorAI(competitors, ctx) {
         wars[key] = { ...w, weeksLeft: w.weeksLeft - 1 };
       }
       c._fareWars = wars;
+    }
+
+    // ── Marketing blitz upkeep + launches (every week) ───────────────────────
+    if (c._mktBlitz && Object.keys(c._mktBlitz).length) {
+      const live = {};
+      for (const [code, b] of Object.entries(c._mktBlitz)) {
+        if (b.weeksLeft <= 1 || (c.cash ?? 0) < reserve * 0.3) continue;  // expired or can't afford
+        c.cash = (c.cash ?? 0) - (b.spend ?? 0);                          // paid weekly from real cash
+        live[code] = { ...b, weeksLeft: b.weeksLeft - 1 };
+      }
+      c._mktBlitz = live;
+    }
+    const canBlitz = !c.fireSale && (c.cash ?? 0) > reserve;
+    if (canBlitz) {
+      const hubBase = MKT_HUB_SPEND[c.tier] ?? 150_000;
+      const myHubs  = [c.homeHub, c.secondaryHub].filter(Boolean);
+      for (const hub of myHubs) {
+        if (c._mktBlitz?.[hub]) continue;
+        const playerSpendHere = playerCampaignSpend[hub] ?? 0;
+        const provoked = playerSpendHere >= BLITZ_PROVOKE_SPEND;
+        const prob = provoked
+          ? (BLITZ_PROB[c._archetype] ?? 0.06)
+          : BLITZ_UNPROVOKED_PROB;
+        if (Math.random() >= prob) continue;
+        const spend = provoked
+          ? Math.min(Math.round(playerSpendHere * 1.25), hubBase * BLITZ_MAX_MULT)
+          : hubBase;
+        const weeks = BLITZ_MIN_WEEKS + Math.floor(Math.random() * BLITZ_EXTRA_WEEKS);
+        c._mktBlitz = { ...(c._mktBlitz ?? {}), [hub]: { spend, weeksLeft: weeks } };
+        events.push({
+          type: 'mktBlitz', airlineId: c.id, name: c.name, airport: hub, provoked,
+          description: provoked
+            ? `${c.name} launched a counter-advertising blitz at ${hub}, fighting your campaign for local mindshare.`
+            : `${c.name} launched a brand campaign at ${hub} — expect stiffer competition for local passengers.`,
+        });
+      }
     }
 
     // ── Distress / fire-sale bookkeeping (every week) ────────────────────────

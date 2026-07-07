@@ -26,7 +26,7 @@ import {
   HUB_MIN_GATES,
   HUB_TIER_COUNT,
 } from '../models/demand.js';
-import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
+import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM, competitorMarketingSpend } from '../models/competitorAI.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import {
@@ -42,7 +42,9 @@ import {
   CODESHARE_DURATION_WEEKS,
   MAX_CODESHARE_AGREEMENTS,
 } from '../data/alliances.js';
-import { routeLaunchCost, DEPRECIATION_YEARS } from '../data/overhead.js';
+import { routeLaunchCost, DEPRECIATION_YEARS,
+         marketingAwarenessGain, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
+         campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective } from '../data/objectives.js';
 
@@ -76,7 +78,9 @@ function freshState() {
     hubs:              {},    // { [airportCode]: { tier: 1|2|3 } } — designated hub airports
     labor:             DEFAULT_LABOR_STATE,
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
-    marketingBudget:   0,          // weekly marketing spend ($) — 0 = no active marketing
+    marketingBudget:   0,          // weekly BRAND marketing spend ($) — builds awareness (adstock), no instant boost
+    targetedMarketing: {},         // { [airportCode]: weeklySpend } — tactical campaigns per airport
+    campaignStrength:  {},         // { [airportCode]: 0-100 } — campaign stock, fast build/fast decay
     defaultCateringLevel: 'full',  // catering service level applied to newly-opened routes
     loyalty: {
       weeklyInvestment: 0,   // weekly $ spend on loyalty program (the set budget)
@@ -1161,11 +1165,20 @@ function reducer(state, action) {
     }
 
     case 'SET_MARKETING_BUDGET': {
-      // action: { amount } — weekly spend in dollars, 0 = no marketing
+      // action: { amount } — weekly brand spend in dollars, 0 = no marketing
       return {
         ...state,
         marketingBudget: Math.max(0, Math.round(action.amount)),
       };
+    }
+
+    case 'SET_TARGETED_MARKETING': {
+      // action: { airport, amount } — weekly targeted spend at one airport; 0 removes it.
+      const amount = Math.max(0, Math.round(action.amount || 0));
+      const next   = { ...(state.targetedMarketing ?? {}) };
+      if (amount > 0) next[action.airport] = amount;
+      else            delete next[action.airport];
+      return { ...state, targetedMarketing: next };
     }
 
     case 'RENEW_LEASE': {
@@ -1538,12 +1551,34 @@ function reducer(state, action) {
       const currentAwareness = state.awareness ?? 5;
       const diminishingFactor = 1 - currentAwareness / 100;
       const organicGain   = Math.min(1.0, (report.totalPassengers ?? 0) / 1000) * diminishingFactor;
-      const mktGain       = Math.min(2.0, (state.marketingBudget ?? 0) / 25000) * diminishingFactor;
-      // Slow natural decay — stops at 5 (airline stays findable even without active marketing)
-      const awarenessDecay = state.routes.length === 0 ? 0.5 : 0.05;
-      const newAwareness   = Math.max(5, Math.min(100,
+      // Adstock: brand spend buys awareness points (revenue-scaled, diminishing),
+      // and awareness above the floor decays proportionally each week. Demand
+      // lift comes ONLY from this stock — see awarenessDemandMultiplier.
+      const mktGain = marketingAwarenessGain(state.marketingBudget ?? 0, report.totalRevenue ?? 0)
+        * diminishingFactor;
+      const awarenessDecay = state.routes.length === 0
+        ? Math.max(0.5, (currentAwareness - AWARENESS_FLOOR) * AWARENESS_DECAY_RATE)
+        : (currentAwareness - AWARENESS_FLOOR) * AWARENESS_DECAY_RATE;
+      const newAwareness   = Math.max(AWARENESS_FLOOR, Math.min(100,
         currentAwareness + organicGain + mktGain - awarenessDecay
       ));
+
+      // ── Targeted campaign stocks: fast build with spend, fast decay without ──
+      // Gain is scaled by SHARE OF VOICE: rival marketing at the same airport
+      // (hub ads, blitzes) makes your campaign build slower there.
+      const prevCampaigns   = state.campaignStrength ?? {};
+      const targetedSpend   = state.targetedMarketing ?? {};
+      const compMktVoice    = competitorMarketingSpend(state.competitors ?? []);
+      const campaignCodes   = new Set([...Object.keys(prevCampaigns), ...Object.keys(targetedSpend)]);
+      const newCampaigns    = {};
+      for (const code of campaignCodes) {
+        const prev  = prevCampaigns[code] ?? 0;
+        const popM  = (() => { const ap = getAirport(code); return ap?.effectivePop ?? ap?.population ?? 1; })();
+        const sov   = shareOfVoiceFactor(targetedSpend[code] ?? 0, compMktVoice[code] ?? 0);
+        const gain  = campaignStrengthGain(targetedSpend[code] ?? 0, popM) * sov * (1 - prev / 100);
+        const next  = prev * (1 - CAMPAIGN_DECAY_RATE) + gain;
+        if (next >= 0.5) newCampaigns[code] = Math.min(100, +next.toFixed(2));
+      }
 
       // Apply event demand multiplier as a line-item adjustment to the report.
       // (fuelMult is already baked into fuelMultiplier above, so no separate fuel adj needed.)
@@ -1771,6 +1806,7 @@ function reducer(state, action) {
           playerRoutes:    aiPlayerRoutes,
           playerHubs:      Object.keys(state.hubs ?? {}),
           playerMarketCap: state.marketCap ?? 0,
+          playerCampaignSpend: state.targetedMarketing ?? {},
         });
 
       // Simulate competitor networks, accumulate cash, and track profit history
@@ -2065,6 +2101,7 @@ function reducer(state, action) {
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
+        campaignStrength:    newCampaigns,
         objectives:               updatedObjectives,
         objectivesEnabled,
         showDebrief:              true,
@@ -2327,6 +2364,8 @@ function reconcileState(parsed) {
     allianceMembership:       parsed.allianceMembership       ?? null,
     codeshareAgreements:      parsed.codeshareAgreements      ?? [],
     marketingBudget:          parsed.marketingBudget          ?? 0,
+    targetedMarketing:        parsed.targetedMarketing        ?? {},
+    campaignStrength:         parsed.campaignStrength         ?? {},
     defaultCateringLevel:     normalizeCateringLevel(parsed.defaultCateringLevel),
     awareness:                parsed.awareness                ?? 5,
     missedLoanPayments:       parsed.missedLoanPayments       ?? 0,

@@ -12,9 +12,15 @@ import {
 import { formatMoney, weeklyBlockHours, routeDistanceKm } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
-  calcHQCost, hqBracket,
-  weeklyInsuranceCost, marketingDemandMultiplier, MARKETING_MAX_BOOST,
+  calcHQCost, hqBracket, weeklyInsuranceCost,
+  awarenessDemandMultiplier, marketingAwarenessGain,
+  AWARENESS_PARITY, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
+  campaignDemandBoostPct, campaignEquilibriumStrength,
+  shareOfVoiceFactor, competitorPressureDrag,
 } from '../data/overhead.js';
+import { competitorMarketingSpend } from '../models/competitorAI.js';
+import { getAirport } from '../data/airports.js';
+import { useState } from 'react';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
 import { Glyph } from './Icons.jsx';
@@ -335,14 +341,24 @@ function MaintenanceCard({ budget, fleetMaintTotal, dispatch }) {
 
 // ─── Marketing budget card ────────────────────────────────────────────────────
 
-function MarketingCard({ budget, weeklyRevenue, dispatch }) {
-  const multiplier = marketingDemandMultiplier(budget, Math.max(weeklyRevenue, 1));
-  const boost      = ((multiplier - 1) * 100).toFixed(1);
-  const roi        = budget > 0 ? ((multiplier - 1) * weeklyRevenue / budget).toFixed(2) : '—';
+function MarketingCard({ budget, weeklyRevenue, awareness, targetedMarketing, campaignStrength, routes, competitors, dispatch }) {
+  const [newAirport, setNewAirport] = useState('');
+  const rivalVoice = competitorMarketingSpend(competitors ?? []);
+
+  // Brand (adstock): spend builds awareness over time; lift derives from awareness.
+  const reach        = awarenessDemandMultiplier(awareness);
+  const rawGain      = marketingAwarenessGain(budget, weeklyRevenue) * (1 - awareness / 100);
+  const decay        = Math.max(0, (awareness - AWARENESS_FLOOR) * AWARENESS_DECAY_RATE);
+  const netGain      = rawGain - decay;   // excludes organic (passenger) gain
 
   const presets = [0, 25_000, 50_000, 100_000, 200_000, 500_000].filter(
     v => v === 0 || v <= Math.max(weeklyRevenue * 0.25, 200_000)
   );
+
+  // Targeted campaigns
+  const served = [...new Set(routes.flatMap(r => r.stops ?? [r.origin, r.destination]))].sort();
+  const campaigns = Object.entries(targetedMarketing);
+  const available = served.filter(c => !(c in targetedMarketing));
 
   return (
     <div className="card" style={{ padding: '14px 18px' }}>
@@ -350,11 +366,12 @@ function MarketingCard({ budget, weeklyRevenue, dispatch }) {
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 18 }}><Glyph e="📣" /></span>
-            Marketing Budget
+            Brand Marketing
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, maxWidth: 420 }}>
-            Weekly spend on advertising, loyalty programme, GDS distribution and travel-agent commissions.
-            Boosts demand across all routes — with steeply diminishing returns.
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, maxWidth: 460 }}>
+            Weekly spend on national advertising and brand campaigns. Builds <strong>awareness</strong> over
+            weeks rather than boosting demand instantly — and awareness persists after spend stops, fading slowly.
+            Demand reach: 40% when unknown, 100% at awareness {AWARENESS_PARITY}, up to 112% for a household name.
           </div>
         </div>
         {budget > 0 && (
@@ -362,8 +379,8 @@ function MarketingCard({ budget, weeklyRevenue, dispatch }) {
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--red)' }}>
               −{formatMoney(budget)}/wk
             </div>
-            <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 1, fontWeight: 600 }}>
-              +{boost}% demand
+            <div style={{ fontSize: 11, color: netGain > 0 ? 'var(--green)' : 'var(--text-muted)', marginTop: 1, fontWeight: 600 }}>
+              {netGain > 0 ? `+${netGain.toFixed(1)}` : netGain.toFixed(1)} awareness/wk
             </div>
           </div>
         )}
@@ -396,21 +413,19 @@ function MarketingCard({ budget, weeklyRevenue, dispatch }) {
       {/* Effect summary */}
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
         <div>
-          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Demand boost</div>
-          <div style={{ fontWeight: 600, color: boost > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
-            +{boost}%
+          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Brand awareness</div>
+          <div style={{ fontWeight: 600 }}>{Math.round(awareness)} / 100</div>
+        </div>
+        <div>
+          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Demand reach</div>
+          <div style={{ fontWeight: 600, color: reach >= 1 ? 'var(--green)' : 'var(--yellow)' }}>
+            {(reach * 100).toFixed(0)}%
           </div>
         </div>
         <div>
-          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Revenue uplift</div>
-          <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-            {weeklyRevenue > 0 ? `+${formatMoney(Math.round((multiplier - 1) * weeklyRevenue))}` : '—'}
-          </div>
-        </div>
-        <div>
-          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Return on spend</div>
-          <div style={{ fontWeight: 600, color: parseFloat(roi) > 1 ? 'var(--green)' : parseFloat(roi) > 0 ? 'var(--yellow)' : 'var(--text-muted)' }}>
-            {roi !== '—' ? `${roi}×` : '—'}
+          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Awareness trend</div>
+          <div style={{ fontWeight: 600, color: netGain > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+            {netGain >= 0 ? '+' : ''}{netGain.toFixed(1)}/wk from marketing
           </div>
         </div>
         <div>
@@ -420,12 +435,110 @@ function MarketingCard({ budget, weeklyRevenue, dispatch }) {
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Curve note</div>
+          <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>Adstock note</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Max boost capped at {(MARKETING_MAX_BOOST * 100).toFixed(0)}%. Returns diminish as spend rises —
-            best ROI below ~10% of revenue.
+            Marketing works with a lag: spend compounds into awareness, and cutting the budget
+            lets it fade at ~{(AWARENESS_DECAY_RATE * 100).toFixed(1)}%/wk rather than dropping demand overnight.
+            Flying passengers also builds awareness organically.
           </div>
         </div>
+      </div>
+
+      {/* ── Targeted campaigns ── */}
+      <div style={{ borderTop: '1px solid var(--border, rgba(128,128,128,0.25))', marginTop: 14, paddingTop: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Targeted Campaigns</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, maxWidth: 460 }}>
+          Tactical advertising in a single market — billboards, local media, fare promotions.
+          Lifts demand up to ~+10% (sustained) on routes touching that airport.
+          Builds in weeks but fades fast when unfunded. Bigger metros cost more to saturate.
+          Effectiveness is <strong>share of voice</strong>: rival hub advertising dilutes your
+          campaign and drags local demand — and carriers may counter-blitz when you invade their hub.
+        </div>
+
+        {campaigns.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic', marginBottom: 8 }}>
+            No active campaigns.
+          </div>
+        )}
+
+        {campaigns.map(([code, spend]) => {
+          const ap       = getAirport(code);
+          const popM     = ap?.effectivePop ?? ap?.population ?? 1;
+          const strength = campaignStrength?.[code] ?? 0;
+          const rival    = rivalVoice[code] ?? 0;
+          const sov      = shareOfVoiceFactor(spend, rival);
+          const drag     = competitorPressureDrag(rival, spend, popM);
+          const boostNow = (1 + campaignDemandBoostPct(strength)) * (1 - drag) - 1;
+          const eqBoost  = (1 + campaignDemandBoostPct(campaignEquilibriumStrength(spend, popM, sov))) * (1 - drag) - 1;
+          return (
+            <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, fontSize: 12, flexWrap: 'wrap' }}>
+              <div style={{ width: 150, fontWeight: 600 }}>
+                {code} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{ap?.city ?? ''}</span>
+              </div>
+              <input
+                type="number"
+                className="input"
+                min="0"
+                step="10000"
+                value={spend || ''}
+                onChange={e => dispatch({ type: 'SET_TARGETED_MARKETING', airport: code, amount: parseInt(e.target.value) || 0 })}
+                style={{ width: 110, fontSize: 12, padding: '3px 8px' }}
+              />
+              <span style={{ color: 'var(--text-dim)' }}>/wk</span>
+              {/* strength bar */}
+              <div style={{ flex: 1, minWidth: 90, maxWidth: 160, height: 6, background: 'rgba(128,128,128,0.2)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, strength)}%`, height: '100%', background: 'var(--green)', borderRadius: 3 }} />
+              </div>
+              <span style={{ color: boostNow > 0 ? 'var(--green)' : boostNow < 0 ? 'var(--red)' : 'var(--text-dim)', fontWeight: 600, minWidth: 56 }}>
+                {boostNow >= 0 ? '+' : ''}{(boostNow * 100).toFixed(1)}%
+              </span>
+              <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                sustained: {eqBoost >= 0 ? '+' : ''}{(eqBoost * 100).toFixed(1)}%
+              </span>
+              {rival > 0 && (
+                <span style={{ color: 'var(--yellow)', fontSize: 11 }} title="Competitor marketing at this airport dilutes your campaign and drags demand">
+                  rivals {formatMoney(rival)}/wk · SoV {(sov * 100).toFixed(0)}%
+                </span>
+              )}
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => dispatch({ type: 'SET_TARGETED_MARKETING', airport: code, amount: 0 })}
+              >
+                End
+              </button>
+            </div>
+          );
+        })}
+
+        {available.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+            <select
+              className="input"
+              value={newAirport}
+              onChange={e => setNewAirport(e.target.value)}
+              style={{ fontSize: 12, padding: '3px 8px', width: 220 }}
+            >
+              <option value="">Add campaign at…</option>
+              {available.map(c => {
+                const ap = getAirport(c);
+                return <option key={c} value={c}>{c} — {ap?.city ?? c}</option>;
+              })}
+            </select>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              disabled={!newAirport}
+              onClick={() => {
+                if (!newAirport) return;
+                dispatch({ type: 'SET_TARGETED_MARKETING', airport: newAirport, amount: 50_000 });
+                setNewAirport('');
+              }}
+            >
+              Start ($50k/wk)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -547,6 +660,11 @@ export default function Operations() {
       <MarketingCard
         budget={marketingBudget}
         weeklyRevenue={state.lastReport?.totalRevenue ?? 0}
+        awareness={state.awareness ?? 5}
+        targetedMarketing={state.targetedMarketing ?? {}}
+        campaignStrength={state.campaignStrength ?? {}}
+        routes={routes}
+        competitors={state.competitors ?? []}
         dispatch={dispatch}
       />
 

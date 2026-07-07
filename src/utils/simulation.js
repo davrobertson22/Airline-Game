@@ -9,7 +9,9 @@ import {
   calcHQCost,
   weeklyInsuranceCost,
   weeklyLandingFee,
-  marketingDemandMultiplier,
+  awarenessDemandMultiplier,
+  campaignDemandBoostPct,
+  competitorPressureDrag,
   weeklyLayoverCost,
   weeklyPassengerCompensation,
   weeklyGroundHandlingCost,
@@ -35,6 +37,7 @@ import {
   partnerInterlineRevenue,
 } from '../data/alliances.js';
 import { runNetworkTick } from '../models/network.js';
+import { competitorMarketingSpend } from '../models/competitorAI.js';
 import { buildEncroachmentOffer } from '../models/encroachment.js';
 
 // ─────────────────────────────────────────────
@@ -1253,6 +1256,8 @@ export function weeklyTick(state) {
     fleet, routes: rawRoutes = [], cargoRoutes = [], gameDate = { month: 6 }, gates = {}, labor,
     maintenanceBudget = 1.0, fuelMultiplier = 1.0,
     marketingBudget = 0,
+    targetedMarketing = {},
+    campaignStrength = {},
     loyalty = { weeklyInvestment: 0, members: 0 },
     awareness = 5,
     encroachments = {},
@@ -1275,9 +1280,37 @@ export function weeklyTick(state) {
   // feed, interline adjacency, or cannibalization while they're out of season.
   const activeRoutes = routes.filter(r => isRouteActive(r, gameDate.month));
 
-  // Awareness multiplier: new/unknown airlines attract only a fraction of potential demand.
-  // Range 0.4 (awareness=0, brand unknown) → 1.0 (awareness=100, household name).
-  const awarenessMultiplier = 0.4 + (awareness / 100) * 0.6;
+  // Awareness multiplier (adstock model): demand reach derives ONLY from the
+  // awareness stock — marketing spend has no instant effect, it builds the
+  // stock over time (see GameContext weekly update). 0.4 (unknown) → 1.0 at
+  // parity (75) → 1.12 (household name).
+  const awarenessMultiplier = awarenessDemandMultiplier(awareness);
+
+  // Targeted campaign boost per route: strongest campaign at either endpoint
+  // (max, not sum — the same seats can't be sold twice). Strength stocks are
+  // last week's; GameContext advances them after the tick.
+  const campaignBoostFor = (a, b) => campaignDemandBoostPct(
+    Math.max(campaignStrength?.[a] ?? 0, campaignStrength?.[b] ?? 0)
+  );
+
+  // Share of voice: competitor marketing (hub advertising, station presence,
+  // ad blitzes) drags demand on routes touching contested airports. Countering
+  // with your own targeted spend reduces the drag.
+  const compMktSpend = competitorMarketingSpend(state.competitors ?? []);
+  const mktDragCache = {};
+  const mktDragAt = (code) => {
+    if (!(code in mktDragCache)) {
+      const ap = getAirport(code);
+      mktDragCache[code] = competitorPressureDrag(
+        compMktSpend[code],
+        targetedMarketing?.[code],
+        ap?.effectivePop ?? ap?.population ?? 1,
+      );
+    }
+    return mktDragCache[code];
+  };
+  // Net marketing lift for a route (campaign boost minus rival drag; can be negative).
+  const netMarketingLift = (boost, drag) => (1 + boost) * (1 - drag) - 1;
 
   // ── Alliance / codeshare setup ────────────────────────────────────────────
   const allianceMembership  = state.allianceMembership  ?? null;
@@ -1348,12 +1381,8 @@ export function weeklyTick(state) {
   // consistent with how marketing/awareness lifts are surfaced.
   const loyaltyMultiplier   = 1 + loyaltyBoostHub;
 
-  // Pre-compute marketing multiplier (needs an initial revenue pass — use last week's revenue
-  // if available, otherwise estimate from current routes without multiplier applied yet)
-  const lastRevenue = state.financialHistory?.length
-    ? state.financialHistory[state.financialHistory.length - 1]?.revenue ?? 0
-    : 0;
-  const mktMultiplier = marketingDemandMultiplier(marketingBudget, Math.max(lastRevenue, 1));
+  // NOTE: no instant marketing multiplier — spend feeds the awareness stock
+  // (brand) and campaign-strength stocks (targeted) instead. See overhead.js §9.
 
   // 1. Route revenue + operating costs
   let totalRevenue        = 0;
@@ -1521,7 +1550,13 @@ export function weeklyTick(state) {
       const cateringRev    = result.cateringRevenue ?? 0;
       // Loyalty boost is concentrated on hub-touching routes.
       const tagLoyaltyBoost = tagHubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
-      const combinedMult   = awarenessMultiplier * mktMultiplier * (1 + tagLoyaltyBoost);
+      // Targeted campaigns: strongest campaign among ALL stops on a tag route,
+      // net of the heaviest rival marketing drag along the way.
+      const tagCampaignBoost = netMarketingLift(
+        campaignDemandBoostPct(Math.max(0, ...stopsList.map(c => campaignStrength?.[c] ?? 0))),
+        Math.max(0, ...stopsList.map(mktDragAt)),
+      );
+      const combinedMult   = awarenessMultiplier * (1 + tagCampaignBoost) * (1 + tagLoyaltyBoost);
       const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
       const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
 
@@ -1554,7 +1589,7 @@ export function weeklyTick(state) {
         routeId: route.id,
         ...result,
         revenue:       routeRevenue,
-        marketingLift: Math.round(result.revenue * (mktMultiplier   - 1)),
+        marketingLift: Math.round(result.revenue * tagCampaignBoost),
         loyaltyLift:   Math.round(result.revenue * tagLoyaltyBoost),
         allianceLift:  0,
         landingFee,
@@ -1613,10 +1648,13 @@ export function weeklyTick(state) {
         }
       : connectingRaw;
     const allianceLift   = partnerContestedKeys.has(routeKey) ? allianceDemandBoostPct : 0;
-    const marketingLift  = mktMultiplier - 1;
+    const marketingLift  = netMarketingLift(
+      campaignBoostFor(route.origin, route.destination),
+      Math.max(mktDragAt(route.origin), mktDragAt(route.destination)),
+    );
     // Loyalty boost concentrated on hub-touching routes, diluted elsewhere.
     const loyaltyLift    = hubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
-    const combinedMult   = awarenessMultiplier * mktMultiplier * (1 + loyaltyLift) * (1 + allianceLift);
+    const combinedMult   = awarenessMultiplier * (1 + marketingLift) * (1 + loyaltyLift) * (1 + allianceLift);
     // Ancillary catering revenue is per-actual-passenger income — it should NOT be
     // amplified by the marketing/awareness/loyalty demand multipliers (those proxy
     // for attracting MORE passengers, which catering income would then double-count).
@@ -1808,8 +1846,11 @@ export function weeklyTick(state) {
     totalInsurance += weeklyInsuranceCost(aircraft, type);
   }
 
-  // 9. Marketing spend — deducted as a cost; demand effect already in revenue above
-  const totalMarketingSpend = marketingBudget > 0 ? Math.round(marketingBudget) : 0;
+  // 9. Marketing spend — brand budget + targeted campaigns. Deducted as a cost;
+  // demand effect flows through awareness / campaign-strength stocks.
+  const totalTargetedSpend  = Object.values(targetedMarketing ?? {})
+    .reduce((s, v) => s + Math.max(0, v || 0), 0);
+  const totalMarketingSpend = Math.round(Math.max(0, marketingBudget) + totalTargetedSpend);
 
   // 10. Loyalty program costs:
   //   - Weekly investment (technology, partnerships, admin)
@@ -1886,7 +1927,7 @@ export function weeklyTick(state) {
     loyaltyMultiplier,
     awarenessMultiplier,
     totalPassengers,
-    mktMultiplier,
+    totalTargetedSpend:     Math.round(totalTargetedSpend),
     totalOpCost:            Math.round(totalOpCost),
     totalCost:              Math.round(totalCost),
     routeResults,

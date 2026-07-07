@@ -224,7 +224,7 @@ const WIKI = [
       { h: 'Maintenance spending' },
       { p: 'Maintenance budget controls spending on parts, components and scheduled checks. Each aircraft family you operate requires its own maintenance base — retiring every aircraft of a type eliminates that base cost. Higher spending keeps aircraft reliable; cutting it saves money but raises the risk of failures.' },
       { h: 'Corporate Overhead' },
-      { p: 'Your overhead / marketing budget boosts demand across all routes, with steeply diminishing returns. Spend enough to stay competitive, but don\'t pour money in past the point where it stops paying back.' },
+      { p: 'Marketing works like real advertising (adstock): brand spend builds awareness over weeks rather than boosting demand instantly, and awareness persists — then slowly fades — after spend stops. Demand reach runs from 40% for an unknown brand to 112% for a household name. Targeted campaigns at individual airports add a fast-building, fast-fading local demand lift (up to ~+10% sustained) on routes touching that airport; bigger metros cost more to saturate. Advertising is a share-of-voice battle: competitors market at their hubs and stations too, which dilutes your campaigns, drags demand at contested airports, and can escalate — invade a fortress carrier\'s hub with a big campaign and expect a counter-blitz.' },
     ],
   },
   {

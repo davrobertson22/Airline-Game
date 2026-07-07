@@ -5,6 +5,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
 import { computeQualityScore } from '../models/demand.js';
+import { awarenessDemandMultiplier } from '../data/overhead.js';
 import { Glyph } from './Icons.jsx';
 
 // ─── Reputation scoring constants ────────────────────────────────────────────
@@ -160,7 +161,7 @@ export default function Reputation() {
 
   // Awareness
   const awareness = state.awareness ?? 5;
-  const awarenessMultiplier = 0.4 + (awareness / 100) * 0.6;
+  const awarenessMultiplier = awarenessDemandMultiplier(awareness);
 
   if (fleet.length === 0 && routes.length === 0) {
     return (
@@ -271,7 +272,7 @@ export default function Reputation() {
             label="Brand Awareness"
             score={Math.round(awareness)}
             icon="📣"
-            detail={`${formatPercent(awarenessMultiplier)} of potential demand reached. Grows via passengers flown + marketing spend.`}
+            detail={`${formatPercent(awarenessMultiplier)} of potential demand reached. Grows via passengers flown + brand marketing (with a lag); fades slowly without upkeep.`}
             tip={awareness < 40 ? 'Increase marketing budget or fly more passengers to build awareness' : undefined}
           />
         </div>

@@ -20,7 +20,7 @@ import {
 } from '../utils/fuel.js';
 import {
   hqBracket,
-  marketingDemandMultiplier,
+  awarenessDemandMultiplier,
   weeklyCateringCost, weeklyLayoverCost, weeklyPassengerCompensation,
   GROUND_HANDLING_COST_PER_PAX,
   DISTRIBUTION_COST_PCT,
@@ -271,7 +271,9 @@ function ProfitWaterfall({ proj, report }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
         <span style={{ color: 'var(--text-dim)' }}>Revenue drivers:</span>
         <span>Awareness <strong>{(report.awarenessMultiplier ?? 1).toFixed(2)}×</strong></span>
-        <span>Marketing <strong>{(report.mktMultiplier ?? 1).toFixed(2)}×</strong></span>
+        {(report.totalTargetedSpend ?? 0) > 0 && (
+          <span>Campaign lift <strong>{formatMoney((report.routeResults ?? []).reduce((s, r) => s + (r.marketingLift ?? 0), 0))}</strong></span>
+        )}
         <span>Loyalty <strong>{(report.loyaltyMultiplier ?? 1).toFixed(2)}×</strong></span>
         {proj.globalDemandMult !== 1 && <span>Events <strong>{proj.globalDemandMult.toFixed(2)}×</strong></span>}
         {(report.totalConnecting ?? 0) > 0 && <span>Connecting feed <strong>{formatMoney(report.totalConnecting)}</strong></span>}
@@ -404,7 +406,6 @@ function PLStatement({ proj }) {
   // Marketing
   const marketingBudgetVal = report.totalMarketingSpend;
   const ytdMarketing  = ytd(financialHistory, 'marketing');
-  const mktMultiplier = report.mktMultiplier ?? 1;
 
   // Revenue — canonical, including connecting feed + partner O&D + all demand lifts.
   const totRev          = proj.effectiveRevenue;
@@ -1192,7 +1193,7 @@ function PLStatement({ proj }) {
                     <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
                       Marketing &amp; advertising
                       <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
-                        demand lift: +{((mktMultiplier - 1) * 100).toFixed(1)}% across all routes
+                        builds brand awareness &amp; local campaigns — demand lift flows through awareness
                       </span>
                     </td>
                     {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-(pw.marketing ?? 0))}</td>}
@@ -2281,9 +2282,7 @@ function Forecast({ proj }) {
 
   // Demand multipliers shown in the "revenue multipliers applied" banner below.
   // (baseRevenue itself already bakes these in via the engine projection.)
-  const awarenessMultiplier = 0.4 + ((state.awareness ?? 5) / 100) * 0.6;
-  const lastRevEstimate = state.financialHistory?.at(-1)?.revenue ?? 1;
-  const mktMultiplier   = marketingDemandMultiplier(state.marketingBudget ?? 0, Math.max(lastRevEstimate, 1));
+  const awarenessMultiplier = awarenessDemandMultiplier(state.awareness ?? 5);
   const globalDemandMult = (state.activeEvents ?? []).reduce((m, ev) => {
     const fx = ev.effects ?? {};
     return fx.globalDemandMult ? m * fx.globalDemandMult : m;
@@ -2388,7 +2387,7 @@ function Forecast({ proj }) {
           <span><Glyph e="⚡" /> Revenue multipliers applied to this forecast:</span>
           {globalDemandMult !== 1 && <span>Events {globalDemandMult > 1 ? '+' : ''}{formatPercent(globalDemandMult - 1)}</span>}
           {awarenessMultiplier < 0.95 && <span>Awareness {formatPercent(awarenessMultiplier)} of max</span>}
-          {mktMultiplier > 1 && <span>Marketing +{formatPercent(mktMultiplier - 1)}</span>}
+          {awarenessMultiplier > 1 && <span>Awareness +{formatPercent(awarenessMultiplier - 1)}</span>}
           <span style={{ color: 'var(--text-dim)' }}>Events end when they expire — future weeks may differ.</span>
         </div>
       )}
