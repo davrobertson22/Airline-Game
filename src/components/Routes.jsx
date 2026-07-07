@@ -254,6 +254,15 @@ export default function Routes() {
     };
   }), [routes, fleet, rrById]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Aircraft types present across all groups (for the type filter dropdown).
+  // NOTE: must stay above the detailPair early-return — hooks can't be conditional.
+  const typesInUse = useMemo(() => {
+    const ids = new Set();
+    for (const g of groupsWithStats) for (const t of g.typeIds) ids.add(t);
+    return [...ids].map(id => ({ id, name: getAircraftType(id)?.name ?? id }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [groupsWithStats]);
+
   // If a route detail is selected, render that instead of the list
   if (detailPair) {
     return (
@@ -317,14 +326,6 @@ export default function Routes() {
     if (sortBy === 'distance') return b.distance     - a.distance;
     return b.totalProfit - a.totalProfit; // default
   });
-
-  // Aircraft types present across all groups (for the type filter dropdown)
-  const typesInUse = useMemo(() => {
-    const ids = new Set();
-    for (const g of groupsWithStats) for (const t of g.typeIds) ids.add(t);
-    return [...ids].map(id => ({ id, name: getAircraftType(id)?.name ?? id }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [groupsWithStats]);
 
   // Groups the player has explicitly ticked (across the full list, not just the
   // current filter view, so a selection survives a filter change).
