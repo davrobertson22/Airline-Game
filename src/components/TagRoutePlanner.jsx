@@ -12,6 +12,7 @@ import {
   cargoSlotsUsedAt,
 } from '../utils/simulation.js';
 import { ModeToggle } from './CargoRoutePlanner.jsx';
+import AddGateButton from './AddGateButton.jsx';
 import { Glyph } from './Icons.jsx';
 
 // ─── Region-grouped airport <select> (only airports with a gate) ───────────────
@@ -240,8 +241,8 @@ export default function TagRoutePlanner({ mode, setMode }) {
                 <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {type.name} range {effRange.toLocaleString()} km &lt; longest leg {Math.round(maxLeg).toLocaleString()} km.</span>
               )}
               {!blockOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> Exceeds the {MAX_WEEKLY_BLOCK_HOURS}h/wk block-hour cap for this aircraft.</span>}
-              {gateProblem && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {gateProblem} — acquire one in the Gates tab.</span>}
-              {slotProblem && <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {slotProblem} — add a gate there.</span>}
+              {gateProblem && <span style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}><Glyph e="⚠" /> No gate at {gateProblem}<AddGateButton code={gateProblem} /></span>}
+              {slotProblem && <span style={{ color: 'var(--yellow)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}><Glyph e="⚠" /> Not enough slots at {slotProblem}<AddGateButton code={slotProblem} /></span>}
               {!connectivityOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {aircraft?.name} can only extend from an airport it already serves.</span>}
             </div>
           </div>

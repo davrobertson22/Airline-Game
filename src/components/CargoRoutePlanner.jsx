@@ -5,6 +5,7 @@ import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import { simulateCargoRoute, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
+import AddGateButton from './AddGateButton.jsx';
 import { Glyph } from './Icons.jsx';
 
 // ─── Passenger / Freight mode toggle (shared with RoutePlanner) ─────────────────
@@ -350,15 +351,17 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
                       </div>
                       {/* Gate requirement */}
                       {noGate.length > 0 && (
-                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 4 }}>
-                          <Glyph e="⛔" size={12} /> No gate at <strong>{noGate.join(' & ')}</strong> — freighters need a gate at both ends. Lease one on the Airports page.
+                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <Glyph e="⛔" size={12} /> No gate at <strong>{noGate.join(' & ')}</strong> — freighters need a gate at both ends.
+                          {noGate.map(c => <AddGateButton key={c} code={c} />)}
                         </div>
                       )}
                       {/* Slot capacity */}
                       {noGate.length === 0 && noSlot.length > 0 && (
-                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 4 }}>
+                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
                           <Glyph e="⚠" size={12} /> Not enough free slots at <strong>{noSlot.join(' & ')}</strong> for {frequency} weekly flight{frequency !== 1 ? 's' : ''}
-                          {originGate.hasGate && destGate.hasGate && ` (free: ${origin} ${Math.max(0, originGate.free)}, ${dest} ${Math.max(0, destGate.free)})`}. Add a gate or reduce frequency.
+                          {originGate.hasGate && destGate.hasGate && ` (free: ${origin} ${Math.max(0, originGate.free)}, ${dest} ${Math.max(0, destGate.free)})`}.
+                          {noSlot.map(c => <AddGateButton key={c} code={c} />)}
                         </div>
                       )}
                       {/* Slot usage summary when everything checks out */}

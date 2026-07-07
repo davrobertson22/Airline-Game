@@ -6,6 +6,7 @@ import AirportLink from './AirportLink.jsx';
 import CargoRoutesList, { FreightBadge, PassengerBadge } from './CargoRoutesList.jsx';
 import CargoRoutePlanner from './CargoRoutePlanner.jsx';
 import { AIRPORTS, getAirport, getRegion, REGIONS } from '../data/airports.js';
+import AddGateButton from './AddGateButton.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel, CATERING_LEVELS, CATERING_LEVEL_ORDER } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
@@ -2174,20 +2175,24 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {/* Gate / slot status */}
         {validDest && (
           <div style={{ fontSize: 12, marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {!gateAtOrigin ? (
-              <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {origin} — go to Gates tab</span>
-            ) : !originSlotsOk ? (
-              <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {origin} ({originSlotsUsed}/{originSlotCap}) — add another gate</span>
-            ) : (
-              <span style={{ color: 'var(--green)' }}><Glyph e="✓" /> {origin}: {originSlotsUsed + Number(frequency)}/{originSlotCap} slots</span>
-            )}
-            {!gateAtDest ? (
-              <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> No gate at {dest} — go to Gates tab</span>
-            ) : !destSlotsOk ? (
-              <span style={{ color: 'var(--yellow)' }}><Glyph e="⚠" /> Not enough slots at {dest} ({destSlotsUsed}/{destSlotCap}) — add another gate</span>
-            ) : (
-              <span style={{ color: 'var(--green)' }}><Glyph e="✓" /> {dest}: {destSlotsUsed + Number(frequency)}/{destSlotCap} slots</span>
-            )}
+            {[
+              { code: origin, hasGate: gateAtOrigin, slotsOk: originSlotsOk, used: originSlotsUsed, cap: originSlotCap },
+              { code: dest,   hasGate: gateAtDest,   slotsOk: destSlotsOk,   used: destSlotsUsed,   cap: destSlotCap },
+            ].map(({ code, hasGate, slotsOk, used, cap }) => (
+              !hasGate ? (
+                <span key={code} style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Glyph e="⚠" /> No gate at {code}
+                  <AddGateButton code={code} />
+                </span>
+              ) : !slotsOk ? (
+                <span key={code} style={{ color: 'var(--yellow)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Glyph e="⚠" /> Not enough slots at {code} ({used}/{cap})
+                  <AddGateButton code={code} />
+                </span>
+              ) : (
+                <span key={code} style={{ color: 'var(--green)' }}><Glyph e="✓" /> {code}: {used + Number(frequency)}/{cap} slots</span>
+              )
+            ))}
           </div>
         )}
 
