@@ -448,7 +448,12 @@ export function computeUtility(offer, market, segment) {
                    ? market.referencePrice * BUSINESS_PRICE_MULTIPLIER
                    : market.referencePrice;
 
-  const priceUtil   = -(price / refPrice) * w.price;
+  // priceSensitivityReduction (−0.2…+0.35, from loyalty program + reputation)
+  // scales how much price matters to THIS airline's passengers: loyal members
+  // and a trusted brand blunt undercutting rivals; a poor reputation makes
+  // passengers more price-driven.
+  const sens        = 1 - (offer.priceSensitivityReduction ?? 0);
+  const priceUtil   = -(price / refPrice) * w.price * sens;
   const qualityUtil = (offer.qualityScore / 100) * w.quality;
   const freqUtil    = Math.log1p(offer.weeklyFrequency) * w.frequency;
   const connUtil    = offer.connectivityBonus;
@@ -578,12 +583,16 @@ export function computeMarketShare(market, offers) {
 function _monopolyResult(market, offer) {
   const noBusiness = offer.businessPrice == null;
 
+  // Loyalty/reputation blunt the elasticity exponent: less-price-sensitive
+  // passengers punish above-reference fares less (and reward discounts less).
+  const sens = 1 - (offer.priceSensitivityReduction ?? 0);
+
   // Compute business demand first so we can detect overflow before sizing leisure.
   const businessRef = market.referencePrice * BUSINESS_PRICE_MULTIPLIER;
   const businessAdj = noBusiness
     ? 0
     : Math.round(market.businessDemand
-        * Math.pow(businessRef / offer.businessPrice, ELASTICITY.business)
+        * Math.pow(businessRef / offer.businessPrice, ELASTICITY.business * sens)
         * priceChokeFactor(offer.businessPrice, businessRef));
   const businessPax = noBusiness ? 0 : Math.min(businessAdj, offer.businessSeats);
 
@@ -600,7 +609,7 @@ function _monopolyResult(market, offer) {
   // Demand with price elasticity applied
   const leisureAdj  = Math.round(
     leisurePool
-      * Math.pow(market.referencePrice / offer.economyPrice, ELASTICITY.leisure)
+      * Math.pow(market.referencePrice / offer.economyPrice, ELASTICITY.leisure * sens)
       * priceChokeFactor(offer.economyPrice, market.referencePrice)
   );
 

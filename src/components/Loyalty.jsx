@@ -245,20 +245,20 @@ export default function Loyalty() {
 
         {/* Growth milestones */}
         <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 8 }}>
-          <strong style={{ color: 'var(--fg)' }}>Milestones:</strong>
+          <strong style={{ color: 'var(--fg)' }}>Milestones</strong> (member penetration — share of your flyers enrolled):
           {[
-            { m: 10_000,  desc: 'Demand boost kicks in (+0.8%)' },
-            { m: 25_000,  desc: 'Meaningful price retention' },
-            { m: 50_000,  desc: '+4 reputation pts, −3.75% price sensitivity' },
-            { m: 100_000, desc: '+8 reputation pts, −7.5% price sensitivity' },
-          ].map(({ m, desc }) => (
-            <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            { p: 0.10, desc: '+2.5% hub demand, −3.5% price sensitivity' },
+            { p: 0.20, desc: '+5% hub demand, −7% price sensitivity, +4 reputation' },
+            { p: 0.30, desc: '+7.5% hub demand, −10.5% price sensitivity (needs Silver+)' },
+            { p: 0.45, desc: '+10% hub demand (max), −15% price sensitivity, +8 reputation (needs Gold+)' },
+          ].map(({ p, desc }) => (
+            <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <span style={{
                 width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                background: members >= m ? '#38d39f' : 'var(--border)',
+                background: penetration >= p ? '#38d39f' : 'var(--border)',
               }} />
-              <span style={{ color: members >= m ? 'var(--fg)' : 'var(--fg-muted)' }}>
-                <strong>{m.toLocaleString()} members</strong> — {desc}
+              <span style={{ color: penetration >= p ? 'var(--fg)' : 'var(--fg-muted)' }}>
+                <strong>{Math.round(p * 100)}% penetration</strong> — {desc}
               </span>
             </div>
           ))}

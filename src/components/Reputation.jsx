@@ -5,12 +5,9 @@ import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
 import { computeQualityScore } from '../models/demand.js';
+import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import { awarenessDemandMultiplier } from '../data/overhead.js';
 import { Glyph } from './Icons.jsx';
-
-// ─── Reputation scoring constants ────────────────────────────────────────────
-
-const QUALITY_SCORE = { basic: 15, standard: 45, premium: 72, luxury: 100 };
 
 // Competitor brand benchmarks (fixed reference points for positioning map)
 const COMPETITOR_POSITIONS = [
@@ -21,70 +18,8 @@ const COMPETITOR_POSITIONS = [
 
 // ─── Pure calculation functions ───────────────────────────────────────────────
 
-function calcReputation(state) {
-  const { fleet, routes, financialHistory, labor, loyalty } = state;
-  const effects = laborEffects(labor);
-
-  // ── Service score (35%) ────────────────────────────────────────────────────
-  // Based on average cabin quality of assigned aircraft, filtered through morale
-  const assignedFleet = fleet.filter(a => routes.some(r => r.aircraftId === a.id));
-  const serviceBase = assignedFleet.length > 0
-    ? assignedFleet.reduce((s, a) => {
-        const seatQ = QUALITY_SCORE[a.config?.seatQuality  ?? 'standard'] ?? 45;
-        const servQ = QUALITY_SCORE[a.config?.serviceQuality ?? 'standard'] ?? 45;
-        return s + (seatQ + servQ) / 2;
-      }, 0) / assignedFleet.length
-    : 45;
-
-  // Cabin crew morale boosts/hurts service delivery
-  const cabinMorale = labor?.cabinCrew?.morale ?? 80;
-  const serviceScore = Math.round(Math.min(100, serviceBase * (cabinMorale / 80)));
-
-  // ── Fleet freshness score (20%) ────────────────────────────────────────────
-  const avgAgeYears = fleet.length > 0
-    ? fleet.reduce((s, a) => s + (a.ageWeeks ?? 0) / 52, 0) / fleet.length
-    : 0;
-  const fleetScore = Math.round(Math.max(0, 100 - avgAgeYears * 5));
-
-  // ── Network score (20%) ────────────────────────────────────────────────────
-  const airports  = new Set(routes.flatMap(r => [r.origin, r.destination]));
-  const hubRoutes = routes.filter(r => r.origin === state.hub || r.destination === state.hub);
-  const rawNet = airports.size * 4 + routes.length * 2 + hubRoutes.length * 3;
-  const networkScore = Math.round(Math.min(100, rawNet));
-
-  // ── Employee morale score (25%) ────────────────────────────────────────────
-  const morales    = Object.values(labor ?? {}).map(g => g.morale ?? 80);
-  const avgMorale  = morales.length > 0 ? morales.reduce((s, m) => s + m, 0) / morales.length : 80;
-  // Financial health bonus/penalty
-  const recentProfit = financialHistory.slice(-4).reduce((s, h) => s + (h.profit ?? 0), 0);
-  const profitBump   = Math.max(-10, Math.min(10, recentProfit / 200000 * 10));
-  const moraleScore  = Math.round(Math.min(100, Math.max(0, avgMorale + profitBump)));
-
-  // Loyalty bonus: up to +8 reputation points for a deep, mature program.
-  // Scales with member PENETRATION (share of your own flyers enrolled), so the
-  // full +8 takes a sustained high-tier program at scale — not a quick win.
-  const loyaltyMembers = loyalty?.members ?? 0;
-  const loyaltyPax     = state.lastReport?.totalPassengers ?? 0;
-  const loyaltyBonus   = loyaltyReputationBonus(loyaltyPenetration(loyaltyMembers, loyaltyPax));
-
-  const overall = Math.min(100, Math.round(
-    serviceScore * 0.35 +
-    fleetScore   * 0.20 +
-    networkScore * 0.20 +
-    moraleScore  * 0.25 +
-    loyaltyBonus
-  ));
-
-  // Quality score as fed into the demand model (mirrors computeQualityScore inputs)
-  const qualityDemandScore = computeQualityScore({
-    onTimeRate:     effects.onTimeRate,
-    serviceLevel:   serviceBase >= 72 ? 'business' : serviceBase >= 60 ? 'premium' : 'economy',
-    fleetAgeYears:  avgAgeYears,
-    customerRating: effects.customerRating + effects.groundQualityBonus,
-  });
-
-  return { overall, service: serviceScore, fleet: fleetScore, network: networkScore, morale: moraleScore, qualityDemandScore, avgAgeYears, loyaltyBonus };
-}
+// calcReputation now lives in models/reputation.js — shared with the engine,
+// so the numbers this page shows are the ones weeklyTick actually applies.
 
 function calcPositioning(state) {
   const { fleet, routes } = state;
@@ -151,13 +86,17 @@ export default function Reputation() {
   const { state } = useGame();
   const { fleet, routes, airlineName, labor } = state;
 
-  const rep = useMemo(() => calcReputation(state), [state]);
+  const rep = useMemo(() => calcReputation(
+    state,
+    loyaltyReputationBonus(loyaltyPenetration(state.loyalty?.members ?? 0, state.lastReport?.totalPassengers ?? 0)),
+  ), [state]);
   const pos = useMemo(() => calcPositioning(state), [state]);
   const strategy = strategyLabel(pos);
 
-  // Demand multiplier from reputation (centered at 50)
-  const demandMultiplier = 1 + (rep.overall - 50) / 100 * 0.15;
-  const elasticityReduction = (rep.overall - 50) / 100 * 0.20;
+  // Same functions the engine applies in weeklyTick (demand multiplier on route
+  // revenue; elasticity reduction on the player offer's price sensitivity).
+  const demandMultiplier = reputationDemandMultiplier(rep.overall);
+  const elasticityReduction = reputationElasticityReduction(rep.overall);
 
   // Awareness
   const awareness = state.awareness ?? 5;

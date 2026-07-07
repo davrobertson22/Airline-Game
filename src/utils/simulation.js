@@ -38,6 +38,7 @@ import {
 } from '../data/alliances.js';
 import { runNetworkTick } from '../models/network.js';
 import { competitorMarketingSpend } from '../models/competitorAI.js';
+import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import { buildEncroachmentOffer } from '../models/encroachment.js';
 
 // ─────────────────────────────────────────────
@@ -698,6 +699,8 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     totalSeats:        configBodies(config) * route.weeklyFrequency,
     qualityScore,
     connectivityBonus,
+    // Loyalty program + reputation blunt price sensitivity (attached by weeklyTick).
+    priceSensitivityReduction: route.priceSensitivityReduction ?? 0,
   };
 
   // Gather any AI competitors serving this route and compute market share.
@@ -952,6 +955,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
       seatsPerFlight: type.seats,
       economySeats: 1e12, businessSeats: 1e12,   // huge → demand returns uncapped
       qualityScore: quality, connectivityBonus,
+      priceSensitivityReduction: route.priceSensitivityReduction ?? 0,
     };
     const competitorOffers = COMPETITOR_AIRLINES
       .map(c => buildCompetitorOffer(c, market)).filter(Boolean);
@@ -1381,6 +1385,18 @@ export function weeklyTick(state) {
   // consistent with how marketing/awareness lifts are surfaced.
   const loyaltyMultiplier   = 1 + loyaltyBoostHub;
 
+  // Reputation: brand trust nudges demand (±7.5%) and — together with the
+  // loyalty program — blunts passengers' price sensitivity. These are the same
+  // figures the Reputation page displays; they now actually feed the engine.
+  const repInfo          = calcReputation(state, loyaltyReputationBonus(loyaltyPenet));
+  const reputationMult   = reputationDemandMultiplier(repInfo.overall);
+  const repElasticityRed = reputationElasticityReduction(repInfo.overall);
+  // Combined price-sensitivity reduction for player offers. Loyalty's share is
+  // concentrated on hub routes (captive frequent flyers), diluted off-hub.
+  const sensReductionFor = (hubQ) => Math.max(-0.2, Math.min(0.35,
+    repElasticityRed + loyaltyPriceSensitivityReduction(loyaltyPenet) * (hubQ > 0 ? 1 : 0.4)
+  ));
+
   // NOTE: no instant marketing multiplier — spend feeds the awareness stock
   // (brand) and campaign-strength stocks (targeted) instead. See overhead.js §9.
 
@@ -1489,6 +1505,7 @@ export function weeklyTick(state) {
         totalSeats:        totalSeatsAll,
         qualityScore:      avgQuality,
         connectivityBonus: connBonus,
+        priceSensitivityReduction: r0.priceSensitivityReduction ?? 0,
       };
 
       const competitorOffers = COMPETITOR_AIRLINES
@@ -1543,7 +1560,11 @@ export function weeklyTick(state) {
         const t = hubs[c]?.tier;
         return t ? (HUB_TIERS[t]?.qualityBonus ?? 0) : 0;
       }));
-      const tagRoute = tagHubQuality > 0 ? { ...route, hubQualityBonus: tagHubQuality } : route;
+      const tagRoute = {
+        ...route,
+        ...(tagHubQuality > 0 ? { hubQualityBonus: tagHubQuality } : {}),
+        priceSensitivityReduction: sensReductionFor(tagHubQuality),
+      };
       const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier);
       if (!result) continue;
 
@@ -1556,7 +1577,7 @@ export function weeklyTick(state) {
         campaignDemandBoostPct(Math.max(0, ...stopsList.map(c => campaignStrength?.[c] ?? 0))),
         Math.max(0, ...stopsList.map(mktDragAt)),
       );
-      const combinedMult   = awarenessMultiplier * (1 + tagCampaignBoost) * (1 + tagLoyaltyBoost);
+      const combinedMult   = awarenessMultiplier * reputationMult * (1 + tagCampaignBoost) * (1 + tagLoyaltyBoost);
       const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
       const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
 
@@ -1609,7 +1630,11 @@ export function weeklyTick(state) {
       originTier ? (HUB_TIERS[originTier]?.qualityBonus ?? 0) : 0,
       destTier   ? (HUB_TIERS[destTier]?.qualityBonus   ?? 0) : 0,
     );
-    const routeWithHubBonus = hubQuality > 0 ? { ...route, hubQualityBonus: hubQuality } : route;
+    const routeWithHubBonus = {
+      ...route,
+      ...(hubQuality > 0 ? { hubQualityBonus: hubQuality } : {}),
+      priceSensitivityReduction: sensReductionFor(hubQuality),
+    };
 
     const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
@@ -1654,7 +1679,7 @@ export function weeklyTick(state) {
     );
     // Loyalty boost concentrated on hub-touching routes, diluted elsewhere.
     const loyaltyLift    = hubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
-    const combinedMult   = awarenessMultiplier * (1 + marketingLift) * (1 + loyaltyLift) * (1 + allianceLift);
+    const combinedMult   = awarenessMultiplier * reputationMult * (1 + marketingLift) * (1 + loyaltyLift) * (1 + allianceLift);
     // Ancillary catering revenue is per-actual-passenger income — it should NOT be
     // amplified by the marketing/awareness/loyalty demand multipliers (those proxy
     // for attracting MORE passengers, which catering income would then double-count).
@@ -1926,6 +1951,8 @@ export function weeklyTick(state) {
     networkConnections:      networkTick.connections, // full Connection[] for debugging/UI
     loyaltyMultiplier,
     awarenessMultiplier,
+    reputationMultiplier:   reputationMult,
+    reputationScore:        repInfo.overall,
     totalPassengers,
     totalTargetedSpend:     Math.round(totalTargetedSpend),
     totalOpCost:            Math.round(totalOpCost),
