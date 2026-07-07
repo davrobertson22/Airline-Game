@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Devlog — Tailwinds Airline Management Game Updates</title>
+  <meta name="description" content="Development log for Tailwinds: what's new in the free browser airline management game — new features, balance changes, and fixes, update by update." />
+  <link rel="canonical" href="https://www.tailwindsairlinegame.com/devlog.html" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#1b1b1f; --panel:#26262d; --line:#3a3b40; --text:#ededee; --muted:#a1a1aa; --gold:#c79a4b; --gold-light:#d3ad63; }
+    * { box-sizing: border-box; }
+    body { font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.7; }
+    a { color:var(--gold-light); }
+    header.site { border-bottom:1px solid var(--line); }
+    nav.site { max-width:880px; margin:0 auto; padding:18px 24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+    nav.site .brand { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem; color:var(--text); text-decoration:none; margin-right:auto; }
+    nav.site a.link { color:var(--muted); text-decoration:none; font-size:0.95rem; font-weight:500; }
+    nav.site a.link:hover { color:var(--gold-light); }
+    main { max-width:760px; margin:0 auto; padding:48px 24px 72px; }
+    h1 { font-family:'Space Grotesk',sans-serif; font-size:2.1rem; line-height:1.2; margin:0 0 8px; }
+    .lede { color:var(--muted); font-size:1.1rem; margin:0 0 36px; }
+    h2 { font-family:'Space Grotesk',sans-serif; font-size:1.45rem; margin:0 0 4px; }
+    h3 { font-size:1.05rem; margin:20px 0 6px; }
+    p { margin:0 0 16px; }
+    ul { margin:0 0 16px; padding-left:22px; }
+    li { margin:0 0 8px; }
+    .entry { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:24px 28px; margin:0 0 22px; }
+    .entry .date { color:var(--gold-light); font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin:0 0 6px; }
+    .cta { display:inline-block; background:var(--gold); color:#20180a; font-weight:700; padding:13px 30px; border-radius:8px; text-decoration:none; margin:18px 0; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <header class="site">
+    <nav class="site">
+      <a class="brand" href="/">Tailwinds</a>
+      <a class="link" href="/how-to-play.html">How to Play</a>
+      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/aircraft.html">Aircraft</a>
+      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/faq.html">FAQ</a>
+      <a class="link" href="/">Play</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Devlog</h1>
+    <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
+
+    <div class="entry">
+      <p class="date">July 6, 2026</p>
+      <h2>Smarter passengers, real marketing, and big-network tools</h2>
+      <p>This update makes demand feel much more alive, and gives players with large networks the management tools they've been asking for.</p>
+      <h3>Demand &amp; marketing</h3>
+      <ul>
+        <li><strong>Loyalty and reputation now feed directly into the demand engine.</strong> Loyal passengers are less price-sensitive, and your airline-wide reputation shifts demand share on every contested route — quality investments finally pay where it counts.</li>
+        <li><strong>Marketing reworked from the ground up.</strong> Campaigns now build awareness over time using an adstock model instead of an instant, flat boost. You can target campaigns at specific airports, and share of voice matters — competitors run their own marketing, including aggressive blitzes you'll need to answer.</li>
+      </ul>
+      <h3>Quality of life for big airlines</h3>
+      <ul>
+        <li><strong>Route management is now table-first</strong> — sort, scan, and edit a 100-route network without endless scrolling.</li>
+        <li><strong>Bulk fleet actions:</strong> select multiple aircraft to configure, sell, return, or retire in one pass.</li>
+        <li><strong>Orders &amp; Deliveries:</strong> a new Market subtab tracks incoming aircraft, and you can now give aircraft custom names.</li>
+        <li>Route planners show an inline "Add gate" button when a hub runs out of slots.</li>
+      </ul>
+      <h3>Balance</h3>
+      <ul>
+        <li><strong>Economy rebalance:</strong> thinner route margins, slower route spool-up, and competitors that arrive earlier. Easy money is over — plan accordingly. The <a href="/route-economics.html">route economics guide</a> reflects the new reality.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 5, 2026</p>
+      <h2>Competitors that actually compete</h2>
+      <p>The biggest AI update since launch. Rival airlines are no longer static route lists — they run their businesses:</p>
+      <ul>
+        <li><strong>Full competitor AI.</strong> Rivals expand into profitable markets, defend their hubs, and respond to your moves.</li>
+        <li><strong>Fare wars.</strong> Undercut a competitor on their turf and expect retaliation on price — sometimes sustained, sometimes ruinous for both sides.</li>
+        <li><strong>Quality investment.</strong> AI carriers upgrade their product over time. You're no longer the only airline that can win on quality.</li>
+        <li><strong>Dynamic alliances and second hubs.</strong> Competitors form alliances and open new hubs as they grow, reshaping the map mid-game.</li>
+        <li><strong>Route finder.</strong> A new tool that scans the map for underserved opportunities from any airport.</li>
+        <li><strong>Cabin template picker</strong> for faster, consistent fleet configuration.</li>
+      </ul>
+      <p>Strategy implications are covered in the updated <a href="/competition-and-alliances.html">competition &amp; alliances guide</a>.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 4, 2026</p>
+      <h2>Bulk pricing tools</h2>
+      <ul>
+        <li><strong>Reprice routes in bulk:</strong> filter by occupancy (find everything under 60% load in one click), select route cards, and adjust fares together instead of one dialog at a time.</li>
+        <li>Dashboard and Routes screens now share a single projection engine — the numbers you see are the numbers the simulation uses.</li>
+        <li>Cleaned up the site: new content pages and footer navigation, plus fixes to duplicate aircraft photos.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">June 24, 2026</p>
+      <h2>Double deckers arrive</h2>
+      <ul>
+        <li><strong>The A380 and 747 family are now in the marketplace</strong>, with a Double Decker filter to find them. Can your network actually fill 500 seats? The <a href="/aircraft-flagships.html">flagship guide</a> will help you decide.</li>
+        <li><strong>Fuel rebalance:</strong> base fuel price stepped up to $1.20/litre over several patches, making fuel efficiency — and <a href="/route-economics.html">hedging</a> — meaningfully more important.</li>
+        <li><strong>Fleet-complexity surcharge:</strong> each additional aircraft family adds ~2% to pilot and maintenance overhead. Fleet commonality is now a real strategy, not just a tip.</li>
+        <li>Fixed capacity caps on multi-aircraft routes and capacity-limited load factor display, with a new "capacity-limited" badge.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">June 21, 2026</p>
+      <h2>Branding &amp; freight polish</h2>
+      <ul>
+        <li><strong>In-game branding editor:</strong> upload your own logo, or use the built-in system — neutral greyscale bases with your accent colour driving the motif. Rename and recolour your airline any time.</li>
+        <li><strong>Freight UX:</strong> open cargo routes straight from the Routes page, a freighter-only checkout flow, and cargo flights auto-resume after mechanical delays.</li>
+        <li>Your airline's real mark now shows in the setup screen and header.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">June 19, 2026</p>
+      <h2>Tailwinds goes mobile</h2>
+      <ul>
+        <li><strong>Install it like an app.</strong> Tailwinds is now a progressive web app: add it to your home screen for a full-screen experience, with offline start once cached.</li>
+        <li><strong>A proper mobile layout:</strong> responsive route map, scrollable tables, a compact top bar with overflow menu, and touch-friendly inputs throughout.</li>
+        <li>Groundwork for further mobile improvements — if you play on a phone, feedback is especially welcome on <a href="/contact.html">Discord</a>.</li>
+      </ul>
+    </div>
+
+    <p>Older changes predate this devlog. From here on, every significant update gets an entry.</p>
+
+    <a class="cta" href="/">Play Tailwinds — It's Free →</a>
+  </main>
+
+  <footer class="site">
+    <div class="footwrap">
+      <a href="/">Home</a>
+      <a href="/how-to-play.html">How to Play</a>
+      <a href="/strategy.html">Strategy</a>
+      <a href="/aircraft.html">Aircraft</a>
+      <a href="/glossary.html">Glossary</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/devlog.html">Devlog</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser.</span>
+    </div>
+  </footer>
+</body>
+</html>
