@@ -155,6 +155,9 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   // ── Quantity ──────────────────────────────────────────────────────────────
   const [quantity, setQuantity] = useState(1);
 
+  // ── Custom name (optional) ────────────────────────────────────────────────
+  const [customName, setCustomName] = useState('');
+
   // ── Cabin configuration ───────────────────────────────────────────────────
   const [first, setFirstRaw] = useState(0);
   const [biz,   setBizRaw]   = useState(0);
@@ -310,6 +313,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
       hasWingtips,
       quantity,
       config:        cabinConfig,
+      name:          customName.trim() || null,
     });
     onClose();
   }
@@ -405,6 +409,30 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                 ))}
               </div>
             </div>
+          </section>
+
+          {/* ── Custom name ──────────────────────────────────────────────── */}
+          <section style={{ marginBottom: 18 }}>
+            <div style={sectionTitle}>Aircraft Name <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></div>
+            <input
+              type="text"
+              value={customName}
+              maxLength={40}
+              onChange={e => setCustomName(e.target.value)}
+              placeholder={`e.g. "Spirit of ${type.manufacturer}" — defaults to ${type.name} #N`}
+              style={{
+                width: '100%', padding: '8px 12px', fontSize: 13,
+                background: 'var(--surface2)', color: 'var(--text)',
+                border: '1px solid var(--border)', borderRadius: 7, outline: 'none',
+              }}
+              onFocus={e => { e.target.style.borderColor = 'var(--accent)'; }}
+              onBlur={e => { e.target.style.borderColor = 'var(--border)'; }}
+            />
+            {customName.trim() && quantity > 1 && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+                Aircraft will be named “{customName.trim()} #1” through “{customName.trim()} #{quantity}”
+              </div>
+            )}
           </section>
 
           {/* ── Engine options ───────────────────────────────────────────── */}

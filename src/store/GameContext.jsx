@@ -317,11 +317,15 @@ function reducer(state, action) {
         if (cashBalance < unitUpfrontCost) break;
 
         const serialNum = totalExisting + 1;
+        const customName = (action.name ?? '').trim();
+        const orderName = customName
+          ? (quantity > 1 ? `${customName} #${i + 1}` : customName)
+          : `${type.name} #${serialNum}`;
         const order = {
           id:            uid(),
           typeId:        action.typeId,
           ownershipType: action.ownershipType,
-          name:          action.name ?? `${type.name} #${serialNum}`,
+          name:          orderName,
           engineId:      engineOpt?.id    ?? null,
           engineLabel:   engineOpt?.label ?? null,
           hasWingtips:   action.hasWingtips ?? false,
@@ -362,6 +366,17 @@ function reducer(state, action) {
         ...state,
         cash:          state.cash + refund,
         pendingOrders: (state.pendingOrders ?? []).filter(o => o.id !== action.orderId),
+      };
+    }
+
+    case 'RENAME_ORDER': {
+      const name = (action.name ?? '').trim();
+      if (!name) return state;
+      return {
+        ...state,
+        pendingOrders: (state.pendingOrders ?? []).map(o =>
+          o.id === action.orderId ? { ...o, name } : o
+        ),
       };
     }
 

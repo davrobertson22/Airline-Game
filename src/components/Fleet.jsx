@@ -76,8 +76,24 @@ function AircraftThumb({ type, size = 'sm' }) {
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 
 function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { routes } = state;
+
+  // Inline rename
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft]     = useState('');
+
+  function startRename() {
+    setNameDraft(aircraft.name);
+    setEditingName(true);
+  }
+  function commitRename() {
+    const name = nameDraft.trim();
+    if (name && name !== aircraft.name) {
+      dispatch({ type: 'RENAME_AIRCRAFT', aircraftId: aircraft.id, name });
+    }
+    setEditingName(false);
+  }
 
   const type = getAircraftType(aircraft.typeId);
 
@@ -125,7 +141,40 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: 20 }}>{aircraft.name}</span>
+                {editingName ? (
+                  <input
+                    autoFocus
+                    value={nameDraft}
+                    maxLength={40}
+                    onChange={e => setNameDraft(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') setEditingName(false);
+                    }}
+                    style={{
+                      fontWeight: 700, fontSize: 20, padding: '2px 8px',
+                      background: 'var(--surface2)', color: 'var(--text)',
+                      border: '1px solid var(--accent)', borderRadius: 6,
+                      outline: 'none', minWidth: 0, width: 260, maxWidth: '100%',
+                    }}
+                  />
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 20 }}>{aircraft.name}</span>
+                    <button
+                      onClick={startRename}
+                      title="Rename aircraft"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--text-muted)', fontSize: 14, padding: '2px 4px',
+                        display: 'inline-flex', alignItems: 'center',
+                      }}
+                    >
+                      <Glyph e="✏️" size={14} />
+                    </button>
+                  </>
+                )}
                 {aircraft.tailNumber && (
                   <span style={{
                     fontFamily: 'monospace', fontSize: 13, fontWeight: 700,
