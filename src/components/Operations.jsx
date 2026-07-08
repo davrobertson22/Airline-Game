@@ -1,8 +1,12 @@
 import { useGame } from '../store/GameContext.jsx';
 import {
-  LABOR_GROUPS, DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET,
+  LABOR_GROUPS, LABOR_GROUP_MAP, DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET,
   moraleTarget, moraleColor,
 } from '../data/labor.js';
+import {
+  DEFAULT_LABOR_RELATIONS, unrestBand, strikeProbability,
+  counterOfferMultiplier, settlementPayMultiplier, UNREST_STRIKE_THRESHOLD,
+} from '../data/laborRelations.js';
 import {
   AIRCRAFT_FAMILY, FAMILY_INFO, FAMILY_CATEGORY_LABEL,
   activeFamilies as getActiveFamilies, weeklyFamilyBaseCost,
@@ -126,9 +130,161 @@ function MoraleBar({ morale, payMultiplier }) {
   );
 }
 
+// ─── Union unrest bar ─────────────────────────────────────────────────────────
+
+function UnrestBar({ unrest }) {
+  const band = unrestBand(unrest);
+  const prob = strikeProbability(unrest);
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+        <span style={{ color: band.color }}>Union unrest: {Math.round(unrest)} — {band.label}</span>
+        {prob > 0 && (
+          <span style={{ color: 'var(--red)', fontSize: 11, fontWeight: 600 }}>
+            ⚠ ~{Math.round(prob * 100)}% strike chance each week
+          </span>
+        )}
+      </div>
+      <div style={{ height: 6, background: 'var(--surface3)', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+        <div style={{
+          height: '100%', width: `${unrest}%`,
+          background: band.color, borderRadius: 3, transition: 'width 0.4s',
+        }} />
+        {/* Strike-threshold marker */}
+        <div style={{
+          position: 'absolute', top: 0, left: `${UNREST_STRIKE_THRESHOLD}%`,
+          width: 2, height: '100%', background: 'var(--border)',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Strike banner ────────────────────────────────────────────────────────────
+
+function StrikeBanner({ strike, labor, dispatch }) {
+  const group  = LABOR_GROUP_MAP[strike.group];
+  const gs     = labor[strike.group] ?? { payMultiplier: 1.0, morale: 80 };
+  const newPay = settlementPayMultiplier(gs.payMultiplier);
+  return (
+    <div className="card" style={{
+      marginBottom: 14, padding: '14px 18px',
+      border: '1px solid var(--red)', background: 'rgba(255,93,108,0.07)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--red)' }}>
+            ✊ STRIKE — {group?.name ?? strike.group} on the picket line
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+            ~{Math.round(strike.severity * 100)}% of flights cancelled while the walkout lasts
+            ({strike.weeksLeft} week{strike.weeksLeft !== 1 ? 's' : ''} remaining). Fixed costs keep
+            running — every struck week burns cash. Settle now with a 15% raise, or hold the line
+            and eat the losses.
+          </div>
+        </div>
+        <button
+          className="btn"
+          style={{ background: 'var(--red)', color: '#fff', fontWeight: 700, whiteSpace: 'nowrap' }}
+          onClick={() => dispatch({ type: 'SETTLE_STRIKE' })}
+        >
+          Settle — raise pay to {newPay.toFixed(2)}×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Contract negotiation banner ──────────────────────────────────────────────
+
+function NegotiationBanner({ negotiation, labor, fleetSize, complexityMult, dispatch }) {
+  const group   = LABOR_GROUP_MAP[negotiation.group];
+  const gs      = labor[negotiation.group] ?? { payMultiplier: 1.0, morale: 80 };
+  const demand  = negotiation.demandMultiplier;
+  const counter = counterOfferMultiplier(gs.payMultiplier, demand);
+  const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(negotiation.group) ? complexityMult : 1.0;
+  const weeklyDelta = (mult) =>
+    Math.round(group.baseWeeklyPerAircraft * (mult - gs.payMultiplier) * fleetSize * famMult);
+
+  const btn = {
+    padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border)',
+    background: 'var(--surface2)', color: 'var(--text)', cursor: 'pointer',
+    fontSize: 12, fontWeight: 600, textAlign: 'center', flex: 1, minWidth: 150,
+  };
+
+  return (
+    <div className="card" style={{
+      marginBottom: 14, padding: '14px 18px',
+      border: '1px solid var(--yellow)', background: 'rgba(245,166,35,0.06)',
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--yellow)' }}>
+        📜 Contract talks — {group?.name ?? negotiation.group}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5, marginBottom: 12 }}>
+        The union demands <b>{demand.toFixed(2)}× market rate</b> (currently {gs.payMultiplier.toFixed(2)}×).
+        You have <b>{negotiation.weeksLeft} week{negotiation.weeksLeft !== 1 ? 's' : ''}</b> to respond —
+        letting the demand lapse counts as a refusal. Refusals and rejected counters build union
+        unrest; enough unrest and they walk.
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          style={{ ...btn, borderColor: 'var(--green)' }}
+          onClick={() => dispatch({ type: 'RESOLVE_NEGOTIATION', response: 'accept' })}
+        >
+          <div style={{ color: 'var(--green)' }}>Accept {demand.toFixed(2)}×</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            {fleetSize > 0 ? `${formatMoney(weeklyDelta(demand))}/wk extra` : 'Costs rise'} · morale +8 · union satisfied
+          </div>
+        </button>
+        <button
+          style={{ ...btn, borderColor: 'var(--yellow)' }}
+          onClick={() => dispatch({ type: 'RESOLVE_NEGOTIATION', response: 'counter' })}
+        >
+          <div style={{ color: 'var(--yellow)' }}>Counter at {counter.toFixed(2)}×</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            {fleetSize > 0 ? `${formatMoney(weeklyDelta(counter))}/wk extra` : 'Half the raise'} · union may accept — or stay angry
+          </div>
+        </button>
+        <button
+          style={{ ...btn, borderColor: 'var(--red)' }}
+          onClick={() => dispatch({ type: 'RESOLVE_NEGOTIATION', response: 'refuse' })}
+        >
+          <div style={{ color: 'var(--red)' }}>Refuse</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            No cost now · morale −10 · unrest +30 — strike territory
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Negotiation outcome note (shown for a few weeks after resolving) ─────────
+
+function NegotiationOutcomeNote({ outcome }) {
+  const group = LABOR_GROUP_MAP[outcome.group];
+  const text = {
+    accepted:        `accepted their demand — pay is now ${outcome.newPay.toFixed(2)}× and the union is satisfied.`,
+    counterAccepted: `took your counter-offer of ${outcome.newPay.toFixed(2)}× — a fair deal, relations intact.`,
+    counterRejected: `pocketed your ${outcome.newPay.toFixed(2)}× counter but rejected the deal — they wanted ${outcome.demand.toFixed(2)}× and will be back sooner, angrier.`,
+    refused:         `were refused outright — morale took a hit and unrest is building.`,
+  }[outcome.outcome];
+  const color = outcome.outcome === 'accepted' || outcome.outcome === 'counterAccepted'
+    ? 'var(--green)' : 'var(--red)';
+  return (
+    <div style={{
+      fontSize: 12, color: 'var(--text-muted)', marginBottom: 14,
+      padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6,
+      borderLeft: `3px solid ${color}`,
+    }}>
+      Last contract round: {group?.name ?? outcome.group} {text}
+    </div>
+  );
+}
+
 // ─── Labor group card ─────────────────────────────────────────────────────────
 
-function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexityMult = 1.0, familyCount = 1 }) {
+function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexityMult = 1.0, familyCount = 1, unrest = 0, onStrike = false }) {
   const { payMultiplier, morale } = groupState;
   const affectedByComplexity  = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) && complexityMult > 1.0;
   const famMult               = affectedByComplexity ? complexityMult : 1.0;
@@ -229,6 +385,9 @@ function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexi
 
       {/* Morale */}
       <MoraleBar morale={morale} payMultiplier={payMultiplier} />
+
+      {/* Union unrest (only worth showing once it exists, or during a strike) */}
+      {(unrest >= 5 || onStrike) && <UnrestBar unrest={unrest} />}
 
       {/* Effect description */}
       <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic' }}>
@@ -554,6 +713,8 @@ export default function Operations() {
     marketingBudget = 0,
   } = state;
   const fleetSize = fleet.length;
+  const laborRelations = state.laborRelations ?? DEFAULT_LABOR_RELATIONS;
+  const currentAbsWeek = ((state.year ?? 1) - 1) * 52 + (state.week ?? 1);
 
   // Pre-compute headcount estimates for all groups
   const headcounts = Object.fromEntries(
@@ -614,6 +775,24 @@ export default function Operations() {
         </div>
       </div>
 
+      {/* Active strike / open contract negotiation */}
+      {laborRelations.strike && (
+        <StrikeBanner strike={laborRelations.strike} labor={labor} dispatch={dispatch} />
+      )}
+      {laborRelations.negotiation && (
+        <NegotiationBanner
+          negotiation={laborRelations.negotiation}
+          labor={labor}
+          fleetSize={fleetSize}
+          complexityMult={complexityMult}
+          dispatch={dispatch}
+        />
+      )}
+      {!laborRelations.negotiation && laborRelations.lastOutcome
+        && (currentAbsWeek - laborRelations.lastOutcome.absWeek) <= 4 && (
+        <NegotiationOutcomeNote outcome={laborRelations.lastOutcome} />
+      )}
+
       {/* Labor section */}
       <div style={{
         fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
@@ -632,6 +811,8 @@ export default function Operations() {
           dispatch={dispatch}
           complexityMult={complexityMult}
           familyCount={familySet.size}
+          unrest={laborRelations.unrest?.[group.id] ?? 0}
+          onStrike={laborRelations.strike?.group === group.id}
         />
       ))}
 

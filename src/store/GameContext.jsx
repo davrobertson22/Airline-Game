@@ -15,6 +15,13 @@ import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { getAircraftType, effectivePurchasePrice, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget } from '../data/labor.js';
+import {
+  DEFAULT_LABOR_RELATIONS, tickUnrest, rollStrike, settlementPayMultiplier,
+  scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand,
+  counterOfferMultiplier, counterAccepted, NEGOTIATION_EFFECTS,
+  NEGOTIATION_RESPONSE_WEEKS, STRIKE_COOLDOWN_WEEKS,
+} from '../data/laborRelations.js';
+import { LABOR_GROUP_MAP } from '../data/labor.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import {
   COMPETITOR_AIRLINES,
@@ -77,6 +84,7 @@ function freshState() {
     gates:             {},    // { [airportCode]: gateCount } — each gate = 50 slots/wk
     hubs:              {},    // { [airportCode]: { tier: 1|2|3 } } — designated hub airports
     labor:             DEFAULT_LABOR_STATE,
+    laborRelations:    DEFAULT_LABOR_RELATIONS,  // union unrest, strikes, contract negotiations
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
     marketingBudget:   0,          // weekly BRAND marketing spend ($) — builds awareness (adstock), no instant boost
     targetedMarketing: {},         // { [airportCode]: weeklySpend } — tactical campaigns per airport
@@ -98,6 +106,7 @@ function freshState() {
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
     awareness: 5,                // 0–100: how well-known the airline is; gates demand
+    satisfaction: null,          // 0–100 earned passenger satisfaction (null until first tick initializes it)
     missedLoanPayments:       0,   // total weeks where loans were due and cash went negative
     consecutiveNegativeWeeks: 0,   // weeks in a row ending with negative cash (resets on recovery)
     bankruptcyReason:         null, // 'missed_loans' | 'consecutive_negative' | null
@@ -1157,6 +1166,107 @@ function reducer(state, action) {
       };
     }
 
+    case 'RESOLVE_NEGOTIATION': {
+      // action: { response: 'accept' | 'counter' | 'refuse' }
+      // Answers the open union pay demand (state.laborRelations.negotiation).
+      const relations   = state.laborRelations ?? DEFAULT_LABOR_RELATIONS;
+      const negotiation = relations.negotiation;
+      if (!negotiation) return state;
+
+      const group      = negotiation.group;
+      const labor      = state.labor ?? DEFAULT_LABOR_STATE;
+      const groupState = labor[group] ?? { payMultiplier: 1.0, morale: 80 };
+      const absWk      = absoluteWeek(state.year, state.week);
+
+      let newPay   = groupState.payMultiplier;
+      let fx;                 // morale/unrest deltas
+      let soured   = false;   // sour talks bring the union back sooner
+      let outcome;            // 'accepted' | 'counterAccepted' | 'counterRejected' | 'refused'
+
+      if (action.response === 'accept') {
+        newPay  = negotiation.demandMultiplier;
+        fx      = NEGOTIATION_EFFECTS.accept;
+        outcome = 'accepted';
+      } else if (action.response === 'counter') {
+        // Midpoint offer. The union always pockets the raise; whether it
+        // ACCEPTS the deal (or stays angry) depends on current morale.
+        newPay = counterOfferMultiplier(groupState.payMultiplier, negotiation.demandMultiplier);
+        if (counterAccepted(groupState.morale)) {
+          fx      = NEGOTIATION_EFFECTS.counterAccepted;
+          outcome = 'counterAccepted';
+        } else {
+          fx      = NEGOTIATION_EFFECTS.counterRejected;
+          outcome = 'counterRejected';
+          soured  = true;
+        }
+      } else { // refuse
+        fx      = NEGOTIATION_EFFECTS.refuse;
+        outcome = 'refused';
+        soured  = true;
+      }
+
+      return {
+        ...state,
+        labor: {
+          ...labor,
+          [group]: {
+            ...groupState,
+            payMultiplier: Math.max(0.5, Math.min(2.0, newPay)),
+            morale: Math.max(5, Math.min(100, groupState.morale + fx.morale)),
+          },
+        },
+        laborRelations: {
+          ...relations,
+          negotiation: null,
+          unrest: {
+            ...relations.unrest,
+            [group]: Math.max(0, Math.min(100, (relations.unrest?.[group] ?? 0) + fx.unrest)),
+          },
+          nextNegotiationAbsWeek: {
+            ...(relations.nextNegotiationAbsWeek ?? {}),
+            [group]: scheduleNextNegotiation(absWk, soured),
+          },
+          lastOutcome: {
+            group, outcome,
+            newPay: Math.max(0.5, Math.min(2.0, newPay)),
+            demand: negotiation.demandMultiplier,
+            absWeek: absWk,
+          },
+        },
+      };
+    }
+
+    case 'SETTLE_STRIKE': {
+      // Capitulate to end an active walkout immediately: 15% raise for the
+      // striking group, morale boost, unrest reset, post-strike truce.
+      const relations = state.laborRelations ?? DEFAULT_LABOR_RELATIONS;
+      const strike    = relations.strike;
+      if (!strike) return state;
+
+      const group      = strike.group;
+      const labor      = state.labor ?? DEFAULT_LABOR_STATE;
+      const groupState = labor[group] ?? { payMultiplier: 1.0, morale: 80 };
+      const absWk      = absoluteWeek(state.year, state.week);
+
+      return {
+        ...state,
+        labor: {
+          ...labor,
+          [group]: {
+            ...groupState,
+            payMultiplier: settlementPayMultiplier(groupState.payMultiplier),
+            morale: Math.max(5, Math.min(100, groupState.morale + 10)),
+          },
+        },
+        laborRelations: {
+          ...relations,
+          strike: null,
+          strikeCooldownUntilAbsWeek: absWk + STRIKE_COOLDOWN_WEEKS,
+          unrest: { ...relations.unrest, [group]: 15 },
+        },
+      };
+    }
+
     case 'SET_MAINTENANCE_BUDGET': {
       return {
         ...state,
@@ -1583,7 +1693,19 @@ function reducer(state, action) {
       // Apply event demand multiplier as a line-item adjustment to the report.
       // (fuelMult is already baked into fuelMultiplier above, so no separate fuel adj needed.)
       const eventDemandAdj  = report.totalRevenue ? report.totalRevenue * (globalDemandMult - 1.0) : 0;
-      const adjustedCashDelta = report.cashDelta + eventDemandAdj;
+
+      // ── Strike in progress: cancelled flights forfeit a share of revenue ──
+      // The walkout that started in a previous week applies to THIS week's
+      // schedule. Applied as a line-item revenue loss (same pattern as
+      // eventDemandAdj) so cash still reconciles: fixed costs keep running
+      // while the picket line is up — that is the pain of a strike.
+      const relationsPrev = state.laborRelations ?? DEFAULT_LABOR_RELATIONS;
+      const activeStrike  = relationsPrev.strike && relationsPrev.strike.weeksLeft > 0
+        ? relationsPrev.strike : null;
+      const strikeRevenueLoss = activeStrike && report.totalRevenue
+        ? Math.round(report.totalRevenue * activeStrike.severity) : 0;
+
+      const adjustedCashDelta = report.cashDelta + eventDemandAdj - strikeRevenueLoss;
 
       // agingRate and tickedFleet were computed before weeklyTick above.
       const mainBudget = mainBudgetPre;
@@ -1740,6 +1862,107 @@ function reducer(state, action) {
         const target   = moraleTarget(g.payMultiplier);
         const newMorale = g.morale + (target - g.morale) * 0.12;
         updatedLabor[id] = { ...g, morale: Math.max(5, Math.min(100, Math.round(newMorale * 10) / 10)) };
+      }
+
+      // ── Labor relations: unrest, strikes, contract negotiations ──────────
+      const relAbsWeek = absoluteWeek(state.year, state.week);
+      let updatedRelations = {
+        ...DEFAULT_LABOR_RELATIONS,
+        ...relationsPrev,
+        unrest: tickUnrest(updatedLabor, relationsPrev.unrest),
+        // Old saves: stagger each union's first contract demand.
+        nextNegotiationAbsWeek: relationsPrev.nextNegotiationAbsWeek
+          ?? scheduleFirstNegotiations(relAbsWeek),
+      };
+
+      // 1. Tick down an active strike; announce the end of the walkout.
+      if (activeStrike) {
+        const weeksLeft = activeStrike.weeksLeft - 1;
+        if (weeksLeft <= 0) {
+          const gName = LABOR_GROUP_MAP[activeStrike.group]?.name ?? activeStrike.group;
+          updatedRelations.strike = null;
+          updatedRelations.strikeCooldownUntilAbsWeek = relAbsWeek + STRIKE_COOLDOWN_WEEKS;
+          updatedRelations.unrest = { ...updatedRelations.unrest, [activeStrike.group]: 20 };
+          newToasts.push({
+            type: 'info', icon: '🤝',
+            title: `Strike over — ${gName} back at work`,
+            message: `The ${gName.toLowerCase()} walkout has ended after ${activeStrike.totalWeeks} week${activeStrike.totalWeeks !== 1 ? 's' : ''}. Unrest has eased for now — fix the pay dispute or they will be back on the picket line.`,
+            duration: 9000,
+          });
+        } else {
+          updatedRelations.strike = { ...activeStrike, weeksLeft };
+        }
+      } else {
+        // 2. No strike running — roll for a new walkout starting next week.
+        const newStrike = rollStrike(
+          updatedRelations.unrest, relAbsWeek, updatedRelations.strikeCooldownUntilAbsWeek);
+        if (newStrike) {
+          const gName = LABOR_GROUP_MAP[newStrike.group]?.name ?? newStrike.group;
+          updatedRelations.strike = newStrike;
+          newToasts.push({
+            type: 'danger', icon: '✊',
+            title: `STRIKE — ${gName} walk out`,
+            message: `Your ${gName.toLowerCase()} are on strike over pay: ~${Math.round(newStrike.severity * 100)}% of flights cancelled for up to ${newStrike.totalWeeks} week${newStrike.totalWeeks !== 1 ? 's' : ''}. Settle in Operations → Labor (15% raise) or wait it out.`,
+            duration: 12000,
+          });
+        }
+      }
+
+      // 3. Contract negotiations — tick the open one, or table a new demand.
+      if (updatedRelations.negotiation) {
+        const weeksLeft = updatedRelations.negotiation.weeksLeft - 1;
+        if (weeksLeft <= 0) {
+          // Ignored until it lapsed → counts as a refusal.
+          const group = updatedRelations.negotiation.group;
+          const gName = LABOR_GROUP_MAP[group]?.name ?? group;
+          const fx    = NEGOTIATION_EFFECTS.refuse;
+          updatedLabor[group] = {
+            ...updatedLabor[group],
+            morale: Math.max(5, Math.min(100, (updatedLabor[group]?.morale ?? 80) + fx.morale)),
+          };
+          updatedRelations.negotiation = null;
+          updatedRelations.unrest = {
+            ...updatedRelations.unrest,
+            [group]: Math.max(0, Math.min(100, (updatedRelations.unrest[group] ?? 0) + fx.unrest)),
+          };
+          updatedRelations.nextNegotiationAbsWeek = {
+            ...updatedRelations.nextNegotiationAbsWeek,
+            [group]: scheduleNextNegotiation(relAbsWeek, true),
+          };
+          newToasts.push({
+            type: 'danger', icon: '🚫',
+            title: `${gName} pay demand ignored`,
+            message: `The ${gName.toLowerCase()} contract demand lapsed without an answer. The union takes it as a refusal — morale has dropped and unrest is building.`,
+            duration: 10000,
+          });
+        } else {
+          updatedRelations.negotiation = { ...updatedRelations.negotiation, weeksLeft };
+        }
+      } else if (!updatedRelations.strike) {
+        // Only one open demand at a time; unions hold off during a walkout.
+        const due = Object.entries(updatedRelations.nextNegotiationAbsWeek)
+          .filter(([, wk]) => relAbsWeek >= wk)
+          .sort((a, b) => a[1] - b[1])[0];
+        if (due) {
+          const group      = due[0];
+          const gName      = LABOR_GROUP_MAP[group]?.name ?? group;
+          const currentPay = updatedLabor[group]?.payMultiplier ?? 1.0;
+          const profitable = (state.financialHistory ?? []).slice(-12)
+            .reduce((s, h) => s + (h.profit ?? 0), 0) > 0;
+          const demand = negotiationDemand(currentPay, profitable);
+          updatedRelations.negotiation = {
+            group,
+            demandMultiplier: demand,
+            weeksLeft:  NEGOTIATION_RESPONSE_WEEKS,
+            totalWeeks: NEGOTIATION_RESPONSE_WEEKS,
+          };
+          newToasts.push({
+            type: 'warning', icon: '📜',
+            title: `Contract talks — ${gName} table a pay demand`,
+            message: `The ${gName.toLowerCase()} union demands ${demand.toFixed(2)}× market rate (currently ${currentPay.toFixed(2)}×). Respond in Operations → Labor within ${NEGOTIATION_RESPONSE_WEEKS} weeks — silence counts as a refusal.`,
+            duration: 12000,
+          });
+        }
       }
 
       // ── Loan repayments ──────────────────────────────────────────────────
@@ -1947,6 +2170,8 @@ function reducer(state, action) {
         // Active-event demand swing applied to revenue this week. Folded into the
         // chart's revenue line so profit = revenue − cost reconciles visually.
         eventDemandAdj:     Math.round(eventDemandAdj),
+        // Revenue forfeited to cancelled flights during a labor strike.
+        strikeLoss:         strikeRevenueLoss,
         totalCost:          report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost,
         // profit = actual cash change this week (after tax, matches newCash delta)
         profit:             preTaxProfit - corporateTax,
@@ -2087,13 +2312,14 @@ function reducer(state, action) {
           // headline net already reflects; "all-in" cost folds loan payments,
           // lease redelivery, seasonal reactivation fees and corporate tax on top of
           // operating cost so that (revenueEffective − totalCostAll) reconciles to cashDelta.
-          revenueEffective: Math.round(report.totalRevenue + eventDemandAdj),
+          revenueEffective: Math.round(report.totalRevenue + eventDemandAdj - strikeRevenueLoss),
           totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost + corporateTax,
-          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,
         loans:             updatedLoans,
         labor:             updatedLabor,
+        laborRelations:    updatedRelations,
         maintenanceBudget: mainBudget,
         activeEvents:      allEvents,
         fuelPrice:         { index: nextFuelIndex, history: fuelPriceHistory },
@@ -2102,6 +2328,10 @@ function reducer(state, action) {
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
         campaignStrength:    newCampaigns,
+        // Earned passenger satisfaction (EWMA toward delivered experience);
+        // computed by weeklyTick, persisted here. Old saves start null and
+        // initialize on their first tick.
+        satisfaction:        report.satisfaction ?? state.satisfaction ?? null,
         objectives:               updatedObjectives,
         objectivesEnabled,
         showDebrief:              true,
@@ -2353,6 +2583,7 @@ function reconcileState(parsed) {
     // Guarantee fields added in later versions exist even on old saves
     financialHistory: parsed.financialHistory ?? [],
     lastReport:       parsed.lastReport       ?? null,
+    satisfaction:     parsed.satisfaction     ?? null,
     hubs:             parsed.hubs             ?? {},
     gates:            parsed.gates            ?? {},
     loans:            parsed.loans            ?? [],
@@ -2368,6 +2599,12 @@ function reconcileState(parsed) {
     campaignStrength:         parsed.campaignStrength         ?? {},
     defaultCateringLevel:     normalizeCateringLevel(parsed.defaultCateringLevel),
     awareness:                parsed.awareness                ?? 5,
+    // Labor relations (unrest / strikes / negotiations) — added later; old saves
+    // start calm and get their first negotiations scheduled on the next tick.
+    laborRelations:           parsed.laborRelations
+      ? { ...DEFAULT_LABOR_RELATIONS, ...parsed.laborRelations,
+          unrest: { ...DEFAULT_LABOR_RELATIONS.unrest, ...(parsed.laborRelations.unrest ?? {}) } }
+      : DEFAULT_LABOR_RELATIONS,
     missedLoanPayments:       parsed.missedLoanPayments       ?? 0,
     consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,
     bankruptcyReason:         parsed.bankruptcyReason         ?? null,

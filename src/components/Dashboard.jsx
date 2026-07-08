@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate, formatGameDate } from '../utils/simulation.js';
+import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate, formatGameDate, fleetAvgUtilization } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
@@ -37,10 +37,11 @@ export default function Dashboard() {
   const routeResults = useMemo(() => {
     const rrById = {};
     for (const rr of proj.report?.routeResults ?? []) rrById[rr.routeId] = rr;
+    const avgUtil = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
     return routes.map(route => {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       const result = !aircraft ? null
-        : (rrById[route.id] ?? simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier));
+        : (rrById[route.id] ?? simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null, [], avgUtil, state.satisfaction ?? null));
       return { route, result };
     });
   }, [routes, fleet, proj, gd, state.labor]);
@@ -488,7 +489,7 @@ function FinancialChart({ history, currentWeek }) {
   // Profit is the true after-tax cash delta, which folds in two things the raw
   // revenue/cost fields exclude: active-event demand swings (added to revenue)
   // and corporate tax (a cost). Fold them back in here so the lines add up.
-  const revenues = history.map(h => (h.revenue ?? 0) + (h.eventDemandAdj ?? 0));
+  const revenues = history.map(h => (h.revenue ?? 0) + (h.eventDemandAdj ?? 0) - (h.strikeLoss ?? 0));
   const costs    = history.map(h => {
     const base = h.totalCost ?? ((h.leases ?? 0) + (h.maintenance ?? 0) + (h.fuel ?? 0) + (h.crew ?? 0) + (h.quality ?? 0) + (h.gates ?? 0));
     return (base ?? 0) + (h.corporateTax ?? 0);

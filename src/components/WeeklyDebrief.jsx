@@ -137,6 +137,18 @@ export default function WeeklyDebrief() {
           <StatChip label="Pax" value={(lastReport.totalPassengers ?? '—').toLocaleString?.()} />
         </div>
 
+        {/* Strike impact strip */}
+        {(lastReport.strikeLoss ?? 0) > 0 && (
+          <div style={{
+            marginBottom: 20, padding: '8px 12px', borderRadius: 8,
+            border: '1px solid rgba(248,81,73,.4)', background: 'rgba(248,81,73,.08)',
+            fontSize: 12, color: 'var(--text-muted)',
+          }}>
+            ✊ <b style={{ color: 'var(--red)' }}>Strike impact: −{formatMoney(lastReport.strikeLoss)}</b> in
+            revenue lost to cancelled flights this week. Settle the dispute in Operations → Labor.
+          </div>
+        )}
+
         {/* Cost breakdown (expandable) */}
         {costRows.length > 0 && (
           <div style={{ marginBottom: 20 }}>

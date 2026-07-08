@@ -220,7 +220,11 @@ const WIKI = [
       { p: 'Operations is where you manage the people and upkeep behind the flights. Changes take effect next week.' },
       { h: 'Pay rates & morale' },
       { p: 'You set pay rates for your labour groups — pilots, cabin crew, ground staff and maintenance. Pay influences **staff morale**, which feeds your quality score and demand.' },
+      { p: 'Your **on-time rate** blends the morale of pilots (50%), ground staff (30%) and cabin crew (20%) — and suffers when your fleet is worked too hard. Above roughly 60% average block-hour utilisation, schedules lose the slack to absorb delays; a fleet flown flat-out near the weekly cap loses up to 12 points of punctuality. Idle spare aircraft act as a buffer that protects on-time performance. Late flights hurt your quality score and increase passenger compensation payouts.' },
       { warn: 'Pay cuts reduce costs immediately, but morale falls gradually over several weeks (~12% per week toward the new target) and recovers just as slowly. Underpaying now has lasting consequences.' },
+      { h: 'Unions, strikes & contract talks' },
+      { p: 'Each labour group has a union. While a group\'s morale sits below 50, **union unrest** builds week by week (faster the deeper the deficit); once it crosses the strike threshold the group can walk out. A **strike** cancels a large share of your flights — pilots hit hardest — for one to two weeks while your fixed costs keep running. You can settle a walkout instantly by granting a 15% raise, or hold out and absorb the losses; either way a truce follows before the union will strike again.' },
+      { p: 'Every couple of game years each union also tables a **contract demand** — a new pay rate, and a bigger ask after profitable years or when you pay below market. You have four weeks to accept, counter at the midpoint, or refuse. Counters are a gamble: happy workforces usually take the deal, angry ones pocket the raise and come back sooner. Refusing (or ignoring the demand) costs morale and stokes unrest — strike territory if pay stays low.' },
       { h: 'Maintenance spending' },
       { p: 'Maintenance budget controls spending on parts, components and scheduled checks. Each aircraft family you operate requires its own maintenance base — retiring every aircraft of a type eliminates that base cost. Higher spending keeps aircraft reliable; cutting it saves money but raises the risk of failures.' },
       { h: 'Corporate Overhead' },
@@ -234,6 +238,8 @@ const WIKI = [
     blurb: 'Your brand and positioning',
     blocks: [
       { p: 'Reputation tracks how travellers perceive your airline — your overall brand score, brand awareness, staff morale and how your fares compare to the market reference price. A stronger brand lifts demand and lets you hold higher prices.' },
+      { p: '**Passenger satisfaction** is earned, not set: each week it drifts toward the experience you actually delivered — punctuality, crew service, cabin product and catering, fleet age. It moves slowly in both directions, and your customer rating (a big slice of the quality score) comes from it. Slash service to save money and your rating erodes over the following weeks; win it back the same slow way.' },
+      { p: '**Quality captures business travelers.** Business demand you can actually win scales with your quality score (roughly ±12%) even on routes you have to yourself — corporate travelers take rail, another hub, or a video call rather than a shoddy product. Against competitors, quality also dominates how the business segment splits. If you sell premium cabins, quality is the engine that fills them.' },
       { h: 'Market positioning' },
       { p: 'Where you sit on the price/quality spectrum shapes who flies you:' },
       { ul: [
