@@ -1019,7 +1019,11 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
       const penalty = tierDef.connPenalty ?? CONNECTION_PENALTY.ownMetal;
 
       const minFreq = Math.min(conn.leg1Freq, conn.leg2Freq);
-      const econSeats = Math.max(1, Math.round(minFreq * ASSUMED_SEATS_PER_FLIGHT * CONNECTING_SEAT_FRACTION));
+      // Better transfer products reserve more of each leg's inventory for
+      // connections (banked schedules, protected connect blocks) — this keeps
+      // tiers differentiated even in capacity-capped markets.
+      const seatFraction = ({ 0: 0.10, 1: 0.15, 2: 0.18, 3: 0.22 })[tier] ?? CONNECTING_SEAT_FRACTION;
+      const econSeats = Math.max(1, Math.round(minFreq * ASSUMED_SEATS_PER_FLIGHT * seatFraction));
       const economyPrice = conn.totalPrice;
 
       const offer = {

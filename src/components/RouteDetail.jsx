@@ -201,8 +201,8 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   // Build market share
   const { shareResults } = useMemo(() => {
     const hubBonus = (code) => {
-      const tier = hubs[code]?.tier;
-      return tier ? (HUB_TIERS[tier]?.qualityBonus ?? 0) : 0;
+      const tier = hubs[code]?.tier;   // tier 0 (Focus City) is valid — check != null
+      return tier != null ? (HUB_TIERS[tier]?.qualityBonus ?? 0) : 0;
     };
     const maxHubBonus = Math.max(hubBonus(origin), hubBonus(dest));
 
@@ -395,10 +395,19 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
     const weeklyFrequency = playerRoutes.reduce((s, r) => s + (r.weeklyFrequency ?? 0), 0) || 7;
 
     return computeConnectingDemand(origin, dest, hubs, rcOrigin, rcDest, refP,
-      { weeklyFrequency, partnerHubCodes }
+      { weeklyFrequency, partnerHubCodes, gates: state.gates ?? {} }
     );
   }, [origin, dest, hubs, rcOrigin, rcDest, refP, playerRoutes,
-      state.allianceMembership, state.codeshareAgreements, state.competitors]);
+      state.allianceMembership, state.codeshareAgreements, state.competitors, state.gates]);
+
+  // Actual connecting result from the last weekly tick (includes own-metal
+  // itinerary feed with per-O&D breakdown), if this route flew last week.
+  const lastConn = useMemo(() => {
+    const rr  = state.lastReport?.routeResults ?? [];
+    const ids = new Set(playerRoutes.map(r => r.id));
+    const match = rr.find(r => ids.has(r.routeId) && r.connecting);
+    return match?.connecting ?? null;
+  }, [state.lastReport, playerRoutes]);
 
   return (
     <div>
@@ -716,12 +725,36 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       )}
 
       {/* Row 4: Connecting passengers — full width */}
-      {connecting.totalPax > 0 && (
+      {(connecting.totalPax > 0 || (lastConn?.totalPax ?? 0) > 0) && (
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Connecting Passengers</div>
           <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 12 }}>
-            +{connecting.totalPax} pax · {formatMoney(connecting.totalRevenue)}/wk
+            {lastConn
+              ? <>+{lastConn.totalPax} pax · {formatMoney(lastConn.totalRevenue)}/wk last week
+                  {lastConn.itineraryPax > 0 && <span style={{ color: 'var(--text-muted)' }}> ({lastConn.itineraryPax} via hub itineraries, {lastConn.externalPax} gateway feed)</span>}
+                  {lastConn.capacityScale < 1 && <span style={{ color: 'var(--yellow)' }}> · seat-limited ×{lastConn.capacityScale}</span>}
+                </>
+              : <>+{connecting.totalPax} pax · {formatMoney(connecting.totalRevenue)}/wk (gateway feed estimate)</>}
           </div>
+          {/* Own-metal itinerary feed: real O&D markets connecting over your hubs */}
+          {(lastConn?.feeds?.length ?? 0) > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Feeding markets (via your hubs)
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {lastConn.feeds.slice(0, 6).map((f, i) => (
+                  <div key={i} style={{
+                    padding: '4px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)', fontSize: 12,
+                  }}>
+                    <span style={{ fontWeight: 700 }}>{f.od}</span>
+                    <span style={{ color: 'var(--text-muted)' }}> via {f.viaHub} · {f.pax} pax · {formatMoney(f.revenue)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {[{ label: origin, side: connecting.origin }, { label: dest, side: connecting.destination }].map(({ label, side }) =>
               side.pax > 0 && (

@@ -969,47 +969,86 @@ function reducer(state, action) {
     }
 
     // ── Hub management ────────────────────────────────────────────────────────
+    // Designations cost one-time capex and (except focus cities) take weeks to
+    // build. Prerequisites are validated by hubUpgradeChecklist (shared with the
+    // HubManagement UI, so the player sees exactly what's enforced here).
 
-    case 'DESIGNATE_HUB': {
-      const gateCount = (state.gates ?? {})[action.airportCode] ?? 0;
-      if (gateCount < HUB_MIN_GATES) return state;  // need 10 gates minimum
-      if ((state.hubs ?? {})[action.airportCode]) return state;  // already a hub
-      // Political restriction: hubs only permitted in home country
-      const airportCountry = getAirport(action.airportCode)?.country;
-      if (state.homeCountry && airportCountry !== state.homeCountry) return state;
+    case 'DESIGNATE_FOCUS_CITY': {
+      const code = action.airportCode;
+      if ((state.hubs ?? {})[code] || (state.hubConstruction ?? {})[code]) return state;
+      const snap = {
+        routes: state.routes, gates: state.gates ?? {}, homeCountry: state.homeCountry,
+        hubs: state.hubs ?? {}, hubThroughput: state.hubThroughput ?? {},
+        cash: state.cash, absWeek: absoluteWeek(state.year, state.week),
+      };
+      if (!hubUpgradeChecklist(snap, code, 0).ok) return state;
+      // Focus cities are instant (no construction period)
       return {
         ...state,
-        hubs: { ...(state.hubs ?? {}), [action.airportCode]: { tier: 1 } },
+        cash: state.cash - HUB_TIERS[0].capex,
+        hubs: { ...(state.hubs ?? {}), [code]: { tier: 0, tierSince: snap.absWeek } },
       };
     }
 
+    case 'DESIGNATE_HUB':
     case 'UPGRADE_HUB': {
-      const hubs        = state.hubs ?? {};
-      const hubInfo     = hubs[action.airportCode];
-      if (!hubInfo || hubInfo.tier >= HUB_TIER_COUNT) return state;
-      const newTier     = hubInfo.tier + 1;
-      const tierDef     = HUB_TIERS[newTier];
-      const gateCount   = (state.gates ?? {})[action.airportCode] ?? 0;
-      if (gateCount < tierDef.minGates) return state;
+      // One path for fresh hub designation (no entry → T1), focus-city promotion
+      // (T0 → T1), and tier upgrades (T1 → T2 → T3). Capex is charged up front;
+      // the tier activates when construction completes in ADVANCE_WEEK.
+      const code    = action.airportCode;
+      const hubs    = state.hubs ?? {};
+      const current = hubs[code]?.tier;   // undefined | 0..3
+      if ((state.hubConstruction ?? {})[code]) return state;        // already building
+      if (current != null && current >= HUB_TIER_COUNT) return state; // maxed out
+      const targetTier = current == null ? 1 : current + 1;
+      const snap = {
+        routes: state.routes, gates: state.gates ?? {}, homeCountry: state.homeCountry,
+        hubs, hubThroughput: state.hubThroughput ?? {},
+        cash: state.cash, absWeek: absoluteWeek(state.year, state.week),
+      };
+      if (!hubUpgradeChecklist(snap, code, targetTier).ok) return state;
+      const tierDef = HUB_TIERS[targetTier];
+      if ((tierDef.buildWeeks ?? 0) <= 0) {
+        return {
+          ...state,
+          cash: state.cash - tierDef.capex,
+          hubs: { ...hubs, [code]: { tier: targetTier, tierSince: snap.absWeek } },
+        };
+      }
       return {
         ...state,
-        hubs: { ...hubs, [action.airportCode]: { tier: newTier } },
+        cash: state.cash - tierDef.capex,
+        hubConstruction: {
+          ...(state.hubConstruction ?? {}),
+          [code]: { targetTier, weeksLeft: tierDef.buildWeeks, capex: tierDef.capex },
+        },
       };
     }
 
     case 'DOWNGRADE_HUB': {
+      const code = action.airportCode;
+      // Cancelling an in-progress construction refunds 50% of capex.
+      const construction = state.hubConstruction ?? {};
+      if (construction[code]) {
+        const { [code]: cancelled, ...rest } = construction;
+        return {
+          ...state,
+          cash: state.cash + Math.round((cancelled.capex ?? 0) * 0.5),
+          hubConstruction: rest,
+        };
+      }
       const hubs    = state.hubs ?? {};
-      const hubInfo = hubs[action.airportCode];
+      const hubInfo = hubs[code];
       if (!hubInfo) return state;
-      if (hubInfo.tier <= 1) {
-        // Remove hub designation entirely
+      if ((hubInfo.tier ?? 0) <= 0) {
+        // Remove focus-city designation entirely
         const newHubs = { ...hubs };
-        delete newHubs[action.airportCode];
+        delete newHubs[code];
         return { ...state, hubs: newHubs };
       }
       return {
         ...state,
-        hubs: { ...hubs, [action.airportCode]: { tier: hubInfo.tier - 1 } },
+        hubs: { ...hubs, [code]: { tier: hubInfo.tier - 1, tierSince: absoluteWeek(state.year, state.week) } },
       };
     }
 
@@ -2099,6 +2138,38 @@ function reducer(state, action) {
         });
       }
 
+      // ── Hub construction countdown + throughput history ──────────────────
+      const hubConstructionPrev = state.hubConstruction ?? {};
+      const newHubConstruction  = {};
+      let   hubsAfterBuild      = state.hubs ?? {};
+      for (const [code, c] of Object.entries(hubConstructionPrev)) {
+        const weeksLeft = (c.weeksLeft ?? 1) - 1;
+        if (weeksLeft <= 0) {
+          const tName = HUB_TIERS[c.targetTier]?.name ?? 'Hub';
+          hubsAfterBuild = {
+            ...hubsAfterBuild,
+            [code]: { tier: c.targetTier, tierSince: absoluteWeek(newYear, newWeek) },
+          };
+          newToasts.push({
+            type: 'success',
+            title: `🏗️ ${tName} Complete — ${code}`,
+            message: `Construction at ${code} is finished. ${tName} benefits (connecting traffic, quality, cost efficiencies) are now active.`,
+            duration: 9000,
+          });
+        } else {
+          newHubConstruction[code] = { ...c, weeksLeft };
+        }
+      }
+      // Rolling 4-week connecting throughput per designated hub (T3 prerequisite)
+      const prevThroughput = state.hubThroughput ?? {};
+      const newHubThroughput = {};
+      for (const code of Object.keys(hubsAfterBuild)) {
+        newHubThroughput[code] = [
+          ...(prevThroughput[code] ?? []),
+          report.hubThroughput?.[code] ?? 0,
+        ].slice(-4);
+      }
+
       // ── Bankruptcy condition tracking ─────────────────────────────────────
       // Condition 1: missed loan payment = week where loans were due AND cash went negative
       const missedThisWeek = totalLoanPayments > 0 && newCash < 0;
@@ -2321,6 +2392,9 @@ function reducer(state, action) {
           loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,
+        hubs:              hubsAfterBuild,
+        hubConstruction:   newHubConstruction,
+        hubThroughput:     newHubThroughput,
         loans:             updatedLoans,
         labor:             updatedLabor,
         laborRelations:    updatedRelations,

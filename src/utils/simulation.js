@@ -491,8 +491,8 @@ export function routeQualityBreakdown(route, aircraft, state) {
   const hubs = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
   const stops = isMultiStop(r) ? routeStops(r) : [r.origin, r.destination];
   const hubPts = Math.max(0, ...stops.map(c => {
-    const t = hubs[c]?.tier;
-    return t ? (HUB_TIERS[t]?.qualityBonus ?? 0) : 0;
+    const t = hubs[c]?.tier;   // tier 0 (Focus City) is valid — check != null
+    return t != null ? (HUB_TIERS[t]?.qualityBonus ?? 0) : 0;
   }));
 
   const raw   = computeQualityScore({ onTimeRate, cabinPoints: cabinPts, fleetAgeYears, customerRating });

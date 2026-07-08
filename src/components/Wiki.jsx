@@ -198,17 +198,29 @@ const WIKI = [
   {
     id: 'hubs',
     icon: '🏢',
-    title: 'Hubs',
+    title: 'Hubs & Focus Cities',
     blurb: 'Unlock connecting traffic',
     blocks: [
-      { p: 'A hub is an airport where your routes connect, letting passengers transfer between your flights. Connecting passengers feed into your routes, boosting load factors and revenue across the whole network.' },
-      { h: 'Creating a hub' },
+      { p: 'A hub is an airport where your routes connect, letting passengers transfer between your flights. Connecting revenue comes from **real one-stop itineraries** sold over the hub — every spoke you add opens new city-pair markets — plus a residual feed from gateway and partner traffic. Hubs also cut operating costs on routes touching them: own ground staff, own flight kitchens, crews sleeping at home, and (at Major Hub and above) on-site line maintenance.' },
+      { h: 'Focus cities' },
       { ul: [
-        'You need **10 gates** at an airport to designate it as a hub.',
-        'Designating a hub unlocks connecting-passenger traffic through it.',
-        'Upgrade the hub to **higher tiers** to capture more of that connecting traffic and improve your reputation on all routes passing through.',
+        'A cheap starter designation: **5 gates**, $1M, active immediately.',
+        'Enables own-metal connections at a reduced level plus small cost savings.',
+        'Allowed **anywhere** — but only one per country outside your home country, and foreign focus cities can never become full hubs.',
+        'At home, a focus city with 10 gates can be **promoted to a full hub**.',
       ] },
-      { tip: 'Hubs reward density. The more spokes you fly into a hub, the more connections become possible — the value compounds as the network grows.' },
+      { h: 'Hub tiers' },
+      { ul: [
+        'Full hubs cost real capex and take weeks of construction: Hub ($5M, 4 wks), Major Hub ($25M, 8 wks), International Gateway ($100M, 16 wks).',
+        'Higher tiers demand a network to match: **20 routes** (2 international) at the airport for Major Hub; **50 routes**, 6 international destinations, 1,000 connecting pax/wk and 26 weeks as a Major Hub for International Gateway.',
+        'Each tier improves the transfer product (more connecting share), quality bonus, and cost savings.',
+      ] },
+      { h: 'Congestion & competition' },
+      { ul: [
+        'Each tier handles a set **routes-per-gate ratio** (1.5 at Hub, up to 2.5 at Gateway). Exceed it and connecting traffic suffers — buy gates to relieve congestion.',
+        'Competitors hubbing at the same airport **contest the connecting pool**. Dominate an International Gateway with over 60% share and it becomes a **fortress hub**: +2 quality and pricing power on every route touching it.',
+      ] },
+      { tip: 'Hubs reward density. The more spokes you fly into a hub, the more connections become possible — the value compounds as the network grows. When gates run short, that is the game telling you to open a second hub.' },
     ],
   },
   {
