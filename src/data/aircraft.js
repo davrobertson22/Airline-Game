@@ -2515,7 +2515,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 39,
     description: 'Narrowbody express freighter — the backbone of integrators like UPS and FedEx.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Delta_757-200_N713TW_on_final_approach_to_Boston_Dec_2024_2.jpg/1280px-Delta_757-200_N713TW_on_final_approach_to_Boston_Dec_2024_2.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Boeing_757-24A%28PF%29%2C_United_Parcel_Service_%28UPS%29_JP6779815.jpg/960px-Boeing_757-24A%28PF%29%2C_United_Parcel_Service_%28UPS%29_JP6779815.jpg',
   },
   {
     id: 'md11f',
@@ -2532,7 +2532,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 91,
     description: 'Tri-jet freighter prized by cargo carriers long after passenger MD-11s retired.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/McDonnell_Douglas_MD-11P_KLM_PH-KCC.jpg/1280px-McDonnell_Douglas_MD-11P_KLM_PH-KCC.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/FedEx_MD-11F_N607FE.jpg/960px-FedEx_MD-11F_N607FE.jpg',
   },
   {
     id: 'a300600f',
@@ -2566,7 +2566,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 78,
     description: 'Converted tri-jet freighter with long legs and a big main deck.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/d/d9/Continental_Airlines_DC-10.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/FEDEX_McDonnell_Douglas_DC-10-30F_%28N308FE_48297_416%29_%285679749455%29.jpg/960px-FEDEX_McDonnell_Douglas_DC-10-30F_%28N308FE_48297_416%29_%285679749455%29.jpg',
   },
   {
     id: 'b737400f',
@@ -2617,7 +2617,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 26,
     description: 'Tri-jet freighter that powered overnight express in the 1980s-90s.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/B-727_Iberia_%28cropped%29.jpg/1280px-B-727_Iberia_%28cropped%29.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Boeing_727-2S2F-Adv%28RE%29_Super_27%2C_FedEx_-_Federal_Express_AN0260523.jpg/960px-Boeing_727-2S2F-Adv%28RE%29_Super_27%2C_FedEx_-_Federal_Express_AN0260523.jpg',
   },
   {
     id: 'dc873f',
@@ -2668,7 +2668,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 28,
     description: 'Passenger-to-freighter A321 — efficient narrowbody capacity for e-commerce growth.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Airbus_A321-231%28w%29_%E2%80%98N915US%E2%80%99_American_Airlines_%2828442733186%29.jpg/1280px-Airbus_A321-231%28w%29_%E2%80%98N915US%E2%80%99_American_Airlines_%2828442733186%29.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/G-POWW_-_Airbus_A321-211%28P2F%29_-_Titan_Airways_STN_130124.jpg/960px-G-POWW_-_Airbus_A321-211%28P2F%29_-_Titan_Airways_STN_130124.jpg',
   },
   {
     id: 'b767200sf',
@@ -2685,7 +2685,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     payloadTonnes: 42,
     description: 'Special-freighter 767-200 conversion — a favorite of Amazon Air feeder fleets.',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Delta_Air_Lines_B767-332_N130DL.jpg/1280px-Delta_Air_Lines_B767-332_N130DL.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Boeing_767-232%28SF%29%2C_Amerijet_International_JP7699998.jpg/960px-Boeing_767-232%28SF%29%2C_Amerijet_International_JP7699998.jpg',
   },
   {
     id: 'an12',
