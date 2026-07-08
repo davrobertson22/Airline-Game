@@ -17,10 +17,10 @@ import {
 const QUALITY_LEVELS = { basic: 0, standard: 1, premium: 2, luxury: 3 };
 
 const QUALITY_OPTIONS = [
-  { value: 'basic',    label: 'Basic',    desc: 'Budget fittings, no frills.' },
+  { value: 'basic',    label: 'Basic',    desc: 'No frills. Saves weekly cost, costs quality points.' },
   { value: 'standard', label: 'Standard', desc: 'Comfortable and no-nonsense.' },
-  { value: 'premium',  label: 'Premium',  desc: 'Enhanced seats, better meals.' },
-  { value: 'luxury',   label: 'Luxury',   desc: 'Flagship product. Premium cost.' },
+  { value: 'premium',  label: 'Premium',  desc: 'Enhanced product. Boosts quality, adds weekly cost.' },
+  { value: 'luxury',   label: 'Luxury',   desc: 'Flagship product. Big quality boost, premium cost.' },
 ];
 
 /**

@@ -4,7 +4,7 @@ import {
   formatMoney, formatPercent,
   simulateRoute, maintenanceMultiplier, blockTimeHours,
   CLASS_FARE_MULTIPLIERS,
-  weeklyBlockHours, routeDistanceKm, weekToGameDate,
+  weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
 } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
@@ -326,14 +326,15 @@ function PLStatement({ proj }) {
   // used, so per-route operating-cost detail rows reconcile to the report totals.
   // Per-route REVENUE for display uses the engine's boosted figure (proj.revById),
   // which includes connecting feed + awareness/marketing/loyalty/alliance lifts.
+  const avgUtilization = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
   const routeData = useMemo(() => routes.map(route => {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) return null;
-    const result = simulateRoute(route, aircraft, gd, labor, proj.fuelMultiplier);
+    const result = simulateRoute(route, aircraft, gd, labor, proj.fuelMultiplier, null, [], avgUtilization, state.satisfaction ?? null);
     if (!result) return null;
     const bookedRevenue = proj.revById[route.id] ?? result.revenue;
     return { route, aircraft, result, bookedRevenue };
-  }).filter(Boolean), [routes, fleet, state.week, proj]);
+  }).filter(Boolean), [routes, fleet, state.week, proj]);  // eslint-disable-line
 
   // Canonical cost buckets (from the engine report, not re-derived)
   const totFuel = report.totalFuel;
@@ -418,7 +419,7 @@ function PLStatement({ proj }) {
   const cargoRoutesState = state.cargoRoutes ?? [];
 
   // Catering / layover / compensation — canonical totals; per-route detail for display.
-  const { onTimeRate } = laborEffects(labor);
+  const { onTimeRate } = laborEffects(labor, avgUtilization, state.satisfaction ?? null);
   const cateringByRoute = routeData.map(({ route, aircraft, result }) => {
     const type = getAircraftType(aircraft.typeId);
     const catering     = result.cateringCost     ?? weeklyCateringCost(result.classSummary ?? {});
@@ -2143,18 +2144,20 @@ function UnitEconomics({ proj }) {
   const gd = currentGameDate(state);
   const labor = state.labor ?? DEFAULT_LABOR_STATE;
 
-  const routeData = useMemo(() => routes.map(route => {
+  const routeData = useMemo(() => {
+    const avgUtil = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
+    return routes.map(route => {
     const a    = fleet.find(x => x.id === route.aircraftId);
     const type = a ? getAircraftType(a.typeId) : null;
     if (!a || !type) return null;
     // Simulate with the engine's labor + fuel multiplier so costs match; use the
     // engine's BOOKED revenue (incl. connecting feed + demand lifts) for RASK/yield.
-    const raw = simulateRoute(route, a, gd, labor, proj.fuelMultiplier);
+    const raw = simulateRoute(route, a, gd, labor, proj.fuelMultiplier, null, [], avgUtil, state.satisfaction ?? null);
     if (!raw) return null;
     const result = { ...raw, revenue: proj.revById[route.id] ?? raw.revenue };
     const ue = calcUnitEconomics(route, a, type, result, fleet, routes);
     return { route, aircraft: a, type, result, ue };
-  }).filter(Boolean), [routes, fleet, state.week, proj]);
+  }).filter(Boolean); }, [routes, fleet, state.week, proj]);  // eslint-disable-line
 
   const totASK    = routeData.reduce((s, r) => s + r.ue.ASK, 0);
   const totRPK    = routeData.reduce((s, r) => s + r.ue.RPK, 0);
@@ -2292,9 +2295,10 @@ function Forecast({ proj }) {
   const fuelMultiplier = state.fuelMultiplier ?? 1.0;
 
   const fcLaborState  = state.labor ?? DEFAULT_LABOR_STATE;
+  const fcAvgUtil     = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
   const routeData = routes.map(r => {
     const a = fleet.find(x => x.id === r.aircraftId);
-    return a ? simulateRoute(r, a, gd, fcLaborState, fuelMultiplier) : null;
+    return a ? simulateRoute(r, a, gd, fcLaborState, fuelMultiplier, null, [], fcAvgUtil, state.satisfaction ?? null) : null;
   }).filter(Boolean);
 
   // ── Canonical current-week baseline (same engine the other tabs use) ───────

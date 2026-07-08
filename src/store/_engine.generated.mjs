@@ -88,6 +88,7 @@ function freshState() {
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null
     codeshareAgreements:  [],    // [{ id, competitorId, competitorName, competitorTier, weeklyFee, signedWeek, weeksRemaining }]
     awareness: 5,                // 0–100: how well-known the airline is; gates demand
+    satisfaction: null,          // 0–100 earned passenger satisfaction (null until first tick initializes it)
     missedLoanPayments:       0,   // total weeks where loans were due and cash went negative
     consecutiveNegativeWeeks: 0,   // weeks in a row ending with negative cash (resets on recovery)
     bankruptcyReason:         null, // 'missed_loans' | 'consecutive_negative' | null
@@ -1694,6 +1695,14 @@ function reducer(state, action) {
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
+        // Earned passenger satisfaction (EWMA toward delivered experience);
+        // computed by weeklyTick, persisted here, plus one-time quality-event shocks.
+        satisfaction:        (() => {
+          const base = report.satisfaction ?? state.satisfaction ?? null;
+          if (base == null) return null;
+          const shock = newEvents.reduce((s, ev) => s + (ev.effects?.satisfactionShock ?? 0), 0);
+          return Math.max(0, Math.min(100, Math.round((base + shock) * 10) / 10));
+        })(),
         objectives:               updatedObjectives,
         objectivesEnabled,
         showDebrief:              true,
@@ -1925,6 +1934,7 @@ function reconcileState(parsed) {
     // Guarantee fields added in later versions exist even on old saves
     financialHistory: parsed.financialHistory ?? [],
     lastReport:       parsed.lastReport       ?? null,
+    satisfaction:     parsed.satisfaction     ?? null,
     hubs:             parsed.hubs             ?? {},
     gates:            parsed.gates            ?? {},
     loans:            parsed.loans            ?? [],

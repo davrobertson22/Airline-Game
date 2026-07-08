@@ -32,6 +32,8 @@ import {
   HUB_TIERS,
   HUB_MIN_GATES,
   HUB_TIER_COUNT,
+  FOCUS_MIN_GATES,
+  hubUpgradeChecklist,
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM, competitorMarketingSpend } from '../models/competitorAI.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
@@ -82,7 +84,9 @@ function freshState() {
     routeCatering: {},// { [pairKey]: cateringLevel } — one catering level per O&D pair
     cargoRoutes: [], // { id, origin, destination, aircraftId, yieldPrice ($/tonne-km), weeklyFrequency, weeksOpen, hub, cargo:true }
     gates:             {},    // { [airportCode]: gateCount } — each gate = 50 slots/wk
-    hubs:              {},    // { [airportCode]: { tier: 1|2|3 } } — designated hub airports
+    hubs:              {},    // { [airportCode]: { tier: 0|1|2|3, tierSince } } — 0 = focus city
+    hubConstruction:   {},    // { [airportCode]: { targetTier, weeksLeft, capex } } — upgrades in progress
+    hubThroughput:     {},    // { [airportCode]: number[] } — last 4 weeks connecting pax (T3 prereq)
     labor:             DEFAULT_LABOR_STATE,
     laborRelations:    DEFAULT_LABOR_RELATIONS,  // union unrest, strikes, contract negotiations
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
@@ -2329,9 +2333,15 @@ function reducer(state, action) {
         awareness:           Math.round(newAwareness * 10) / 10,
         campaignStrength:    newCampaigns,
         // Earned passenger satisfaction (EWMA toward delivered experience);
-        // computed by weeklyTick, persisted here. Old saves start null and
-        // initialize on their first tick.
-        satisfaction:        report.satisfaction ?? state.satisfaction ?? null,
+        // computed by weeklyTick, persisted here, plus any one-time shocks from
+        // quality events that triggered this week (catering scandal, viral
+        // praise, ...). Old saves start null and initialize on their first tick.
+        satisfaction:        (() => {
+          const base = report.satisfaction ?? state.satisfaction ?? null;
+          if (base == null) return null;
+          const shock = newEvents.reduce((s, ev) => s + (ev.effects?.satisfactionShock ?? 0), 0);
+          return Math.max(0, Math.min(100, Math.round((base + shock) * 10) / 10));
+        })(),
         objectives:               updatedObjectives,
         objectivesEnabled,
         showDebrief:              true,

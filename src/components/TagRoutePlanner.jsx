@@ -9,7 +9,7 @@ import {
   currentGameDate, effectiveRangeKm, defaultClassPrices,
   routeLegs, routeSegments, routeSegmentKey, routeMaxLegKm, routeBlockHours,
   routeLandingFee, routeStops, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
-  cargoSlotsUsedAt,
+  cargoSlotsUsedAt, fleetAvgUtilization,
 } from '../utils/simulation.js';
 import { ModeToggle } from './CargoRoutePlanner.jsx';
 import AddGateButton from './AddGateButton.jsx';
@@ -109,7 +109,10 @@ export default function TagRoutePlanner({ mode, setMode }) {
 
   const preview = useMemo(() => {
     if (!route || !aircraft || !inRange) return null;
-    return simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0);
+    // Include the prospective route in the utilization estimate so the preview
+    // reflects the schedule pressure this flight would add.
+    const avgUtil = fleetAvgUtilization(fleet, [...routes, ...cargoRoutes, { ...route, aircraftId: aircraft.id }]);
+    return simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0, avgUtil, state.satisfaction ?? null);
   }, [route, aircraft, inRange, gd.month, state.labor]); // eslint-disable-line
 
   // ── Validation (mirrors the reducer; advisory only) ──

@@ -20,7 +20,7 @@ import {
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, cargoSlotsUsedAt,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
-  maxClassPrice, isRouteActive, routeActiveMonths,
+  maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
 } from '../utils/simulation.js';
 
 const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -198,7 +198,8 @@ export default function Routes() {
     if (!aircraft) return null;
     const rr = rrById[route.id];
     if (rr) return rr;
-    return simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier);
+    const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
+    return simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null, [], avgUtil, state.satisfaction ?? null);
   };
 
   // Per-group stats for filtering + sorting
@@ -782,7 +783,9 @@ function TagRouteCard({ route, onClose }) {
   const aircraft = fleet.find(a => a.id === route.aircraftId);
   const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
   const stops    = routeStops(route);
-  const sim      = aircraft ? simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0) : null;
+  const sim      = aircraft ? simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0,
+    fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
+    state.satisfaction ?? null) : null;
   const landingFee = type ? routeLandingFee(route, type, route.weeklyFrequency) : 0;
   const profit   = sim ? sim.profit - landingFee : 0;
 

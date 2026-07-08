@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
-import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE } from '../utils/simulation.js';
-import { computeQualityScore } from '../models/demand.js';
+import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE, fleetAvgUtilization } from '../utils/simulation.js';
+import { computeQualityScore, cabinQualityPoints } from '../models/demand.js';
+import { laborEffects } from '../data/labor.js';
 import { ARCHETYPES, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
 import { getAlliance, effectiveAllianceId } from '../data/alliances.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -26,22 +27,16 @@ const TIER_META = {
   premium: { label: 'Premium', color: '#a78bfa'         },
 };
 
-/** Map aircraft serviceQuality → quality model serviceLevel */
-function toServiceLevel(serviceQuality) {
-  if (serviceQuality === 'luxury')  return 'business';
-  if (serviceQuality === 'premium') return 'premium';
-  return 'economy';
-}
-
-/** Compute player's quality score for one route (uses assigned aircraft config). */
-function playerQuality(route, fleet) {
+/** Compute player's quality score for one route — same inputs the engine uses
+ *  (real on-time rate from morale + utilization, seat AND service cabin points). */
+function playerQuality(route, fleet, laborFx) {
   const aircraft = fleet.find(a => a.id === route.aircraftId);
   if (!aircraft) return null;
   return computeQualityScore({
-    onTimeRate:    0.85,
-    serviceLevel:  toServiceLevel(aircraft.config?.serviceQuality ?? 'standard'),
+    onTimeRate:    laborFx.onTimeRate,
+    cabinPoints:   cabinQualityPoints(aircraft.config),
     fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52,
-    customerRating: 3.5,
+    customerRating: laborFx.customerRating,
   });
 }
 
@@ -374,11 +369,16 @@ function StatLine({ label, value, color, prefix = '' }) {
 }
 
 function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet }) {
+  const { state } = useGame();
   const [a, b] = routeKey.split('-');
   const oAirport = getAirport(a);
   const dAirport = getAirport(b);
   const refP = referencePrice(a, b);
-  const pQual = playerQuality(playerRoute, fleet);
+  // Same labor + utilization inputs the engine feeds the demand model.
+  const laborFx = laborEffects(state.labor ?? null,
+    fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
+    state.satisfaction ?? null);
+  const pQual = playerQuality(playerRoute, fleet, laborFx);
 
   const cols = 1 + competitors.length; // you + N competitors
 

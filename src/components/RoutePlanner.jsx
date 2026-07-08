@@ -6,11 +6,12 @@ import {
   baseCityPairDemand, referencePrice, distanceKm,
   simulateRoute, formatMoney, formatPercent, weekToGameDate,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
-  CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS,
+  CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
 } from '../utils/simulation.js';
+import { laborEffects } from '../data/labor.js';
 import {
   buildRouteMarket, computeMarketShare,
-  buildCompetitorOffer, computeQualityScore,
+  buildCompetitorOffer, computeQualityScore, cabinQualityPoints,
   computeConnectingDemand, AIRPORT_GATEWAY_SCORES,
 } from '../models/demand.js';
 import { routeLaunchCost } from '../data/overhead.js';
@@ -559,10 +560,16 @@ export default function RoutePlanner() {
     // opened. Without this the forecast would charge every cabin the economy fare.
     const classPrices = defaultClassPrices(effectivePrice);
 
+    // Real operational inputs (morale, fleet utilization, earned satisfaction) so
+    // the forecast quality matches what the engine will actually compute.
+    const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
+    const satisfaction = state.satisfaction ?? null;
+
     const result = simulateRoute(
       { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel },
       simAircraft,
       gameDate,
+      state.labor ?? null, 1.0, null, [], avgUtil, satisfaction,
     );
     if (!result) return null;
 
@@ -571,6 +578,7 @@ export default function RoutePlanner() {
       { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel, weeksOpen: 0 },
       simAircraft,
       gameDate,
+      state.labor ?? null, 1.0, null, [], avgUtil, satisfaction,
     );
 
     // Connecting passenger estimate
@@ -588,7 +596,6 @@ export default function RoutePlanner() {
     // Seat counts and quality reflect the chosen cabin configuration so the
     // share estimate matches what simulateRoute computes internally.
     const cfg = effectiveConfig ?? defaultConfig(type.seats);
-    const serviceLevelMap = { basic: 'economy', standard: 'economy', premium: 'premium', luxury: 'business' };
     const playerOffer = {
       airlineId: 'player',
       origin, destination: dest,
@@ -599,8 +606,11 @@ export default function RoutePlanner() {
       economySeats: (cfg.economy ?? type.seats) * frequency,
       businessSeats: (cfg.businessClass ?? 0) * frequency,
       totalSeats: configBodies(cfg) * frequency,
-      qualityScore: Math.max(0, Math.min(100,
-        computeQualityScore({ onTimeRate: 0.85, serviceLevel: serviceLevelMap[cfg.seatQuality ?? 'standard'] ?? 'economy', fleetAgeYears: 0, customerRating: 3.5 })
+      qualityScore: Math.max(0, Math.min(100, (() => {
+        const fx = laborEffects(state.labor ?? null, avgUtil, satisfaction);
+        return computeQualityScore({ onTimeRate: fx.onTimeRate, cabinPoints: cabinQualityPoints(cfg), fleetAgeYears: 0, customerRating: fx.customerRating })
+          + (fx.groundQualityBonus ?? 0);
+      })()
         + configSpaceQualityBonus(cfg, type)
         + cateringQualityBonus(cateringLevel, routeData.dist))),
       connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,

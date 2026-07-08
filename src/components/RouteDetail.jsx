@@ -10,7 +10,7 @@ import {
 import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
-  isRouteActive, routeActiveMonths,
+  isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -45,6 +45,50 @@ function Stat({ label, value, sub, color }) {
       <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>{label}</div>
       <div style={{ fontWeight: 700, fontSize: 15, color: color ?? 'var(--text)' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/** Where this route's quality score comes from — mirrors the engine exactly
+ *  via routeQualityBreakdown, so players can see (and pull) every lever. */
+function QualityBreakdownPanel({ route, aircraft, state }) {
+  const bd = routeQualityBreakdown(route, aircraft, state);
+  if (!bd) return null;
+  const fmt = (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 10) / 10}`;
+  const rows = [
+    { label: 'On-time performance', pts: bd.onTimePts,   sub: `${Math.round(bd.onTimeRate * 100)}% on time · morale + fleet utilization` },
+    { label: 'Customer rating',     pts: bd.ratingPts,   sub: bd.satisfaction != null
+        ? `${bd.customerRating.toFixed(1)}★ · earned satisfaction ${Math.round(bd.satisfaction)}/100`
+        : `${bd.customerRating.toFixed(1)}★ · from cabin crew morale` },
+    { label: 'Cabin product',       pts: bd.cabinPts,    sub: 'seat + service quality settings' },
+    { label: 'Fleet age',           pts: bd.agePts,      sub: 'newer aircraft score higher' },
+    { label: 'Cabin space',         pts: bd.spacePts,    sub: 'floor left unfilled = more room' },
+    { label: 'Catering',            pts: bd.cateringPts, sub: 'matters more on long flights' },
+    { label: 'Ground staff',        pts: bd.groundPts,   sub: 'morale bonus / penalty' },
+    { label: 'Hub investment',      pts: bd.hubPts,      sub: 'from hub tier at endpoints' },
+  ].filter(r => r.pts !== 0 || ['On-time performance', 'Customer rating', 'Cabin product', 'Fleet age'].includes(r.label));
+  return (
+    <div style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Quality score breakdown</span>
+        <span style={{ fontWeight: 700, fontSize: 16, color: bd.total >= 70 ? 'var(--green)' : bd.total >= 45 ? 'var(--yellow)' : 'var(--red)' }}>
+          {Math.round(bd.total)} / 100
+        </span>
+      </div>
+      {rows.map(r => (
+        <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginBottom: 3 }}>
+          <span>
+            {r.label}
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{r.sub}</span>
+          </span>
+          <span style={{ fontWeight: 600, color: r.pts >= 0 ? 'var(--text)' : 'var(--red)', whiteSpace: 'nowrap', marginLeft: 10 }}>
+            {fmt(r.pts)} pts
+          </span>
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
+        Quality drives your share of passengers against competitors — business travelers weigh it heavily.
+      </div>
     </div>
   );
 }
@@ -179,7 +223,10 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           economySeats:      (aircraft.config?.economy ?? type.seats) * totalFreq,
           businessSeats:     (aircraft.config?.businessClass ?? 0) * totalFreq,
           totalSeats:        ((aircraft.config?.economy ?? type.seats) + (aircraft.config?.businessClass ?? 0) + (aircraft.config?.premiumEconomy ?? 0) + (aircraft.config?.firstClass ?? 0)) * totalFreq,
-          qualityScore:      Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
+          // Same quality the engine computes for this route (morale, utilization,
+          // satisfaction, cabin product), incl. the hub bonus via the breakdown.
+          qualityScore:      routeQualityBreakdown(route, aircraft, state)?.total
+            ?? Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
         };
       }
@@ -263,9 +310,12 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // and landing fees, and carries weeklyLeaseCost / weeklyMaintCost / profit.
       const rr = rrById[route.id];
       if (rr) return [{ route, aircraft, type, result: rr }];
-      // Fallback for routes the engine skipped (grounded / dormant-seasonal).
-      const result = simulateRoute(route, aircraft, gameDate, null, 1.0,
-        demandAllocations.get(aircraft.id) ?? null);
+      // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
+      // same labor / utilization / satisfaction inputs the engine uses.
+      const result = simulateRoute(route, aircraft, gameDate, state.labor ?? null, 1.0,
+        demandAllocations.get(aircraft.id) ?? null, [],
+        fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
+        state.satisfaction ?? null);
       if (!result) return [];
       const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
         : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
@@ -540,6 +590,12 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
               label={catLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
             />
           </div>
+          {/* Quality score breakdown — engine-accurate per-source points */}
+          {(() => {
+            const r0 = playerRoutes[0];
+            const ac = r0 ? state.fleet.find(a => a.id === r0.aircraftId) : null;
+            return ac ? <QualityBreakdownPanel route={r0} aircraft={ac} state={state} /> : null;
+          })()}
           {/* Load factor by class */}
           {activeClasses.length > 0 && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: playerSims.length > 1 ? 14 : 0 }}>

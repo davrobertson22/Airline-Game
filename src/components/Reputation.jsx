@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyReputationBonus } from '../utils/simulation.js';
+import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyReputationBonus, fleetAvgUtilization } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
@@ -89,7 +89,8 @@ export default function Reputation() {
   const rep = useMemo(() => calcReputation(
     state,
     loyaltyReputationBonus(loyaltyPenetration(state.loyalty?.members ?? 0, state.lastReport?.totalPassengers ?? 0)),
-  ), [state]);
+    fleetAvgUtilization(fleet ?? [], [...(routes ?? []), ...(state.cargoRoutes ?? [])]),
+  ), [state]);  // eslint-disable-line
   const pos = useMemo(() => calcPositioning(state), [state]);
   const strategy = strategyLabel(pos);
 
@@ -145,6 +146,19 @@ export default function Reputation() {
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>as seen in demand model</div>
         </div>
+        {state.satisfaction != null && (
+          <div className="stat-box">
+            <div className="stat-label">Passenger Satisfaction</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor(state.satisfaction) }}>{Math.round(state.satisfaction)}</span>
+              <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
+            </div>
+            <ScoreBar value={state.satisfaction} color={scoreColor(state.satisfaction)} />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              earned track record → customer rating {((state.satisfaction / 100) * 5).toFixed(1)}★
+            </div>
+          </div>
+        )}
         <div className="stat-box">
           <div className="stat-label">Brand Awareness</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>

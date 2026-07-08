@@ -17,7 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { laborEffects } from '../data/labor.js';
-import { computeQualityScore } from './demand.js';
+import { computeQualityScore, cabinQualityPoints } from './demand.js';
 
 const QUALITY_SCORE = { basic: 15, standard: 45, premium: 72, luxury: 100 };
 
@@ -25,10 +25,14 @@ const QUALITY_SCORE = { basic: 15, standard: 45, premium: 72, luxury: 100 };
  * Overall reputation score (0–100) plus component scores.
  * @param {object} state       – game state (fleet, routes, financialHistory, labor, hub, …)
  * @param {number} loyaltyBonus – 0–8 bonus from a mature loyalty program
+ * @param {number|null} avgUtilization – average fleet block-hour utilization (0–1),
+ *   passed IN (like loyaltyBonus) to avoid an import cycle with simulation.js;
+ *   callers compute it via fleetAvgUtilization(fleet, routes). Feeds the
+ *   on-time rate's schedule-pressure penalty.
  */
-export function calcReputation(state, loyaltyBonus = 0) {
+export function calcReputation(state, loyaltyBonus = 0, avgUtilization = null) {
   const { fleet = [], routes = [], financialHistory = [], labor } = state;
-  const effects = laborEffects(labor);
+  const effects = laborEffects(labor, avgUtilization, state.satisfaction ?? null);
 
   // ── Service score (35%) ────────────────────────────────────────────────────
   // Based on average cabin quality of assigned aircraft, filtered through morale
@@ -73,10 +77,15 @@ export function calcReputation(state, loyaltyBonus = 0) {
     loyaltyBonus
   ));
 
-  // Quality score as fed into the demand model (mirrors computeQualityScore inputs)
+  // Quality score as fed into the demand model (mirrors computeQualityScore inputs);
+  // cabin points averaged across assigned aircraft — same seat/service points the
+  // engine awards per route.
+  const avgCabinPoints = assignedFleet.length > 0
+    ? assignedFleet.reduce((s, a) => s + cabinQualityPoints(a.config), 0) / assignedFleet.length
+    : 0;
   const qualityDemandScore = computeQualityScore({
     onTimeRate:     effects.onTimeRate,
-    serviceLevel:   serviceBase >= 72 ? 'business' : serviceBase >= 60 ? 'premium' : 'economy',
+    cabinPoints:    avgCabinPoints,
     fleetAgeYears:  avgAgeYears,
     customerRating: effects.customerRating + effects.groundQualityBonus,
   });
