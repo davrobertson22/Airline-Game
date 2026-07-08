@@ -392,6 +392,7 @@ export const AIRPORTS = [
   { code: 'KTM', name: 'Tribhuvan Intl',                city: 'Kathmandu',       country: 'NP', lat: 27.70,  lon: 85.36,    population: 1.4,  tier: 'regional' },
   { code: 'DAC', name: 'Hazrat Shahjalal Intl',         city: 'Dhaka',           country: 'BD', lat: 23.84,  lon: 90.40,    population: 22.5, tier: 'major'    },
   { code: 'CGP', name: 'Shah Amanat Intl',              city: 'Chittagong',      country: 'BD', lat: 22.25,  lon: 91.81,    population: 5.0,  tier: 'regional' },
+  { code: 'BZL', name: 'Barisal Airport',               city: 'Barisal',         country: 'BD', lat: 22.80,  lon: 90.30,    population: 0.5,  tier: 'regional' },
   { code: 'RGN', name: 'Yangon Intl',                   city: 'Yangon',          country: 'MM', lat: 16.91,  lon: 96.13,    population: 7.4,  tier: 'regional' },
   { code: 'HAN', name: 'Noi Bai Intl',                  city: 'Hanoi',           country: 'VN', lat: 21.22,  lon: 105.81,   population: 8.5,  tier: 'major'    },
   { code: 'SGN', name: 'Tan Son Nhat Intl',             city: 'Ho Chi Minh City',country: 'VN', lat: 10.82,  lon: 106.66,   population: 13.0, tier: 'major'    },
