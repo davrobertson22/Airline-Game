@@ -6,6 +6,8 @@ import AirportLink from './AirportLink.jsx';
 import CargoRoutesList, { FreightBadge, PassengerBadge } from './CargoRoutesList.jsx';
 import CargoRoutePlanner from './CargoRoutePlanner.jsx';
 import { AIRPORTS, getAirport, getRegion, REGIONS } from '../data/airports.js';
+import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel, CATERING_LEVELS, CATERING_LEVEL_ORDER } from '../data/catering.js';
@@ -1929,7 +1931,29 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
       .reduce((s, r) => s + weeklyBlockHours(routeDistanceKm(r.origin, r.destination), r.weeklyFrequency, t), 0);
   };
 
-  const defaultAircraft = fleet.find(a => usedBlockHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS);
+  // Freighters can't fly passenger routes (the reducer rejects them) — keep them
+  // out of this form entirely; they're managed in the cargo planner.
+  const paxFleet = fleet.filter(a => !getAircraftType(a.typeId)?.freighter);
+  const hasHours = (a) => usedBlockHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS;
+
+  // Default aircraft. In add-flights mode, prefer one already flying this pair
+  // (merges frequency, no launch cost), then one whose network touches an endpoint
+  // (passes the connectivity rule), then any idle passenger aircraft.
+  const pairAircraftIds = isAddingFlights
+    ? new Set(routes.filter(r =>
+        (r.origin === initialOrigin && r.destination === initialDest) ||
+        (r.origin === initialDest && r.destination === initialOrigin)
+      ).map(r => r.aircraftId))
+    : new Set();
+  const connectsToPair = (a) => {
+    const acRoutes = routes.filter(r => r.aircraftId === a.id);
+    return acRoutes.length === 0 ||
+      acRoutes.some(r => [r.origin, r.destination].some(c => c === initialOrigin || c === initialDest));
+  };
+  const defaultAircraft = isAddingFlights
+    ? (paxFleet.find(a => pairAircraftIds.has(a.id) && hasHours(a))
+        ?? paxFleet.find(a => hasHours(a) && connectsToPair(a)))
+    : paxFleet.find(hasHours);
 
   const [origin, setOrigin] = useState(initialOrigin ?? hub);
   const [dest,   setDest]   = useState(initialDest   ?? '');
@@ -1993,8 +2017,32 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const connectivityOk   = aircraftRoutes.length === 0 ||
     servedAirports.has(origin) || (validDest && servedAirports.has(dest));
 
+  // Regulatory restrictions (perimeter rules, per-pair frequency caps) — mirror
+  // the reducer's check so a submit is never silently rejected.
+  const pairKey = validDest ? [origin, dest].sort().join('-') : null;
+  const restriction = (validDest && type) ? (() => {
+    const pairRoutes = routes.filter(r => [r.origin, r.destination].sort().join('-') === pairKey);
+    const peakPairFreq = Math.max(0, ...newMonths.map(m =>
+      pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + r.weeklyFrequency, 0)));
+    return checkRouteRestrictions(origin, dest, dist, peakPairFreq + Number(frequency), type.category,
+      { routes, excludeKey: pairKey });
+  })() : null;
+
+  // Launch cost applies only when this opens a NEW route; adding frequency to a
+  // route the same aircraft already flies (same season window) merges for free.
+  const sameSeasonAs = (r) => {
+    const a = routeActiveMonths(r);
+    return a.length === newMonths.length && a.every((m, i) => m === newMonths[i]);
+  };
+  const mergesExisting = validDest && aircraft && routes.some(r =>
+    r.aircraftId === aircraft.id && sameSeasonAs(r) &&
+    ((r.origin === origin && r.destination === dest) || (r.origin === dest && r.destination === origin)));
+  const launchCost = (validDest && dist && !mergesExisting) ? routeLaunchCost(dist) : 0;
+  const canAfford  = state.cash >= launchCost;
+
   const canSubmit = validDest && aircraft && inRange && blockOk &&
-    gateAtOrigin && gateAtDest && originSlotsOk && destSlotsOk && connectivityOk;
+    gateAtOrigin && gateAtDest && originSlotsOk && destSlotsOk && connectivityOk &&
+    !restriction && canAfford;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -2085,7 +2133,8 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Aircraft</label>
             <select className="form-select" value={aircraftId} onChange={e => setAircraftId(e.target.value)} required>
-              {fleet.map(a => {
+              {aircraftId === '' && <option value="">— Select aircraft —</option>}
+              {paxFleet.map(a => {
                 const t    = getAircraftType(a.typeId);
                 const used = usedBlockHrsFor(a);
                 const rem  = MAX_WEEKLY_BLOCK_HOURS - used;
@@ -2143,6 +2192,21 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {aircraft && !connectivityOk && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
             <Glyph e="⚠" /> {aircraft.name} already flies from {[...servedAirports].join(', ')} — new routes must connect to one of those airports. Aircraft can't teleport.
+          </div>
+        )}
+
+        {/* Regulatory restriction warning */}
+        {restriction && (
+          <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
+            <Glyph e="⛔" /> {restriction.reason.split(': ')[1] ?? restriction.reason}
+          </div>
+        )}
+
+        {/* Launch cost (new routes only — merging into an existing route is free) */}
+        {validDest && launchCost > 0 && (
+          <div style={{ fontSize: 12, color: canAfford ? 'var(--text-muted)' : 'var(--red)', marginBottom: 10 }}>
+            <Glyph e={canAfford ? '💸' : '⚠'} /> One-time launch cost: {formatMoney(launchCost)}
+            {!canAfford && ' — insufficient cash'}
           </div>
         )}
 
