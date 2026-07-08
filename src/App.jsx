@@ -385,6 +385,7 @@ function AppInner() {
               ['How to Play', '/how-to-play.html'],
               ['Strategy Guide', '/strategy.html'],
               ['Glossary', '/glossary.html'],
+              ['Devlog', '/devlog.html'],
               ['About', '/about.html'],
               ['Privacy', '/privacy.html'],
             ].map(([label, href]) => (
