@@ -24,6 +24,14 @@ const TIER_META = {
   premium: { label: 'Premium', color: '#a78bfa'        },
 };
 
+/** Human-readable eligibility label for an alliance's allowed tiers.
+ *  No allowedTiers (or empty) means the bloc is open to everyone. */
+function allianceTierLabel(alliance) {
+  const tiers = alliance.requirements?.allowedTiers;
+  if (!tiers || tiers.length === 0) return 'all carriers';
+  return tiers.map(t => TIER_META[t]?.label ?? t).join(' / ') + ' carriers';
+}
+
 /** Player's average quality score across routes.
  *  Prefers last week's engine results (routeResults[].qualityScore — real scores;
  *  older saves lack the field, so entries without it are SKIPPED, not defaulted:
@@ -288,9 +296,15 @@ function AllianceCard({
           {formatMoney(alliance.initiationFee)}
         </strong>
       </div>
-      <div style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ color: 'var(--text-muted)' }}>Weekly dues</span>
         <strong>{formatMoney(alliance.weeklyFee)}/wk</strong>
+      </div>
+
+      {/* Who can join */}
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Glyph e="🎫" size={12} />
+        <span>Open to {allianceTierLabel(alliance)}</span>
       </div>
 
       {/* Eligibility / action */}
