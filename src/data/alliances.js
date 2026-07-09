@@ -92,7 +92,7 @@ export const ALLIANCES = [
 
     requirements: {
       minRoutes:    10,
-      minQuality:   65,
+      minQuality:   80,
       allowedTiers: ['premium'],   // premium carriers only
     },
   },
@@ -117,7 +117,7 @@ export const ALLIANCES = [
     requirements: {
       minRoutes:    5,
       minQuality:   35,
-      allowedTiers: ['budget', 'legacy'],
+      // Open to every tier — the value bloc welcomes any carrier.
     },
   },
   {
