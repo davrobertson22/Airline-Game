@@ -974,6 +974,9 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
 
   return {
     revenue:      Math.round(totalRevenue),
+    // Final quality score used in the demand model (all bonuses, clamped 0–100).
+    // Consumed by the Alliances page (eligibility) and available to any UI.
+    qualityScore,
     fuelCost,
     crewCost,
     qualityCost,
@@ -1098,6 +1101,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     return {
       from: seg.from, to: seg.to, dist, eco, biz, legIdxs, legSpan: seg.legSpan,
       ecoDemand: res.leisurePax, bizDemand: res.businessPax,
+      quality,
     };
   });
 
@@ -1189,6 +1193,11 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
   return {
     tag:          true,
     revenue:      Math.round(totalRevenue),
+    // Average per-segment quality score (all bonuses, clamped) — same field
+    // simulateRoute exposes, consumed by the Alliances page.
+    qualityScore: segData.length > 0
+      ? Math.round(segData.reduce((s, d) => s + d.quality, 0) / segData.length)
+      : null,
     fuelCost,
     crewCost,
     qualityCost,

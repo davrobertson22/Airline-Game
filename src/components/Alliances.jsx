@@ -1,7 +1,7 @@
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney } from '../utils/simulation.js';
+import { formatMoney, routeQualityBreakdown } from '../utils/simulation.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import {
   ALLIANCES,
@@ -24,15 +24,26 @@ const TIER_META = {
   premium: { label: 'Premium', color: '#a78bfa'        },
 };
 
-/** Derive a rough quality score for the player (averaged across all routes / fleet). */
+/** Player's average quality score across routes.
+ *  Prefers last week's engine results (routeResults[].qualityScore — real scores;
+ *  older saves lack the field, so entries without it are SKIPPED, not defaulted:
+ *  the old `?? 60` default meant this read exactly 60 forever). Falls back to a
+ *  live engine-accurate computation via routeQualityBreakdown. */
 function playerAvgQuality(state) {
-  // Use last week's route results if available
   const routeResults = state.lastReport?.routeResults;
   if (routeResults?.length) {
-    const scores = routeResults.map(r => r.qualityScore ?? 60).filter(Boolean);
+    const scores = routeResults.map(r => r.qualityScore).filter(v => v != null);
     if (scores.length) return Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
   }
-  return 60; // fallback
+  // Live fallback (week 1, or a save from before qualityScore was reported)
+  const live = (state.routes ?? [])
+    .map(r => {
+      const aircraft = (state.fleet ?? []).find(a => a.id === r.aircraftId);
+      return aircraft ? routeQualityBreakdown(r, aircraft, state)?.total : null;
+    })
+    .filter(v => v != null);
+  if (live.length) return Math.round(live.reduce((s, v) => s + v, 0) / live.length);
+  return 60; // no routes yet
 }
 
 /** The player's "tier" for alliance eligibility purposes. */
