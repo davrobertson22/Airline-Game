@@ -115,10 +115,10 @@ export default function Alliances() {
         />
         <SummaryKPI label="Codeshares" value={`${codeshareAgreements.length} / ${MAX_CODESHARE_AGREEMENTS}`} />
         <SummaryKPI
-          label="Product quality"
+          label="Quality"
           value={`${avgQuality}/100`}
           color={avgQuality >= 65 ? 'var(--green)' : avgQuality >= 50 ? 'var(--yellow)' : '#f87171'}
-          sub="seat + service score (≠ reputation)"
+          sub="avg across your routes — same score shown on route pages"
         />
       </div>
 

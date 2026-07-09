@@ -1,11 +1,13 @@
 /**
  * alliances.js — Alliance and codeshare configuration data
  *
- * THREE ALLIANCES
- * ───────────────
+ * FIVE ALLIANCES
+ * ──────────────
  * SkyBridge Alliance  — Legacy, Europe/Americas heavy
  * Pacific Pact        — Legacy/Premium, Asia-Pacific
  * Apex Network        — Premium only, Middle East/Global
+ * Horizon Coalition   — Budget/value, low-cost carriers worldwide
+ * Meridian Alliance   — Legacy/Premium, emerging markets (Africa/South Asia/LatAm)
  *
  * CODESHARE AGREEMENTS
  * ─────────────────────
@@ -92,6 +94,54 @@ export const ALLIANCES = [
       minRoutes:    10,
       minQuality:   65,
       allowedTiers: ['premium'],   // premium carriers only
+    },
+  },
+  {
+    id:       'horizoncoalition',
+    name:     'Horizon Coalition',
+    color:    '#f59e0b',
+    icon:     '🧭',
+    tagline:  'The low-cost carriers\' network',
+    description:
+      'A value alliance of low-cost carriers spanning every continent. Low dues and an easy '
+      + 'entry bar, with the strongest revenue lift on contested routes — LCCs win on price and volume.',
+    memberIds: ['zoomjet', 'fastfly', 'wingit', 'asiaexpress'],
+
+    initiationFee: 120_000,
+    weeklyFee:     30_000,
+
+    demandBoostPct: 0.07,   // highest revenue boost — LCC volume play
+    qualityBonus:   2,      // modest quality lift
+    interlineFraction: 0.55,
+
+    requirements: {
+      minRoutes:    5,
+      minQuality:   35,
+      allowedTiers: ['budget', 'legacy'],
+    },
+  },
+  {
+    id:       'meridianalliance',
+    name:     'Meridian Alliance',
+    color:    '#14b8a6',
+    icon:     '🌍',
+    tagline:  'Connecting the emerging world',
+    description:
+      'Fast-growing carriers across Africa, South Asia and Latin America. Coordinated schedules '
+      + 'open connecting demand through emerging-market gateways underserved by the legacy blocs.',
+    memberIds: ['transafrica', 'indiastar', 'aztecair', 'dragoneast'],
+
+    initiationFee: 300_000,
+    weeklyFee:     65_000,
+
+    demandBoostPct: 0.05,
+    qualityBonus:   5,
+    interlineFraction: 0.62,
+
+    requirements: {
+      minRoutes:    7,
+      minQuality:   52,
+      allowedTiers: ['legacy', 'premium'],
     },
   },
 ];

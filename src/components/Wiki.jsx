@@ -249,7 +249,12 @@ const WIKI = [
     title: 'Reputation',
     blurb: 'Your brand and positioning',
     blocks: [
-      { p: 'Reputation tracks how travellers perceive your airline — your overall brand score, brand awareness, staff morale and how your fares compare to the market reference price. A stronger brand lifts demand and lets you hold higher prices.' },
+      { p: 'Three scores describe how travellers see your airline, each answering one question and pulling one lever:' },
+      { ul: [
+        '**Quality (0–100)** — how good is the product on the plane? Built from on-time performance, cabin product, fleet age and your earned customer rating, plus catering, space and hub bonuses per route. Wins market share against competitors and captures business travelers. See the breakdown on any route\'s detail page.',
+        '**Reputation (0–100)** — how much do travellers trust the brand? Built from service, fleet freshness, network reach, staff morale and loyalty. Nudges demand on every route (±7.5%) and makes your passengers less price-sensitive.',
+        '**Awareness (0–100)** — how many travellers know you exist? Built by marketing spend and passengers flown, with a lag. Gates how much of potential demand you can reach at all (40%–112%).',
+      ] },
       { p: '**Passenger satisfaction** is earned, not set: each week it drifts toward the experience you actually delivered — punctuality, crew service, cabin product and catering, fleet age. It moves slowly in both directions, and your customer rating (a big slice of the quality score) comes from it. Slash service to save money and your rating erodes over the following weeks; win it back the same slow way.' },
       { p: '**Quality captures business travelers.** Business demand you can actually win scales with your quality score (roughly ±12%) even on routes you have to yourself — corporate travelers take rail, another hub, or a video call rather than a shoddy product. Against competitors, quality also dominates how the business segment splits. Quality also stretches the business fare travelers tolerate (about ±7%), so a flagship product can hold a fatter premium before demand collapses. If you sell premium cabins, quality is the engine that fills them.' },
       { p: '**Watch for service moments.** Random events can shock satisfaction directly — a catering contractor meltdown or baggage-system failure dents it; a viral crew moment or an industry service award lifts it. Shocks fade gradually over the following weeks as your delivered experience reasserts itself.' },

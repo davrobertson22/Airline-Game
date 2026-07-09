@@ -115,59 +115,52 @@ export default function Reputation() {
   return (
     <div>
 
-      {/* ── Brand health KPIs ── */}
-      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: 20 }}>
-        <div className="stat-box" style={{ gridColumn: 'span 1' }}>
-          <div className="stat-label">Overall Brand Score</div>
+      {/* ── The three scores: Quality · Reputation · Awareness ── */}
+      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 20 }}>
+        <div className="stat-box">
+          <div className="stat-label">Quality</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
+            <span style={{ fontSize: 32, fontWeight: 800, color: scoreColor(rep.qualityDemandScore) }}>{Math.round(rep.qualityDemandScore)}</span>
+            <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
+          </div>
+          <ScoreBar value={rep.qualityDemandScore} color={scoreColor(rep.qualityDemandScore)} />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            How good the product is — wins market share &amp; business travelers.
+            {state.satisfaction != null && (
+              <> Includes earned satisfaction <span style={{ color: scoreColor(state.satisfaction), fontWeight: 600 }}>{Math.round(state.satisfaction)}</span> → rating {((state.satisfaction / 100) * 5).toFixed(1)}★.</>
+            )}
+            {' '}Per-route detail on each route's page.
+          </div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Reputation</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
             <span style={{ fontSize: 32, fontWeight: 800, color: scoreColor(rep.overall) }}>{rep.overall}</span>
             <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
           </div>
           <ScoreBar value={rep.overall} color={scoreColor(rep.overall)} />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            How much travelers trust the brand — demand{' '}
+            <span style={{ color: demandMultiplier >= 1 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+              {demandMultiplier >= 1 ? '+' : ''}{formatPercent(demandMultiplier - 1)}
+            </span>
+            {' '}· price sensitivity{' '}
+            <span style={{ color: elasticityReduction >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+              {elasticityReduction >= 0 ? '−' : '+'}{formatPercent(Math.abs(elasticityReduction))}
+            </span>
+          </div>
         </div>
         <div className="stat-box">
-          <div className="stat-label">Demand Bonus</div>
-          <div style={{ fontWeight: 700, fontSize: 20, marginTop: 4, color: demandMultiplier > 1 ? 'var(--green)' : demandMultiplier < 1 ? 'var(--red)' : 'var(--text-muted)' }}>
-            {demandMultiplier > 1 ? '+' : ''}{formatPercent(demandMultiplier - 1)}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>vs neutral airline</div>
-        </div>
-        <div className="stat-box">
-          <div className="stat-label">Price Sensitivity</div>
-          <div style={{ fontWeight: 700, fontSize: 20, marginTop: 4, color: elasticityReduction > 0 ? 'var(--green)' : elasticityReduction < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
-            {elasticityReduction >= 0 ? '−' : '+'}{formatPercent(Math.abs(elasticityReduction))}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>passengers less price-sensitive</div>
-        </div>
-        <div className="stat-box">
-          <div className="stat-label">Quality Score (demand)</div>
-          <div style={{ fontWeight: 700, fontSize: 20, marginTop: 4, color: scoreColor(rep.qualityDemandScore) }}>
-            {Math.round(rep.qualityDemandScore)}<span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>/100</span>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>as seen in demand model</div>
-        </div>
-        {state.satisfaction != null && (
-          <div className="stat-box">
-            <div className="stat-label">Passenger Satisfaction</div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor(state.satisfaction) }}>{Math.round(state.satisfaction)}</span>
-              <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
-            </div>
-            <ScoreBar value={state.satisfaction} color={scoreColor(state.satisfaction)} />
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              earned track record → customer rating {((state.satisfaction / 100) * 5).toFixed(1)}★
-            </div>
-          </div>
-        )}
-        <div className="stat-box">
-          <div className="stat-label">Brand Awareness</div>
+          <div className="stat-label">Awareness</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 4 }}>
-            <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor(awareness) }}>{Math.round(awareness)}</span>
+            <span style={{ fontSize: 32, fontWeight: 800, color: scoreColor(awareness) }}>{Math.round(awareness)}</span>
             <span style={{ fontSize: 14, color: 'var(--text-muted)', paddingBottom: 4 }}>/100</span>
           </div>
           <ScoreBar value={awareness} color={scoreColor(awareness)} />
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            Demand reach: <span style={{ color: scoreColor(awareness), fontWeight: 600 }}>{formatPercent(awarenessMultiplier - 1 + 1)}</span> of potential
+            How many travelers know you exist — reaching{' '}
+            <span style={{ color: scoreColor(awareness), fontWeight: 600 }}>{formatPercent(awarenessMultiplier)}</span>
+            {' '}of potential demand. Built by marketing &amp; flying.
           </div>
         </div>
       </div>
@@ -192,7 +185,7 @@ export default function Reputation() {
 
         {/* ── Score breakdown ── */}
         <div className="card" style={{ marginBottom: 0 }}>
-          <div className="card-title">Brand Drivers</div>
+          <div className="card-title">Reputation Drivers</div>
           <DimensionRow
             label="Service Quality"
             score={rep.service}
@@ -222,7 +215,7 @@ export default function Reputation() {
             tip={rep.morale < 60 ? 'Raise pay multipliers for struggling groups' : undefined}
           />
           <DimensionRow
-            label="Brand Awareness"
+            label="Awareness"
             score={Math.round(awareness)}
             icon="📣"
             detail={`${formatPercent(awarenessMultiplier)} of potential demand reached. Grows via passengers flown + brand marketing (with a lag); fades slowly without upkeep.`}
