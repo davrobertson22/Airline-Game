@@ -83,12 +83,14 @@ export function calcReputation(state, loyaltyBonus = 0, avgUtilization = null) {
   const avgCabinPoints = assignedFleet.length > 0
     ? assignedFleet.reduce((s, a) => s + cabinQualityPoints(a.config), 0) / assignedFleet.length
     : 0;
-  const qualityDemandScore = computeQualityScore({
+  // Ground staff bonus is quality POINTS added after scoring (as the engine
+  // does), not stars — adding it to the 0–5 rating inflated this by up to ~11.
+  const qualityDemandScore = Math.max(0, Math.min(100, computeQualityScore({
     onTimeRate:     effects.onTimeRate,
     cabinPoints:    avgCabinPoints,
     fleetAgeYears:  avgAgeYears,
-    customerRating: effects.customerRating + effects.groundQualityBonus,
-  });
+    customerRating: effects.customerRating,
+  }) + effects.groundQualityBonus));
 
   return { overall, service: serviceScore, fleet: fleetScore, network: networkScore, morale: moraleScore, qualityDemandScore, avgAgeYears, loyaltyBonus };
 }

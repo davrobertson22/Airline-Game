@@ -437,6 +437,14 @@ export function deliveredExperience({ fleet = [], routes = [], labor = null }, a
   const avgCabinPts = assigned.length > 0
     ? assigned.reduce((s, a) => s + cabinQualityPoints(a.config), 0) / assigned.length
     : 0;
+  // Spacious cabins build lasting goodwill too: average space bonus (empty
+  // floor → extra room per passenger) across assigned aircraft.
+  const avgSpacePts = assigned.length > 0
+    ? assigned.reduce((s, a) => {
+        const type = getAircraftType(a.typeId);
+        return s + (type ? configSpaceQualityBonus(a.config ?? defaultConfig(type.seats), type) : 0);
+      }, 0) / assigned.length
+    : 0;
   const avgAgeYears = assigned.length > 0
     ? assigned.reduce((s, a) => s + (a.ageWeeks ?? 0) / 52, 0) / assigned.length
     : 0;
@@ -449,7 +457,7 @@ export function deliveredExperience({ fleet = [], routes = [], labor = null }, a
 
   const otpPts   = onTimeRate * 40;                                            // 0–40
   const crewPts  = (cabinMorale / 100) * 22;                                   // 0–22
-  const cabinPts = Math.max(0, Math.min(24, 12 + (avgCabinPts + avgCatering) * 0.55)); // 0–24
+  const cabinPts = Math.max(0, Math.min(24, 12 + (avgCabinPts + avgCatering + avgSpacePts) * 0.55)); // 0–24
   const agePts   = Math.max(0, 14 - avgAgeYears * 1.1);                        // 0–14
   return Math.max(0, Math.min(100, Math.round(otpPts + crewPts + cabinPts + agePts)));
 }
@@ -1643,6 +1651,18 @@ export function weeklyTick(state) {
       const maturity = r0.weeksOpen != null ? routeMaturityFactor(r0.weeksOpen) : 1;
       const market   = buildRouteMarket(r0.origin, r0.destination, gameDate, maturity);
 
+      // Pair-level bonuses (same as the single-aircraft simulateRoute path):
+      // hub investment, catering (distance-amplified), ground staff. Previously
+      // the combined offer used ONLY the raw quality score — multi-aircraft
+      // routes silently lost up to ~30 pts of space/catering/ground/hub quality
+      // and the reputation/loyalty price-sensitivity shield in the share fight.
+      const groupDist   = routeDistanceKm(r0.origin, r0.destination);
+      const groupHubQ   = Math.max(
+        hubs[r0.origin]?.tier      ? (HUB_TIERS[hubs[r0.origin].tier]?.qualityBonus      ?? 0) : 0,
+        hubs[r0.destination]?.tier ? (HUB_TIERS[hubs[r0.destination].tier]?.qualityBonus ?? 0) : 0,
+      );
+      const fx = laborEffects(labor, avgUtilization, satisfaction);
+
       // Aggregate capacity across all aircraft in the group
       let totalEcoSeats = 0;
       let totalBizSeats = 0;
@@ -1662,13 +1682,18 @@ export function weeklyTick(state) {
         totalBizSeats += biz;
         totalSeatsAll += configBodies(cfg) * freq;
         totalFreq     += freq;
-        const fx = laborEffects(labor, avgUtilization, satisfaction);
-        totalQuality  += computeQualityScore({
+        const raw = computeQualityScore({
           onTimeRate:    fx.onTimeRate,
           cabinPoints:   cabinQualityPoints(cfg),
           fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52,
           customerRating: fx.customerRating,
         });
+        // Full per-aircraft quality with every bonus simulateRoute applies.
+        totalQuality += Math.max(0, Math.min(100,
+          raw + fx.groundQualityBonus
+          + configSpaceQualityBonus(cfg, type)
+          + cateringQualityBonus(normalizeCateringLevel(route.cateringLevel), groupDist)
+          + groupHubQ));
         if (biz > 0) hasBusinessCabin = true;
       }
 
@@ -1693,7 +1718,9 @@ export function weeklyTick(state) {
         totalSeats:        totalSeatsAll,
         qualityScore:      avgQuality,
         connectivityBonus: connBonus,
-        priceSensitivityReduction: r0.priceSensitivityReduction ?? 0,
+        // Reputation/loyalty price-sensitivity shield — same as single-aircraft
+        // routes get via sensReductionFor (was: always 0 for grouped routes).
+        priceSensitivityReduction: sensReductionFor(groupHubQ),
       };
 
       const competitorOffers = COMPETITOR_AIRLINES
