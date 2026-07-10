@@ -3,7 +3,7 @@ import {
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute,
-  loyaltyTier, loyaltyEnrollPull,
+  loyaltyTier, loyaltyEnrollPull, loyaltyPaxBase,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
@@ -1224,7 +1224,7 @@ function reducer(state, action) {
       const prevEff          = currentLoyalty.effInvestment ?? targetInvestment;
       const effInvestment    = Math.round(prevEff + (targetInvestment - prevEff) * 0.18);
 
-      const loyaltyWeeklyPax = report.totalPassengers ?? 0;
+      const loyaltyWeeklyPax = loyaltyPaxBase(state) || (report.totalPassengers ?? 0);
       const prevMaturity     = currentLoyalty.maturity ?? 0;
       let newLoyaltyMembers  = currentLoyalty.members ?? 0;
       let newMaturity        = prevMaturity;
@@ -1243,6 +1243,11 @@ function reducer(state, action) {
         const lapseRate = prevMaturity > 0.4 ? 0.97 : 0.988;
         newLoyaltyMembers = Math.round(newLoyaltyMembers * lapseRate);
         newMaturity = Math.max(0, prevMaturity - 1 / 20);
+      }
+      // Inactive members lapse toward 85% of a month's flyers (10%/wk of excess).
+      const loyaltyHardCap = Math.round(loyaltyWeeklyPax * 4 * 0.85);
+      if (loyaltyHardCap > 0 && newLoyaltyMembers > loyaltyHardCap) {
+        newLoyaltyMembers = Math.round(loyaltyHardCap + (newLoyaltyMembers - loyaltyHardCap) * 0.90);
       }
       const newPointsLiability = report.loyaltyLiability ?? currentLoyalty.pointsLiability ?? 0;
       const updatedLoyalty = {
@@ -1529,6 +1534,7 @@ function reducer(state, action) {
         year:        state.year,
         cash:        newCash,
         revenue:     report.totalRevenue,
+        passengers:  report.totalPassengers ?? 0,
         leases:      report.totalLeases,
         maintenance: report.totalMaintenance,
         fuel:        report.totalFuel,
