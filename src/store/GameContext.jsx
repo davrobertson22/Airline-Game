@@ -61,7 +61,7 @@ import { initialObjectives, initialObjectivesForState, checkObjectives, getObjec
 // STATE SHAPE
 // ─────────────────────────────────────────────
 
-const STARTING_CASH = 10_000_000;
+const STARTING_CASH = 15_000_000;
 
 function freshState() {
   return {
@@ -98,6 +98,8 @@ function freshState() {
       weeklyInvestment: 0,   // weekly $ spend on loyalty program (the set budget)
       effInvestment: 0,      // ramped "effective" budget — eases toward weeklyInvestment
       members: 0,            // current active members
+      maturity: 0,           // 0–1 program maturity — grows over ~18 months funded, gates all effects
+      pointsLiability: 0,    // $ value of outstanding unredeemed points (balance-sheet debt)
     },
     financialHistory: [],  // last 52 weeks of reports
     lastReport: null,
@@ -186,7 +188,7 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'START_GAME': {
-      // Startup capital: $10M of founders' EQUITY (see STARTING_CASH in freshState).
+      // Startup capital: $15M of founders' EQUITY (see STARTING_CASH in freshState).
       // It is not a loan — there is no debt to service at launch, giving new airlines
       // breathing room to reach profitability. Players can borrow from the bank later.
       return {
@@ -1670,21 +1672,27 @@ function reducer(state, action) {
 
       const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments });
 
-      // ── Loyalty program: grow/decay member base ──────────────────────────
+      // ── Loyalty program: grow/decay member base + maturity + points debt ──
       // Penetration-based S-curve. Enrollment slows as the base approaches the
-      // tier's penetration ceiling (you can't enrol people who already belong),
-      // so reaching a deep, mature program takes sustained investment in a high
-      // tier rather than being an instant win. A ramped "effective" budget gives
-      // the dial inertia so changing it isn't a light switch.
-      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0, effInvestment: 0 };
+      // tier's penetration ceiling (you can't enrol people who already belong).
+      // MATURITY compounds slowly (~18 months funded to reach 1.0) and gates
+      // all demand-side effects, so the program pays off long after sign-ups
+      // plateau. A ramped "effective" budget gives the dial inertia so changing
+      // it isn't a light switch.
+      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0, effInvestment: 0, maturity: 0, pointsLiability: 0 };
       const targetInvestment = currentLoyalty.weeklyInvestment ?? 0;
       const prevEff          = currentLoyalty.effInvestment ?? targetInvestment;
       // Ease ~18%/week toward the set budget (≈63% of a change felt after 5 weeks).
       const effInvestment    = Math.round(prevEff + (targetInvestment - prevEff) * 0.18);
 
       const loyaltyWeeklyPax = report.totalPassengers ?? 0;
+      const prevMaturity     = currentLoyalty.maturity ?? 0;
       let newLoyaltyMembers  = currentLoyalty.members ?? 0;
-      if (effInvestment > 0 && loyaltyWeeklyPax > 0) {
+      let newMaturity        = prevMaturity;
+      // Funding is judged on the SET budget (what's actually being paid), not
+      // the ramped effective budget — otherwise a cancelled program would keep
+      // enrolling and maturing for free while the ramp winds down.
+      if (targetInvestment > 0 && effInvestment > 0 && loyaltyWeeklyPax > 0) {
         const tier      = loyaltyTier(effInvestment);
         const enrollPull = loyaltyEnrollPull(effInvestment);
         const ceiling   = tier.maxPenetration * loyaltyWeeklyPax * 4;   // max members this tier sustains
@@ -1692,11 +1700,26 @@ function reducer(state, action) {
         const newEnrollments = Math.round(loyaltyWeeklyPax * enrollPull * headroom);
         // 0.4% weekly churn when funded — real frequent-flyer accounts are sticky.
         newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.996 + newEnrollments);
+        // Maturity grows at the tier's pace (~80 funded weeks at Gold).
+        newMaturity = Math.min(1, prevMaturity + (tier.maturityFactor ?? 1) / 80);
       } else {
-        // Program unfunded: 1.2% weekly decay (gradual lapse, not a cliff).
-        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.988);
+        // Program unfunded: members lapse — and if the program was mature, the
+        // betrayal cuts deeper (status flyers defect to rivals fast). Maturity
+        // itself unwinds in ~20 weeks: trust is torn down 4× faster than built.
+        const lapseRate = prevMaturity > 0.4 ? 0.97 : 0.988;
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * lapseRate);
+        newMaturity = Math.max(0, prevMaturity - 1 / 20);
       }
-      const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers), effInvestment };
+      // Outstanding points liability was advanced by the engine this week
+      // (earn accrual minus redemptions/breakage) — persist the new stock.
+      const newPointsLiability = report.loyaltyLiability ?? currentLoyalty.pointsLiability ?? 0;
+      const updatedLoyalty = {
+        ...currentLoyalty,
+        members: Math.max(0, newLoyaltyMembers),
+        effInvestment,
+        maturity: newMaturity,
+        pointsLiability: newPointsLiability,
+      };
 
       // ── Awareness: grows from operations + marketing, decays without activity ──
       // Organic: passengers flying builds word-of-mouth. Marketing accelerates growth.
@@ -2673,8 +2696,15 @@ function reconcileState(parsed) {
     loans:            parsed.loans            ?? [],
     hedgeContracts:   parsed.hedgeContracts   ?? [],
     loyalty:          parsed.loyalty
-      ? { effInvestment: parsed.loyalty.weeklyInvestment ?? 0, ...parsed.loyalty }
-      : { weeklyInvestment: 0, effInvestment: 0, members: 0 },
+      ? {
+          effInvestment: parsed.loyalty.weeklyInvestment ?? 0,
+          // Migration for pre-maturity saves: an established member base gets
+          // credit for half-built trust rather than resetting to zero.
+          maturity: parsed.loyalty.maturity ?? ((parsed.loyalty.members ?? 0) > 0 ? 0.5 : 0),
+          pointsLiability: parsed.loyalty.pointsLiability ?? 0,
+          ...parsed.loyalty,
+        }
+      : { weeklyInvestment: 0, effInvestment: 0, members: 0, maturity: 0, pointsLiability: 0 },
     fuelPrice:        parsed.fuelPrice        ?? { index: 1.0, history: [] },
     allianceMembership:       parsed.allianceMembership       ?? null,
     codeshareAgreements:      parsed.codeshareAgreements      ?? [],

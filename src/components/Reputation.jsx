@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyReputationBonus, fleetAvgUtilization } from '../utils/simulation.js';
+import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyEffectiveStrength, loyaltyReputationBonus, fleetAvgUtilization } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
@@ -88,7 +88,10 @@ export default function Reputation() {
 
   const rep = useMemo(() => calcReputation(
     state,
-    loyaltyReputationBonus(loyaltyPenetration(state.loyalty?.members ?? 0, state.lastReport?.totalPassengers ?? 0)),
+    loyaltyReputationBonus(loyaltyEffectiveStrength(
+      loyaltyPenetration(state.loyalty?.members ?? 0, state.lastReport?.totalPassengers ?? 0),
+      state.loyalty?.maturity ?? 0,
+    )),
     fleetAvgUtilization(fleet ?? [], [...(routes ?? []), ...(state.cargoRoutes ?? [])]),
   ), [state]);  // eslint-disable-line
   const pos = useMemo(() => calcPositioning(state), [state]);

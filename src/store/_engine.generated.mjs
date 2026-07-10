@@ -45,7 +45,7 @@ import { initialObjectives, initialObjectivesForState, checkObjectives, getObjec
 // STATE SHAPE
 // ─────────────────────────────────────────────
 
-const STARTING_CASH = 10_000_000;
+const STARTING_CASH = 15_000_000;
 
 function freshState() {
   return {
@@ -163,7 +163,7 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'START_GAME': {
-      // Startup capital: $10M of founders' EQUITY (see STARTING_CASH in freshState).
+      // Startup capital: $15M of founders' EQUITY (see STARTING_CASH in freshState).
       // It is not a loan — there is no debt to service at launch, giving new airlines
       // breathing room to reach profitability. Players can borrow from the bank later.
       return {
@@ -1217,20 +1217,19 @@ function reducer(state, action) {
 
       const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments });
 
-      // ── Loyalty program: grow/decay member base ──────────────────────────
-      // Penetration-based S-curve. Enrollment slows as the base approaches the
-      // tier's penetration ceiling (you can't enrol people who already belong),
-      // so reaching a deep, mature program takes sustained investment in a high
-      // tier rather than being an instant win. A ramped "effective" budget gives
-      // the dial inertia so changing it isn't a light switch.
-      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0, effInvestment: 0 };
+      // ── Loyalty program: grow/decay member base + maturity + points debt ──
+      // Mirrors GameContext.jsx — keep in sync.
+      const currentLoyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0, effInvestment: 0, maturity: 0, pointsLiability: 0 };
       const targetInvestment = currentLoyalty.weeklyInvestment ?? 0;
       const prevEff          = currentLoyalty.effInvestment ?? targetInvestment;
       const effInvestment    = Math.round(prevEff + (targetInvestment - prevEff) * 0.18);
 
       const loyaltyWeeklyPax = report.totalPassengers ?? 0;
+      const prevMaturity     = currentLoyalty.maturity ?? 0;
       let newLoyaltyMembers  = currentLoyalty.members ?? 0;
-      if (effInvestment > 0 && loyaltyWeeklyPax > 0) {
+      let newMaturity        = prevMaturity;
+      // Funding is judged on the SET budget, not the ramped effective budget.
+      if (targetInvestment > 0 && effInvestment > 0 && loyaltyWeeklyPax > 0) {
         const tier      = loyaltyTier(effInvestment);
         const enrollPull = loyaltyEnrollPull(effInvestment);
         const ceiling   = tier.maxPenetration * loyaltyWeeklyPax * 4;   // max members this tier sustains
@@ -1238,11 +1237,21 @@ function reducer(state, action) {
         const newEnrollments = Math.round(loyaltyWeeklyPax * enrollPull * headroom);
         // 0.4% weekly churn when funded — real frequent-flyer accounts are sticky.
         newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.996 + newEnrollments);
+        newMaturity = Math.min(1, prevMaturity + (tier.maturityFactor ?? 1) / 80);
       } else {
-        // Program unfunded: 1.2% weekly decay (gradual lapse, not a cliff).
-        newLoyaltyMembers = Math.round(newLoyaltyMembers * 0.988);
+        // Unfunded: members lapse — a mature program collapses faster (betrayal).
+        const lapseRate = prevMaturity > 0.4 ? 0.97 : 0.988;
+        newLoyaltyMembers = Math.round(newLoyaltyMembers * lapseRate);
+        newMaturity = Math.max(0, prevMaturity - 1 / 20);
       }
-      const updatedLoyalty = { ...currentLoyalty, members: Math.max(0, newLoyaltyMembers), effInvestment };
+      const newPointsLiability = report.loyaltyLiability ?? currentLoyalty.pointsLiability ?? 0;
+      const updatedLoyalty = {
+        ...currentLoyalty,
+        members: Math.max(0, newLoyaltyMembers),
+        effInvestment,
+        maturity: newMaturity,
+        pointsLiability: newPointsLiability,
+      };
 
       // ── Awareness: grows from operations + marketing, decays without activity ──
       // Organic: passengers flying builds word-of-mouth. Marketing accelerates growth.

@@ -1343,14 +1343,21 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
 // ─────────────────────────────────────────────
 // LOYALTY PROGRAM MODEL
 // ─────────────────────────────────────────────
-// Every loyalty effect scales with MEMBER PENETRATION — the share of your own
-// flyers who are members — rather than an absolute member count. This keeps the
-// milestones meaningful at any airline size (a 100k-member program is elite for
-// a small carrier and trivial for a giant one) and makes the program a slow,
-// expensive asset to mature rather than a week-one freebie.
-//
-// Penetration is members / (4 weeks of passengers) — i.e. roughly the fraction
-// of a month's travellers carrying your card. It saturates at 1.0.
+// Loyalty is a slow-compounding ASSET, not a slider you profit from instantly.
+// Three stocks drive it:
+//   PENETRATION — share of your own flyers enrolled (members / 4 wks of pax).
+//   MATURITY    — 0→1 over ~18 months of continuous funding. New programs are
+//                 shallow: a member card means little until members have status,
+//                 history and a points balance worth protecting. All demand-side
+//                 effects scale with penetration × maturity, so the payoff is
+//                 heavily back-loaded even after sign-ups plateau.
+//   POINTS LIABILITY — a real balance-sheet debt. Members earn points now (a %
+//                 of member revenue accrues to the liability) and redeem them
+//                 over the following months as award seats — a genuine cost that
+//                 arrives LATER. Breakage (points that expire unused) is where a
+//                 well-run program eventually finds its margin.
+// Net effect: the program costs real money for its first year-plus and only
+// pays for itself once maturity unlocks the full demand shield.
 
 export function loyaltyPenetration(members, weeklyPassengers) {
   if (!weeklyPassengers || weeklyPassengers <= 0) return 0;
@@ -1358,45 +1365,77 @@ export function loyaltyPenetration(members, weeklyPassengers) {
 }
 
 // Investment tier → program quality. Higher tiers unlock a higher achievable
-// penetration CEILING (how deep into your base you can sign people up) and pay
-// richer rewards (generosity drives the points-redemption cost). The tier sets
-// where the program can go; the weekly budget sets how fast it gets there.
+// penetration CEILING, richer rewards (generosity drives points earn), HIGHER
+// EFFECT CAPS (demandCap / sensCap — the reason Elite exists), and faster
+// maturity growth (maturityFactor).
 export function loyaltyTier(weeklyInvestment) {
   const inv = weeklyInvestment ?? 0;
-  if (inv <= 0)        return { label: 'None',   maxPenetration: 0,    generosity: 0    };
-  if (inv < 100_000)   return { label: 'Basic',  maxPenetration: 0.15, generosity: 0.85 };
-  if (inv < 250_000)   return { label: 'Silver', maxPenetration: 0.30, generosity: 1.00 };
-  if (inv < 500_000)   return { label: 'Gold',   maxPenetration: 0.45, generosity: 1.15 };
-  return                      { label: 'Elite',  maxPenetration: 0.60, generosity: 1.30 };
+  if (inv <= 0)        return { label: 'None',   maxPenetration: 0,    generosity: 0,    demandCap: 0,     sensCap: 0,    maturityFactor: 0    };
+  if (inv < 100_000)   return { label: 'Basic',  maxPenetration: 0.15, generosity: 0.85, demandCap: 0.05,  sensCap: 0.08, maturityFactor: 0.60 };
+  if (inv < 250_000)   return { label: 'Silver', maxPenetration: 0.30, generosity: 1.00, demandCap: 0.075, sensCap: 0.11, maturityFactor: 0.85 };
+  if (inv < 500_000)   return { label: 'Gold',   maxPenetration: 0.45, generosity: 1.15, demandCap: 0.10,  sensCap: 0.15, maturityFactor: 1.00 };
+  return                      { label: 'Elite',  maxPenetration: 0.60, generosity: 1.30, demandCap: 0.125, sensCap: 0.18, maturityFactor: 1.15 };
 }
 
 // Per-week enrollment pull as a fraction of passengers flown, driven by budget.
-// Continuous in spend so the slider still matters; the S-curve ceiling (above)
-// is what ultimately bounds the program.
+// Deliberately slow — a program should take the better part of a year to fill,
+// not a fiscal quarter.
 export function loyaltyEnrollPull(weeklyInvestment) {
-  return Math.min(0.25, (weeklyInvestment ?? 0) / 2_000_000);
+  return Math.min(0.12, (weeklyInvestment ?? 0) / 4_000_000);
+}
+
+// Maturity growth: 0→1 in ~80 funded weeks at Gold pace (maturityFactor 1.0);
+// Elite matures ~15% faster, Basic ~40% slower. Unfunded programs decay in
+// ~20 weeks — members drift away far faster than trust was built.
+export const LOYALTY_MATURITY_WEEKS = 80;
+export const LOYALTY_MATURITY_DECAY = 1 / 20;
+
+// Effective program strength — the single number every demand-side effect keys
+// off. A brand-new program delivers only 25% of its penetration's potential;
+// full value requires full maturity.
+export function loyaltyEffectiveStrength(penetration, maturity) {
+  return (penetration ?? 0) * (0.25 + 0.75 * Math.min(1, Math.max(0, maturity ?? 0)));
 }
 
 // Demand stability boost (retained price-defectors). Concentrated on hub routes
-// by the caller; this is the full hub-route figure. Cap +10%, reached near 40%
-// penetration.
-export function loyaltyDemandBoostPct(penetration) {
-  return Math.min(0.10, 0.25 * (penetration ?? 0));
+// by the caller; this is the full hub-route figure. Cap set by tier.
+export function loyaltyDemandBoostPct(strength, tier) {
+  return Math.min(tier?.demandCap ?? 0.10, 0.25 * (strength ?? 0));
 }
 
-// Effective price-sensitivity reduction members confer. Cap 15%, near maturity.
-export function loyaltyPriceSensitivityReduction(penetration) {
-  return Math.min(0.15, 0.35 * (penetration ?? 0));
+// Effective price-sensitivity reduction members confer. Cap set by tier.
+export function loyaltyPriceSensitivityReduction(strength, tier) {
+  return Math.min(tier?.sensCap ?? 0.15, 0.35 * (strength ?? 0));
 }
 
-// Brand/reputation bonus: only a deep, mature program earns the full +8. Linear
-// in penetration, full value at ~45% penetration (a Gold+ program at scale).
-export function loyaltyReputationBonus(penetration) {
-  return Math.min(8, Math.round(8 * ((penetration ?? 0) / 0.45)));
+// Brand/reputation bonus: only a deep, MATURE program earns the full +8.
+// Full value at strength ≈ 0.40 (e.g. 53% penetration at full maturity).
+export function loyaltyReputationBonus(strength) {
+  return Math.max(0, Math.min(8, Math.round(8 * ((strength ?? 0) / 0.40))));
 }
 
-// Points-redemption cost as a share of revenue. Scales with penetration AND tier
-// generosity (richer programs give more away). Real programs run ~2–4%; cap 4%.
+// ── Points economics ──
+// Members earn points worth LOYALTY_EARN_RATE × member-attributable revenue
+// (member revenue ≈ total revenue × penetration), scaled by tier generosity.
+// That value accrues to the liability. Each week ~LOYALTY_REDEEM_RATE of the
+// outstanding liability is drawn down: most becomes award-seat cost on the
+// P&L, LOYALTY_BREAKAGE expires unused (free liability relief).
+export const LOYALTY_EARN_RATE   = 0.09;   // points value earned / member revenue
+export const LOYALTY_REDEEM_RATE = 0.035;  // share of liability drawn per week
+export const LOYALTY_BREAKAGE    = 0.20;   // share of drawn points that expire
+
+export function loyaltyPointsFlows(liability, totalRevenue, penetration, generosity) {
+  const lia     = Math.max(0, liability ?? 0);
+  const earned  = Math.round(Math.max(0, totalRevenue ?? 0) * (penetration ?? 0) * LOYALTY_EARN_RATE * (generosity || 0));
+  const drawn   = Math.round(lia * LOYALTY_REDEEM_RATE);
+  const expired = Math.round(drawn * LOYALTY_BREAKAGE);
+  const redeemedCost = drawn - expired;              // real award-seat cost this week
+  const newLiability = Math.max(0, lia + earned - drawn);
+  return { earned, redeemedCost, expired, newLiability };
+}
+
+// Legacy flat redemption-cost curve — kept only for save-file back-compat
+// estimates in old reports; the engine now uses loyaltyPointsFlows.
 export function loyaltyPointsCostPct(penetration, generosity) {
   return Math.min(0.04, 0.06 * (penetration ?? 0) * (generosity || 1));
 }
@@ -1583,15 +1622,18 @@ export function weeklyTick(state) {
 
   // Loyalty demand effect: members are less price-sensitive, so the player
   // retains more of them even when competitors undercut. The size of the effect
-  // scales with member PENETRATION (share of our own flyers enrolled), using
-  // last week's passenger count as the base. It is CONCENTRATED on hub routes —
-  // where frequent flyers actually have a captive relationship — and diluted on
-  // off-hub leisure routes where people buy on price regardless.
+  // scales with member PENETRATION × program MATURITY (see loyalty model above),
+  // using last week's passenger count as the base. It is CONCENTRATED on hub
+  // routes — where frequent flyers actually have a captive relationship — and
+  // diluted on off-hub leisure routes where people buy on price regardless.
   const loyaltyMembers      = loyalty?.members ?? 0;
   const loyaltyPaxBase      = state.lastReport?.totalPassengers ?? 0;
   const loyaltyPenet        = loyaltyPenetration(loyaltyMembers, loyaltyPaxBase);
-  const loyaltyBoostHub     = loyaltyDemandBoostPct(loyaltyPenet);   // full, hub routes
-  const loyaltyBoostOffHub  = loyaltyBoostHub * 0.4;                 // diluted, off-hub
+  const loyaltyMaturity     = loyalty?.maturity ?? 0;
+  const loyaltyStrength     = loyaltyEffectiveStrength(loyaltyPenet, loyaltyMaturity);
+  const loyaltyTierNow      = loyaltyTier(loyalty?.effInvestment ?? loyalty?.weeklyInvestment ?? 0);
+  const loyaltyBoostHub     = loyaltyDemandBoostPct(loyaltyStrength, loyaltyTierNow); // full, hub routes
+  const loyaltyBoostOffHub  = loyaltyBoostHub * 0.4;                                  // diluted, off-hub
   // Headline multiplier reported to the UI is the hub-route ("up to") figure,
   // consistent with how marketing/awareness lifts are surfaced.
   const loyaltyMultiplier   = 1 + loyaltyBoostHub;
@@ -1599,13 +1641,13 @@ export function weeklyTick(state) {
   // Reputation: brand trust nudges demand (±7.5%) and — together with the
   // loyalty program — blunts passengers' price sensitivity. These are the same
   // figures the Reputation page displays; they now actually feed the engine.
-  const repInfo          = calcReputation(state, loyaltyReputationBonus(loyaltyPenet), avgUtilization);
+  const repInfo          = calcReputation(state, loyaltyReputationBonus(loyaltyStrength), avgUtilization);
   const reputationMult   = reputationDemandMultiplier(repInfo.overall);
   const repElasticityRed = reputationElasticityReduction(repInfo.overall);
   // Combined price-sensitivity reduction for player offers. Loyalty's share is
   // concentrated on hub routes (captive frequent flyers), diluted off-hub.
   const sensReductionFor = (hubQ) => Math.max(-0.2, Math.min(0.35,
-    repElasticityRed + loyaltyPriceSensitivityReduction(loyaltyPenet) * (hubQ > 0 ? 1 : 0.4)
+    repElasticityRed + loyaltyPriceSensitivityReduction(loyaltyStrength, loyaltyTierNow) * (hubQ > 0 ? 1 : 0.4)
   ));
 
   // NOTE: no instant marketing multiplier — spend feeds the awareness stock
@@ -2175,17 +2217,18 @@ export function weeklyTick(state) {
 
   // 10. Loyalty program costs:
   //   - Weekly investment (technology, partnerships, admin)
-  //   - Points redemption / award seat cost: up to 3.5% of revenue at full membership.
-  //   Real programs run 2–4% of revenue; 3.5% cap is realistic for a large mature program.
+  //   - Points flows: members EARN points now (accrues to the liability stock),
+  //     and outstanding points are REDEEMED over the following months as award
+  //     seats — that draw-down (minus breakage) is the real weekly cost.
+  //   A program that stops being funded still owes its outstanding points.
   const loyaltyInvestment = loyalty?.weeklyInvestment ?? 0;
-  // Redemption cost scales with penetration AND how generous the current tier is.
-  // A program kept alive with members but zero budget still honours outstanding
-  // points, so fall back to a baseline generosity when members remain.
   const loyaltyGenerosity = loyaltyTier(loyaltyInvestment).generosity
     || (loyaltyMembers > 0 ? 0.85 : 0);
-  const loyaltyPointsCost = loyaltyMembers > 0
-    ? Math.round(totalRevenue * loyaltyPointsCostPct(loyaltyPenet, loyaltyGenerosity))
-    : 0;
+  const loyaltyPrevLiability = Math.max(0, loyalty?.pointsLiability ?? 0);
+  const loyaltyFlows = (loyaltyMembers > 0 || loyaltyPrevLiability > 0)
+    ? loyaltyPointsFlows(loyaltyPrevLiability, totalRevenue, loyaltyPenet, loyaltyGenerosity)
+    : { earned: 0, redeemedCost: 0, expired: 0, newLiability: 0 };
+  const loyaltyPointsCost = loyaltyFlows.redeemedCost;
   const totalLoyaltyCost  = loyaltyInvestment + loyaltyPointsCost;
 
   // 11. Alliance & codeshare partnerships
@@ -2264,6 +2307,11 @@ export function weeklyTick(state) {
       entries:      (ownMetalOD?.entries ?? []).slice(0, 40),
     },
     loyaltyMultiplier,
+    loyaltyStrength,                                   // penetration × maturity factor
+    loyaltyPointsEarned:    Math.round(loyaltyFlows.earned),
+    loyaltyPointsCost:      Math.round(loyaltyPointsCost),
+    loyaltyPointsExpired:   Math.round(loyaltyFlows.expired),
+    loyaltyLiability:       Math.round(loyaltyFlows.newLiability), // for the reducer to persist
     awarenessMultiplier,
     reputationMultiplier:   reputationMult,
     reputationScore:        repInfo.overall,
