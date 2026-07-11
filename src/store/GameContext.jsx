@@ -1697,12 +1697,14 @@ function reducer(state, action) {
       const allEvents  = [...survivingEvents, ...newEvents];
 
       // ── Compute event effects on this week's finances ──────────────────
-      let fuelMult         = 1.0;
-      let globalDemandMult = 1.0;
+      // Fuel shocks scale the fuel multiplier below. Demand shocks (global +
+      // regional) are applied INSIDE weeklyTick — they shrink each route's
+      // passenger pool so load factors genuinely drop, rather than skimming a
+      // flat revenue adjustment off fully-booked flights.
+      let fuelMult = 1.0;
       for (const ev of allEvents) {
         const fx = ev.effects ?? {};
-        if (fx.fuelMult)         fuelMult         *= fx.fuelMult;
-        if (fx.globalDemandMult) globalDemandMult *= fx.globalDemandMult;
+        if (fx.fuelMult) fuelMult *= fx.fuelMult;
       }
 
       // ── Fuel price + hedging ──────────────────────────────────────────
@@ -1784,7 +1786,7 @@ function reducer(state, action) {
         encroachments: state.encroachments ?? {},
       });
 
-      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments });
+      const report = weeklyTick({ ...state, fleet: tickedFleetPre, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments, activeEvents: allEvents });
 
       // ── Loyalty program: grow/decay member base + maturity + points debt ──
       // Penetration-based S-curve. Enrollment slows as the base approaches the
@@ -1879,22 +1881,24 @@ function reducer(state, action) {
         if (next >= 0.5) newCampaigns[code] = Math.min(100, +next.toFixed(2));
       }
 
-      // Apply event demand multiplier as a line-item adjustment to the report.
-      // (fuelMult is already baked into fuelMultiplier above, so no separate fuel adj needed.)
-      const eventDemandAdj  = report.totalRevenue ? report.totalRevenue * (globalDemandMult - 1.0) : 0;
+      // Event demand shocks are baked into report revenue by weeklyTick (they
+      // shrink each route's passenger pool). The old flat line-item adjustment
+      // is retired; the field is kept at 0 so saved-history charts that add
+      // eventDemandAdj back into revenue keep reconciling for old saves.
+      const eventDemandAdj  = 0;
 
       // ── Strike in progress: cancelled flights forfeit a share of revenue ──
       // The walkout that started in a previous week applies to THIS week's
-      // schedule. Applied as a line-item revenue loss (same pattern as
-      // eventDemandAdj) so cash still reconciles: fixed costs keep running
-      // while the picket line is up — that is the pain of a strike.
+      // schedule. Applied as a line-item revenue loss so cash still
+      // reconciles: fixed costs keep running while the picket line is up —
+      // that is the pain of a strike.
       const relationsPrev = state.laborRelations ?? DEFAULT_LABOR_RELATIONS;
       const activeStrike  = relationsPrev.strike && relationsPrev.strike.weeksLeft > 0
         ? relationsPrev.strike : null;
       const strikeRevenueLoss = activeStrike && report.totalRevenue
         ? Math.round(report.totalRevenue * activeStrike.severity) : 0;
 
-      const adjustedCashDelta = report.cashDelta + eventDemandAdj - strikeRevenueLoss;
+      const adjustedCashDelta = report.cashDelta - strikeRevenueLoss;
 
       // agingRate and tickedFleet were computed before weeklyTick above.
       const mainBudget = mainBudgetPre;

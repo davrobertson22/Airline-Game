@@ -11,6 +11,7 @@ import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
+  buildEventDemandModel,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -168,8 +169,13 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const refP          = referencePrice(origin, dest);
   const routeKey      = [origin, dest].sort().join('-');
 
-  // Market
-  const market      = useMemo(() => buildRouteMarket(origin, dest, gameDate), [origin, dest, gameDate.month]);
+  // Market — scaled by any active world-event demand shock (pandemic, regional
+  // disruption...) so the detail page matches what the engine actually books.
+  const eventDemand = useMemo(() => buildEventDemandModel(state.activeEvents), [state.activeEvents]);
+  const market      = useMemo(
+    () => buildRouteMarket(origin, dest, gameDate, 1, eventDemand.multFor(origin, dest)),
+    [origin, dest, gameDate.month, eventDemand]
+  );
   const totalDemand = market.leisureDemand + market.businessDemand;
 
   // Player routes on this pair (either direction)
@@ -315,7 +321,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       const result = simulateRoute(route, aircraft, gameDate, state.labor ?? null, 1.0,
         demandAllocations.get(aircraft.id) ?? null, [],
         fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
-        state.satisfaction ?? null);
+        state.satisfaction ?? null, eventDemand.multFor(origin, dest));
       if (!result) return [];
       const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
         : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
@@ -323,7 +329,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       return [{ route, aircraft, type, result: { ...result, weeklyLeaseCost, weeklyMaintCost,
         trueProfit: result.revenue - (result.totalOpCost ?? 0) - weeklyLeaseCost - weeklyMaintCost } }];
     });
-  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults, rrById]);
+  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults, rrById, eventDemand]);
 
   // result.passengers is one-way (per direction) — directly comparable to market demand.
   const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);
