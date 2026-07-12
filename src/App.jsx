@@ -394,6 +394,9 @@ function AppInner() {
             screen space. */}
         <footer className="app-footer app-footer-inline">
           <div style={{ marginBottom: 8 }}>
+            {!remote && (
+              <a href="/?home" style={{ color: 'var(--accent)', textDecoration: 'none', marginRight: 16, fontSize: 12, fontWeight: 600 }}>← Home</a>
+            )}
             {[
               ['How to Play', '/how-to-play.html'],
               ['Strategy Guide', '/strategy.html'],
