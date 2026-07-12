@@ -13,7 +13,9 @@
     <script>
       (function () {
         try {
-          if (localStorage.getItem('bbae_save_v2')) {
+          // Allow ?home / #home to force the landing even for returning players.
+          var wantHome = /[?&]home(=|&|$)/.test(location.search) || location.hash === '#home';
+          if (!wantHome && localStorage.getItem('bbae_save_v2')) {
             document.documentElement.setAttribute('data-skip-landing', '1');
           }
         } catch (e) { /* show landing on any error */ }
