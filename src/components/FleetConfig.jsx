@@ -1,6 +1,7 @@
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useState } from 'react';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
+import InfoTip from './InfoTip.jsx';
 import { useGame } from '../store/GameContext.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import {
@@ -170,10 +171,13 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
 
         {/* Cabin Layout */}
         <div style={{ marginBottom: 22 }}>
-          <div className="card-title">Cabin Layout</div>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            Cabin Layout
+            <InfoTip text="Any mix works, including all-premium. Premium cabins earn more per seat but each route only has so many premium flyers: overdo it and those seats fly empty. Leaving floor space unused adds range and comfort." />
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-            Set each cabin's seat count. Leaving floor space empty trades seats for more
-            range and a roomier, higher-quality cabin. Each seat moved costs $2,500 to refit.
+            Set seats per cabin, or hit Max to fill the remaining floor with one class.
+            Refits cost $2,500 per seat moved.
           </div>
 
           <CabinTemplatePicker
@@ -185,7 +189,8 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
           <ClassInput
             label="First Class"
             fareLabel={`${CLASS_FARE_MULTIPLIERS.firstClass}× fare`}
-            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.firstClass}× floor space`}
+            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.firstClass}× space`}
+            revPerSpace={(CLASS_FARE_MULTIPLIERS.firstClass / CLASS_SPACE_MULTIPLIERS.firstClass).toFixed(1)}
             value={first}
             max={Math.floor((maxSeats - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy) / CLASS_SPACE_MULTIPLIERS.firstClass)}
             onChange={v => setFirst(v)}
@@ -194,7 +199,8 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
           <ClassInput
             label="Business Class"
             fareLabel={`${CLASS_FARE_MULTIPLIERS.businessClass}× fare`}
-            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.businessClass}× floor space`}
+            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.businessClass}× space`}
+            revPerSpace={(CLASS_FARE_MULTIPLIERS.businessClass / CLASS_SPACE_MULTIPLIERS.businessClass).toFixed(1)}
             value={biz}
             max={Math.floor((maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy) / CLASS_SPACE_MULTIPLIERS.businessClass)}
             onChange={v => setBiz(v)}
@@ -203,7 +209,8 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
           <ClassInput
             label="Premium Economy"
             fareLabel={`${CLASS_FARE_MULTIPLIERS.premiumEconomy}× fare`}
-            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.premiumEconomy}× floor space`}
+            spaceLabel={`${CLASS_SPACE_MULTIPLIERS.premiumEconomy}× space`}
+            revPerSpace={(CLASS_FARE_MULTIPLIERS.premiumEconomy / CLASS_SPACE_MULTIPLIERS.premiumEconomy).toFixed(1)}
             value={prem}
             max={Math.floor((maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass) / CLASS_SPACE_MULTIPLIERS.premiumEconomy)}
             onChange={v => setPrem(v)}
@@ -214,20 +221,13 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
           <ClassInput
             label="Economy"
             fareLabel="1× fare"
-            spaceLabel="1× floor space"
+            spaceLabel="1× space"
+            revPerSpace="1.0"
             value={eco}
             max={ecoMax}
             onChange={v => setEcoSeats(v)}
             color="#38d39f"
           />
-          {eco < ecoMax && (
-            <button
-              onClick={() => setEcoSeats(ecoMax)}
-              style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px 24px' }}
-            >
-              ↥ Fill remaining floor ({ecoMax - eco} more economy seats)
-            </button>
-          )}
 
           {/* Seat unit bar — width proportional to floor space used; empty floor shown grey */}
           <div style={{ marginTop: 4 }}>
@@ -269,9 +269,12 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
 
         {/* Quality */}
         <div style={{ marginBottom: 22 }}>
-          <div className="card-title">Cabin Quality</div>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            Cabin Quality
+            <InfoTip text="Classes decide the layout; quality decides the product in every one of those seats. Seat quality is the hardware (slimline vs. plush), service quality is the soft product (crew, amenities). Both lift demand at a cost." />
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-            Upgrading or downgrading quality costs $30,000 per tier change and affects passenger demand.
+            Applies across the whole aircraft. Changing a tier costs $30,000 and shifts passenger demand.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <QualityPicker
@@ -306,7 +309,7 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
             />
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            Premium classes earn more per seat but serve a smaller share of total route demand — pack too many and they'll fly empty.
+            Premium seats earn more but draw from a smaller pool of flyers. Pack in too many and they fly empty.
           </div>
         </div>
 
@@ -355,24 +358,40 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function ClassInput({ label, fareLabel, spaceLabel, value, max, onChange, color }) {
+function ClassInput({ label, fareLabel, spaceLabel, revPerSpace, value, max, onChange, color }) {
+  const clamp = v => Math.min(max, Math.max(0, v));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
       <div style={{ width: 12, height: 12, borderRadius: 2, background: color, flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13 }}>{label}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fareLabel} · {spaceLabel}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {fareLabel} · {spaceLabel} ·{' '}
+          <span title="Revenue potential per unit of floor space — higher is more efficient use of the cabin">
+            {revPerSpace}× rev/space
+          </span>
+        </div>
       </div>
-      <input
-        type="number"
-        min={0}
-        max={max}
-        value={value}
-        onChange={e => onChange(Math.min(max, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-        className="form-input"
-        style={{ width: 72, textAlign: 'center', flexShrink: 0 }}
-      />
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', width: 40, flexShrink: 0 }}>seats</div>
+      <div className="seat-stepper">
+        <button type="button" aria-label={`Fewer ${label} seats`} onClick={() => onChange(clamp(value - 1))} disabled={value <= 0}>−</button>
+        <input
+          type="number"
+          min={0}
+          max={max}
+          value={value}
+          onChange={e => onChange(clamp(parseInt(e.target.value, 10) || 0))}
+        />
+        <button type="button" aria-label={`More ${label} seats`} onClick={() => onChange(clamp(value + 1))} disabled={value >= max}>+</button>
+      </div>
+      <button
+        type="button"
+        className="seat-max-btn"
+        title={`Fill the remaining floor space with ${label} (${max} seats max)`}
+        onClick={() => onChange(max)}
+        disabled={value >= max}
+      >
+        Max
+      </button>
     </div>
   );
 }

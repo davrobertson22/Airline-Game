@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
-import { simulateCargoRoute, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS } from '../utils/simulation.js';
+import { simulateCargoRoute, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS, maxFrequency } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
@@ -128,6 +128,15 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
   const originAirport = getAirport(origin);
   const destAirport   = getAirport(dest);
   const ready         = !!(originAirport && destAirport);
+
+  // One freighter has MAX_WEEKLY_BLOCK_HOURS flying hours a week — long sectors
+  // fit fewer round trips, so the frequency slider is capped at what one
+  // airframe can actually fly.
+  const freqCap = useMemo(() => {
+    const t = getAircraftType(selectedTypeId);
+    if (!ready || !t) return 14;
+    return Math.max(1, Math.min(14, maxFrequency(routeDistance(origin, dest), t)));
+  }, [ready, origin, dest, selectedTypeId]);
 
   const routeData = useMemo(() => {
     if (!ready) return null;
@@ -291,15 +300,20 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
                   <div>
                     <div className="form-label" style={{ marginBottom: 6 }}>Flights / week</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" min="1" max="14" step="1" value={frequency} onChange={e => setFrequency(Number(e.target.value))} style={{ width: 110, accentColor: ACCENT }} />
-                      <span style={{ fontWeight: 700, minWidth: 22 }}>{frequency}×</span>
+                      <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={Math.min(frequency, freqCap)} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: 110, accentColor: ACCENT }} />
+                      <span style={{ fontWeight: 700, minWidth: 22 }}>{Math.min(frequency, freqCap)}×</span>
                     </div>
+                    {freqCap < 14 && (
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 5, maxWidth: 190, lineHeight: 1.4 }}>
+                        Max <strong style={{ color: ACCENT }}>{freqCap}/wk</strong> for one freighter on this distance (weekly block-hour limit). Add another freighter for more.
+                      </div>
+                    )}
                   </div>
                   {/* Yield */}
                   <div>
                     <div className="form-label" style={{ marginBottom: 6 }}>Yield ($/tonne-km)</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" min={+(routeData.refYield * 0.4).toFixed(3)} max={+(routeData.refYield * 2).toFixed(3)} step="0.005"
+                      <input type="range" className="hw-range" min={+(routeData.refYield * 0.4).toFixed(3)} max={+(routeData.refYield * 2).toFixed(3)} step="0.005" draggable={false} onDragStart={e => e.preventDefault()}
                         value={effectiveYield} onChange={e => setYieldPrice(Number(e.target.value))} style={{ width: 110, accentColor: ACCENT }} />
                       <span style={{ fontWeight: 700, minWidth: 46 }}>${effectiveYield.toFixed(3)}</span>
                       <span style={{ fontSize: 11, minWidth: 90, color: yieldPct > 10 ? 'var(--red)' : yieldPct < -10 ? 'var(--green)' : 'var(--text-muted)' }}>
