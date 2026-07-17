@@ -7,7 +7,7 @@ import {
   simulateRoute, formatMoney, formatPercent, weekToGameDate,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
-  buildEventDemandModel,
+  buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -492,14 +492,24 @@ export default function RoutePlanner() {
     }
   }, [reachableTypes]);
 
-  // Idle aircraft in fleet, by type
-  const idleByType = useMemo(() => {
+  // Aircraft that can actually be DEPLOYED to this lane, by type — includes
+  // planes already flying another route but with spare block-hours that touch an
+  // endpoint (the engine caps one plane at 140h/wk across routes, not one route).
+  const deployableByType = useMemo(() => {
+    if (!routeData) return {};
     const map = {};
-    state.fleet.filter(a => a.status === 'idle').forEach(a => {
-      (map[a.typeId] = map[a.typeId] ?? []).push(a);
-    });
+    for (const t of reachableTypes) {
+      map[t.id] = deployableFleetForRoute({
+        fleet:          state.fleet,
+        existingRoutes: state.routes,
+        typeId:         t.id,
+        origin, dest,
+        distKm:         routeData.dist,
+        weeklyFrequency: frequency,
+      });
+    }
     return map;
-  }, [state.fleet]);
+  }, [state.fleet, state.routes, reachableTypes, routeData, origin, dest, frequency]);
 
   // All aircraft you own of the selected type (idle first) — used as config sources.
   const fleetOfType = useMemo(() => {
@@ -836,10 +846,10 @@ export default function RoutePlanner() {
                       onChange={e => setSelectedTypeId(e.target.value)}
                     >
                       {reachableTypes.map(t => {
-                        const idle = idleByType[t.id]?.length ?? 0;
+                        const ready = (deployableByType[t.id] ?? []).filter(d => d.eligible).length;
                         return (
                           <option key={t.id} value={t.id}>
-                            {t.name} ({t.seats} seats){idle > 0 ? ` — ${idle} idle` : ''}
+                            {t.name} ({t.seats} seats){ready > 0 ? ` — ${ready} ready` : ''}
                           </option>
                         );
                       })}
@@ -1007,10 +1017,15 @@ export default function RoutePlanner() {
 
                 {/* Open route CTA */}
                 {simulation && (() => {
-                  const idle       = idleByType[selectedTypeId] ?? [];
-                  // Deploy the aircraft you chose as the config source if it's idle,
-                  // so the plane that flies matches the forecast above.
-                  const preferred  = idle.find(a => a.id === configSource) ?? idle[0];
+                  const pool       = deployableByType[selectedTypeId] ?? [];
+                  const eligible   = pool.filter(d => d.eligible);
+                  // Deploy the aircraft you chose as the config source if it's
+                  // eligible, so the plane that flies matches the forecast above;
+                  // otherwise the best eligible one (idle first, then most spare).
+                  const preferredD = eligible.find(d => d.aircraft.id === configSource) ?? eligible[0];
+                  const preferred  = preferredD?.aircraft;
+                  const anySpare   = pool.some(d => d.hoursOk);   // has hours (network may not reach this lane)
+                  const owned      = pool.length;
                   const lCost      = routeLaunchCost(routeData.dist);
                   const canAfford  = state.cash >= lCost;
                   const blocked    = !!routeRestriction;
@@ -1028,11 +1043,15 @@ export default function RoutePlanner() {
                             disabled={!canAfford}
                             onClick={() => handleOpenRoute(preferred.id)}
                           >
-                            Open Route with {preferred.tailNumber || preferred.name}
+                            Open Route with {preferred.tailNumber || preferred.name}{!preferredD.idle ? ' · shares hours' : ''}
                           </button>
                         ) : (
                           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                            No idle {simulation.type.name} available — lease one from the Market first.
+                            {owned === 0
+                              ? <>No {simulation.type.name} in your fleet — lease one from the Market first.</>
+                              : anySpare
+                                ? <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} flying other networks and can't reach {origin}–{dest} directly — an aircraft can only add a route that touches an airport it already serves. Lease another, or first route one through {origin} or {dest}.</>
+                                : <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another route. Lease another {simulation.type.name} to open this route.</>}
                           </div>
                         )}
                         {simulation.netProfit < 0 && (
