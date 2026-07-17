@@ -1,4 +1,5 @@
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { useConfirm } from './ConfirmModal.jsx';
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import RouteDetail from './RouteDetail.jsx';
@@ -129,6 +130,7 @@ function groupRoutes(routes) {
 
 export default function Routes() {
   const { state, dispatch } = useGame();
+  const confirm = useConfirm();
   const addToast = useToast();
   const { fleet, routes, hub, pendingOrders = [], cargoRoutes = [] } = state;
 
@@ -337,8 +339,8 @@ export default function Routes() {
   // current filter view, so a selection survives a filter change).
   const selectedGroups = groupsWithStats.filter(g => selectedKeys.has(g.key));
 
-  function handleClose(routeId) {
-    if (window.confirm('Remove this aircraft from the route? It will be freed for other assignments.')) {
+  async function handleClose(routeId) {
+    if (await confirm({ title: 'Remove this aircraft from the route?', body: 'It will be freed for other assignments.', danger: true, confirmLabel: 'Remove' })) {
       dispatch({ type: 'CLOSE_ROUTE', routeId });
     }
   }
@@ -383,14 +385,14 @@ export default function Routes() {
   }
 
   // Bulk: close every selected pair (all aircraft deployments on them).
-  function bulkCloseGroups(groupsToClose) {
+  async function bulkCloseGroups(groupsToClose) {
     const routeIds = groupsToClose.flatMap(g => g.routes.map(r => r.id));
     if (routeIds.length === 0) return;
-    const ok = window.confirm(
-      `Close ${groupsToClose.length} route${groupsToClose.length !== 1 ? 's' : ''} ` +
-      `(${routeIds.length} aircraft deployment${routeIds.length !== 1 ? 's' : ''})? ` +
-      `Aircraft will be freed for other assignments.`
-    );
+    const ok = await confirm({
+      title: `Close ${groupsToClose.length} route${groupsToClose.length !== 1 ? 's' : ''}?`,
+      body: `This frees ${routeIds.length} aircraft deployment${routeIds.length !== 1 ? 's' : ''} for other assignments.`,
+      danger: true, confirmLabel: 'Close routes',
+    });
     if (!ok) return;
     for (const id of routeIds) dispatch({ type: 'CLOSE_ROUTE', routeId: id });
     addToast({
@@ -524,7 +526,7 @@ export default function Routes() {
             disabled={fleet.length === 0 || availableFleet.length === 0}
             title={
               fleet.length === 0 && pendingOrders.length > 0
-                ? `Your aircraft is being delivered — advance time to receive it`
+                ? `Your aircraft is being delivered, advance time to receive it`
                 : fleet.length === 0
                 ? 'Lease an aircraft first'
                 : availableFleet.length === 0
@@ -557,7 +559,7 @@ export default function Routes() {
           fontSize: 13,
           color: 'var(--color-warning-text, #92400e)',
         }}>
-          <Glyph e="✈️" /> Your aircraft {pendingOrders.length === 1 ? 'is' : 'are'} on the way — advance time to receive {pendingOrders.length === 1 ? 'it' : 'them'} and open routes.
+          <Glyph e="✈️" /> Your aircraft {pendingOrders.length === 1 ? 'is' : 'are'} on the way, advance time to receive {pendingOrders.length === 1 ? 'it' : 'them'} and open routes.
         </div>
       )}
 
@@ -846,7 +848,7 @@ function TagRouteCard({ route, onClose }) {
           </div>
         </>
       ) : (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aircraft unavailable — this route isn’t flying.</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aircraft unavailable. This route isn’t flying.</div>
       )}
     </div>
   );
@@ -2083,7 +2085,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
     <div className="card" style={{ borderColor: 'var(--accent)', marginBottom: 16 }}>
       <div className="card-title">
         {isAddingFlights
-          ? <>Add Flights — <span style={{ color: 'var(--accent)' }}>{initialOrigin} → {initialDest}</span></>
+          ? <>Add Flights · <span style={{ color: 'var(--accent)' }}>{initialOrigin} → {initialDest}</span></>
           : 'Open New Route'}
       </div>
 
@@ -2211,7 +2213,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {/* Connectivity warning */}
         {aircraft && !connectivityOk && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10 }}>
-            <Glyph e="⚠" /> {aircraft.name} already flies from {[...servedAirports].join(', ')} — new routes must connect to one of those airports. Aircraft can't teleport.
+            <Glyph e="⚠" /> {aircraft.name} already flies from {[...servedAirports].join(', ')} · new routes must connect to one of those airports. Aircraft can't teleport.
           </div>
         )}
 
@@ -2226,7 +2228,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
         {validDest && launchCost > 0 && (
           <div style={{ fontSize: 12, color: canAfford ? 'var(--text-muted)' : 'var(--red)', marginBottom: 10 }}>
             <Glyph e={canAfford ? '💸' : '⚠'} /> One-time launch cost: {formatMoney(launchCost)}
-            {!canAfford && ' — insufficient cash'}
+            {!canAfford && ' · insufficient cash'}
           </div>
         )}
 
@@ -2244,7 +2246,7 @@ function AddRouteForm({ onClose, initialOrigin, initialDest }) {
               </span>
               <span style={{ color: blockColor, fontWeight: 600 }}>
                 {totalBlockHrs.toFixed(1)} / {MAX_WEEKLY_BLOCK_HOURS}h
-                {!blockOk && ` — max freq: ${freqLimit}×`}
+                {!blockOk && ` · max freq: ${freqLimit}×`}
               </span>
             </div>
             <div style={{ height: 4, borderRadius: 2, background: 'var(--surface3)', overflow: 'hidden', position: 'relative' }}>

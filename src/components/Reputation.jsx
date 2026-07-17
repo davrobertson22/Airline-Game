@@ -75,9 +75,9 @@ function strategyLabel(pos) {
   const { x, y } = pos;
   if (y >= 0.6 && x >= 0.55) return { name: 'Premium Full-Service', color: '#a98bff', emoji: '💎', description: 'Positioned for business and premium leisure travel. High revenue per seat, brand commands a price premium. Focus on service consistency and business-friendly routes.' };
   if (y >= 0.6 && x <  0.55) return { name: 'Luxury Leisure',       color: '#38d39f', emoji: '🌴', description: 'Upscale but leisure-oriented. Sells a premium holiday experience. Strong in resort routes and seasonal markets. Demand is highly seasonal.' };
-  if (y <  0.4 && x >= 0.55) return { name: 'Budget Business',      color: '#3ea6ff', emoji: '💼', description: 'Affordable business travel — think no-frills but reliable on corporate corridors. Works on short-haul business routes with high frequency.' };
+  if (y <  0.4 && x >= 0.55) return { name: 'Budget Business',      color: '#3ea6ff', emoji: '💼', description: 'Affordable business travel, think no-frills but reliable on corporate corridors. Works on short-haul business routes with high frequency.' };
   if (y <  0.4 && x <  0.55) return { name: 'Low-Cost Carrier',     color: '#ffb43d', emoji: '✂️', description: 'Volume over margin. Fill planes at low prices, minimise costs everywhere. Works best with high frequency, large fleets, and dense leisure routes.' };
-  return { name: 'Mid-Market',               color: '#93a4ba', emoji: '🔄', description: 'Sitting in the middle. Not strongly differentiated yet. Consider pushing toward Premium or Low-Cost — the middle is the hardest place to compete.' };
+  return { name: 'Mid-Market',               color: '#93a4ba', emoji: '🔄', description: 'Sitting in the middle. Not strongly differentiated yet. Consider pushing toward Premium or Low-Cost, the middle is the hardest place to compete.' };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────

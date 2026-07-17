@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, weekToGameDate, formatGameDate, fleetAvgUtilization } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
@@ -250,7 +250,7 @@ export default function Dashboard() {
   // ── Action alerts ────────────────────────────────────────────────────────
   const alerts = [];
   if (idleAircraft > 0)
-    alerts.push({ color: 'var(--yellow)', icon: AlertIcon, text: `${idleAircraft} idle aircraft — paying lease with no revenue` });
+    alerts.push({ color: 'var(--yellow)', icon: AlertIcon, text: `${idleAircraft} idle aircraft, paying lease with no revenue` });
   if (isFinite(weeksOfCash) && weeksOfCash < 4)
     alerts.push({ color: 'var(--red)', icon: DotIcon, text: `Only ${weeksOfCash} weeks of cash runway remaining` });
   // The silent killer: routes are in the black, but fixed costs, financing and
@@ -258,11 +258,11 @@ export default function Dashboard() {
   if (pnl.projected && pnl.projected.routeOp > 0 && pnl.projected.net < 0)
     alerts.push({
       color: 'var(--red)', icon: TrendDownIcon,
-      text: `Routes earn +${formatMoney(pnl.projected.routeOp)}/wk, but fixed costs, financing & tax turn that into ${formatMoney(pnl.projected.net)}/wk — see Weekly P&L`,
+      text: `Routes earn +${formatMoney(pnl.projected.routeOp)}/wk, but fixed costs, financing & tax turn that into ${formatMoney(pnl.projected.net)}/wk · see Weekly P&L`,
     });
   const losingRoutes = routeResults.filter(({ result }) => result && result.profit < 0);
   if (losingRoutes.length > 0)
-    alerts.push({ color: 'var(--red)', icon: TrendDownIcon, text: `${losingRoutes.length} loss-making route${losingRoutes.length !== 1 ? 's' : ''} — consider repricing` });
+    alerts.push({ color: 'var(--red)', icon: TrendDownIcon, text: `${losingRoutes.length} loss-making route${losingRoutes.length !== 1 ? 's' : ''} · consider repricing` });
   if (activeEvents.length > 0) {
     const bad = activeEvents.filter(e =>
       (e.effects?.fuelMult ?? 1) > 1 ||
@@ -270,7 +270,7 @@ export default function Dashboard() {
       (e.effects?.regionDemandMult ?? 1) < 1
     );
     if (bad.length > 0)
-      alerts.push({ color: 'var(--yellow)', icon: bad[0].icon, text: `${bad[0].name} active — check Finance for impact` });
+      alerts.push({ color: 'var(--yellow)', icon: bad[0].icon, text: `${bad[0].name} active. Check Finance for impact` });
   }
 
   return (
@@ -322,8 +322,18 @@ export default function Dashboard() {
           label="Cash Balance"
           value={formatMoney(cash)}
           color={cash >= 0 ? 'green' : 'red'}
-          sub={isFinite(weeksOfCash) ? `${weeksOfCash} wks runway` : undefined}
-          subColor={weeksOfCash < 4 ? 'var(--red)' : 'var(--text-dim)'}
+          sub={
+            <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+              {isFinite(weeksOfCash) && (
+                <span style={{ color: weeksOfCash < 4 ? 'var(--red)' : 'var(--text-dim)' }}>{weeksOfCash} wks runway</span>
+              )}
+              {lastReport && (
+                <span style={{ color: lastReport.cashDelta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {lastReport.cashDelta >= 0 ? '+' : ''}{formatMoney(lastReport.cashDelta)} last wk
+                </span>
+              )}
+            </span>
+          }
         />
         <KpiBox
           label="Projected Profit / wk"
@@ -377,13 +387,6 @@ export default function Dashboard() {
             sub={networkStats.revPerPax != null ? `${formatMoney(networkStats.revPerPax)} avg / pax` : undefined}
           />
         )}
-        <KpiBox
-          label="Date"
-          value={formatGameDate({ week, year })}
-          valueStyle={{ fontSize: 13 }}
-          sub={lastReport ? (lastReport.cashDelta >= 0 ? `+${formatMoney(lastReport.cashDelta)} last wk` : `${formatMoney(lastReport.cashDelta)} last wk`) : 'No data yet'}
-          subColor={lastReport ? (lastReport.cashDelta >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)'}
-        />
       </div>
 
       {/* ── Weekly P&L bridge (incl. cost-mix bar) ───────────────────────── */}
@@ -607,7 +610,7 @@ export default function Dashboard() {
             <li>Go to <strong style={{ color: 'var(--text)' }}>Market</strong> and lease an aircraft.</li>
             <li>Go to <strong style={{ color: 'var(--text)' }}>Routes</strong> and open your first route.</li>
             <li>Click <strong style={{ color: 'var(--accent)' }}>Next Week →</strong> to collect revenue.</li>
-            <li>Keep expanding — but watch your cash!</li>
+            <li>Keep expanding, but watch your cash!</li>
           </ol>
         </div>
       )}
@@ -669,7 +672,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
   const rows = [];
   rows.push({
     label: 'Route operating profit',
-    tip: 'Sum of every route’s revenue minus its direct flying costs (fuel, crew, service, landing fees) — passenger and cargo. This is the profit shown in the Top Routes table.',
+    tip: 'Sum of every route’s revenue minus its direct flying costs (fuel, crew, service, landing fees), passenger and cargo. This is the profit shown in the Top Routes table.',
     lw: lastWeek?.routeOp, pj: projected.routeOp,
   });
   if ((lastWeek?.otherRev ?? 0) !== 0 || projected.otherRev !== 0) rows.push({
@@ -698,7 +701,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
   });
   rows.push({
     label: 'Operating profit',
-    tip: 'Revenue minus ALL operating and fixed costs (EBITDA) — before financing and tax.',
+    tip: 'Revenue minus ALL operating and fixed costs (EBITDA), before financing and tax.',
     lw: lastWeek?.operating, pj: projected.operating,
     subtotal: true,
   });
@@ -735,7 +738,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
         <div className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           Weekly P&amp;L
-          <InfoTip text="Why route profit doesn't add up to total profit: routes only carry their direct flying costs. Fixed costs, financing and tax sit below the line — this bridge reconciles the two." />
+          <InfoTip text="Why route profit doesn't add up to total profit: routes only carry their direct flying costs. Fixed costs, financing and tax sit below the line. This bridge reconciles the two." />
         </div>
         {!two && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>last-week actuals appear after your first full week</span>}
       </div>
@@ -808,8 +811,20 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
 
 function FinancialChart({ history, currentWeek }) {
   const [hover, setHover] = useState(null);
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(900);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const cw = entries[0]?.contentRect?.width;
+      if (cw) setW(Math.max(320, Math.round(cw)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const PAD_L = 58, PAD_R = 12, PAD_T = 10, PAD_B = 22;
-  const W = 600, H = 180;
+  const W = w, H = 180;
   const dW = W - PAD_L - PAD_R;
   const dH = H - PAD_T - PAD_B;
 
@@ -884,7 +899,7 @@ function FinancialChart({ history, currentWeek }) {
   };
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }} ref={wrapRef}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: H, display: 'block', cursor: 'crosshair' }}

@@ -126,7 +126,7 @@ export default function Alliances() {
           label="Quality"
           value={`${avgQuality}/100`}
           color={avgQuality >= 65 ? 'var(--green)' : avgQuality >= 50 ? 'var(--yellow)' : '#f87171'}
-          sub="avg across your routes — same score shown on route pages"
+          sub="avg across your routes, same score shown on route pages"
         />
       </div>
 
@@ -364,7 +364,7 @@ function AllianceCard({
             disabled={!canJoin}
             onClick={handleJoin}
           >
-            {canJoin ? `Join — ${formatMoney(alliance.initiationFee)}` : 'Unavailable'}
+            {canJoin ? `Join · ${formatMoney(alliance.initiationFee)}` : 'Unavailable'}
           </button>
         </div>
       )}

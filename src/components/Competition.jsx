@@ -95,12 +95,8 @@ export default function Competition() {
       {/* ── Contested routes ──────────────────────────────────────────────── */}
       <SectionHeader><Glyph e="⚔" /> Contested Routes</SectionHeader>
       {contestedKeys.length === 0 ? (
-        <div className="empty-state" style={{ marginBottom: 24 }}>
-          <div className="empty-state-icon"><Glyph e="🤝" /></div>
-          <div className="empty-state-text">No contested routes yet</div>
-          <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-muted)' }}>
-            Open routes that competitors also fly to see head-to-head comparisons.
-          </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 24px' }}>
+          No contested routes yet. Open a route a competitor also flies to see the head-to-head.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
@@ -183,7 +179,7 @@ function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, pl
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <SectionHeader><Glyph e="🏆" /> Industry Leaderboard — Market Capitalisation</SectionHeader>
+      <SectionHeader><Glyph e="🏆" /> Industry Leaderboard · Market Capitalisation</SectionHeader>
 
       {!hasMarketCapData && (
         <div className="empty-state" style={{ marginBottom: 8 }}>
@@ -508,13 +504,13 @@ function CompetitiveHints({ playerRoute, playerQual, competitors, routeKey, refP
     const qualDiff  = (playerQual ?? 0) - c.baseQualityScore;
 
     if (priceDiff > compPrice * 0.12)
-      hints.push({ type: 'warn', text: `Your price is ${Math.round(priceDiff / refP * 100)}% above ${c.name}'s — you may be losing price-sensitive passengers.` });
+      hints.push({ type: 'warn', text: `Your price is ${Math.round(priceDiff / refP * 100)}% above ${c.name}'s · you may be losing price-sensitive passengers.` });
 
     if (qualDiff < -20)
       hints.push({ type: 'info', text: `${c.name} has a ${Math.abs(qualDiff)}-point quality advantage. Consider upgrading seat or service quality in Fleet.` });
 
     if (priceDiff < -compPrice * 0.12 && qualDiff > 15)
-      hints.push({ type: 'good', text: `You lead ${c.name} on both price and quality — strong position.` });
+      hints.push({ type: 'good', text: `You lead ${c.name} on both price and quality, strong position.` });
   }
 
   if (hints.length === 0) return null;
@@ -578,7 +574,7 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
           )}
           {atWar && (
             <span
-              title="This carrier is waging a fare war on a route you share — it is pricing below cost to push you off."
+              title="This carrier is waging a fare war on a route you share. It is pricing below cost to push you off."
               style={{ fontSize: 11, fontWeight: 700, color: '#fb923c',
                        padding: '1px 7px', borderRadius: 10,
                        border: '1px solid rgba(251,146,60,0.5)', background: 'rgba(251,146,60,0.12)' }}>
@@ -740,10 +736,10 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
             color={target.fireSale ? 'var(--green)' : 'var(--yellow)'} />
           <DealRow label="Total acquisition cost" value={formatMoney(acquisitionCost)} bold />
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
-          <DealRow label="You receive — their cash" value={`+${formatMoney(target.cash ?? 0)}`} color="var(--green)" />
-          <DealRow label="You receive — routes" value={`+${routeCount}`} color="var(--green)" />
-          <DealRow label="You receive — aircraft" value={`+${aircraftGained}`} color="var(--green)" />
-          <DealRow label="You receive — gate slots" value={`+${gatesGained}`} color="var(--green)" />
+          <DealRow label="You receive. Their cash" value={`+${formatMoney(target.cash ?? 0)}`} color="var(--green)" />
+          <DealRow label="You receive · routes" value={`+${routeCount}`} color="var(--green)" />
+          <DealRow label="You receive · aircraft" value={`+${aircraftGained}`} color="var(--green)" />
+          <DealRow label="You receive, gate slots" value={`+${gatesGained}`} color="var(--green)" />
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
           <DealRow label="Net cash outlay" value={formatMoney(netCost)} bold color={netCost > 0 ? '#f87171' : 'var(--green)'} />
           <DealRow label="Your cash after" value={formatMoney(playerCash - acquisitionCost + (target.cash ?? 0))}

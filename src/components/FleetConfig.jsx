@@ -244,7 +244,7 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
               <span style={{ color: over ? 'var(--red)' : 'var(--text-muted)' }}>
                 {over
-                  ? <GlyphLabel size={12} text={`⚠ Over by ${(usedUnits - maxSeats).toFixed(2)} seat units — reduce a class`} />
+                  ? <GlyphLabel size={12} text={`⚠ Over by ${(usedUnits - maxSeats).toFixed(2)} seat units, reduce a class`} />
                   : `${usedUnits.toFixed(1)} / ${maxSeats} seat units used${emptyUnits >= 1 ? ` · ${emptyUnits.toFixed(0)} empty` : ''}`}
               </span>
               <span style={{ color: 'var(--text-muted)' }}>
@@ -367,7 +367,7 @@ function ClassInput({ label, fareLabel, spaceLabel, revPerSpace, value, max, onC
         <div style={{ fontSize: 13 }}>{label}</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {fareLabel} · {spaceLabel} ·{' '}
-          <span title="Revenue potential per unit of floor space — higher is more efficient use of the cabin">
+          <span title="Revenue potential per unit of floor space, higher is more efficient use of the cabin">
             {revPerSpace}× rev/space
           </span>
         </div>

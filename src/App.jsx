@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useGame } from './store/GameContext.jsx';
 import { ToastProvider, useToast } from './components/ToastSystem.jsx';
+import { ConfirmProvider } from './components/ConfirmModal.jsx';
 import WeeklyDebrief from './components/WeeklyDebrief.jsx';
 import SaveLoadModal from './components/SaveLoadModal.jsx';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
@@ -95,10 +96,27 @@ const TABS = [
   { id: 'wiki',        label: 'Help',          Icon: HelpIcon        },
 ];
 
+// Look up a tab's label/Icon by id.
+const TABS_BY_ID = Object.fromEntries(TABS.map(t => [t.id, t]));
+
+// Grouped navigation: Dashboard, Finance and Help stay one click away; the rest
+// fold into four dropdown groups so the bar fits without cutting anything off.
+const NAV_GROUPS = [
+  { id: 'dashboard' },
+  { label: 'Network',  Icon: MapIcon,        children: ['map', 'planner', 'routes'] },
+  { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
+  { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
+  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'reputation', 'loyalty', 'alliances', 'competition'] },
+  { id: 'finance' },
+  { id: 'wiki' },
+];
+
 export default function App() {
   return (
     <ToastProvider>
-      <AppInner />
+      <ConfirmProvider>
+        <AppInner />
+      </ConfirmProvider>
     </ToastProvider>
   );
 }
@@ -109,6 +127,7 @@ function AppInner() {
   // Save/Load, New Game) is hidden. Always falsy in the solo game.
   const { state, dispatch, remote } = useGame();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [openGroup, setOpenGroup] = useState(null);
   const [showTour, setShowTour] = useState(false);
   const [saveLoadMode, setSaveLoadMode] = useState(null); // 'save' | 'load' | null
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
@@ -217,6 +236,8 @@ function AppInner() {
     setShowNewGameConfirm(false);
     dispatch({ type: 'RESET' });
   }
+
+  const navigate = (id) => { setActiveTab(id); setOpenGroup(null); };
 
   const tabContent = {
     dashboard:   <Dashboard />,
@@ -372,18 +393,62 @@ function AppInner() {
         )}
       </div>
 
-      {/* Nav tabs */}
+      {/* Nav tabs (grouped) */}
       <div className="nav-tabs">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={`nav-tab ${activeTab === id ? 'active' : ''}`}
-            onClick={() => setActiveTab(id)}
-          >
-            <Icon size={14} />
-            <span>{label}</span>
-          </button>
-        ))}
+        {NAV_GROUPS.map((grp) => {
+          if (!grp.children) {
+            const t = TABS_BY_ID[grp.id];
+            const Icon = t.Icon;
+            return (
+              <button
+                key={grp.id}
+                className={`nav-tab ${activeTab === grp.id ? 'active' : ''}`}
+                onClick={() => navigate(grp.id)}
+              >
+                <Icon size={14} />
+                <span>{t.label}</span>
+              </button>
+            );
+          }
+          const GroupIcon = grp.Icon;
+          const activeChild = grp.children.includes(activeTab);
+          const open = openGroup === grp.label;
+          return (
+            <div key={grp.label} className="nav-group">
+              <button
+                className={`nav-tab ${activeChild ? 'active' : ''} ${open ? 'open' : ''}`}
+                onClick={() => setOpenGroup(open ? null : grp.label)}
+                aria-expanded={open}
+              >
+                <GroupIcon size={14} />
+                <span>{grp.label}</span>
+                <span className="nav-caret" aria-hidden="true">▾</span>
+              </button>
+              {open && (
+                <>
+                  <div className="nav-group-backdrop" onClick={() => setOpenGroup(null)} />
+                  <div className="nav-group-menu" role="menu">
+                    {grp.children.map((cid) => {
+                      const ct = TABS_BY_ID[cid];
+                      const CIcon = ct.Icon;
+                      return (
+                        <button
+                          key={cid}
+                          role="menuitem"
+                          className={activeTab === cid ? 'active' : ''}
+                          onClick={() => navigate(cid)}
+                        >
+                          <CIcon size={14} />
+                          <span>{ct.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Page content */}
