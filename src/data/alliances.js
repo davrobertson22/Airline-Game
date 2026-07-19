@@ -175,10 +175,8 @@ export const INTERLINE_RATE_BY_TIER = {
  */
 export const CODESHARE_DURATION_WEEKS = 52;
 
-/**
- * Maximum simultaneous bilateral codeshare agreements.
- */
-export const MAX_CODESHARE_AGREEMENTS = 6;
+// Bilateral codeshare agreements are unlimited — sign as many as there are
+// available partners. (The former MAX_CODESHARE_AGREEMENTS cap was removed.)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

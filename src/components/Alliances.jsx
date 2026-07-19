@@ -8,7 +8,6 @@ import {
   getAlliance,
   CODESHARE_WEEKLY_FEE_BY_TIER,
   INTERLINE_RATE_BY_TIER,
-  MAX_CODESHARE_AGREEMENTS,
   CODESHARE_DURATION_WEEKS,
   countAdjacentRoutes,
   checkAllianceEligibility,
@@ -121,7 +120,7 @@ export default function Alliances() {
           value={currentAlliance ? currentAlliance.name : 'None'}
           color={currentAlliance ? currentAlliance.color : 'var(--text-muted)'}
         />
-        <SummaryKPI label="Codeshares" value={`${codeshareAgreements.length} / ${MAX_CODESHARE_AGREEMENTS}`} />
+        <SummaryKPI label="Codeshares" value={`${codeshareAgreements.length}`} />
         <SummaryKPI
           label="Quality"
           value={`${avgQuality}/100`}
@@ -161,7 +160,7 @@ export default function Alliances() {
       {codeshareAgreements.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>
-            ACTIVE ({codeshareAgreements.length}/{MAX_CODESHARE_AGREEMENTS})
+            ACTIVE ({codeshareAgreements.length})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {codeshareAgreements.map(agreement => {
@@ -445,8 +444,6 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
     }))
     .sort((a, b) => (b.estRevenue - b.weeklyFee) - (a.estRevenue - a.weeklyFee)); // sort by net benefit
 
-  const atCap = codeshareAgreements.length >= MAX_CODESHARE_AGREEMENTS;
-
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -471,15 +468,6 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
           ))}
         </div>
       </div>
-
-      {atCap && (
-        <div style={{
-          fontSize: 12, color: 'var(--yellow)', background: 'rgba(251,191,36,0.1)',
-          padding: '8px 12px', borderRadius: 6, marginBottom: 10,
-        }}>
-          <Glyph e="⚠" /> Maximum codeshare agreements reached ({MAX_CODESHARE_AGREEMENTS}). Cancel one to add another.
-        </div>
-      )}
 
       {available.length === 0 ? (
         <div className="empty-state">
@@ -524,9 +512,8 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
                 </div>
 
                 <button
-                  className={`btn ${worthwhile && !atCap ? 'btn-primary' : ''}`}
-                  style={{ fontSize: 12, padding: '6px 14px', opacity: atCap ? 0.5 : 1 }}
-                  disabled={atCap}
+                  className={`btn ${worthwhile ? 'btn-primary' : ''}`}
+                  style={{ fontSize: 12, padding: '6px 14px' }}
                   onClick={() => dispatch({ type: 'SIGN_CODESHARE', competitorId: comp.id })}
                 >
                   Sign

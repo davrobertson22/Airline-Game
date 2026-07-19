@@ -49,7 +49,6 @@ import {
   getAlliance,
   CODESHARE_WEEKLY_FEE_BY_TIER,
   CODESHARE_DURATION_WEEKS,
-  MAX_CODESHARE_AGREEMENTS,
 } from '../data/alliances.js';
 import { routeLaunchCost, DEPRECIATION_YEARS,
          marketingAwarenessGain, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
@@ -1520,7 +1519,7 @@ function reducer(state, action) {
     case 'SIGN_CODESHARE': {
       // action: { competitorId }
       const activeAgreements = state.codeshareAgreements ?? [];
-      if (activeAgreements.length >= MAX_CODESHARE_AGREEMENTS) return state;
+      // No cap on the number of codeshare agreements.
       if (activeAgreements.some(a => a.competitorId === action.competitorId)) return state;
 
       const comp = (state.competitors ?? []).find(c => c.id === action.competitorId);
