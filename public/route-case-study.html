@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Route Case Study — One 737, Twelve Weeks, Real Numbers | Tailwinds</title>
+  <meta name="description" content="A week-by-week worked example of a single Tailwinds route: the full P&amp;L of a leased 737-800, what a fuel spike and a competitor entry did to it, and the decisions that kept it profitable." />
+  <link rel="canonical" href="https://www.tailwindsairlinegame.com/route-case-study.html" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#1b1b1f; --panel:#26262d; --line:#3a3b40; --text:#ededee; --muted:#a1a1aa; --gold:#c79a4b; --gold-light:#d3ad63; }
+    * { box-sizing: border-box; }
+    body { font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.7; }
+    a { color:var(--gold-light); }
+    header.site { border-bottom:1px solid var(--line); }
+    nav.site { max-width:880px; margin:0 auto; padding:18px 24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+    nav.site .brand { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem; color:var(--text); text-decoration:none; margin-right:auto; }
+    nav.site a.link { color:var(--muted); text-decoration:none; font-size:0.95rem; font-weight:500; }
+    nav.site a.link:hover { color:var(--gold-light); }
+    main { max-width:760px; margin:0 auto; padding:48px 24px 72px; }
+    h1 { font-family:'Space Grotesk',sans-serif; font-size:2.1rem; line-height:1.2; margin:0 0 8px; }
+    .lede { color:var(--muted); font-size:1.1rem; margin:0 0 36px; }
+    h2 { font-family:'Space Grotesk',sans-serif; font-size:1.45rem; margin:40px 0 12px; }
+    h3 { font-size:1.1rem; margin:26px 0 8px; }
+    p { margin:0 0 16px; }
+    ul,ol { margin:0 0 16px; padding-left:22px; }
+    li { margin:0 0 8px; }
+    .cta { display:inline-block; background:var(--gold); color:#20180a; font-weight:700; padding:13px 30px; border-radius:8px; text-decoration:none; margin:18px 0; }
+    .tip { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:0 0 16px; }
+    table { border-collapse:collapse; margin:0 0 16px; width:100%; }
+    th,td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:0.95rem; }
+    th { background:var(--panel); font-weight:600; }
+    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <header class="site">
+    <nav class="site">
+      <a class="brand" href="/">Tailwinds</a>
+      <a class="link" href="/how-to-play.html">How to Play</a>
+      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/aircraft.html">Aircraft</a>
+      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/faq.html">FAQ</a>
+      <a class="link" href="/">Play</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Route Case Study: One 737, Twelve Weeks, Real Numbers</h1>
+    <p class="lede">Guides tell you the principles. This page shows you the arithmetic. We take one leased Boeing 737-800, put it on one 1,100&nbsp;km route between two major cities, and walk through twelve weeks of its life — the baseline P&amp;L, a fuel spike, a competitor entry, and exactly what each decision was worth. The figures come from a real playthrough; yours will differ in detail but not in shape.</p>
+
+    <h2>The setup</h2>
+    <p>The aircraft: a leased 737-800 — 189 seats in a standard fit, $68,000 a week in lease, $57,600 a week in base maintenance, burning 400.25 litres per 100&nbsp;km. The route: 1,100&nbsp;km between two major-tier airports, the kind of city pair with solid business traffic and year-round leisure demand. The schedule: fourteen round trips a week — two a day, a morning and an evening rotation.</p>
+    <p>Scheduling first, because it constrains everything: each round trip is roughly 4.7 block hours (about 1.6 hours of flying each way plus turnarounds), so fourteen of them consume about 66 of the aircraft's 140 weekly block hours. That matters later — this airframe has room to do more, and spare block hours are options waiting to be exercised.</p>
+    <p>Capacity: 189 seats × 28 departures = 5,292 seat-legs a week. Fares were set at route creation for both cabins — an economy fare in the low hundreds and a small business cabin priced at a healthy multiple, blending to about $92 of revenue per boarded passenger.</p>
+
+    <h2>Weeks 1–4: the baseline</h2>
+    <p>After a spin-up period while the market discovered the service, the route settled at a 79% load factor — about 4,180 passengers a week. Here's the full weekly P&amp;L, laid out the way the game's True Profit view allocates it:</p>
+    <table>
+      <tr><th>Weekly P&amp;L</th><th class="num">Amount</th></tr>
+      <tr><td>Passenger revenue (4,180 pax, ~$92 blended)</td><td class="num">$384,700</td></tr>
+      <tr><td>Fuel (2,200 km × 14 round trips, index 1.00)</td><td class="num">−$147,900</td></tr>
+      <tr><td>Crew ($1.42/km)</td><td class="num">−$43,700</td></tr>
+      <tr><td>Landing &amp; handling (28 departures)</td><td class="num">−$39,200</td></tr>
+      <tr><td><strong>Route operating profit</strong></td><td class="num"><strong>$153,900</strong></td></tr>
+      <tr><td>Aircraft lease</td><td class="num">−$68,000</td></tr>
+      <tr><td>Maintenance</td><td class="num">−$57,600</td></tr>
+      <tr><td><strong>True profit</strong></td><td class="num"><strong>$28,300</strong></td></tr>
+    </table>
+    <p>Two things deserve a hard look. First, the gap between the two profit lines: the route table's operating profit says this route earns $154,000 a week, but once the aircraft's lease and maintenance are charged to it, the real number is $28,300 — a 7% margin. That's a healthy route, and it is <em>one soft month from being an unhealthy one</em>. Airlines run on thin margins; Tailwinds models that faithfully. Second, fuel is 57% of the operating cost line. Remember that.</p>
+    <p class="tip">During week 3, with the fuel index sitting at 0.97, we bought a 13-week hedge at 50% coverage — locked price 0.97 × 1.06 ≈ 1.03. It cost a few thousand a week while fuel stayed calm. Routine hygiene, not a prediction. (Mechanics in the <a href="/fuel-hedging.html">fuel hedging guide</a>.)</p>
+
+    <h2>Weeks 5–8: the fuel spike</h2>
+    <p>The index climbed for three straight weeks and peaked at 1.45. Unhedged, the route's fuel line goes from $147,900 to $214,500 — a $66,600 weekly swing, which would have taken true profit from +$28,300 to roughly <strong>−$38,300</strong>. Same route, same passengers, deeply underwater.</p>
+    <p>The hedge halved the damage: with 50% of fuel locked at 1.03, the effective index was 0.5 × 1.03 + 0.5 × 1.45 = 1.24, a fuel bill of about $183,400 — $31,000 a week better than unhedged. We also nudged the blended fare up about $5; competitors' costs had spiked too, so the market absorbed most of it with only a small load-factor dip. Between the hedge and the reprice, the worst week landed at essentially breakeven instead of −$38,000. By week 9 the index had reverted below 1.10, exactly as mean reversion promises, and the route was earning again — while the hedge, now locked <em>above</em> market, quietly cost us its premium. That's fine. Insurance you didn't need is not a mistake.</p>
+    <p>The wrong moves here, for the record: panic-hedging at 1.45 (locking the top plus a premium), or slashing fares to "stimulate demand" when the problem was cost, not demand. The <a href="/route-economics.html">route economics guide</a> covers separating cost problems from demand problems.</p>
+
+    <h2>Weeks 9–12: the competitor</h2>
+    <p>Week 9, a rival opened the same city pair — seven weekly round trips with a similar narrow-body. Demand on a route is a finite pool, and a credible second carrier takes a real share of it. Our load factor fell to 66% within two weeks: about 3,490 passengers, revenue down to roughly $321,000, true profit around <strong>−$35,000</strong>. A fuel spike and a competitor entry produce eerily similar red ink; the diagnosis is the whole game. This one showed up as <em>our route alone</em> souring while the rest of the network held — competition, not costs.</p>
+    <p>We priced the fare-war option before rejecting it: matching a deep cut to, say, $78 blended would require filling about 86% of every flight just to get back to the same loss — while the rival cuts too. Price wars on split demand are mutual destruction with extra steps. Instead:</p>
+    <ul>
+      <li><strong>Held fares near $92</strong> and kept the schedule advantage — fourteen frequencies against their seven means we own the time-sensitive traveller.</li>
+      <li><strong>Trimmed two round trips</strong> to firm the load factor up and cut flying costs, banking the freed block hours.</li>
+      <li><strong>Watched their commitment.</strong> Seven frequencies with no schedule depth is a probe, not a fortress. Their loads were visibly thin.</li>
+    </ul>
+    <p>By week 12 the rival had redeployed to softer targets, our load factor was back in the mid-70s, and the route was earning around $20,000 a week on twelve frequencies — with 9&nbsp;spare block hours that went to a new afternoon rotation on a short spoke. Reading a competitor's commitment before reacting is covered in depth in <a href="/competition-and-alliances.html">competition &amp; alliances</a>.</p>
+
+    <h2>What twelve weeks teach</h2>
+    <ol>
+      <li><strong>True profit is the only profit.</strong> The route "earned" $154,000 a week all quarter. The airline saw $28,300 at best. Ownership costs don't stop for bad weeks — see mistake #5 in <a href="/beginner-mistakes.html">beginner mistakes</a>.</li>
+      <li><strong>The margin is the buffer.</strong> A 7% margin means a 7% shock — fuel, competition, anything — takes you to zero. Every decision above was really about protecting that thin strip of profitability.</li>
+      <li><strong>Diagnose before you touch fares.</strong> Fuel problems and competition problems produce the same red number and demand opposite responses. Whole-network dip = costs; single-route dip = market.</li>
+      <li><strong>Buy your insurance on sunny days.</strong> The week-3 hedge was boring. It was also the single highest-value decision of the quarter: worth $31,000 a week exactly when the route could least afford the hit.</li>
+    </ol>
+
+    <a class="cta" href="/">Run Your Own Numbers — Play Tailwinds →</a>
+  </main>
+
+  <footer class="site">
+    <div class="footwrap">
+      <a href="/?home">Home</a>
+      <a href="/how-to-play.html">How to Play</a>
+      <a href="/strategy.html">Strategy</a>
+      <a href="/aircraft.html">Aircraft</a>
+      <a href="/glossary.html">Glossary</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/devlog.html">Devlog</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
+    </div>
+  </footer>
+</body>
+</html>

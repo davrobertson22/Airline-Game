@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fuel Prices &amp; Hedging in Tailwinds — The Complete Guide</title>
+  <meta name="description" content="How jet fuel pricing works in Tailwinds — the mean-reverting market index, per-aircraft burn rates — and how to use hedge contracts (durations, premiums, coverage laddering) to protect your airline from spikes." />
+  <link rel="canonical" href="https://www.tailwindsairlinegame.com/fuel-hedging.html" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#1b1b1f; --panel:#26262d; --line:#3a3b40; --text:#ededee; --muted:#a1a1aa; --gold:#c79a4b; --gold-light:#d3ad63; }
+    * { box-sizing: border-box; }
+    body { font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.7; }
+    a { color:var(--gold-light); }
+    header.site { border-bottom:1px solid var(--line); }
+    nav.site { max-width:880px; margin:0 auto; padding:18px 24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+    nav.site .brand { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem; color:var(--text); text-decoration:none; margin-right:auto; }
+    nav.site a.link { color:var(--muted); text-decoration:none; font-size:0.95rem; font-weight:500; }
+    nav.site a.link:hover { color:var(--gold-light); }
+    main { max-width:760px; margin:0 auto; padding:48px 24px 72px; }
+    h1 { font-family:'Space Grotesk',sans-serif; font-size:2.1rem; line-height:1.2; margin:0 0 8px; }
+    .lede { color:var(--muted); font-size:1.1rem; margin:0 0 36px; }
+    h2 { font-family:'Space Grotesk',sans-serif; font-size:1.45rem; margin:40px 0 12px; }
+    h3 { font-size:1.1rem; margin:26px 0 8px; }
+    p { margin:0 0 16px; }
+    ul,ol { margin:0 0 16px; padding-left:22px; }
+    li { margin:0 0 8px; }
+    .cta { display:inline-block; background:var(--gold); color:#20180a; font-weight:700; padding:13px 30px; border-radius:8px; text-decoration:none; margin:18px 0; }
+    .tip { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:0 0 16px; }
+    table { border-collapse:collapse; margin:0 0 16px; width:100%; }
+    th,td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:0.95rem; }
+    th { background:var(--panel); font-weight:600; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <header class="site">
+    <nav class="site">
+      <a class="brand" href="/">Tailwinds</a>
+      <a class="link" href="/how-to-play.html">How to Play</a>
+      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/aircraft.html">Aircraft</a>
+      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/faq.html">FAQ</a>
+      <a class="link" href="/">Play</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Fuel Prices &amp; Hedging: The Complete Guide</h1>
+    <p class="lede">For most airlines in Tailwinds, fuel is the single largest operating cost — which makes the fuel market the single largest thing you don't control. Except that you can, partially. This guide explains exactly how fuel pricing works under the hood, how hedge contracts are priced, and a simple routine that takes the drama out of spikes.</p>
+
+    <h2>How the fuel market works</h2>
+    <p>Tailwinds prices jet fuel from a base of <strong>$1.20 per litre</strong>, multiplied by a market index that starts at 1.00 and moves every week. The index wanders between roughly <strong>0.55</strong> (a cheap-oil glut) and <strong>1.90</strong> (a full-blown crisis spike), so the real price you pay ranges from about $0.66 to about $2.28 per litre.</p>
+    <p>The index is <em>mean-reverting</em>: wherever it is, it gets pulled gently back toward 1.00 each week, with random shocks layered on top. Two practical consequences fall out of that design:</p>
+    <ul>
+      <li><strong>Extremes don't last.</strong> An index at 1.60 is being dragged downward even while the headlines feel apocalyptic. An index at 0.70 is quietly climbing back. The further from normal, the stronger the pull.</li>
+      <li><strong>But extremes do happen, and they arrive fast.</strong> The weekly shocks can stack in one direction for a while. An airline with thin margins and zero protection can go from comfortable to cash-negative inside a month.</li>
+    </ul>
+    <p>You can watch the current index and its recent history on the Finance screen — it's worth a glance every week, the way a real CFO glances at Brent crude.</p>
+
+    <h2>What fuel actually costs your airline</h2>
+    <p>Each aircraft type has a fixed physical burn rate in litres per 100&nbsp;km — that's a property of the airframe and never changes. Your cost per kilometre is burn × price per litre. At the base index of 1.00:</p>
+    <table>
+      <tr><th>Aircraft</th><th>Burn (L/100km)</th><th>Fuel cost per km</th></tr>
+      <tr><td>ATR 72-600 (turboprop, 78 seats)</td><td>122.75</td><td>≈ $1.47</td></tr>
+      <tr><td>Boeing 737-800 (narrow-body, 189 seats)</td><td>400.25</td><td>≈ $4.80</td></tr>
+      <tr><td>Airbus A320neo (narrow-body, 194 seats)</td><td>388.25</td><td>≈ $4.66</td></tr>
+      <tr><td>Boeing 787-9 (wide-body, 420 seats)</td><td>717.50</td><td>≈ $8.61</td></tr>
+    </table>
+    <p>Multiply by route distance and weekly frequency and the sums get large quickly: a single 737-800 flying fourteen 1,100&nbsp;km round trips a week burns roughly $148,000 of fuel at index 1.00 — and roughly $214,000 if the index spikes to 1.45. Same aircraft, same schedule, same passengers: $66,000 a week of difference you didn't choose. The <a href="/aircraft.html">aircraft guides</a> list burn rates for every type in the game, and per-seat fuel efficiency is one of the biggest reasons newer types justify their higher leases.</p>
+
+    <h2>How hedge contracts work</h2>
+    <p>A hedge contract locks today's market index, plus a premium, for a fixed share of your fleet's total fuel bill over a fixed number of weeks. Three duration options are available:</p>
+    <table>
+      <tr><th>Contract</th><th>Length</th><th>Premium on locked price</th></tr>
+      <tr><td>Short</td><td>8 weeks</td><td>+3%</td></tr>
+      <tr><td>Medium</td><td>13 weeks</td><td>+6%</td></tr>
+      <tr><td>Long</td><td>26 weeks</td><td>+10%</td></tr>
+    </table>
+    <p>Coverage comes in steps of 25%, 50%, or 75% of your fuel bill, and contracts stack — you can layer several at once up to a total of 100% coverage. While a contract runs, its share of your fuel is charged at the locked price no matter what the market does; the unhedged remainder floats. Your effective price is simply the blend:</p>
+    <p class="tip">effective index = hedged share × locked price + unhedged share × market index</p>
+    <p>Worked example: the market index sits at 0.97. You buy a 13-week hedge at 50% coverage. Your locked price is 0.97 × 1.06 ≈ 1.03. Six weeks later a spike drives the market to 1.45 — but you pay 0.5 × 1.03 + 0.5 × 1.45 = <strong>1.24</strong>. On the 737-800 schedule above, that's about $31,000 a week you didn't spend, for a premium that cost you a few thousand a week while prices were calm.</p>
+
+    <h2>When to hedge — and when not to</h2>
+    <h3>Hedge when prices are normal or cheap</h3>
+    <p>The whole trade is buying certainty at a small markup. That markup is only worth paying when the price you're locking is a price you'd be happy to pay for months. An index at or below 1.00 is exactly that. Think of it as insurance shopping on a sunny day.</p>
+    <h3>Don't hedge into a spike</h3>
+    <p>The instinct when fuel hits 1.50 is to panic-lock before it gets worse. Resist it. Mean reversion means the expected path from 1.50 is <em>down</em>, and a hedge locks the bad price plus a premium — the game-mechanics equivalent of buying flood insurance while standing in the flood. During a spike, the better levers are operational: nudge fares up (your competitors' costs spiked too), trim marginal frequency, and let the index fall back before writing new contracts.</p>
+    <h3>Ladder your contracts</h3>
+    <p>Rather than one all-or-nothing decision, keep a rolling ladder: for example, a 26-week contract at 25% coverage as your long-term floor, plus a 13-week contract at 25–50% renewed whenever prices dip below normal. Expirations then arrive staggered, no single renewal date can ambush you, and you always retain some floating share to benefit when fuel gets genuinely cheap.</p>
+    <h3>Match coverage to your fragility</h3>
+    <p>Hedging matters most when a spike could actually hurt you. A young airline running thin margins and big lease commitments should carry more coverage — 50–75% — because a bad quarter is existential. A mature airline with fat margins and a cash cushion can run 25% or even none, treating fuel swings as noise. And note which fleets care: a turboprop regional network at $1.47/km of fuel has far less at stake than a widebody long-haul operation at $8.61/km.</p>
+
+    <h2>Reading fuel in your route P&amp;L</h2>
+    <p>Fuel flows through every route's weekly profit line, so a market move shows up as your whole network getting better or worse at once — distinct from a single route souring, which points to competition or pricing instead. When your P&amp;L dips across the board, check the fuel index before touching your fares; the fix for expensive fuel is rarely a fare cut. The <a href="/route-economics.html">route economics guide</a> covers how to decompose a route's profit change into its causes, and the <a href="/route-case-study.html">route case study</a> shows a fuel spike hitting a live route — with and without the hedge.</p>
+
+    <div class="tip">Rule of thumb: below 0.90, hedge generously and long. Between 0.90 and 1.10, keep the ladder rolling. Above 1.20, stop writing new contracts and ride your existing ones. Above 1.40, be glad you laddered.</div>
+
+    <a class="cta" href="/">Play Tailwinds Now →</a>
+  </main>
+
+  <footer class="site">
+    <div class="footwrap">
+      <a href="/?home">Home</a>
+      <a href="/how-to-play.html">How to Play</a>
+      <a href="/strategy.html">Strategy</a>
+      <a href="/aircraft.html">Aircraft</a>
+      <a href="/glossary.html">Glossary</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/devlog.html">Devlog</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
+    </div>
+  </footer>
+</body>
+</html>
