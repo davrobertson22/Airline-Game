@@ -1,0 +1,13 @@
+import { gameReducer, freshState } from './src/store/GameContext.jsx';
+import { AIRCRAFT_TYPES } from './src/data/aircraft.js';
+const t = AIRCRAFT_TYPES.find(x => !x.freighter);
+let st = { ...freshState(), cash: 1e12, phase: 'playing', hub: 'SFO', airlineName: 'Test' };
+for (let i = 0; i < 3; i++) st = gameReducer(st, { type: 'BUY_AIRCRAFT', typeId: t.id });
+console.log('after 3 buys:', st.fleet.map(a => a.name).join(', '));
+st = gameReducer(st, { type: 'SELL_AIRCRAFT', aircraftId: st.fleet[1].id });
+console.log('after sell #2:', st.fleet.map(a => a.name).join(', '));
+st = gameReducer(st, { type: 'BUY_AIRCRAFT', typeId: t.id });
+const names = st.fleet.map(a => a.name);
+console.log('after re-buy:', names.join(', '));
+const dupes = names.filter((n,i)=>names.indexOf(n)!==i);
+console.log(dupes.length===0 ? 'NO DUPLICATES OK' : 'DUPES: '+dupes);
