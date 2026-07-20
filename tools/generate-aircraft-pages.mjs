@@ -255,6 +255,7 @@ function aircraftCard(t, group, isFreight) {
   const specs = [
     isFreight ? `<span>Payload <b>${t.payloadTonnes} tonnes</b></span>` : `<span>Seats <b>${fmtInt(t.seats)}</b></span>`,
     `<span>Range <b>${fmtInt(t.range)} km</b></span>`,
+    t.runwayFt ? `<span>Runway <b>${fmtInt(t.runwayFt)} ft</b></span>` : '',
     `<span>Lease <b>${fmtMoney(t.weeklyLease)}/wk</b></span>`,
     `<span>Buy <b>${fmtMoney(t.purchasePrice)}</b></span>`,
     `<span>Fuel <b>${t.fuelBurnPer100km.toFixed(0)} L/100km</b> (≈ $${t.fuelKm.toFixed(2)}/km)</span>`,

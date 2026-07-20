@@ -98,9 +98,10 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
     if (routeMaxLegKm(r) > range) return { ok: false, reason: `Out of range: ${r.origin}–${r.destination}` };
   }
 
-  // Regulatory restrictions re-checked per leg with the NEW aircraft category
+  // Regulatory restrictions re-checked per leg with the NEW aircraft type —
+  // category rules AND runway-length requirements can differ between types
   // (pair frequencies are unchanged, so totals stay as already approved).
-  if (toType.category !== fromType.category) {
+  if (toType.id !== fromType.id) {
     const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
     for (const r of all) {
       for (const l of routeLegs(r)) {
@@ -108,7 +109,7 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
         const pairFreq = allOps.reduce((s, o) =>
           routeLegs(o).some(ol => routePairKey(ol.from, ol.to) === pk) ? s + (o.weeklyFrequency ?? 0) : s, 0);
         if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to), pairFreq,
-              toType.category, { routes: allOps, excludeKey: pk }))
+              toType.category, { routes: allOps, excludeKey: pk, aircraftType: toType }))
           return { ok: false, reason: `Not permitted at ${l.from}–${l.to}` };
       }
     }
@@ -154,7 +155,7 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   const peakPairFreq = Math.max(0, ...months.map(m =>
     pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + freqOf(r), 0)));
   if (checkRouteRestrictions(route.origin, route.destination, dist, peakPairFreq, type.category,
-        { routes: state.routes, excludeKey: pairKey })) return 'Regulatory frequency cap on this route';
+        { routes: state.routes, excludeKey: pairKey, aircraftType: type })) return 'Regulatory frequency cap on this route';
 
   // Block-hours on this aircraft, per-month peak, with this route at the new freq.
   const acRoutes = state.routes.filter(r => r.aircraftId === route.aircraftId);
@@ -704,7 +705,7 @@ function reducer(state, action) {
         pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + r.weeklyFrequency, 0)));
       const proposedPairFreq = peakPairFreq + weeklyFrequency;
       if (checkRouteRestrictions(action.origin, action.destination, dist, proposedPairFreq, type.category,
-            { routes: state.routes, excludeKey: pairKey })) return state;
+            { routes: state.routes, excludeKey: pairKey, aircraftType: type })) return state;
 
       // ── Block-hours check: per-month peak across routes on this aircraft ───────
       // Two routes that never share a month can both use the full block-hour budget.
@@ -840,7 +841,7 @@ function reducer(state, action) {
         const pk = routePairKey(l.from, l.to);
         if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to),
               legPairFreq(pk) + weeklyFrequency, type.category,
-              { routes: state.routes, excludeKey: pk })) return state;
+              { routes: state.routes, excludeKey: pk, aircraftType: type })) return state;
       }
 
       // ── Block hours: cumulative across this aircraft's routes, legs-aware ──
@@ -993,7 +994,7 @@ function reducer(state, action) {
         .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
         .reduce((s, r) => s + r.weeklyFrequency, 0);
       if (checkRouteRestrictions(action.origin, action.destination, dist, existingPairFreq + weeklyFrequency,
-            type.category, { routes: allOps, excludeKey: pairKey })) return state;
+            type.category, { routes: allOps, excludeKey: pairKey, aircraftType: type })) return state;
 
       // Block-hours across this freighter's existing cargo routes.
       const existingBlockHrs = (state.cargoRoutes ?? [])
