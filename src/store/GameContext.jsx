@@ -2027,7 +2027,7 @@ function reducer(state, action) {
         .filter(a => !failedIds.has(a.id)); // don't re-announce ones that just failed again
       const recoveryToasts = recoveredAircraft.map(a => ({
         type:    'success',
-        title:   `✅ Back in Service — ${a.name}`,
+        title:   `Back in Service: ${a.name}`,
         message: `${a.tailNumber || a.name} has completed repairs and returned to service.`,
         icon:    '✅',
         duration: 5000,
@@ -2580,6 +2580,24 @@ function reducer(state, action) {
         });
       }
       const finalFleet = [...agedFleet, ...deliveredAircraft];
+      // Self-heal legacy duplicate display names (pre-2026-07-17 fleets could
+      // mint two "A320neo #18"s). Keep the first of each name; renumber later
+      // ones to the next free number for their type. Deterministic, so repeat
+      // ticks converge; no-op once names are unique.
+      {
+        const seen = new Set();
+        for (let i = 0; i < finalFleet.length; i++) {
+          const a = finalFleet[i];
+          if (!a?.name) continue;
+          if (!seen.has(a.name)) { seen.add(a.name); continue; }
+          const base = a.name.replace(/\s*#\d+\s*$/, '');
+          let num = nextAircraftNumber(a.typeId, finalFleet, state.pendingOrders);
+          let candidate = `${base} #${num}`;
+          while (seen.has(candidate)) candidate = `${base} #${++num}`;
+          finalFleet[i] = { ...a, name: candidate };
+          seen.add(candidate);
+        }
+      }
       // Drop routes whose aircraft lease expired this week, and age weeksOpen on survivors
       const survivingRoutes = expiredLeaseIds.size > 0
         ? seasonAdjustedRoutes.filter(r => !expiredLeaseIds.has(r.aircraftId))
