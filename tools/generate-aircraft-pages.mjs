@@ -129,6 +129,7 @@ const FOOTER = `
       <a href="/glossary.html">Glossary</a>
       <a href="/faq.html">FAQ</a>
       <a href="/devlog.html">Devlog</a>
+      <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>
       <a href="/contact.html">Contact</a>
       <a href="/privacy.html">Privacy</a>
