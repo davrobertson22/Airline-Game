@@ -14,6 +14,7 @@ Tailwinds is free to play at https://www.tailwindsairlinegame.com — the game i
 
 - [Strategy Guide](https://www.tailwindsairlinegame.com/strategy.html): openings, growth, and late-game play
 - [Route Economics](https://www.tailwindsairlinegame.com/route-economics.html): demand, fares, load factors, and profitability
+- [Demand & Quality](https://www.tailwindsairlinegame.com/demand-and-quality.html): inside the simulation — how passengers choose airlines, segment weights, and the 0–100 quality score
 - [Hub Strategy](https://www.tailwindsairlinegame.com/hub-strategy.html): building connecting banks and choosing a hub
 - [Fleet Planning](https://www.tailwindsairlinegame.com/fleet-planning.html): matching aircraft to routes
 - [Aircraft Guide](https://www.tailwindsairlinegame.com/aircraft.html): stats for 100+ real aircraft, by class

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How Demand &amp; Quality Work — Tailwinds Airline Management Game</title>
+  <meta name="description" content="Inside the Tailwinds simulation: how the demand model splits passengers between airlines using price, quality and frequency, and every factor behind the 0–100 quality score." />
+  <link rel="canonical" href="https://www.tailwindsairlinegame.com/demand-and-quality.html" />
+  <meta property="og:title" content="How Demand &amp; Quality Work — Tailwinds Airline Management Game" />
+  <meta property="og:description" content="Inside the Tailwinds simulation: how the demand model splits passengers between airlines using price, quality and frequency, and every factor behind the 0–100 quality score." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://www.tailwindsairlinegame.com/demand-and-quality.html" />
+  <meta property="og:image" content="https://www.tailwindsairlinegame.com/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#1b1b1f; --panel:#26262d; --line:#3a3b40; --text:#ededee; --muted:#a1a1aa; --gold:#c79a4b; --gold-light:#d3ad63; }
+    * { box-sizing: border-box; }
+    body { font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.7; }
+    a { color:var(--gold-light); }
+    header.site { border-bottom:1px solid var(--line); }
+    nav.site { max-width:880px; margin:0 auto; padding:18px 24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+    nav.site .brand { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem; color:var(--text); text-decoration:none; margin-right:auto; }
+    nav.site a.link { color:var(--muted); text-decoration:none; font-size:0.95rem; font-weight:500; }
+    nav.site a.link:hover { color:var(--gold-light); }
+    main { max-width:760px; margin:0 auto; padding:48px 24px 72px; }
+    h1 { font-family:'Space Grotesk',sans-serif; font-size:2.1rem; line-height:1.2; margin:0 0 8px; }
+    .lede { color:var(--muted); font-size:1.1rem; margin:0 0 36px; }
+    h2 { font-family:'Space Grotesk',sans-serif; font-size:1.45rem; margin:40px 0 12px; }
+    h3 { font-size:1.1rem; margin:26px 0 8px; }
+    p { margin:0 0 16px; }
+    ul,ol { margin:0 0 16px; padding-left:22px; }
+    li { margin:0 0 8px; }
+    table { border-collapse:collapse; width:100%; margin:0 0 16px; font-size:0.95rem; }
+    th,td { border:1px solid var(--line); padding:8px 12px; text-align:left; }
+    th { background:var(--panel); font-weight:600; }
+    .cta { display:inline-block; background:var(--gold); color:#20180a; font-weight:700; padding:13px 30px; border-radius:8px; text-decoration:none; margin:18px 0; }
+    .tip { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:0 0 16px; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "How Demand & Quality Work — Tailwinds Airline Management Game",
+    "description": "Inside the Tailwinds simulation: how the demand model splits passengers between airlines using price, quality and frequency, and every factor behind the 0–100 quality score.",
+    "mainEntityOfPage": "https://www.tailwindsairlinegame.com/demand-and-quality.html",
+    "image": "https://www.tailwindsairlinegame.com/og-image.png",
+    "datePublished": "2026-07-22",
+    "dateModified": "2026-07-22",
+    "author": {
+      "@type": "Organization",
+      "name": "Tailwinds"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Tailwinds",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://www.tailwindsairlinegame.com/tailwinds-logo-color.png"
+      }
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="site">
+    <nav class="site">
+      <a class="brand" href="/">Tailwinds</a>
+      <a class="link" href="/how-to-play.html">How to Play</a>
+      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/aircraft.html">Aircraft</a>
+      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/faq.html">FAQ</a>
+      <a class="link" href="/">Play</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>How Demand &amp; Quality Actually Work</h1>
+    <p class="lede">Tailwinds looks approachable on the surface, but underneath sits a full passenger-choice model: every week, simulated travellers weigh your fares, your product, and your schedule against every competitor on the route. This guide opens the hood.</p>
+
+    <h2>The passenger's decision</h2>
+    <p>Demand on a route isn't handed to the airline with the lowest fare. Each passenger segment scores every airline's offer with a utility model — roughly: <em>quality weight × quality score − price weight × relative fare</em>, plus a frequency term — and market share follows from those scores. The two segments weigh the ingredients very differently:</p>
+    <table>
+      <tr><th>Segment</th><th>Price weight</th><th>Quality weight</th><th>Frequency weight</th></tr>
+      <tr><td>Leisure</td><td>1.8</td><td>0.5</td><td>0.4</td></tr>
+      <tr><td>Business</td><td>0.8</td><td>1.4</td><td>0.9</td></tr>
+    </table>
+    <p>That asymmetry is the heart of airline strategy in Tailwinds. Leisure travellers chase cheap fares and mostly tolerate a spartan product; business travellers pay more than double the weight on quality and want frequent departures so they can fly when the meeting ends, not when the airline feels like it. A low-cost configuration and a premium configuration can both win — on different routes, against different rivals.</p>
+
+    <h2>The quality score, factor by factor</h2>
+    <p>Every route you fly carries a 0–100 quality score, recomputed weekly from how you actually run the airline. Nothing in it is a dial you set directly — each point is earned (or lost) somewhere in your operation:</p>
+    <ul>
+      <li><strong>On-time performance (up to 30 points).</strong> Punctuality blends the morale of your pilots, ground staff and cabin crew — and suffers when the fleet is worked too hard. Push average utilisation past ~60% of the weekly block-hour cap and schedules lose the slack to absorb delays; idle spare aircraft quietly protect your punctuality.</li>
+      <li><strong>Customer rating (up to 28 points).</strong> Earned, not set. Passenger satisfaction drifts each week toward the experience you actually delivered — punctuality, crew service, cabin product, catering, fleet age — and your star rating follows it slowly in both directions. Cut service to save money and the damage arrives over the following weeks, then takes just as long to win back.</li>
+      <li><strong>Cabin product (−11 to +34 points).</strong> Seat quality (basic −6 to luxury +20) plus service quality (basic −5 to luxury +14). The <em>basic</em> tiers are a deliberate low-cost-carrier tradeoff: real weekly savings in exchange for a quality penalty.</li>
+      <li><strong>Fleet age (up to 20 points).</strong> A factory-fresh aircraft scores the full 20; the bonus erodes with age and hits zero around year 13. Cheap old jets save on lease and give it back here.</li>
+      <li><strong>Cabin space (up to +14 points).</strong> Floor space you deliberately leave unfilled becomes room per passenger. Business-class seats consume 1.5× the floor of an economy seat and premium economy 1.25×, so a premium-heavy or under-seated cabin is a real capacity sacrifice that passengers can feel. A lighter cabin also flies further — less payload means more fuel.</li>
+      <li><strong>Catering (bonus or penalty, scaled by distance).</strong> Meal service matters little on a 45-minute hop and a lot on a 12-hour ultra-long-haul.</li>
+      <li><strong>Ground staff &amp; hubs.</strong> Well-staffed, well-paid ground operations add a small bonus (understaffed ones a penalty), and routes touching a hub you've invested in get a boost from that investment.</li>
+    </ul>
+    <div class="tip">See it in game: the Routes table shows a colour-coded Quality column for every city pair, and each route's detail page has a full point-by-point breakdown of where its score comes from.</div>
+
+    <h2>Why quality is a strategy, not a virtue</h2>
+    <p>Because the two segments weigh it so differently, quality is an investment with a return you can calculate. Against competitors, the business segment splits mostly on quality — a 70-quality product against a 50-quality rival takes a disproportionate share of the highest-yield passengers, and premium cabins only fill when the product behind them is credible. Meanwhile every quality point costs something: better seats cost capacity, better catering costs money per meal, younger fleets cost more to acquire, and punctuality costs spare aircraft and staff morale.</p>
+    <p>The result is that "maximum quality" is rarely the right answer — and neither is minimum. A regional leisure carrier flying dense cabins at rock-bottom fares can post excellent margins with a mediocre score, because its passengers weigh price at 1.8 and quality at 0.5. A business-heavy trunk route between financial capitals rewards the opposite build. Matching the product to the route's passenger mix is the actual game.</p>
+
+    <h2>Where the demand itself comes from</h2>
+    <p>Before any of this splits the market, the market has to exist. Route demand is gravity-based — populations, distance, tourism appeal, gateway effects and seasonality set the size of the pool, and connecting traffic over your hub adds to it. The <a href="/route-economics.html">route economics guide</a> covers that side in detail, and the <a href="/hub-strategy.html">hub strategy guide</a> explains the network effects. For how rival airlines respond to your moves — including AI carriers that invest in their own cabins when profitable and cut standards when distressed — see <a href="/competition-and-alliances.html">competition &amp; alliances</a>.</p>
+
+    <h2>Further reading</h2>
+    <p>The <a href="/aircraft.html">aircraft guides</a> carry per-type economics for every aircraft in the game, <a href="/fleet-planning.html">fleet planning</a> covers matching frames to markets, and the <a href="/glossary.html">glossary</a> defines the terms used here.</p>
+
+    <a class="cta" href="/">Play Tailwinds Now →</a>
+  </main>
+
+  <footer class="site">
+    <div class="footwrap">
+      <a href="/?home">Home</a>
+      <a href="/how-to-play.html">How to Play</a>
+      <a href="/strategy.html">Strategy</a>
+      <a href="/aircraft.html">Aircraft</a>
+      <a href="/glossary.html">Glossary</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
+      <a href="/devlog.html">Devlog</a>
+      <a href="/best-airline-management-games.html">Best Airline Games</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
+    </div>
+  </footer>
+</body>
+</html>
