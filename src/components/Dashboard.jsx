@@ -366,7 +366,7 @@ export default function Dashboard() {
             label="Cargo / wk"
             value={formatMoney(cargoRevenue)}
             color="green"
-            sub={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><PackageIcon size={11} /> {Math.round(cargoTonnes).toLocaleString()} t/wk · {cargoRoutes.length} route{cargoRoutes.length !== 1 ? 's' : ''}</span>}
+            sub={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><PackageIcon size={11} /> {Math.round(cargoTonnes).toLocaleString()} t/wk · {(() => { const n = new Set(cargoRoutes.map(r => [r.origin, r.destination].sort().join('-'))).size; return n + ' route' + (n !== 1 ? 's' : ''); })()}</span>}
             subColor="var(--text-dim)"
           />
         )}
