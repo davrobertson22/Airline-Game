@@ -5,17 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!--
-      Skip the static landing for anyone who already has a session (including
-      mid-signup). Runs in <head> before the body is parsed/painted, and hides
-      via CSS so the landing is never rendered for returning visitors — no flash.
-      Brand-new visitors (no save) still see the landing as the front door.
+      The static landing is the front door for EVERY visit — new and returning
+      players alike. Nobody is dropped straight into the game on load; players
+      click "Play Free Now" to enter, which resumes their existing save.
+
+      Opt back into the old auto-resume behaviour with ?play (or #play): a
+      returning player (has a save) who arrives with that flag skips the landing.
+      This keeps deep links like "resume my game" working without changing the
+      default of always showing the home page first.
     -->
     <script>
       (function () {
         try {
-          // Allow ?home / #home to force the landing even for returning players.
-          var wantHome = /[?&]home(=|&|$)/.test(location.search) || location.hash === '#home';
-          if (!wantHome && localStorage.getItem('bbae_save_v2')) {
+          var wantPlay = /[?&]play(=|&|$)/.test(location.search) || location.hash === '#play';
+          if (wantPlay && localStorage.getItem('bbae_save_v2')) {
             document.documentElement.setAttribute('data-skip-landing', '1');
           }
         } catch (e) { /* show landing on any error */ }
