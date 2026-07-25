@@ -28,7 +28,10 @@
  * Each aircraft stores its own physical burn (litres/100km), independent of
  * this price. Effective $/km for a type = (burnPer100km / 100) × pricePerLitre.
  */
-export const FUEL_PRICE_PER_LITRE = 1.20;
+// Raised 1.20 → 1.45 (+21%) as part of the load-factor rebalance: fuel is a
+// large, load-INDEPENDENT per-departure cost, so a higher fuel price lifts the
+// break-even load factor of a typical route toward ~65% (empty seats now bleed).
+export const FUEL_PRICE_PER_LITRE = 1.45;
 
 /**
  * Market fuel price ($/litre) for a given index (defaults to base, index 1.0).
