@@ -20,6 +20,7 @@ import {
   DISTRIBUTION_COST_PCT,
 } from '../data/overhead.js';
 import { routeCatering, cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
+import { routeAncillaries, ancillaryQualityBonus } from '../data/ancillaries.js';
 import {
   buildRouteMarket,
   computeMarketShare,
@@ -432,7 +433,7 @@ export const SATISFACTION_ADAPT_RATE = 0.15;
  * catering, and fleet age. Deliberately EXCLUDES customerRating itself so the
  * satisfaction loop has no feedback term.
  */
-export function deliveredExperience({ fleet = [], routes = [], labor = null }, avgUtilization = null) {
+export function deliveredExperience({ fleet = [], routes = [], labor = null, ancillaries = null }, avgUtilization = null) {
   const { onTimeRate } = laborEffects(labor, avgUtilization);
   const assigned = fleet.filter(a => routes.some(r => r.aircraftId === a.id));
   const avgCabinPts = assigned.length > 0
@@ -455,10 +456,12 @@ export function deliveredExperience({ fleet = [], routes = [], labor = null }, a
         routeDistanceKm(r.origin, r.destination)), 0) / routes.length
     : 0;
   const cabinMorale = labor?.cabinCrew?.morale ?? 80;
+  // Airline-wide ancillary generosity lifts (or dents) the delivered experience.
+  const ancQ = ancillaryQualityBonus(ancillaries);
 
   const otpPts   = onTimeRate * 40;                                            // 0–40
   const crewPts  = (cabinMorale / 100) * 22;                                   // 0–22
-  const cabinPts = Math.max(0, Math.min(24, 12 + (avgCabinPts + avgCatering + avgSpacePts) * 0.55)); // 0–24
+  const cabinPts = Math.max(0, Math.min(24, 12 + (avgCabinPts + avgCatering + avgSpacePts + ancQ) * 0.55)); // 0–24
   const agePts   = Math.max(0, 14 - avgAgeYears * 1.1);                        // 0–14
   return Math.max(0, Math.min(100, Math.round(otpPts + crewPts + cabinPts + agePts)));
 }
@@ -495,6 +498,7 @@ export function routeQualityBreakdown(route, aircraft, state) {
   const spacePts    = configSpaceQualityBonus(config, type);
   const dist        = isMultiStop(r) ? routeMaxLegKm(r) : routeDistanceKm(r.origin, r.destination);
   const cateringPts = cateringQualityBonus(normalizeCateringLevel(r.cateringLevel), dist);
+  const ancillaryPts = ancillaryQualityBonus(state.ancillaries ?? null);
 
   // Hub investment bonus: best player hub touching the route (all stops for tag routes)
   const hubs = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
@@ -505,11 +509,11 @@ export function routeQualityBreakdown(route, aircraft, state) {
   }));
 
   const raw   = computeQualityScore({ onTimeRate, cabinPoints: cabinPts, fleetAgeYears, customerRating });
-  const total = Math.max(0, Math.min(100, raw + groundQualityBonus + spacePts + cateringPts + hubPts));
+  const total = Math.max(0, Math.min(100, raw + groundQualityBonus + spacePts + cateringPts + ancillaryPts + hubPts));
 
   return {
     onTimePts, cabinPts, agePts, ratingPts,
-    groundPts: groundQualityBonus, spacePts, cateringPts, hubPts,
+    groundPts: groundQualityBonus, spacePts, cateringPts, ancillaryPts, hubPts,
     raw, total,
     onTimeRate, customerRating, satisfaction, avgUtilization,
   };
@@ -810,7 +814,7 @@ export function defaultConfig(totalSeats) {
  *                                           empties seats instead of skimming revenue.
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -843,8 +847,12 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // the per-aircraft service quality already baked into rawQualityScore.
   const cateringLevel    = normalizeCateringLevel(route.cateringLevel);
   const cateringQuality  = cateringQualityBonus(cateringLevel, dist);
+  // Ancillary quality: airline-wide à la carte generosity (free/cheap extras and
+  // simply offering expected amenities lift perceived quality; nickel-and-diming
+  // and dropping amenities drag it). Zero when no policy is active.
+  const ancillaryQuality = ancillaryQualityBonus(ancillaries);
   // Hub quality bonus: routes through a player-designated hub get a quality boost from hub investment
-  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + spaceQualityBonus + cateringQuality + (route.hubQualityBonus ?? 0)));
+  const qualityScore = Math.max(0, Math.min(100, rawQualityScore + groundQualityBonus + spaceQualityBonus + cateringQuality + ancillaryQuality + (route.hubQualityBonus ?? 0)));
 
   // Hub connectivity bonus (mirrors old hubBonus but expressed as 0–0.25 for the utility model)
   const connectivityBonus = (route.origin === route.hub || route.destination === route.hub) ? 0.20 : 0;
@@ -1014,6 +1022,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // Ancillary catering income folds straight into route revenue.
   totalRevenue += cateringRevenue;
 
+  // À la carte ancillaries (bags, seats, Wi-Fi, lounge, …) — airline-wide policy.
+  // Per-actual-passenger income + provisioning cost; both fold into the route.
+  const ancillary        = routeAncillaries(ancillaries, classSummary, dist);
+  const ancillaryRevenue = ancillary.revenue;
+  const ancillaryCost    = ancillary.cost;
+  totalRevenue += ancillaryRevenue;
+
   // Ground handling — ramp, baggage, gate agents, pushback; per boarded passenger
   const groundHandlingCost = Math.round(weeklyGroundHandlingCost(classSummary) * stationF);
 
@@ -1038,7 +1053,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // dedicated check-in for business/first pax. Per-passenger, both directions.
   const loungeCost = weeklyLoungeCost(classSummary);
 
-  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost + groundHandlingCost + layoverCost + compensationCost + loungeCost;
+  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost + ancillaryCost + groundHandlingCost + layoverCost + compensationCost + loungeCost;
 
   return {
     revenue:      Math.round(totalRevenue),
@@ -1053,6 +1068,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     cateringLevel,
     cateringQuality,
     cateringByClass: catering.byClass,
+    ancillaryRevenue,
+    ancillaryCost,
+    ancillaryQuality,
+    ancillaryByItem: ancillary.byItem,
     groundHandlingCost,
     loungeCost,
     layoverCost,
@@ -1107,7 +1126,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
  * @param {object} [gameDate={month:6}]
  * @returns {object|null}   null if an aircraft/airport is invalid or a leg exceeds range
  */
-export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null) {
+export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null) {
   const type  = getAircraftType(aircraft.typeId);
   if (!type) return null;
   const stops = routeStops(route);
@@ -1154,7 +1173,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     const biz    = Math.max(1, sp?.businessClass ?? eco * CLASS_FARE_MULTIPLIERS.businessClass);
     const quality = Math.max(0, Math.min(100,
       baseQuality + groundQualityBonus + spaceBonus
-      + cateringQualityBonus(cateringLevel, dist) + (route.hubQualityBonus ?? 0)));
+      + cateringQualityBonus(cateringLevel, dist) + ancillaryQualityBonus(ancillaries) + (route.hubQualityBonus ?? 0)));
     const connectivityBonus = (seg.from === route.hub || seg.to === route.hub) ? 0.20 : 0;
     const offer = {
       airlineId: 'player', origin: seg.from, destination: seg.to,
@@ -1241,6 +1260,12 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
   const cateringRevenue = catering.revenue;
   totalRevenue += cateringRevenue;
 
+  // À la carte ancillaries — airline-wide policy, per-passenger across the tag route.
+  const ancillary        = routeAncillaries(ancillaries, classSummary, totalDist);
+  const ancillaryRevenue = ancillary.revenue;
+  const ancillaryCost    = ancillary.cost;
+  totalRevenue += ancillaryRevenue;
+
   const groundHandlingCost = Math.round(weeklyGroundHandlingCost(classSummary) * stationFT);
   const loungeCost         = weeklyLoungeCost(classSummary);
   // Layover cost accrues per leg whose one-way block time clears the threshold.
@@ -1255,7 +1280,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     + layoverCostRaw * (1 - layoverFT)
   ) : 0;
 
-  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost
+  const totalOpCost = fuelCost + crewCost + qualityCost + cateringCost + ancillaryCost
     + groundHandlingCost + loungeCost + layoverCost + compensationCost;
 
   const totalSeatLegsAvail = legs.length * (ecoSeatsPerFlight + bizSeatsPerFlight) * f;
@@ -1275,6 +1300,9 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     cateringCost,
     cateringRevenue,
     cateringLevel,
+    ancillaryRevenue,
+    ancillaryCost,
+    ancillaryByItem: ancillary.byItem,
     groundHandlingCost,
     loungeCost,
     layoverCost,
@@ -1601,6 +1629,8 @@ export function weeklyTick(state) {
   // route.classPrices / route.cateringLevel as before.
   const routePricing  = state.routePricing  ?? {};
   const routeCatering = state.routeCatering ?? {};
+  // Airline-wide ancillary policy (null = inactive → zero revenue/cost/quality).
+  const ancillaries   = state.ancillaries   ?? null;
   const routes = rawRoutes.map(r => hydrateRoute(r, routePricing, routeCatering));
   // Routes operating THIS month. Dormant seasonal routes must not provide network
   // feed, interline adjacency, or cannibalization while they're out of season.
@@ -1615,7 +1645,7 @@ export function weeklyTick(state) {
   // the post-week value (EWMA toward this week's delivered experience) is
   // returned on the report for the reducer to persist.
   const satisfaction  = state.satisfaction ?? null;
-  const deliveredExp  = deliveredExperience({ fleet, routes, labor }, avgUtilization);
+  const deliveredExp  = deliveredExperience({ fleet, routes, labor, ancillaries }, avgUtilization);
   const satisfactionNext = nextSatisfaction(satisfaction, deliveredExp);
 
   // Awareness multiplier (adstock model): demand reach derives ONLY from the
@@ -1800,6 +1830,8 @@ export function weeklyTick(state) {
   let totalQuality        = 0;
   let totalCatering       = 0;   // catering COST
   let totalCateringRevenue = 0;  // ancillary catering REVENUE
+  let totalAncillaryRevenue = 0; // à la carte ancillary REVENUE (bags/seats/wifi/…)
+  let totalAncillaryCost    = 0; // à la carte ancillary provisioning COST
   let totalGroundHandling = 0;
   let totalLounge         = 0;
   let totalLayover        = 0;
@@ -1884,6 +1916,7 @@ export function weeklyTick(state) {
           raw + fx.groundQualityBonus
           + configSpaceQualityBonus(cfg, type)
           + cateringQualityBonus(normalizeCateringLevel(route.cateringLevel), groupDist)
+          + ancillaryQualityBonus(ancillaries)
           + groupHubQ));
         if (biz > 0) hasBusinessCabin = true;
       }
@@ -1981,10 +2014,11 @@ export function weeklyTick(state) {
           sensReductionFor(tagHubQuality) + (tagFortress ? 0.05 : 0)),
         ...(tagHcf ? { hubCostFactors: tagHcf } : {}),
       };
-      const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor);
+      const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries);
       if (!result) continue;
 
       const cateringRev    = result.cateringRevenue ?? 0;
+      const ancillaryRev   = result.ancillaryRevenue ?? 0;
       // Loyalty boost is concentrated on hub-touching routes.
       const tagLoyaltyBoost = tagHubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
       // Targeted campaigns: strongest campaign among ALL stops on a tag route,
@@ -1994,7 +2028,9 @@ export function weeklyTick(state) {
         Math.max(0, ...stopsList.map(mktDragAt)),
       );
       const combinedMult   = awarenessMultiplier * reputationMult * (1 + tagCampaignBoost) * (1 + tagLoyaltyBoost);
-      const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
+      // Per-passenger income (catering + ancillary fees) is NOT amplified by the
+      // demand multipliers — strip it out before boosting, add it back unscaled.
+      const boostedRevenue = Math.round((result.revenue - cateringRev - ancillaryRev) * combinedMult) + cateringRev + ancillaryRev;
       const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
 
       const type       = getAircraftType(aircraft.typeId);
@@ -2006,6 +2042,8 @@ export function weeklyTick(state) {
       totalQuality        += result.qualityCost;
       totalCatering        += result.cateringCost      ?? 0;
       totalCateringRevenue += cateringRev;
+      totalAncillaryRevenue += ancillaryRev;
+      totalAncillaryCost    += result.ancillaryCost    ?? 0;
       totalGroundHandling += result.groundHandlingCost ?? 0;
       totalLounge         += result.loungeCost         ?? 0;
       totalLayover        += result.layoverCost        ?? 0;
@@ -2069,7 +2107,7 @@ export function weeklyTick(state) {
     const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
       demandAllocations.get(aircraft.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
-      eventDemandMultFor(route.origin, route.destination));
+      eventDemandMultFor(route.origin, route.destination), ancillaries);
     if (!result) continue;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
@@ -2157,12 +2195,13 @@ export function weeklyTick(state) {
     // Loyalty boost concentrated on hub-touching routes, diluted elsewhere.
     const loyaltyLift    = hubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
     const combinedMult   = awarenessMultiplier * reputationMult * (1 + marketingLift) * (1 + loyaltyLift) * (1 + allianceLift);
-    // Ancillary catering revenue is per-actual-passenger income — it should NOT be
-    // amplified by the marketing/awareness/loyalty demand multipliers (those proxy
-    // for attracting MORE passengers, which catering income would then double-count).
-    // Strip it out before boosting, then add it back unscaled.
+    // Catering + à la carte ancillary revenue are per-actual-passenger income — they
+    // should NOT be amplified by the marketing/awareness/loyalty demand multipliers
+    // (those proxy for attracting MORE passengers, which this income would then
+    // double-count). Strip them out before boosting, then add them back unscaled.
     const cateringRev    = result.cateringRevenue ?? 0;
-    const boostedRevenue = Math.round((result.revenue - cateringRev) * combinedMult) + cateringRev;
+    const ancillaryRev   = result.ancillaryRevenue ?? 0;
+    const boostedRevenue = Math.round((result.revenue - cateringRev - ancillaryRev) * combinedMult) + cateringRev + ancillaryRev;
     const routeRevenue   = boostedRevenue + connecting.totalRevenue;
 
     // Landing & navigation fees for this route
@@ -2184,6 +2223,8 @@ export function weeklyTick(state) {
     totalQuality        += result.qualityCost;
     totalCatering        += result.cateringCost       ?? 0;
     totalCateringRevenue += cateringRev;
+    totalAncillaryRevenue += ancillaryRev;
+    totalAncillaryCost    += result.ancillaryCost     ?? 0;
     totalGroundHandling += result.groundHandlingCost  ?? 0;
     totalLounge         += result.loungeCost          ?? 0;
     totalLayover        += result.layoverCost         ?? 0;
@@ -2399,7 +2440,7 @@ export function weeklyTick(state) {
     hubThroughput[code] = (ownMetalOD?.byHub?.[code]?.pax ?? 0) + (hubExternalPax[code] ?? 0);
   }
 
-  const totalOpCost = totalFuel + totalCrew + totalQuality + totalCatering + totalGroundHandling + totalLounge + totalLayover + totalCompensation + totalLandingFees;
+  const totalOpCost = totalFuel + totalCrew + totalQuality + totalCatering + totalAncillaryCost + totalGroundHandling + totalLounge + totalLayover + totalCompensation + totalLandingFees;
   const totalCost   = totalLeases + totalMaintenance + totalOpCost + totalGateFees
     + totalLaborCosts + totalFamilyBaseCosts + totalHubInvestment
     + totalHQCost + totalInsurance + totalMarketingSpend + totalLoyaltyCost + totalPartnerFees
@@ -2418,6 +2459,8 @@ export function weeklyTick(state) {
     totalLandingFees:       Math.round(totalLandingFees),
     totalCatering:          Math.round(totalCatering),
     totalCateringRevenue:   Math.round(totalCateringRevenue),
+    totalAncillaryRevenue:  Math.round(totalAncillaryRevenue),
+    totalAncillaryCost:     Math.round(totalAncillaryCost),
     totalGroundHandling:    Math.round(totalGroundHandling),
     totalLounge:            Math.round(totalLounge),
     totalDistributionCost:  Math.round(totalDistributionCost),

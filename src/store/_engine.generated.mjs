@@ -39,6 +39,7 @@ import {
 } from '../data/alliances.js';
 import { routeLaunchCost, DEPRECIATION_YEARS } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
+import { normalizeAncillaries, defaultAncillaries, ANCILLARY_MAP } from '../data/ancillaries.js';
 import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective } from '../data/objectives.js';
 
 // ─────────────────────────────────────────────
@@ -72,6 +73,7 @@ function freshState() {
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
     marketingBudget:   0,          // weekly marketing spend ($) — 0 = no active marketing
     defaultCateringLevel: 'full',  // catering service level applied to newly-opened routes
+    ancillaries: null,             // airline-wide à la carte policy — null = not yet configured (no effect)
     loyalty: {
       weeklyInvestment: 0,   // weekly $ spend on loyalty program (the set budget)
       effInvestment: 0,      // ramped "effective" budget — eases toward weeklyInvestment
@@ -878,6 +880,34 @@ function reducer(state, action) {
       return { ...state, defaultCateringLevel: normalizeCateringLevel(action.level) };
     }
 
+    // Edit ONE ancillary product's { offered, price }. Touching any product for the
+    // first time activates the whole policy from the recommended baseline, then
+    // applies this change on top — so partial edits never leave a half-built policy.
+    // action: { id, offered?, price? }
+    case 'SET_ANCILLARY': {
+      const product = ANCILLARY_MAP[action.id];
+      if (!product) return state;
+      const base = state.ancillaries ? { ...state.ancillaries } : defaultAncillaries();
+      const cur  = base[action.id] ?? { offered: true, price: product.refPrice };
+      const next = { ...cur };
+      if (action.offered !== undefined) next.offered = !!action.offered;
+      if (action.price   !== undefined) {
+        const p = Math.round(Number(action.price));
+        next.price = Number.isFinite(p) ? Math.max(0, Math.min(product.maxPrice, p)) : cur.price;
+      }
+      base[action.id] = next;
+      return { ...state, ancillaries: normalizeAncillaries(base) };
+    }
+
+    // Activate (seed the recommended baseline), reset, or deactivate the whole
+    // ancillary policy. action: { active: boolean } or { ancillaries: {...} }
+    case 'SET_ANCILLARIES': {
+      if (action.ancillaries !== undefined) {
+        return { ...state, ancillaries: normalizeAncillaries(action.ancillaries) };
+      }
+      return { ...state, ancillaries: action.active ? defaultAncillaries() : null };
+    }
+
     case 'SET_LABOR_PAY': {
       // action: { group: 'pilots' | 'cabinCrew' | 'groundStaff' | 'maintenanceTeam', payMultiplier: number }
       const current = state.labor ?? DEFAULT_LABOR_STATE;
@@ -1543,6 +1573,8 @@ function reducer(state, action) {
         landingFees:     report.totalLandingFees    ?? 0,
         catering:        report.totalCatering          ?? 0,
         cateringRevenue: report.totalCateringRevenue   ?? 0,
+        ancillaryRevenue: report.totalAncillaryRevenue ?? 0,
+        ancillaryCost:    report.totalAncillaryCost    ?? 0,
         groundHandling:  report.totalGroundHandling    ?? 0,
         distribution:    report.totalDistributionCost  ?? 0,
         layover:         report.totalLayover           ?? 0,
@@ -1962,6 +1994,7 @@ function reconcileState(parsed) {
     codeshareAgreements:      parsed.codeshareAgreements      ?? [],
     marketingBudget:          parsed.marketingBudget          ?? 0,
     defaultCateringLevel:     normalizeCateringLevel(parsed.defaultCateringLevel),
+    ancillaries:              normalizeAncillaries(parsed.ancillaries),
     awareness:                parsed.awareness                ?? 5,
     missedLoanPayments:       parsed.missedLoanPayments       ?? 0,
     consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,
