@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
-import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE, fleetAvgUtilization } from '../utils/simulation.js';
+import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE, fleetAvgUtilization, isRouteActive, weekToGameDate } from '../utils/simulation.js';
 import { computeQualityScore, cabinQualityPoints } from '../models/demand.js';
 import { laborEffects } from '../data/labor.js';
 import { ARCHETYPES, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
@@ -40,6 +40,88 @@ function playerQuality(route, fleet, laborFx) {
   });
 }
 
+/** Seats on the aircraft flying a route (null when the tail can't be resolved). */
+function seatsOfRoute(route, fleet) {
+  const aircraft = fleet.find(a => a.id === route.aircraftId);
+  if (!aircraft) return null;
+  return getAircraftType(aircraft.typeId)?.seats ?? null;
+}
+
+/** Build routeKey → *aggregated* player presence on that city pair.
+ *
+ *  A city pair routinely carries several route objects: the reducer only merges
+ *  routes that share BOTH the same aircraft and the same season window, so two
+ *  aircraft on JFK–LAX are two rows, as is one aircraft with a summer and a
+ *  winter schedule. Every player-vs-competitor comparison has to fold those
+ *  together — otherwise whichever row happened to be written last was the only
+ *  one shown and your own frequency/seats were silently undercounted.
+ *
+ *  Seasonal rows dormant this month are excluded (they aren't flying now); if
+ *  every row on a pair is dormant we still keep the pair, using all of its rows,
+ *  so the route doesn't vanish from the contested list mid-off-season.
+ *
+ *  The returned object keeps the shape of a route (so existing consumers can
+ *  read .origin/.destination/.ticketPrice/.weeklyFrequency) with:
+ *    legs         — every route object on the pair that this aggregate covers
+ *    weeklyFrequency — Σ frequency
+ *    seatsPerWeek — Σ seats(tail) × frequency  (null if no tail resolvable)
+ *    ticketPrice  — frequency-weighted average fare
+ */
+export function buildPlayerPairMap(routes = [], fleet = [], month = null) {
+  const byPair = {};
+  for (const r of routes) {
+    const key = [r.origin, r.destination].sort().join('-');
+    (byPair[key] ??= []).push(r);
+  }
+
+  const map = {};
+  for (const [key, all] of Object.entries(byPair)) {
+    const active = month == null ? all : all.filter(r => isRouteActive(r, month));
+    const legs = active.length > 0 ? active : all;
+
+    let freq = 0, fareFreq = 0, seatsWk = null;
+    for (const leg of legs) {
+      const f = leg.weeklyFrequency ?? 0;
+      freq += f;
+      fareFreq += (leg.ticketPrice ?? 0) * f;
+      const seats = seatsOfRoute(leg, fleet);
+      if (seats != null) seatsWk = (seatsWk ?? 0) + seats * f;
+    }
+
+    // Representative row = the one carrying the most seats (falls back to the
+    // first) — used for any single-aircraft detail the UI still shows.
+    const primary = legs.reduce((best, leg) => {
+      const s = (seatsOfRoute(leg, fleet) ?? 0) * (leg.weeklyFrequency ?? 0);
+      const bs = (seatsOfRoute(best, fleet) ?? 0) * (best.weeklyFrequency ?? 0);
+      return s > bs ? leg : best;
+    }, legs[0]);
+
+    map[key] = {
+      ...primary,
+      legs,
+      weeklyFrequency: freq,
+      seatsPerWeek: seatsWk,
+      ticketPrice: freq > 0 ? Math.round(fareFreq / freq) : (primary.ticketPrice ?? 0),
+    };
+  }
+  return map;
+}
+
+/** Quality across every aircraft the player has on a pair, weighted by flights. */
+function playerPairQuality(agg, fleet, laborFx) {
+  const legs = agg?.legs ?? (agg ? [agg] : []);
+  if (legs.length === 1) return playerQuality(legs[0], fleet, laborFx);
+  let num = 0, den = 0, plain = 0, n = 0;
+  for (const leg of legs) {
+    const q = playerQuality(leg, fleet, laborFx);
+    if (q == null) continue;
+    const w = leg.weeklyFrequency ?? 0;
+    num += q * w; den += w; plain += q; n++;
+  }
+  if (n === 0) return null;
+  return Math.round(den > 0 ? num / den : plain / n);
+}
+
 // ─── Root component ───────────────────────────────────────────────────────────
 
 export default function Competition() {
@@ -48,12 +130,9 @@ export default function Competition() {
   const [expandedCarrier, setExpandedCarrier] = useState(null);
   const [acquireTarget, setAcquireTarget] = useState(null); // competitor object pending confirmation
 
-  // Map from routeKey → player route object
-  const playerRouteMap = {};
-  for (const r of routes) {
-    const key = [r.origin, r.destination].sort().join('-');
-    playerRouteMap[key] = r;
-  }
+  // routeKey → the player's TOTAL presence on that pair (all aircraft, all
+  // schedules folded together — see buildPlayerPairMap).
+  const playerRouteMap = buildPlayerPairMap(routes, fleet, weekToGameDate(state.week).monthIndex);
 
   // Routes where at least one competitor overlaps with the player
   const contestedKeys = Object.keys(playerRouteMap).filter(k =>
@@ -374,7 +453,9 @@ function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet }) {
   const laborFx = laborEffects(state.labor ?? null,
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null);
-  const pQual = playerQuality(playerRoute, fleet, laborFx);
+  // playerRoute is a pair AGGREGATE (all your aircraft on this city pair).
+  const pQual = playerPairQuality(playerRoute, fleet, laborFx);
+  const pLegs = playerRoute.legs ?? [playerRoute];
 
   const cols = 1 + competitors.length; // you + N competitors
 
@@ -389,6 +470,14 @@ function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet }) {
         <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
           · ref ${refP}
         </span>
+        {pLegs.length > 1 && (
+          <span
+            style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}
+            title="Your figures below combine every aircraft you fly on this pair"
+          >
+            · your {pLegs.length} aircraft combined
+          </span>
+        )}
       </div>
 
       {/* Comparison grid */}
@@ -416,12 +505,27 @@ function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet }) {
         <QualityCell score={pQual} isPlayer />
         {competitors.map(c => <QualityCell key={c.id} score={c.baseQualityScore} />)}
 
-        {/* Frequency */}
+        {/* Frequency — summed across every aircraft you fly on the pair */}
         <RowLabel>Flights / week</RowLabel>
         <FreqCell freq={playerRoute.weeklyFrequency} isPlayer />
         {competitors.map(c => (
           <FreqCell key={c.id} freq={c.routes[routeKey].frequency} />
         ))}
+
+        {/* Seats/week — total weekly capacity, not one aircraft's */}
+        <RowLabel>Seats / week</RowLabel>
+        <div style={{ padding: '7px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          {playerRoute.seatsPerWeek != null ? playerRoute.seatsPerWeek.toLocaleString() : '–'}
+        </div>
+        {competitors.map(c => {
+          const cfg = c.routes[routeKey];
+          const seats = cfg.aircraftType ? getAircraftType(cfg.aircraftType)?.seats ?? null : null;
+          return (
+            <div key={c.id} style={{ padding: '7px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              {seats != null ? (seats * (cfg.frequency ?? 0)).toLocaleString() : '–'}
+            </div>
+          );
+        })}
       </div>
 
       {/* Hints */}

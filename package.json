@@ -15,7 +15,8 @@
     "test:ui": "node --import ./tools/_register-loader.mjs tools/ui-smoke-test.mjs",
     "test:route-config": "node --import ./tools/_register-loader.mjs tools/route-config-test.mjs",
     "test:bulk-pricing": "node --import ./tools/_register-loader.mjs tools/bulk-pricing-test.mjs",
-    "test": "node tools/cargo-test.mjs && node tools/multistop-test.mjs && node tools/multistop-edge-test.mjs && node tools/reducer-tag-test.mjs && node tools/seasonal-test.mjs && node tools/ancillaries-test.mjs && node --import ./tools/_register-loader.mjs tools/ui-smoke-test.mjs && node --import ./tools/_register-loader.mjs tools/route-config-test.mjs && node --import ./tools/_register-loader.mjs tools/bulk-pricing-test.mjs"
+    "test": "node tools/cargo-test.mjs && node tools/multistop-test.mjs && node tools/multistop-edge-test.mjs && node tools/reducer-tag-test.mjs && node tools/seasonal-test.mjs && node tools/ancillaries-test.mjs && node --import ./tools/_register-loader.mjs tools/ui-smoke-test.mjs && node --import ./tools/_register-loader.mjs tools/route-config-test.mjs && node --import ./tools/_register-loader.mjs tools/bulk-pricing-test.mjs && node --import ./tools/_register-loader.mjs tools/contested-routes-test.mjs",
+    "test:contested": "node --import ./tools/_register-loader.mjs tools/contested-routes-test.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
