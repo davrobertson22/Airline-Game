@@ -63,6 +63,20 @@
 
     <div class="entry">
       <p class="date">July 27, 2026</p>
+      <h2>Hub congestion was measuring against the wrong gate</h2>
+      <p>A gate in Tailwinds physically holds <strong>50 departures a week</strong> &mdash; that's the hard limit the game enforces when you add a route, and it's the number the Airports tab has always shown you. The congestion warning on the Hub panel, though, was quietly measuring against a completely different figure: 16 departures per gate at a Major Hub. Two numbers for the same gate, roughly three times apart.</p>
+      <p>The effect was that congestion switched on at about a third of a hub's real capacity. If you were using your gates at all, the meter said &ldquo;Congested&rdquo; &mdash; and because the penalty bottoms out quickly, most congested hubs sat at the maximum debuff regardless of how far over they were. A hub at 110% and a hub at 400% got the same treatment, and the percentage in the warning didn't correspond to anything you could see elsewhere in the game.</p>
+      <ul>
+        <li><strong>Thresholds now track the real gate.</strong> Congestion begins at 30 departures per gate at a Focus City, 35 at a Hub, 40 at a Major Hub and 45 at an International Gateway &mdash; 60% to 90% of the 50-slot physical limit. Better hubs work their gates harder before connections start to slip, which is the point of upgrading one.</li>
+        <li><strong>The curve has room to ramp.</strong> A hub 10% over capacity now loses about 5% of its connecting traffic; one filled right to the physical wall loses around 11%. It scales with how overloaded you actually are instead of jumping straight to the worst case.</li>
+        <li><strong>Buying gates does something immediately.</strong> Under the old numbers a badly congested hub needed a huge gate order before the meter moved at all. Now every gate you add shows up.</li>
+        <li><strong>The percentage means something.</strong> &ldquo;% of slots&rdquo; on the Hub panel is now readable against the 50 slots per gate the Airports tab quotes, rather than against an invisible second number.</li>
+      </ul>
+      <p>If you've been staring at a hub flashing 284% and wondering how that squared with having plenty of slots left, that's why &mdash; it wasn't your reading of it. See the <a href="/hub-strategy.html">hub strategy</a> guide for how tiers and gates fit together.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 27, 2026</p>
       <h2>A News tab &mdash; your world now has a memory</h2>
       <p>The simulation has always generated far more story than you got to see. Rival airlines start fare wars, open second hubs, invest in cabins, run out of money and merge; the world economy moves through fuel spikes and recessions. All of it appeared briefly in the Weekly Debrief &mdash; the first six competitor lines, no more &mdash; and then vanished the moment you clicked through. There was no way to ask when a fare war had actually started.</p>
       <p>The new <strong>News</strong> tab keeps it.</p>
