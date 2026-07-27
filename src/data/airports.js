@@ -2851,6 +2851,9 @@ export const COUNTRY_REGION = {
   CV: 'Africa', ST: 'Africa',
   // Additional Middle East
   YE: 'Middle East',
+  // Overseas territories / dependencies
+  GP: 'North America', MQ: 'North America', TC: 'North America',
+  VG: 'North America', MP: 'Oceania',
 };
 
 export const REGIONS = [
