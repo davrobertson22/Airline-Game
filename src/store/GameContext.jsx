@@ -39,6 +39,7 @@ import {
   hubUpgradeChecklist,
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM, competitorMarketingSpend } from '../models/competitorAI.js';
+import { buildWeekNews, appendNews } from '../models/newsLog.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import {
@@ -201,6 +202,7 @@ function freshState() {
     year: 1,
     fleet: [],         // { id, typeId, name, status, ageWeeks, config, ownershipType, fuelMod, rangeMod, maintMod, engineId, engineLabel, hasWingtips }
     pendingOrders: [], // { id, typeId, ownershipType, name, engineId, engineLabel, hasWingtips, fuelMod, rangeMod, maintMod, deliverAbsWeek, totalPrice }
+    newsLog: [],       // { id, absWeek, year, week, category, kind, subject, icon, tier, data } — the News tab's archive (see models/newsLog.js)
     routes: [],      // { id, origin, destination, stops:[origin,...,destination], aircraftId, weeklyFrequency, hub } — price lives in routePricing; stops carries intermediate tag-flight airports (single-leg routes have stops=[origin,destination])
     routePricing: {},// { [pairKey]: { economy, premiumEconomy, businessClass, firstClass } } — one price set per O&D pair
     routeCatering: {},// { [pairKey]: cateringLevel } — one catering level per O&D pair
@@ -2649,6 +2651,8 @@ function reducer(state, action) {
 
       let objectiveCashBonus = 0;
       let updatedObjectives = currentObjectives;
+      // Collected for the news log: the toast is transient, the news row is not.
+      const completedObjectiveRows = [];
 
       if (objectivesEnabled && currentObjectives.length > 0) {
         const { newlyCompleted } = checkObjectives(currentObjectives, objectiveSnap);
@@ -2656,6 +2660,10 @@ function reducer(state, action) {
           if (!newlyCompleted.includes(obj.id)) return obj;
           const tmpl = getObjective(obj.id);
           objectiveCashBonus += tmpl?.reward ?? 0;
+          completedObjectiveRows.push({
+            id: obj.id, title: tmpl?.title ?? obj.id,
+            reward: tmpl?.reward ?? 0, desc: tmpl?.desc ?? null, icon: tmpl?.icon ?? '🏅',
+          });
           newToasts.push({
             type:     'success',
             title:    `🏅 Objective Complete — ${tmpl?.title ?? obj.id}`,
@@ -2753,11 +2761,34 @@ function reducer(state, action) {
       let newReputationPenalty = (state.reputationPenalty ?? 0) * REP_PENALTY_DECAY + forcedRepHit;
       newReputationPenalty = newReputationPenalty < 0.1 ? 0 : Math.min(REP_PENALTY_MAX, newReputationPenalty);
 
+      // ── News log ─────────────────────────────────────────────────────────────
+      // Everything this week generated that the player might want to look up
+      // later. The Weekly Debrief shows the week; this keeps it. Built from the
+      // same values the debrief reads, so the two can never disagree.
+      const newsProfit = preTaxProfit - corporateTax;
+      const bestProfitBefore = Math.max(
+        ...(state.statsHistory ?? []).map(h => h.profit ?? 0),
+        ...(state.financialHistory ?? []).map(h => h.profit ?? 0),
+        Number.NEGATIVE_INFINITY,
+      );
+      const weekNews = buildWeekNews({
+        year: newYear, week: newWeek, absWeek: newAbsWeek,
+        newEvents, expiredEvents, competitorEvents,
+        deliveries: deliveredAircraft,
+        checksCompleted: completedChecks,
+        checksForced,
+        failures: newFailures,
+        completedObjectives: completedObjectiveRows,
+        profit: newsProfit,
+        bestProfitBefore: Number.isFinite(bestProfitBefore) ? bestProfitBefore : null,
+      });
+
       return {
         ...state,
         cash:              newCash + objectiveCashBonus,
         week:              newWeek,
         year:              newYear,
+        newsLog:           appendNews(state.newsLog, weekNews),
         fleet:             finalFleet,
         reputationPenalty: newReputationPenalty,
         routes:            finalRoutes,

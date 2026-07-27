@@ -303,6 +303,32 @@ const WIKI = [
     ],
   },
   {
+    id: 'news',
+    icon: '\ud83d\udcf0',
+    title: 'News',
+    blurb: 'Your world\'s story, kept',
+    blocks: [
+      { p: 'The **News** tab is the running record of your world. The Weekly Debrief tells you what happened *this* week and then moves on; News keeps it, so you can go back and find when a fare war actually started, or what the board paid you for an objective.' },
+      { h: 'What shows up' },
+      { ul: [
+        '**World** \u00b7 economy events starting and ending: fuel spikes, recessions, regional demand shocks.',
+        '**Competitors** \u00b7 everything the other airlines do. Fare wars opening and ending, marketing blitzes, second hubs, route launches and withdrawals, quality investment, distress, mergers, failures and new entrants.',
+        '**Fleet** \u00b7 aircraft arriving, heavy checks finishing, unplanned groundings and mechanical faults.',
+        '**Company** \u00b7 board objectives completed, and your best trading week so far.',
+      ] },
+      { h: 'It groups the busy stuff' },
+      { p: 'In a healthy market several carriers launch routes every week, usually one each. Listed individually they would bury everything else, so a week\'s launches (and withdrawals, and capacity matches) collapse into a single line you can open for the full list. Anything rare \u2014 a fare war, a merger, an airline failing \u2014 always gets its own line.' },
+      { h: 'Two filters' },
+      { ul: [
+        '**Big moves only** \u00b7 fare wars, mergers, failures, new entrants, world events, objectives, unplanned groundings, and any competitor move on a route you fly.',
+        '**Near my network** \u00b7 only what touches an airport you serve or a city pair you fly. A rival opening a route into your hub is promoted automatically, filter or not.',
+      ] },
+      { tip: 'A competitor launching on one of your pairs is the single most useful thing on this page. If you check one filter, check that one.' },
+      { h: 'How far back it goes' },
+      { p: 'Your save keeps the most recent 250 items, which works out at roughly **two game years** of ordinary weeks. News begins accumulating from the first week you play after this update; earlier history was never recorded and cannot be recovered.' },
+    ],
+  },
+  {
     id: 'competition',
     icon: '⚔️',
     title: 'Competition',

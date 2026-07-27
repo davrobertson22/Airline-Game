@@ -12,7 +12,7 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon } from './components/Icons.jsx';
+import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon } from './components/Icons.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
 import Competition from './components/Competition.jsx';
@@ -24,6 +24,7 @@ import Ancillaries from './components/Ancillaries.jsx';
 import Loyalty from './components/Loyalty.jsx';
 import Alliances from './components/Alliances.jsx';
 import Wiki from './components/Wiki.jsx';
+import News from './components/News.jsx';
 import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 import BrandingModal from './components/BrandingModal.jsx';
@@ -106,6 +107,7 @@ const TABS = [
   { id: 'alliances',   label: 'Alliances',    Icon: AllianceIcon    },
   { id: 'competition', label: 'Competition',  Icon: CompetitionIcon   },
   { id: 'finance',     label: 'Finance',       Icon: FinanceIcon     },
+  { id: 'news',        label: 'News',          Icon: NewsIcon        },
   { id: 'wiki',        label: 'Help',          Icon: HelpIcon        },
 ];
 
@@ -116,6 +118,7 @@ const TABS_BY_ID = Object.fromEntries(TABS.map(t => [t.id, t]));
 // fold into four dropdown groups so the bar fits without cutting anything off.
 const NAV_GROUPS = [
   { id: 'dashboard' },
+  { id: 'news' },
   { label: 'Network',  Icon: MapIcon,        children: ['map', 'planner', 'routes'] },
   { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
   { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
@@ -269,6 +272,7 @@ function AppInner() {
     alliances:   <Alliances />,
     competition: <Competition />,
     finance:     <Finance />,
+    news:        <News />,
     wiki:        <Wiki />,
   };
 
