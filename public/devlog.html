@@ -63,6 +63,19 @@
 
     <div class="entry">
       <p class="date">July 27, 2026</p>
+      <h2>The aircraft picker now only offers aircraft you can actually use</h2>
+      <p>Opening a route meant scrolling a dropdown that listed your entire passenger fleet &mdash; including aircraft that the game was always going to refuse. An aircraft can only pick up an extra route that touches an airport it already serves, so a 737 busy on a European network was never going to fly Los Angeles&ndash;Denver, however tempting it looked in the list. You found that out after filling in the form.</p>
+      <ul>
+        <li><strong>Only eligible aircraft are listed.</strong> The picker now shows aircraft that are idle &mdash; a full 140 hours free, so they can go anywhere &mdash; plus any aircraft whose existing schedule already touches the origin or destination. Everything else is out of the list rather than waiting to reject you.</li>
+        <li><strong>Change the airports and the list follows.</strong> Pick a different destination and the picker re-evaluates, moving you to the best remaining aircraft instead of leaving an impossible one selected.</li>
+        <li><strong>Nothing eligible? It says so.</strong> Instead of a dropdown full of dead ends you get a plain explanation of the rule, so you know whether to lease another aircraft or route one through the airport first.</li>
+        <li><strong>&ldquo;Spare hours&rdquo; means useful spare hours.</strong> An aircraft with an hour left on its weekly limit was being counted as available, on the Routes header and in the picker alike. Anything with 5 hours or less now reads as having no spare hours &mdash; because it hasn&rsquo;t got enough left to fly anything.</li>
+      </ul>
+      <p>The same filtering applies to the multi-stop tag-flight planner. For how block hours and the weekly limit shape what your fleet can carry, see the <a href="/route-economics.html">route economics</a> guide.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 27, 2026</p>
       <h2>Hub congestion was measuring against the wrong gate</h2>
       <p>A gate in Tailwinds physically holds <strong>50 departures a week</strong> &mdash; that's the hard limit the game enforces when you add a route, and it's the number the Airports tab has always shown you. The congestion warning on the Hub panel, though, was quietly measuring against a completely different figure: 16 departures per gate at a Major Hub. Two numbers for the same gate, roughly three times apart.</p>
       <p>The effect was that congestion switched on at about a third of a hub's real capacity. If you were using your gates at all, the meter said &ldquo;Congested&rdquo; &mdash; and because the penalty bottoms out quickly, most congested hubs sat at the maximum debuff regardless of how far over they were. A hub at 110% and a hub at 400% got the same treatment, and the percentage in the warning didn't correspond to anything you could see elsewhere in the game.</p>
