@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { useGame } from '../store/GameContext.jsx';
+import { useGame, cargoFrequencyChangeBlockReason } from '../store/GameContext.jsx';
 import { useConfirm } from './ConfirmModal.jsx';
 import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { simulateCargoRoute, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { useToast } from './ToastSystem.jsx';
 
 const ACCENT = '#e8833a';
 const CARGO_PAGE_SIZE = 60;
@@ -41,6 +42,7 @@ export function PassengerBadge() {
 export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle = false }) {
   const { state, dispatch } = useGame();
   const confirm = useConfirm();
+  const addToast = useToast();
   const { cargoRoutes = [], fleet } = state;
   const gd = currentGameDate(state);
 
@@ -91,6 +93,12 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
   }
 
   function adjFreq(route, delta) {
+    // Increases run through the exact reducer guard so a blocked bump explains
+    // itself (block-hours / gate slots) instead of silently no-opping.
+    if (delta > 0) {
+      const reason = cargoFrequencyChangeBlockReason(state, route.id, route.weeklyFrequency + delta);
+      if (reason) { addToast({ type: 'warning', title: 'Can’t add a flight', message: reason }); return; }
+    }
     dispatch({ type: 'UPDATE_CARGO_FREQUENCY', routeId: route.id, weeklyFrequency: Math.max(1, route.weeklyFrequency + delta) });
   }
   function adjYield(route, delta) {
@@ -102,7 +110,7 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
     }
   }
 
-  const controls = { adjFreq, adjYield, close };
+  const controls = { adjFreq, adjYield, close, state };
 
   const totalRev    = rows.reduce((s, r) => s + (r.sim?.revenue ?? 0), 0);
   const totalProfit = rows.reduce((s, r) => s + (r.sim?.profit ?? 0), 0);
@@ -328,8 +336,9 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
 // ─── Shared controls (used by both the expanded table row and the card view) ────
 
 function CargoRouteControls({ route, sim, controls }) {
-  const { adjFreq, adjYield, close } = controls;
+  const { adjFreq, adjYield, close, state } = controls;
   const perKg = (route.yieldPrice * (sim?.distance ?? 0) / 1000);
+  const upBlock = cargoFrequencyChangeBlockReason(state, route.id, route.weeklyFrequency + 1);
 
   return (
     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -345,8 +354,8 @@ function CargoRouteControls({ route, sim, controls }) {
         <span style={{ fontWeight: 700, minWidth: 22, textAlign: 'center' }}>{route.weeklyFrequency}</span>
         <button
           className="btn btn-ghost"
-          style={{ padding: '2px 9px' }}
-          title="One more flight per week"
+          style={{ padding: '2px 9px', opacity: upBlock ? 0.4 : 1, cursor: upBlock ? 'not-allowed' : 'pointer' }}
+          title={upBlock || 'One more flight per week'}
           onClick={() => adjFreq(route, +1)}
         >+</button>
       </div>
