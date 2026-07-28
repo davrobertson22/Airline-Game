@@ -1,6 +1,10 @@
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
+import {
+  resolveBaseFor, mroFactorsFor, familyContractOffsets, totalBaseWeeklyCost,
+  contractOffsetSavings, isBaseOpen, RESERVE_AT_BASE_READINESS_DISCOUNT,
+} from '../data/mroBase.js';
 import { RESERVE_READINESS_MULT, RESERVE_NO_DISPATCH_IF_CHECK_WITHIN_WEEKS, reserveParkingFee } from '../data/reserve.js';
 export { baseCityPairDemand } from './market.js';
 import { cargoCityPairDemand, cargoReferenceYield, referencePrice } from './market.js';
@@ -1823,6 +1827,7 @@ export function weeklyTick(state) {
   const {
     fleet, routes: rawRoutes = [], cargoRoutes = [], gameDate = { month: 6 }, gates = {}, labor,
     maintenanceBudget = 1.0, fuelMultiplier = 1.0,
+    mroBases = {}, absWeek = 0,
     marketingBudget = 0,
     targetedMarketing = {},
     campaignStrength = {},
@@ -2551,6 +2556,17 @@ export function weeklyTick(state) {
     });
   }
 
+  // ── Jet bases: resolve each aircraft's best available base ONCE ────────────
+  // Slot contention is NOT applied here — line maintenance and the contract
+  // offset are ownership benefits that a base delivers to the whole fleet it
+  // covers. Slots gate the discrete JOBS (checks, AOG repairs) in the reducer.
+  const mroFactorsByAircraft = {};
+  for (const aircraft of fleet) {
+    const resolved = resolveBaseFor(aircraft, mroBases, rawRoutes, cargoRoutes, absWeek);
+    if (resolved) mroFactorsByAircraft[aircraft.id] = mroFactorsFor(resolved);
+  }
+  const mroContractOffsets = familyContractOffsets(mroBases, absWeek);
+
   // 2. Fleet fixed costs (lease + maintenance + reserve standby)
   let totalLeases         = 0;
   let totalMaintenance    = 0;
@@ -2563,16 +2579,26 @@ export function weeklyTick(state) {
     if (!type) continue;
     const maintMult         = maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft));
     const { maintenanceCostMultiplier } = laborEffects(labor);
+    // Line-maintenance facility discount: the BEST of the hub factor and the
+    // jet-base factor — they do not stack, you only maintain the jet once.
+    const mroF              = mroFactorsByAircraft[aircraft.id] ?? null;
+    const facilityFactor    = Math.min(aircraftMaintFactor[aircraft.id] ?? 1.0, mroF?.lineFactor ?? 1.0);
     const baseMaint         = Math.round(
       type.baseMaintenancePerWk * maintMult * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0)
-      * (aircraftMaintFactor[aircraft.id] ?? 1.0)   // hub line-maintenance discount
+      * facilityFactor
     );
     // Reserve standby costs (design doc §4.4): a stationed reserve pays a
     // readiness premium on line maintenance (crew on standby, systems warm),
     // plus a weekly parking fee at its base — suspended in weeks it is out
     // covering (it's flying, not parked) or in the shop itself.
+    // A reserve parked at one of your OWN open bases is cheaper to keep warm —
+    // your mechanics are already standing there.
     const stationed = !!aircraft.reserveBase && aircraft.status !== 'retired';
-    const maint     = stationed ? Math.round(baseMaint * RESERVE_READINESS_MULT) : baseMaint;
+    const atOwnBase = stationed && isBaseOpen(mroBases?.[aircraft.reserveBase]);
+    const readiness = atOwnBase
+      ? 1 + (RESERVE_READINESS_MULT - 1) * (1 - RESERVE_AT_BASE_READINESS_DISCOUNT)
+      : RESERVE_READINESS_MULT;
+    const maint     = stationed ? Math.round(baseMaint * readiness) : baseMaint;
     let parking = 0;
     if (stationed && !isOutOfService(aircraft)) {
       const covering = rawRoutes.some(r => r.aircraftId === aircraft.id && r.coverForAircraftId)
@@ -2622,8 +2648,15 @@ export function weeklyTick(state) {
     totalGateFees += Math.round(totalGateMonthlyFee(ap, count) / 4);
   }
 
-  // 5. Fleet family MRO base costs (one fixed fee per active aircraft family, regardless of fleet size)
-  const totalFamilyBaseCosts = fleet.length > 0 ? weeklyFamilyBaseCost(fleet) : 0;
+  // 5. Fleet family MRO base costs (one fixed fee per active aircraft family, regardless of fleet size).
+  //    These are OUTSOURCED contract rates — a certified jet base offsets most of
+  //    the family's bill because you are now doing that work yourself.
+  const familyBaseGross      = fleet.length > 0 ? weeklyFamilyBaseCost(fleet) : 0;
+  const totalFamilyBaseCosts = fleet.length > 0 ? weeklyFamilyBaseCost(fleet, mroContractOffsets) : 0;
+  const mroContractSavings   = Math.max(0, familyBaseGross - totalFamilyBaseCosts);
+
+  // 5b. Jet-base running costs — opex, extra certifications, parts pool.
+  const totalMroBaseCosts = totalBaseWeeklyCost(mroBases);
 
   // 6. Hub investment costs — higher tiers require ongoing weekly spend
   let totalHubInvestment = 0;
@@ -2689,7 +2722,7 @@ export function weeklyTick(state) {
 
   const totalOpCost = totalFuel + totalCrew + totalQuality + totalCatering + totalAncillaryCost + totalGroundHandling + totalLounge + totalLayover + totalCompensation + totalLandingFees;
   const totalCost   = totalLeases + totalMaintenance + totalOpCost + totalGateFees
-    + totalLaborCosts + totalFamilyBaseCosts + totalHubInvestment
+    + totalLaborCosts + totalFamilyBaseCosts + totalMroBaseCosts + totalHubInvestment
     + totalHQCost + totalInsurance + totalMarketingSpend + totalLoyaltyCost + totalPartnerFees
     + totalDistributionCost + totalReserveParking;
   const cashDelta   = totalRevenue + totalPartnerRevenue - totalCost;
@@ -2718,6 +2751,9 @@ export function weeklyTick(state) {
     totalGateFees:          Math.round(totalGateFees),
     totalLaborCosts:        Math.round(totalLaborCosts),
     totalFamilyBaseCosts:   Math.round(totalFamilyBaseCosts),
+    totalMroBaseCosts:      Math.round(totalMroBaseCosts),
+    mroContractSavings:     Math.round(mroContractSavings),
+    mroFactorsByAircraft,   // aircraftId → resolved jet-base benefits this week
     totalHubInvestment:     Math.round(totalHubInvestment),
     totalHQCost:            Math.round(totalHQCost),
     totalInsurance:         Math.round(totalInsurance),
