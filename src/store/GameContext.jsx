@@ -9,7 +9,7 @@ import {
   MAX_ROUTE_STOPS,
   loyaltyTier, loyaltyEnrollPull, loyaltyPaxBase,
   isRouteActive, routeActiveMonths, aircraftHubMaintFactor,
-  applyReserveCovers, planCovers,
+  applyReserveCovers, planCovers, freighterBodyClass,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
@@ -62,7 +62,7 @@ import {
   CODESHARE_WEEKLY_FEE_BY_TIER,
   CODESHARE_DURATION_WEEKS,
 } from '../data/alliances.js';
-import { routeLaunchCost, DEPRECIATION_YEARS,
+import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
          marketingAwarenessGain, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
          campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -125,7 +125,7 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
         const pairFreq = allOps.reduce((s, o) =>
           routeLegs(o).some(ol => routePairKey(ol.from, ol.to) === pk) ? s + (o.weeklyFrequency ?? 0) : s, 0);
         if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to), pairFreq,
-              toType.category, { routes: allOps, excludeKey: pk, aircraftType: toType }))
+              freighterBodyClass(toType), { routes: allOps, excludeKey: pk, aircraftType: toType }))
           return { ok: false, reason: `Not permitted at ${l.from}–${l.to}` };
       }
     }
@@ -203,7 +203,7 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   const pairRoutes = state.routes.filter(r => [r.origin, r.destination].sort().join('-') === pairKey);
   const peakPairFreq = Math.max(0, ...months.map(m =>
     pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + freqOf(r), 0)));
-  if (checkRouteRestrictions(route.origin, route.destination, dist, peakPairFreq, type.category,
+  if (checkRouteRestrictions(route.origin, route.destination, dist, peakPairFreq, freighterBodyClass(type),
         { routes: state.routes, excludeKey: pairKey, aircraftType: type })) return 'Regulatory frequency cap on this route';
 
   // Block-hours on this aircraft, per-month peak, with this route at the new freq.
@@ -455,7 +455,7 @@ function reducer(state, action) {
         name,
         tailNumber,
         status:             'idle',
-        ageWeeks:           0,
+        ageWeeks:           type?.deliveredAgeWeeks ?? 0,
         config:             defaultConfig(type?.seats ?? 100),
         ownershipType:      'lease',
         leaseTermWeeks,
@@ -481,7 +481,7 @@ function reducer(state, action) {
         name,
         tailNumber,
         status:        'idle',
-        ageWeeks:      0,
+        ageWeeks:      type?.deliveredAgeWeeks ?? 0,
         config:        defaultConfig(type.seats),
         ownershipType: 'owned',
       };
@@ -687,7 +687,7 @@ function reducer(state, action) {
         const cost = checkCost(mType, ct, { maintMod: a.maintMod ?? 1, laborMult: laborEffects(state.labor).maintenanceCostMultiplier, hubFactor: facNow });
         if (state.cash < cost) return { ...state, error: 'Not enough cash to start this check.' };
         const savedNow = ct === 'D' ? mfNow.dWeeksSaved : mfNow.cWeeksSaved;
-        const dur = Math.max(1, checkDurationWeeks(mType.category, ct) - savedNow);
+        const dur = Math.max(1, checkDurationWeeks(mType, ct) - savedNow);
         return {
           ...state,
           cash:  state.cash - cost,
@@ -809,8 +809,7 @@ function reducer(state, action) {
       // Sell an owned aircraft at NAV minus 5% selling & admin fee.
       const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
       const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
-      const ageYears      = (aircraft?.ageWeeks ?? 0) / 52;
-      const remaining     = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
+      const remaining     = valueRemaining(aircraft?.ageWeeks, type);
       const sellAbsWeek   = absoluteWeek(state.year, state.week);
       const nav           = Math.round((type?.purchasePrice ?? 0) * remaining * maintNavMultiplier(aircraft, sellAbsWeek));
       const fee           = Math.round(nav * 0.05);
@@ -957,7 +956,7 @@ function reducer(state, action) {
       const peakPairFreq = Math.max(0, ...newMonths.map(m =>
         pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + r.weeklyFrequency, 0)));
       const proposedPairFreq = peakPairFreq + weeklyFrequency;
-      if (checkRouteRestrictions(action.origin, action.destination, dist, proposedPairFreq, type.category,
+      if (checkRouteRestrictions(action.origin, action.destination, dist, proposedPairFreq, freighterBodyClass(type),
             { routes: state.routes, excludeKey: pairKey, aircraftType: type })) return state;
 
       // ── Block-hours check: per-month peak across routes on this aircraft ───────
@@ -1093,7 +1092,7 @@ function reducer(state, action) {
       for (const l of legs) {
         const pk = routePairKey(l.from, l.to);
         if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to),
-              legPairFreq(pk) + weeklyFrequency, type.category,
+              legPairFreq(pk) + weeklyFrequency, freighterBodyClass(type),
               { routes: state.routes, excludeKey: pk, aircraftType: type })) return state;
       }
 
@@ -1247,7 +1246,7 @@ function reducer(state, action) {
         .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
         .reduce((s, r) => s + r.weeklyFrequency, 0);
       if (checkRouteRestrictions(action.origin, action.destination, dist, existingPairFreq + weeklyFrequency,
-            type.category, { routes: allOps, excludeKey: pairKey, aircraftType: type })) return state;
+            freighterBodyClass(type), { routes: allOps, excludeKey: pairKey, aircraftType: type })) return state;
 
       // Block-hours across this freighter's existing cargo routes.
       const existingBlockHrs = (state.cargoRoutes ?? [])
@@ -2406,7 +2405,7 @@ function reducer(state, action) {
             if (runningCashForChecks >= cost) {
               runningCashForChecks -= cost; maintCheckSpend += cost;
               if (fac.base) claimSlot(mroSlots, fac.base);
-              const dur = Math.max(1, checkDurationWeeks(mType?.category, ct) - fac.weeksSaved);
+              const dur = Math.max(1, checkDurationWeeks(mType, ct) - fac.weeksSaved);
               checksStarted.push({ id: aged.id, name: aged.name, tailNumber: aged.tailNumber ?? '', checkType: ct, cost, weeks: dur, base: fac.base });
               mroJobs.push({ kind: 'check', checkType: ct, aircraftId: aged.id, name: aged.name, tailNumber: aged.tailNumber ?? '', cost, base: fac.base, weeks: dur });
               return startCheck(aged, ct, dur);
@@ -2420,7 +2419,7 @@ function reducer(state, action) {
           // the normal due/forced flow when cash can't cover the check.
           if (autoMaintActive && di.primaryDue && !aged.scheduledCheck) {
             const ct  = di.primaryDue;
-            const dur = checkDurationWeeks(mType?.category, ct);
+            const dur = checkDurationWeeks(mType, ct);
             const leaseSoonReturn = aged.ownershipType === 'lease' && (aged.leaseRemainingWeeks ?? 999) <= dur + 4;
             if (!leaseSoonReturn) {
               const fac  = checkFacility(aged, ct);
@@ -2437,7 +2436,7 @@ function reducer(state, action) {
           }
           if (di.forcedType) {
             const ct   = di.forcedType;
-            const dur  = checkDurationWeeks(mType?.category, ct);
+            const dur  = checkDurationWeeks(mType, ct);
             const leaseSoonReturn = aged.ownershipType === 'lease' && (aged.leaseRemainingWeeks ?? 999) <= dur + 4;
             if (!leaseSoonReturn) {
               // No jet-base discount on a forced grounding: the regulator parks it
@@ -3064,7 +3063,7 @@ function reducer(state, action) {
           name:          order.name,
           tailNumber,
           status:        'idle',
-          ageWeeks:      0,
+          ageWeeks:      ordType?.deliveredAgeWeeks ?? 0,
           config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
           ownershipType: order.ownershipType,
           weeklyLease:        order.weeklyLease ?? 0,
