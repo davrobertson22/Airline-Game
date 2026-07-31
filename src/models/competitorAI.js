@@ -23,6 +23,7 @@
 
 import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/market.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { valueRemaining } from '../data/overhead.js';
 import { ALLIANCES } from '../data/alliances.js';
 import {
   pickCompetitorAircraftType,
@@ -78,8 +79,32 @@ const MIN_ROUTES = 3;
 /** Cumulative loss-weeks on a route before it gets cut. */
 const LOSS_WEEKS_TO_CUT = 10;
 
+/** Standard takeover premium over the target's market cap. */
+export const ACQUISITION_PREMIUM = 1.25;
+
 /** Fire sale: acquisition premium drops from 1.25× to this while flag is set. */
 export const FIRE_SALE_PREMIUM = 0.75;
+
+/**
+ * Break-up floor — what fraction of a target's fleet NAV sets the minimum price.
+ *
+ * The market-cap formula prices the BUSINESS (profits + cash) and ignores the
+ * aircraft entirely. That is fine for a going concern, but it means a loss-maker
+ * can print a cap far below what its jets are worth — and every acquired jet
+ * lands in the player's fleet, sellable next click.
+ *
+ * So this is set to the fleet's REALIZABLE value: SELL_AIRCRAFT pays NAV minus a
+ * 5% selling fee, so 0.95 is exactly what the buyer could liquidate the fleet
+ * for. Buy-and-break-up therefore nets zero, which is the only value that closes
+ * the loop — anything lower is a money printer with extra steps, because the
+ * buyer flips the metal for more than the whole airline cost.
+ *
+ * TUNING: lowering this makes weak carriers cheaper to absorb AND reopens the
+ * flip (profit ≈ (0.95 − haircut) × fleet NAV). The reward for a distressed
+ * takeover is meant to be the network — routes, gates, slots — which still comes
+ * free on top of the metal.
+ */
+export const FLEET_FLOOR_HAIRCUT = 0.95;
 
 /** Bankruptcy triggers. */
 const BANKRUPT_CASH_FLOOR   = -15_000_000;
@@ -617,8 +642,14 @@ export function tickCompetitorAI(competitors, ctx) {
     const buyer  = allyBuyer ?? buyers[0];
     const target = allyBuyer ? target0 : targets.find(t => t.id !== buyer?.id
       && (t.marketCap ?? 20_000_000) * 0.9 < (buyer?.cash ?? 0) * 0.8);
-    if (buyer && target) {
-      const price = Math.round(Math.max(5_000_000, (target.marketCap ?? 10_000_000)) * 0.9);
+    // Same floor the player pays (see acquisitionQuote): a buyer can't take over a
+    // carrier for less than the cash it inherits, or the AI mints money too.
+    const mergerPrice = target
+      ? Math.max(Math.round(Math.max(5_000_000, (target.marketCap ?? 10_000_000)) * 0.9),
+                 Math.max(0, target.cash ?? 0))
+      : 0;
+    if (buyer && target && mergerPrice <= (buyer.cash ?? 0) * 0.8) {
+      const price = mergerPrice;
       const mergedRoutes = { ...buyer.routes };
       const mergedFleet  = [...(buyer.fleet ?? [])];
       for (const [key, cfg] of Object.entries(target.routes ?? {})) {
@@ -785,4 +816,66 @@ function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerH
   const priceMultiplier = +(priceBase * undercut * (0.97 + Math.random() * 0.06)).toFixed(3);
 
   return { key: best.key, dist: best.dist, frequency, priceMultiplier, onPlayerPair: best.onPlayerPair };
+}
+
+// ─── Acquisition pricing ────────────────────────────────────────────────
+//
+// ONE source of truth for what a carrier costs, shared by the Competition list,
+// the acquisition modal and the ACQUIRE_COMPETITOR reducer. They used to compute
+// it separately, which is how a deal that handed the buyer more cash than it cost
+// shipped without anything flagging it.
+
+/**
+ * Break-up value of a competitor's fleet — depreciated airframe value across
+ * every tail it owns. Competitor tails carry no maintenance state, so this is
+ * the straight NAV (purchase price × remaining value) without the maintenance
+ * modifier the player's own fleet gets.
+ */
+export function competitorFleetNAV(carrier) {
+  return (carrier?.fleet ?? []).reduce((sum, tail) => {
+    const type = getAircraftType(tail.typeId);
+    if (!type) return sum;
+    return sum + (type.purchasePrice ?? 0) * valueRemaining(tail.ageWeeks, type);
+  }, 0);
+}
+
+/**
+ * What it costs to acquire a carrier, and why.
+ *
+ * price = max(market cap × premium, net cash + a slice of fleet break-up value)
+ *
+ * The floor is what stops the "buy a $500K company, pocket its $67M" trade: the
+ * buyer inherits the target's cash and fleet, so the price can never sit below
+ * what those are worth. For a healthy carrier the market-cap leg is far higher
+ * and the floor never binds — nothing about a normal takeover changes.
+ *
+ * @returns {{ price, marketCapPrice, floorPrice, floorBinds, premium, cash,
+ *             fleetNAV, haircut } | null}  null when the carrier has no valuation yet.
+ */
+export function acquisitionQuote(carrier) {
+  if (!carrier || carrier.marketCap == null) return null;
+  const fireSale = !!carrier.fireSale;
+  const premium  = fireSale ? FIRE_SALE_PREMIUM : ACQUISITION_PREMIUM;
+  const cash     = carrier.cash ?? 0;
+  const fleetNAV = competitorFleetNAV(carrier);
+  // The floor is liquidation value and does not flex with distress — a fire sale
+  // discounts the BUSINESS, not the airframes. (Cheap metal would just be resold.)
+  const haircut  = FLEET_FLOOR_HAIRCUT;
+
+  const marketCapPrice = Math.round(carrier.marketCap * premium);
+  // Negative cash (a carrier in the red) legitimately pulls the floor down — the
+  // buyer is assuming that hole. Never below zero, though.
+  const floorPrice     = Math.max(0, Math.round(cash + fleetNAV * haircut));
+  const price          = Math.max(marketCapPrice, floorPrice);
+
+  return {
+    price, marketCapPrice, floorPrice,
+    floorBinds: floorPrice > marketCapPrice,
+    premium, cash, fleetNAV, haircut,
+  };
+}
+
+/** Convenience: just the number. Returns null when the carrier isn't valued yet. */
+export function acquisitionPrice(carrier) {
+  return acquisitionQuote(carrier)?.price ?? null;
 }

@@ -468,6 +468,82 @@ export function referencePrice(originCode, destCode) {
 export const TOTAL_SHARES = 100_000_000;
 
 /**
+ * Published-price smoothing (ported from Headwinds 2026-07-29).
+ *
+ * The valuation below is a FAIR VALUE — what the airline is worth on this week's
+ * fundamentals. Publishing it directly as the market cap means the printed number
+ * teleports: one good week, a loan draw or an asset sale moves it by whatever the
+ * model says, with nothing in between. Headwinds hit this in its ugliest form (a
+ * company printed a +8383% weekly move) and the fix is the same here — the
+ * published cap CONVERGES toward fair value inside a weekly band instead of
+ * jumping to it.
+ *
+ * The band widens with the size of the gap on purpose. A flat band is not
+ * smoothing, it is a governor: an airline growing faster than the band could never
+ * catch its own fair value, and its printed cap would stop carrying any
+ * information about the business. So ordinary weeks move at most 8%, and a genuine
+ * re-rating converges in a handful of weeks rather than never.
+ *
+ * NOTE this changes the PATH of the number, not its level — the fair-value math
+ * below is untouched, so where a valuation settles is exactly what it was before.
+ */
+export const MARKET_CONVERGENCE     = 0.30;   // weekly pull toward fair value
+export const WEEKLY_MOVE_CLAMP      = 0.08;   // resting band: max ±move per week
+export const MOVE_CLAMP_MAX         = 0.35;   // widest catch-up band, however far off
+export const MOVE_CLAMP_GAP_POW     = 0.5;    // band scales with gap^this (sqrt)
+export const MIN_MARKET_CAP         = 500_000;
+
+/**
+ * Liquidation floor — an airline is never worth less than the money in its bank.
+ *
+ * The going-concern formula below values a loss-maker at `annualLoss x 5`, which
+ * can drag fair value straight through the floor even when the company is sitting
+ * on a mountain of cash. That produced a real exploit: a budget carrier bleeding
+ * money but holding $67M printed the $500K minimum cap, so it could be ACQUIRED
+ * for $625K — and the buyer inherited the $67M. Free money.
+ *
+ * Net cash is the hard floor for equity value: a shareholder facing a lower price
+ * would liquidate instead. Losses can pull a company down TO its cash pile, never
+ * below it. (Negative cash leaves only MIN_MARKET_CAP, which is correct — a
+ * carrier in the red is worth the option value of its licences and nothing more.)
+ */
+export const NET_CASH_FLOOR = 1.0;
+
+/**
+ * Weekly move band, given how far the published print sits from fair value.
+ *
+ *   gap 1x   ->  8.0%   (an ordinary week — unchanged)
+ *   gap 4x   -> 16.0%
+ *   gap 19x+ -> 35.0%   (MOVE_CLAMP_MAX)
+ *
+ * Symmetric: a collapse reprices exactly as fast as a re-rating.
+ */
+export function moveClampFor(prevMarketCap, fairValue) {
+  const p = Number(prevMarketCap), f = Number(fairValue);
+  if (!(p > 0) || !(f > 0)) return WEEKLY_MOVE_CLAMP;
+  const gap = Math.max(f / p, p / f);
+  return Math.min(MOVE_CLAMP_MAX, WEEKLY_MOVE_CLAMP * Math.pow(gap, MOVE_CLAMP_GAP_POW));
+}
+
+/**
+ * Apply the convergence + clamp to a fair value, given last week's print.
+ *
+ * Without a previous print (a cold valuation — save-load fallbacks, acquisition
+ * pricing, a brand-new airline) the fair value is published as-is, which is the
+ * only sensible thing to do when there is no series to smooth.
+ */
+export function publishMarketCap(fairValue, prevMarketCap, noise = 0) {
+  const fair = Math.max(Number(fairValue) || 0, MIN_MARKET_CAP);
+  if (!(Number.isFinite(prevMarketCap) && prevMarketCap > 0)) return fair;
+  const target  = prevMarketCap + MARKET_CONVERGENCE * (fair - prevMarketCap);
+  const band    = moveClampFor(prevMarketCap, fair);
+  const clamped = Math.min(prevMarketCap * (1 + band),
+                           Math.max(prevMarketCap * (1 - band), target));
+  const n = Number.isFinite(noise) ? noise : 0;
+  return Math.max(clamped * (1 + n), MIN_MARKET_CAP);
+}
+
+/**
  * Compute market capitalisation and share price for an airline.
  *
  * @param {number[]} profitHistory  Weekly profit figures, most-recent last (up to last 12 used).
@@ -476,13 +552,31 @@ export const TOTAL_SHARES = 100_000_000;
  * @returns {{ marketCap: number, sharePrice: number, peMultiple: number|null,
  *             annualizedProfit: number|null, growthRate: number|null }}
  */
-export function computeMarketCap(profitHistory, cash, qualityScore = 50) {
+/**
+ * @param {number[]} profitHistory  Weekly profit figures, most-recent last (last 12 used).
+ * @param {number}   cash           Current cash balance.
+ * @param {number}   [qualityScore] 0–100 quality/reputation score.
+ * @param {object}   [extras]
+ * @param {number}   [extras.prevMarketCap]  Last week's PUBLISHED cap. Supplying it turns on
+ *                                           convergence + the move clamp; omitting it returns
+ *                                           the raw fair value (cold valuation).
+ * @param {number}   [extras.noise]          Optional pre-rolled noise fraction. Tailwinds does
+ *                                           not pass one — a solo game keeps a deterministic
+ *                                           tick, and the smoothing is the substance here.
+ * @returns {{ marketCap, sharePrice, peMultiple, annualizedProfit, growthRate, fairValue }}
+ */
+export function computeMarketCap(profitHistory, cash, qualityScore = 50, extras = {}) {
+  const { prevMarketCap = null, noise = 0 } = extras;
   const weeks = (profitHistory ?? []).slice(-12);
 
   // Not enough history — value purely on cash
   if (weeks.length < 2) {
-    const marketCap = Math.max(cash * 1.5, 500_000);
-    return { marketCap, sharePrice: marketCap / TOTAL_SHARES, peMultiple: null, annualizedProfit: null, growthRate: null };
+    const fairValue = Math.max(cash * 1.5, MIN_MARKET_CAP);
+    const marketCap = publishMarketCap(fairValue, prevMarketCap, noise);
+    return {
+      marketCap, sharePrice: marketCap / TOTAL_SHARES,
+      peMultiple: null, annualizedProfit: null, growthRate: null, fairValue,
+    };
   }
 
   const trailing12Profit  = weeks.reduce((s, p) => s + p, 0);
@@ -509,7 +603,12 @@ export function computeMarketCap(profitHistory, cash, qualityScore = 50) {
     ? annualizedProfit * peMultiple
     : annualizedProfit * 5;
 
-  const marketCap  = Math.max(profitComponent + cash * 0.8, 500_000);
+  // Fair value — the level. Untouched by the smoothing port.
+  const fairValue  = Math.max(profitComponent + cash * 0.8,
+                              cash * NET_CASH_FLOOR,      // liquidation floor
+                              MIN_MARKET_CAP);
+  // Published cap — the path. Converges toward fair value inside the weekly band.
+  const marketCap  = publishMarketCap(fairValue, prevMarketCap, noise);
   const sharePrice = marketCap / TOTAL_SHARES;
 
   return {
@@ -518,6 +617,7 @@ export function computeMarketCap(profitHistory, cash, qualityScore = 50) {
     peMultiple:       Math.round(peMultiple * 10) / 10,
     annualizedProfit,
     growthRate,
+    fairValue,
   };
 }
 

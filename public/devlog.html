@@ -62,6 +62,39 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">July 31, 2026</p>
+      <h2>Freight lanes share one market &mdash; and cargo gets a Route Finder</h2>
+      <p>A sharp catch from the Discord: putting several freighters on the same city pair created what were effectively separate copies of the route, and <em>each one</em> claimed the full cargo market. Fifteen 747Fs on a single lane, fifteen full loads, week after week. That exploit is closed &mdash; and freight planning got the tool passenger routes have had for a while.</p>
+      <ul>
+        <li><strong>One lane, one pool of freight.</strong> All of your freighters flying the same city pair now share a single weekly demand pool, split by each aircraft&rsquo;s share of the lane&rsquo;s capacity &mdash; exactly how passenger routes have always shared a market. Two 747Fs on a lane with 800 tonnes of demand now carry ~400 tonnes each, not 800 each. Adding aircraft to a busy lane still makes sense right up until the demand runs out; past that point you are just flying empty decks.</li>
+        <li><strong>Your rate card still matters, per aircraft.</strong> Price one freighter above the market rate and <em>that</em> freighter&rsquo;s share of the lane shrinks &mdash; underpricing a second aircraft can&rsquo;t conjure new tonnage out of the same market.</li>
+        <li><strong>Joining an established lane skips the ramp-up.</strong> A lane you have served for months is already on forwarders&rsquo; books: a freighter added to it joins the mature pool instead of starting from zero. (Closing and reopening a route can&rsquo;t reset or game the shared pool either.)</li>
+        <li><strong>The planner tells you the truth before you commit.</strong> Opening a lane you already fly now projects that aircraft&rsquo;s <em>share</em> of the pool, with a note showing how much capacity you already have on the lane. Shared lanes are badged in your routes list so you can spot overserved pairs at a glance.</li>
+        <li><strong>New: Cargo Route Finder.</strong> The freight planner now has the same discovery tool as the passenger side &mdash; scan every lane from any airport, filter by distance or a freighter&rsquo;s range, and sort by tonnage or revenue potential. Cargo demand follows trade, not tourism, so the best lanes look nothing like the best passenger routes; the <a href="/aircraft.html">aircraft guide</a> covers which freighters fit which stage lengths.</li>
+      </ul>
+      <p>If your freight network leaned on stacked lanes, this is a real rebalance &mdash; spread those freighters across new pairs (the Route Finder will point you at unserved ones) and check <a href="/route-economics.html">route economics</a> for how demand, yield and load factor set a lane&rsquo;s ceiling.</p>
+    </div>
+    <div class="entry">
+      <p class="date">July 31, 2026</p>
+      <h2>Takeovers are priced on what you actually get</h2>
+      <p>A player spotted a carrier with a $500K market cap sitting on $67M in cash &mdash; and buying it for $625K handed over the whole $67M, plus ten routes and nineteen jets. That is fixed, and the way acquisitions are valued has been rebuilt around a simple rule: <strong>you can never buy an airline for less than the things it hands you.</strong></p>
+      <ul>
+        <li><strong>An airline is never worth less than its bank balance.</strong> Valuations are built from profits, so a carrier losing money badly could be priced below the cash it was sitting on. Losses still drag a valuation down &mdash; they now stop at the cash pile instead of falling through it.</li>
+        <li><strong>Takeover prices have a break-up floor.</strong> The price is whichever is higher: market cap plus the usual 25% premium, or the target&rsquo;s cash plus what its aircraft would sell for. A struggling carrier can be worth less as a business than the jets it owns, and no board sells below the value of the metal.</li>
+        <li><strong>Distressed carriers are still a bargain &mdash; the discount just moved.</strong> A fire sale marks down the <em>business</em>, not the airframes. What a takeover still gets you cheaply is the network: the routes, gates and slots come with the deal, and that is where the real prize was all along.</li>
+        <li><strong>The confirmation screen shows its working.</strong> When the break-up floor is what sets the price, the Acquisition Summary says so and shows the number, so a deal can never cost more than the screen led you to expect.</li>
+        <li><strong>Rival airlines play by the same rule.</strong> AI-vs-AI mergers were priced the same loose way. They now respect the same floor, so no carrier can inflate itself by swallowing a cash-rich rival on the cheap.</li>
+      </ul>
+      <p>Worth reading alongside <a href="/route-economics.html">route economics</a> if you are weighing a takeover against simply opening the routes yourself &mdash; buying a network is now much closer to a fair fight with building one.</p>
+    </div>
+    <div class="entry">
+      <p class="date">July 29, 2026</p>
+      <h2>Small fixes</h2>
+      <ul>
+        <li><strong>The fuel gauge tells the truth.</strong> On the Fuel &amp; Hedging screen, the &ldquo;1.0 (normal)&rdquo; marker sat in the middle of the bar while the needle for a perfectly normal fuel price sat a third of the way along &mdash; so normal fuel always looked cheap. The scale runs 0.55 to 1.9, which puts 1.0 at a third, and the label and a new tick mark now sit exactly there. Nothing about fuel costs changed; the gauge just stopped disagreeing with itself. See <a href="/route-economics.html">route economics</a> for what fuel actually does to a route.</li>
+      </ul>
+    </div>
+    <div class="entry">
       <p class="date">July 28, 2026</p>
       <h2>Maintenance gets its own page &mdash; and you can build your own hangars</h2>
       <p>Maintenance used to be a slider buried in Operations and a queue of checks you booked one aircraft at a time. It is now a place you go, with a network you build. <strong>Company &rsaquo; Maintenance</strong> holds the whole picture: what you spend keeping the fleet flying, what is in the shop right now, what is coming due, and where the work gets done.</p>

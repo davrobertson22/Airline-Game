@@ -5,19 +5,12 @@ import AirportLink from './AirportLink.jsx';
 import { referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE, fleetAvgUtilization, isRouteActive, weekToGameDate } from '../utils/simulation.js';
 import { computeQualityScore, cabinQualityPoints } from '../models/demand.js';
 import { laborEffects } from '../data/labor.js';
-import { ARCHETYPES, FIRE_SALE_PREMIUM } from '../models/competitorAI.js';
+import { ARCHETYPES, FIRE_SALE_PREMIUM, ACQUISITION_PREMIUM, acquisitionQuote, acquisitionPrice } from '../models/competitorAI.js';
 import { getAlliance, effectiveAllianceId } from '../data/alliances.js';
 import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 
-const ACQUISITION_PREMIUM = 1.25;
-
-/** Cost to acquire a carrier — fire-sale carriers go at a discount. */
-function acquisitionPrice(carrier) {
-  if (carrier.marketCap == null) return null;
-  return Math.round(carrier.marketCap * (carrier.fireSale ? FIRE_SALE_PREMIUM : ACQUISITION_PREMIUM));
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -789,8 +782,9 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
 // ─── Acquisition modal ────────────────────────────────────────────────────────
 
 function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
+  const quote           = acquisitionQuote(target) ?? {};
   const premium         = target.fireSale ? FIRE_SALE_PREMIUM : ACQUISITION_PREMIUM;
-  const acquisitionCost = Math.round((target.marketCap ?? 0) * premium);
+  const acquisitionCost = quote.price ?? Math.round((target.marketCap ?? 0) * premium);
   const netCost         = acquisitionCost - (target.cash ?? 0);
   const canAfford       = playerCash >= acquisitionCost;
   const routeCount      = Object.keys(target.routes ?? {}).length;
@@ -838,7 +832,19 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
               : `Acquisition premium (${Math.round((premium - 1) * 100)}%)`}
             value={`${premium >= 1 ? '+' : '−'}${formatMoney(Math.abs(Math.round((target.marketCap ?? 0) * (premium - 1))))}`}
             color={target.fireSale ? 'var(--green)' : 'var(--yellow)'} />
+          {quote.floorBinds && (
+            <DealRow
+              label="Break-up floor (cash + fleet)"
+              value={formatMoney(quote.floorPrice)}
+              color="var(--yellow)" />
+          )}
           <DealRow label="Total acquisition cost" value={formatMoney(acquisitionCost)} bold />
+          {quote.floorBinds && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45, marginTop: -2 }}>
+              {target.name} is worth more broken up than as a going concern — the board
+              won't sell below its cash and fleet value, so that sets the price.
+            </div>
+          )}
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
           <DealRow label="You receive. Their cash" value={`+${formatMoney(target.cash ?? 0)}`} color="var(--green)" />
           <DealRow label="You receive · routes" value={`+${routeCount}`} color="var(--green)" />

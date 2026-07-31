@@ -46,7 +46,8 @@ import {
   FOCUS_MIN_GATES,
   hubUpgradeChecklist,
 } from '../models/demand.js';
-import { tickCompetitorAI, retainedProfit, FIRE_SALE_PREMIUM, competitorMarketingSpend } from '../models/competitorAI.js';
+import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
+         acquisitionQuote } from '../models/competitorAI.js';
 import { buildWeekNews, appendNews } from '../models/newsLog.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
@@ -1844,10 +1845,15 @@ function reducer(state, action) {
       // Value the target. marketCap is only populated after the first weekly tick;
       // fall back to a computed valuation so a fresh-game competitor can never be
       // acquired for $0 (which would also hand the player their cash for free).
-      const targetValue = target.marketCap
-        ?? computeMarketCap(target.profitHistory ?? [], target.cash ?? 0, target.baseQualityScore ?? 50).marketCap;
-      // Distressed carriers sell at a discount (fire sale) instead of a premium.
-      const acquisitionCost = Math.round(targetValue * (target.fireSale ? FIRE_SALE_PREMIUM : 1.25));
+      const valuedTarget = target.marketCap != null ? target : {
+        ...target,
+        marketCap: computeMarketCap(target.profitHistory ?? [], target.cash ?? 0,
+                                    target.baseQualityScore ?? 50).marketCap,
+      };
+      // Priced by the SAME helper the acquisition modal quotes, so the confirmed
+      // deal always matches the numbers the player agreed to. The helper applies
+      // the fire-sale discount and the cash + fleet break-up floor.
+      const acquisitionCost = acquisitionQuote(valuedTarget).price;
       if (state.cash < acquisitionCost) return state;  // can't afford — ignore
 
       // ── Inherit the competitor's REAL fleet ────────────────────────────────
@@ -2754,7 +2760,9 @@ function reducer(state, action) {
         const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =
-          computeMarketCap(newProfitHistory, newCompCash, c.baseQualityScore);
+          computeMarketCap(newProfitHistory, newCompCash, c.baseQualityScore, {
+            prevMarketCap: c.marketCap ?? null,
+          });
         return {
           ...c,
           weeklyStats:   stats,
@@ -2985,8 +2993,13 @@ function reducer(state, action) {
 
       // ── Player market cap (trailing 12 weeks, using newHistory which includes this week) ──
       const playerProfitHistory = newHistory.slice(-12).map(h => h.profit);
+      // The published cap is a smoothed series now: it converges toward this
+      // week's fair value inside a widening band instead of teleporting to it.
+      // Passing last week's print is what turns that on — see publishMarketCap.
       const { marketCap: newMarketCap, sharePrice: newSharePrice } =
-        computeMarketCap(playerProfitHistory, newCash, state.awareness ?? 5);
+        computeMarketCap(playerProfitHistory, newCash, state.awareness ?? 5, {
+          prevMarketCap: state.marketCap ?? null,
+        });
 
       // ── Board objectives check ───────────────────────────────────────────────
       const objectivesEnabled = state.objectivesEnabled ?? true;

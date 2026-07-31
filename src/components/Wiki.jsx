@@ -371,6 +371,7 @@ const WIKI = [
       { p: 'Rivals that overreach bleed cash. A struggling carrier enters a **fire sale** (buy it at a discount instead of a premium), and prolonged distress ends in **bankruptcy**. Strong airlines sometimes acquire weak ones, and brand-new startups appear mid-game to fill the gaps.' },
       { h: 'Acquisitions' },
       { p: 'As you grow and rivals weaken, you can **acquire** competitors. The **Acquisition Summary** previews the cost and the fleet and gates that would transfer to you. Buying out a competitor folds their network into yours.' },
+      { p: 'The price is whichever is higher: their **market cap plus a 25% premium**, or their **break-up value** — the cash in their bank plus what their aircraft would fetch if you sold them. A carrier that is losing money can be worth less as a business than the jets it owns, and no board sells below the value of the metal. What a takeover gets you cheaply is the **network**: the routes, gates and slots come with the deal.' },
       { warn: 'You win when no rival remains standing, acquire them, or outlast them as they collapse. Each purchase is a big cash outlay, so make sure a takeover strengthens you rather than overextending your balance sheet.' },
     ],
   },
