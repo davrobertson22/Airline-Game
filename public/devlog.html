@@ -62,6 +62,32 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 2, 2026</p>
+      <h2>The map stays where you put it</h2>
+      <p>Straight from the Discord: &ldquo;when you zoom in and pass your mouse over a route, it resets your zoom.&rdquo; It did, and it should not have.</p>
+      <ul>
+        <li><strong>Hovering a line snapped you back out.</strong> Zoom into a corner of your network to read two lanes, brush a route with the cursor, and the map jumped straight back to a view of everything you fly. On a big network that made the map close to unusable at any zoom above the default.</li>
+        <li><strong>The weekly tick did it too.</strong> Advancing a week re-drew the map, and the re-draw re-framed it &mdash; so any zoom you had set was gone as soon as time moved. Focusing a route and then panning away had the same problem: the next week yanked the camera back onto the focused route.</li>
+        <li><strong>Now the map only moves for a reason.</strong> It frames your network when the network actually changes &mdash; a route opened, a route closed, or a map filter narrowed what is on screen &mdash; and it flies to a route when you click it. Hovering, re-drawing and the passage of time leave your zoom exactly where you left it.</li>
+        <li><strong>Lines and tooltips are steadier as a side effect.</strong> The map was rebuilding every line on screen each time your cursor crossed one; it no longer does.</li>
+      </ul>
+      <p>Clicking a route still frames it, and &ldquo;Clear focus&rdquo; still returns you to the whole picture. <a href="/route-economics.html">Route economics</a> covers the numbers behind each line on the map.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 31, 2026</p>
+      <h2>Unions no longer demand the pay you are already giving them</h2>
+      <p>Pay your pilots the maximum and, sooner or later, their union would sit down at the table and demand&hellip; the maximum. A whole round of contract talks over a raise of exactly nothing.</p>
+      <ul>
+        <li><strong>Three choices, none of them real.</strong> &ldquo;Accept&rdquo; cost $0 a week and handed you a morale bonus for free. &ldquo;Counter&rdquo; offered the union its own number and could still be thrown back in your face &mdash; a morale hit and a spike in unrest for agreeing with them. &ldquo;Refuse&rdquo; punished you for declining to hand over nothing, and letting the clock run out did the same.</li>
+        <li><strong>Now they stay at their desks.</strong> A group already on the top pay setting has nothing to ask for, so no demand is tabled at all. The union simply looks in again later &mdash; and if you have cut pay by then, they will have plenty to say about it.</li>
+        <li><strong>If one of these is open on your airline right now, it will clear itself.</strong> The next week you play, a demand for the pay you are already on is quietly taken off the table &mdash; no morale hit, no unrest, and it will not lapse into a refusal on you.</li>
+        <li><strong>A counter that meets the demand is a deal.</strong> Splitting the difference sometimes rounds up to the full amount the union asked for. That is not a gamble any more: give them their number and the deal closes, every time. Where the split is genuinely lower, countering is the gamble it always was.</li>
+      </ul>
+      <p>Everything else about labour is unchanged &mdash; low pay still drags morale down, unrest still builds, and a militant group will still walk. <a href="/on-time-performance.html">On-time performance</a> covers what crew morale does to your operation, and <a href="/route-economics.html">route economics</a> covers where the payroll lands on each route.</p>
+    </div>
+
+    <div class="entry">
       <p class="date">July 31, 2026</p>
       <h2>The route map was reporting the wrong load factors</h2>
       <p>Straight from a player: &ldquo;why in one screen does it say my loads are 100% and then in two others it says they aren&rsquo;t?&rdquo; A fair question, and the map was the screen that was wrong.</p>

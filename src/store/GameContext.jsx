@@ -29,6 +29,7 @@ import {
 import {
   DEFAULT_LABOR_RELATIONS, tickUnrest, rollStrike, settlementPayMultiplier,
   scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand,
+  MAX_PAY_MULTIPLIER,
   counterOfferMultiplier, counterAccepted, NEGOTIATION_EFFECTS,
   NEGOTIATION_RESPONSE_WEEKS, STRIKE_COOLDOWN_WEEKS,
 } from '../data/laborRelations.js';
@@ -1671,7 +1672,13 @@ function reducer(state, action) {
         // Midpoint offer. The union always pockets the raise; whether it
         // ACCEPTS the deal (or stays angry) depends on current morale.
         newPay = counterOfferMultiplier(groupState.payMultiplier, negotiation.demandMultiplier);
-        if (counterAccepted(groupState.morale)) {
+        if (newPay >= negotiation.demandMultiplier - 1e-9) {
+          // The midpoint rounded up to (or past) the demand — that isn't a
+          // counter, it's the union's own number. It can't be rejected.
+          newPay  = negotiation.demandMultiplier;
+          fx      = NEGOTIATION_EFFECTS.accept;
+          outcome = 'accepted';
+        } else if (counterAccepted(groupState.morale)) {
           fx      = NEGOTIATION_EFFECTS.counterAccepted;
           outcome = 'counterAccepted';
         } else {
@@ -1691,7 +1698,7 @@ function reducer(state, action) {
           ...labor,
           [group]: {
             ...groupState,
-            payMultiplier: Math.max(0.5, Math.min(2.0, newPay)),
+            payMultiplier: Math.max(0.5, Math.min(MAX_PAY_MULTIPLIER, newPay)),
             morale: Math.max(5, Math.min(100, groupState.morale + fx.morale)),
           },
         },
@@ -1708,7 +1715,7 @@ function reducer(state, action) {
           },
           lastOutcome: {
             group, outcome,
-            newPay: Math.max(0.5, Math.min(2.0, newPay)),
+            newPay: Math.max(0.5, Math.min(MAX_PAY_MULTIPLIER, newPay)),
             demand: negotiation.demandMultiplier,
             absWeek: absWk,
           },
@@ -2642,7 +2649,19 @@ function reducer(state, action) {
       }
 
       // 3. Contract negotiations — tick the open one, or table a new demand.
-      if (updatedRelations.negotiation) {
+      if (updatedRelations.negotiation
+          && updatedRelations.negotiation.demandMultiplier
+             <= (updatedLabor[updatedRelations.negotiation.group]?.payMultiplier ?? 1.0) + 1e-9) {
+        // Save written before the ceiling fix: an open demand for the pay the
+        // player is already on. There is no honest answer to it, so close it
+        // quietly — no morale hit, no unrest, no lapse-into-refusal.
+        const group = updatedRelations.negotiation.group;
+        updatedRelations.negotiation = null;
+        updatedRelations.nextNegotiationAbsWeek = {
+          ...updatedRelations.nextNegotiationAbsWeek,
+          [group]: scheduleNextNegotiation(relAbsWeek, false),
+        };
+      } else if (updatedRelations.negotiation) {
         const weeksLeft = updatedRelations.negotiation.weeksLeft - 1;
         if (weeksLeft <= 0) {
           // Ignored until it lapsed → counts as a refusal.
@@ -2683,18 +2702,28 @@ function reducer(state, action) {
           const profitable = (state.financialHistory ?? []).slice(-12)
             .reduce((s, h) => s + (h.profit ?? 0), 0) > 0;
           const demand = negotiationDemand(currentPay, profitable);
-          updatedRelations.negotiation = {
-            group,
-            demandMultiplier: demand,
-            weeksLeft:  NEGOTIATION_RESPONSE_WEEKS,
-            totalWeeks: NEGOTIATION_RESPONSE_WEEKS,
-          };
-          newToasts.push({
-            type: 'warning', icon: '📜',
-            title: `Contract talks — ${gName} table a pay demand`,
-            message: `The ${gName.toLowerCase()} union demands ${demand.toFixed(2)}× market rate (currently ${currentPay.toFixed(2)}×). Respond in Operations → Labor within ${NEGOTIATION_RESPONSE_WEEKS} weeks — silence counts as a refusal.`,
-            duration: 12000,
-          });
+          if (demand === null) {
+            // Already paying the ceiling — the union has nothing to table, so
+            // don't open a round of talks over the rate they're already on.
+            // Quietly look in again later (pay may have been cut by then).
+            updatedRelations.nextNegotiationAbsWeek = {
+              ...updatedRelations.nextNegotiationAbsWeek,
+              [group]: scheduleNextNegotiation(relAbsWeek, false),
+            };
+          } else {
+            updatedRelations.negotiation = {
+              group,
+              demandMultiplier: demand,
+              weeksLeft:  NEGOTIATION_RESPONSE_WEEKS,
+              totalWeeks: NEGOTIATION_RESPONSE_WEEKS,
+            };
+            newToasts.push({
+              type: 'warning', icon: '📜',
+              title: `Contract talks — ${gName} table a pay demand`,
+              message: `The ${gName.toLowerCase()} union demands ${demand.toFixed(2)}× market rate (currently ${currentPay.toFixed(2)}×). Respond in Operations → Labor within ${NEGOTIATION_RESPONSE_WEEKS} weeks — silence counts as a refusal.`,
+              duration: 12000,
+            });
+          }
         }
       }
 
