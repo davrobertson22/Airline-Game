@@ -2,6 +2,14 @@
 
 Free browser airline management game (React + Vite SPA), live at https://www.tailwindsairlinegame.com. Monetized via Google AdSense — the static content pages in `public/` exist largely to satisfy AdSense content policies. Keep them healthy.
 
+## Shell blocks — commands only
+
+Any shell/bash block written for Dave to run must contain **commands only**: no inline `#` comments, no `#` header lines, no explanatory prose, no annotations like `npm test   # exit 0`. Put every word of explanation in prose before or after the block.
+
+He copy-pastes the whole block into Terminal, and he runs **zsh**, where `INTERACTIVE_COMMENTS` is off — a trailing `#` is an ARGUMENT, not a comment. This is not a style preference; it silently corrupts commands. Real example: `git status   # eight staged` parsed as `git status '#' eight staged`, i.e. three pathspecs matching nothing, so git printed "nothing to commit, working tree clean" on a tree with eight staged files.
+
+Applies to Headwinds too.
+
 ## Devlog maintenance (important)
 
 **Whenever a session ships a notable game change (feature, rebalance, significant fix), add an entry to `public/devlog.html` before committing.**

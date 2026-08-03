@@ -8,7 +8,7 @@ import {
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
-  maxFrequency,
+  maxFrequency, stateBrandReach,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -651,6 +651,11 @@ export default function RoutePlanner() {
         + configSpaceQualityBonus(cfg, type)
         + cateringQualityBonus(cateringLevel, routeData.dist))),
       connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+      // Brand reach, resolved through the same helper the tick uses. Now that
+      // brand is a demand term rather than a revenue multiplier, an offer that
+      // omits it is scored as an ESTABLISHED carrier — so a week-one airline
+      // would preview the market share of a household name.
+      brandReach: stateBrandReach(state, 0, false),
     };
     const competitorOffers = competitorsOnRoute.map(c => c.offer).filter(Boolean);
     const allOffers  = [playerOffer, ...competitorOffers];

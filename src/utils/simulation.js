@@ -947,6 +947,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // Targeted advertising at either endpoint (attached by weeklyTick). Enters
     // the share fight on contested pairs and the demand pool on monopolies.
     marketingBoost: route.marketingBoost ?? 0,
+    // Brand reach — awareness × reputation × loyalty × alliance, net of rival
+    // ad pressure (attached by weeklyTick). Same two channels as marketingBoost.
+    // Callers that don't attach it (previews, tests) sit at parity.
+    brandReach: route.brandReach ?? 1,
   };
 
   // Gather any AI competitors serving this route and compute market share.
@@ -1237,6 +1241,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
       qualityScore: quality, connectivityBonus,
       priceSensitivityReduction: route.priceSensitivityReduction ?? 0,
       marketingBoost: route.marketingBoost ?? 0,
+      brandReach: route.brandReach ?? 1,
     };
     const competitorOffers = COMPETITOR_AIRLINES
       .map(c => buildCompetitorOffer(c, market)).filter(Boolean);
@@ -1722,6 +1727,43 @@ export function stateSensReduction(state, hubQ = 0) {
   const repInfo = calcReputation(state, loyaltyReputationBonus(strength), avgUtilization);
   return priceSensitivityReductionFor(
     reputationElasticityReduction(repInfo.overall), strength, tier, hubQ);
+}
+
+/**
+ * Brand reach for a pair, computed from raw state — the preview-side twin of
+ * weeklyTick's `brandReachFor`. Any screen that builds a player offer itself
+ * must include this field; omitting it would show a brand-new airline the
+ * market share of an established one.
+ *
+ * Rival ad drag is deliberately NOT included here: it depends on competitor
+ * marketing spend resolved during the tick, and a preview that guessed at it
+ * would disagree with the tick in the other direction. The omission is worth at
+ * most COMPETITOR_MKT_MAX_DRAG (5%).
+ *
+ * @param {object}   state
+ * @param {number}   hubQ                hub quality bonus for the pair (0 = off-hub)
+ * @param {boolean}  allianceContested   whether an alliance partner contests it
+ * @returns {number} ~0.45–1.35, 1 = parity
+ */
+export function stateBrandReach(state, hubQ = 0, allianceContested = false) {
+  const loyalty = state.loyalty ?? { weeklyInvestment: 0, members: 0 };
+  const strength = loyaltyEffectiveStrength(
+    loyaltyPenetration(loyalty.members ?? 0, loyaltyPaxBase(state)),
+    loyalty.maturity ?? 0,
+  );
+  const tier = loyaltyTier(loyalty.effInvestment ?? loyalty.weeklyInvestment ?? 0);
+  const avgUtilization = fleetAvgUtilization(state.fleet ?? [],
+    [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
+  const repInfo = calcReputation(state, loyaltyReputationBonus(strength), avgUtilization);
+  const loyaltyBoostHub = loyaltyDemandBoostPct(strength, tier);
+  const loyaltyLift = hubQ > 0 ? loyaltyBoostHub : loyaltyBoostHub * 0.4;
+  const allianceLift = allianceContested
+    ? (getAlliance(state.allianceMembership?.allianceId)?.demandBoostPct ?? 0)
+    : 0;
+  return Math.max(0.01,
+    awarenessDemandMultiplier(state.awareness ?? 5)
+    * reputationDemandMultiplier(repInfo.overall)
+    * (1 + loyaltyLift) * (1 + allianceLift));
 }
 
 // Brand/reputation bonus: only a deep, MATURE program earns the full +8.
@@ -2223,6 +2265,52 @@ export function weeklyTick(state) {
   const sensReductionFor = (hubQ) =>
     priceSensitivityReductionFor(repElasticityRed, loyaltyStrength, loyaltyTierNow, hubQ);
 
+  // Brand reach: awareness × reputation × loyalty × alliance, net of rival ad
+  // pressure — ONE number describing how much of a market will even consider
+  // flying this airline.
+  //
+  // It used to be `combinedMult`, a multiplier applied to route REVENUE after
+  // the share fight and after the capacity cap. That was wrong three ways:
+  //
+  //   1. It changed no passengers. `passengers`, `loadFactor` and `classSummary`
+  //      came back from simulateRoute unboosted while `revenue` was scaled, so
+  //      revenue ÷ pax stopped equalling the fare the player had set, per-cabin
+  //      revenues stopped summing to the route total, and Finance's yield/RASK
+  //      (revenue ÷ RPK) drifted upward year after year on routes nobody had
+  //      repriced. A new airline wasn't reaching 45% of the market — it was
+  //      quietly selling every seat at 45% of its own ticket price.
+  //   2. The payout was largest on routes already at 100% load factor, i.e.
+  //      precisely where a stronger brand cannot sell one more seat. The reward
+  //      was inverted.
+  //   3. The freight path already did it correctly — simulateCargoRoute takes
+  //      the same awareness figure as `demandMultiplier` and applies it to
+  //      TONNES. One engine, two contradictory meanings for one number.
+  //
+  // As a demand term it does what it says: on a contested pair an unknown brand
+  // loses passengers to its rivals (a log-odds shift in computeUtility), and on
+  // a monopoly it loses them to not-flying (a pool multiplier in
+  // _monopolyResult). Either way the player now flies emptier aircraft at the
+  // fare they set, instead of full aircraft at a fare they never charged.
+  //
+  // Reputation and loyalty still ALSO blunt price elasticity via
+  // sensReductionFor — a separate, deliberate channel (see reputation.js).
+  //
+  // @param {number}   hubQ   hub quality bonus for the route (0 = off-hub);
+  //                          loyalty is concentrated on hub-touching routes.
+  // @param {string[]} stops  every airport the route touches — rival ad drag is
+  //                          the worst along the whole path, as before.
+  // @param {boolean}  allianceContested  whether a partner contests this pair.
+  const brandReachFor = (hubQ, stops, allianceContested = false) => {
+    const rivalAdDrag = Math.max(0, ...stops.map(mktDragAt));
+    const loyaltyLift = hubQ > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
+    const allianceLift = allianceContested ? allianceDemandBoostPct : 0;
+    return Math.max(0.01,
+      awarenessMultiplier * reputationMult * (1 - rivalAdDrag)
+      * (1 + loyaltyLift) * (1 + allianceLift));
+  };
+  /** Sorted city-pair key, matching partnerContestedKeys / cannibalizationMap. */
+  const pairKeyOf = (a, b) => [a, b].sort().join('-');
+
   // NOTE: no instant marketing multiplier — spend feeds the awareness stock
   // (brand) and campaign-strength stocks (targeted) instead. See overhead.js §9.
 
@@ -2352,6 +2440,11 @@ export function weeklyTick(state) {
         priceSensitivityReduction: sensReductionFor(groupHubQ),
         // Same targeted-campaign term the single-aircraft path gets.
         marketingBoost: campaignBoostFor(r0.origin, r0.destination),
+        // Same brand-reach term too. The pooled demand this offer produces is
+        // handed straight to each aircraft as a demandOverride, so omitting it
+        // here would exempt every multi-aircraft route from the brand model.
+        brandReach: brandReachFor(groupHubQ, [r0.origin, r0.destination],
+          partnerContestedKeys.has(pairKeyOf(r0.origin, r0.destination))),
       };
 
       const competitorOffers = COMPETITOR_AIRLINES
@@ -2427,6 +2520,10 @@ export function weeklyTick(state) {
         priceSensitivityReduction: Math.min(0.40,
           sensReductionFor(tagHubQuality) + (tagFortress ? 0.05 : 0)),
         marketingBoost: tagCampaignBoost,
+        // Brand reach across every stop on the tag route. No alliance term:
+        // partnerContestedKeys is keyed by single city pairs, and a multi-stop
+        // rotation isn't one — same omission the old combinedMult made here.
+        brandReach: brandReachFor(tagHubQuality, stopsList, false),
         ...(tagHcf ? { hubCostFactors: tagHcf } : {}),
       };
       const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries);
@@ -2437,11 +2534,10 @@ export function weeklyTick(state) {
       // Loyalty boost is concentrated on hub-touching routes.
       const tagLoyaltyBoost = tagHubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
       const tagMarketingLift = netMarketingLift(tagCampaignBoost, tagRivalAdDrag);
-      const combinedMult   = awarenessMultiplier * reputationMult * (1 - tagRivalAdDrag) * (1 + tagLoyaltyBoost);
-      // Per-passenger income (catering + ancillary fees) is NOT amplified by the
-      // demand multipliers — strip it out before boosting, add it back unscaled.
-      const boostedRevenue = Math.round((result.revenue - cateringRev - ancillaryRev) * combinedMult) + cateringRev + ancillaryRev;
-      const routeRevenue   = boostedRevenue;   // no simple connecting add for tag routes
+      // Brand and campaign are both already inside result.revenue — they went
+      // through the demand model on tagRoute.brandReach / .marketingBoost and
+      // sold real seats at the real fare. Nothing is applied on top here.
+      const routeRevenue   = result.revenue;   // no simple connecting add for tag routes
 
       const type       = getAircraftType(aircraft.typeId);
       const landingFee = routeLandingFee(route, type, route.weeklyFrequency);
@@ -2515,6 +2611,11 @@ export function weeklyTick(state) {
       // model rather than multiplied onto revenue afterwards (see the
       // marketingLift note below).
       marketingBoost: campaignBoostFor(route.origin, route.destination),
+      // Awareness / reputation / loyalty / alliance / rival ad drag, ridden in
+      // the same way for the same reason (see brandReachFor).
+      brandReach: brandReachFor(hubQuality,
+        [route.origin, route.destination],
+        partnerContestedKeys.has(pairKeyOf(route.origin, route.destination))),
       ...(hcfRoute ? { hubCostFactors: hcfRoute } : {}),
     };
 
@@ -2619,15 +2720,15 @@ export function weeklyTick(state) {
     const marketingLift  = netMarketingLift(campaignBoost, rivalAdDrag);
     // Loyalty boost concentrated on hub-touching routes, diluted elsewhere.
     const loyaltyLift    = hubQuality > 0 ? loyaltyBoostHub : loyaltyBoostOffHub;
-    const combinedMult   = awarenessMultiplier * reputationMult * (1 - rivalAdDrag) * (1 + loyaltyLift) * (1 + allianceLift);
-    // Catering + à la carte ancillary revenue are per-actual-passenger income — they
-    // should NOT be amplified by the marketing/awareness/loyalty demand multipliers
-    // (those proxy for attracting MORE passengers, which this income would then
-    // double-count). Strip them out before boosting, then add them back unscaled.
+    // No multiplier is applied here any more. Brand reach and the campaign both
+    // rode into the demand model on routeWithHubBonus and have already decided
+    // how many people booked; result.revenue is those passengers at the fare the
+    // player set. Catering and ancillaries no longer need stripping out and
+    // adding back either — nothing is being scaled, so nothing can double-count.
+    // (They are still broken out below for the revenue-mix totals.)
     const cateringRev    = result.cateringRevenue ?? 0;
     const ancillaryRev   = result.ancillaryRevenue ?? 0;
-    const boostedRevenue = Math.round((result.revenue - cateringRev - ancillaryRev) * combinedMult) + cateringRev + ancillaryRev;
-    const routeRevenue   = boostedRevenue + connecting.totalRevenue;
+    const routeRevenue   = result.revenue + connecting.totalRevenue;
 
     // Landing & navigation fees for this route
     const type         = getAircraftType(aircraft.typeId);

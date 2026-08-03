@@ -11,7 +11,7 @@ import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
-  buildEventDemandModel,
+  buildEventDemandModel, stateBrandReach,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -235,6 +235,9 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           qualityScore:      routeQualityBreakdown(route, aircraft, state)?.total
             ?? Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+          // See the note on combinedOffer below: without this the share panel
+          // scores a brand-new airline as an established one.
+          brandReach:        stateBrandReach(state, maxHubBonus, false),
         };
       }
     }
@@ -288,6 +291,11 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           totalSeats: totalSeatsAll,
           qualityScore: shareResults.find(r => r.airlineId === 'player') ? 70 : 70,
           connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+          // Brand reach, resolved through the same helper the tick uses. Now
+          // that brand is a demand term rather than a revenue multiplier, an
+          // offer that omits it is scored as an ESTABLISHED carrier — so a
+          // week-one airline would preview the market share of a household name.
+          brandReach: stateBrandReach(state, maxHubBonus, false),
         };
         const compOffers = competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean);
         const [combined] = computeMarketShare(market, [combinedOffer, ...compOffers]);

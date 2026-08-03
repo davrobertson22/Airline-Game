@@ -159,6 +159,10 @@ export function buildEncroachmentOffer(spec, market) {
       ? computeConnectivityBonus(spec.homeHub, market.origin, market.destination)
       : 0,
     marketingBoost:    spec.marketingBoost ?? 0,
+    // Rivals carry their own brand reach when a caller supplies one; an AI
+    // encroacher with no brand model sits at parity (1) rather than being
+    // scored as an unknown carrier.
+    brandReach:        spec.brandReach ?? 1,
   };
 }
 

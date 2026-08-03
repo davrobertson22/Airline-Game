@@ -106,6 +106,16 @@ const save = {
   fleet,
   routes,
   encroachments,
+  // An ESTABLISHED brand, so brand reach is exactly 1 and drops out.
+  //
+  // This suite is about the map agreeing with the engine, not about brand: the
+  // uncontested spoke is the control, and it only works as one if the sole
+  // difference between it and the contested pairs is the rival. freshState()
+  // starts at awareness 5 (reach ~0.446), and now that brand reach is a real
+  // demand term it shrinks the monopoly POOL — so at this fixture's 32x/week
+  // the control route ran 61.2% full and stopped controlling for anything.
+  // Pinning awareness removes the confound rather than relaxing the assertion.
+  awareness: 65,
 };
 store.set('bbae_save_v2', JSON.stringify(save));
 
