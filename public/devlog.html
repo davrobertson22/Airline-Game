@@ -62,6 +62,18 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 5, 2026</p>
+      <h2>&ldquo;Open Route&rdquo; now tells you why it will not</h2>
+      <p>From the Discord: &ldquo;when clicking open route, nothing happens.&rdquo; The reporter worked it out himself &mdash; he had not leased a gate at the destination yet &mdash; but the game never said so. The button simply absorbed the click.</p>
+      <ul>
+        <li><strong>A blocked route now explains itself.</strong> Click Open Route when something is standing in the way and a notice names it: no gate at the far end, gate slots already full, the aircraft out of flying hours, the lane beyond its range, the plane not connected to either airport, or not enough cash for the launch. No more dead buttons.</li>
+        <li><strong>Missing gates show up before you click.</strong> The planner now displays your gate and slot position at both ends of the route, in red when you have none and amber when you are short of slots &mdash; each with an <em>Add gate</em> button right there, so you can fix it without leaving the page. The Routes tab has done this for a while; the planner had not caught up.</li>
+        <li><strong>The planner and the engine can no longer disagree.</strong> Every reason a route can be refused now lives in one place that both the planner and the simulation read from. If the engine will refuse a route, the planner knows the reason and shows it.</li>
+      </ul>
+      <p>Gates are the thing most new airlines forget: you need one at <em>both</em> ends of every route, and each gate only carries so many departures a week. <a href="/route-economics.html">Route economics</a> covers how gate costs land on a route&rsquo;s bottom line.</p>
+    </div>
+
+    <div class="entry">
       <p class="date">August 2, 2026</p>
       <h2>The map stays where you put it</h2>
       <p>Straight from the Discord: &ldquo;when you zoom in and pass your mouse over a route, it resets your zoom.&rdquo; It did, and it should not have.</p>

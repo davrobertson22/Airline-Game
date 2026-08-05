@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useGame } from '../store/GameContext.jsx';
+import { useGame, addRouteBlockReason } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import {
@@ -8,7 +8,7 @@ import {
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
-  maxFrequency, stateBrandReach,
+  maxFrequency, stateBrandReach, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -24,6 +24,8 @@ import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
 import TagRoutePlanner from './TagRoutePlanner.jsx';
 import RouteFinder from './RouteFinder.jsx';
 import InfoTip from './InfoTip.jsx';
+import AddGateButton from './AddGateButton.jsx';
+import { useToast } from './ToastSystem.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 
 function weekToMonth(week) {
@@ -404,6 +406,7 @@ function CabinConfigPanel({ type, config, onChange, source, onSourceChange, flee
 
 export default function RoutePlanner() {
   const { state, dispatch } = useGame();
+  const addToast = useToast();
 
   const [mode, setMode] = useState('passenger');
 
@@ -665,7 +668,36 @@ export default function RoutePlanner() {
     return { result, resultLaunch, type, netProfit, totalRevenue, connecting, playerOffer, shareResults, playerShare };
   }, [routeData, selectedTypeId, frequency, effectivePrice, cateringLevel, effectiveConfig, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest]);
 
+  // Gate + slot position at each endpoint for the planned frequency. The engine
+  // enforces both (ADD_ROUTE), so the planner shows them before you click rather
+  // than letting the dispatch silently do nothing.
+  const endpointGates = useMemo(() => {
+    if (!ready) return null;
+    const gates = state.gates ?? {};
+    const months = routeActiveMonths({ origin, destination: dest, season });
+    const usedAt = (code) => Math.max(0, ...months.map(m => (state.routes ?? [])
+      .filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
+      .reduce((s, r) => s + r.weeklyFrequency, 0)));
+    return [origin, dest].map(code => {
+      const owned = gates[code] ?? 0;
+      const cap   = owned * SLOTS_PER_GATE;
+      const used  = usedAt(code);
+      return { code, hasGate: owned > 0, cap, used, slotsOk: used + frequency <= cap };
+    });
+  }, [ready, origin, dest, frequency, season, state.gates, state.routes]);
+
+  // Ask the engine's own guard whether this exact route would be accepted. null =
+  // yes; otherwise a player-facing sentence naming the blocker.
+  const blockReasonFor = (aircraftId) => addRouteBlockReason(state, {
+    origin, destination: dest, aircraftId, weeklyFrequency: frequency, season,
+  });
+
   function handleOpenRoute(aircraftId) {
+    const reason = blockReasonFor(aircraftId);
+    if (reason) {
+      addToast({ type: 'warning', title: "Can't open this route", message: reason });
+      return;
+    }
     dispatch({ type: 'ADD_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, ticketPrice: effectivePrice, cateringLevel, season });
   }
 
@@ -1064,6 +1096,9 @@ export default function RoutePlanner() {
                   const lCost      = routeLaunchCost(routeData.dist);
                   const canAfford  = state.cash >= lCost;
                   const blocked    = !!routeRestriction;
+                  // The engine's own verdict on the plane we'd actually deploy.
+                  const blockReason = preferred ? blockReasonFor(preferred.id) : null;
+                  const gateTrouble = (endpointGates ?? []).filter(g => !g.hasGate || !g.slotsOk);
                   // Deploying a stationed reserve is allowed — it just ends its
                   // standby — so say so plainly instead of hiding the plane.
                   const reserveTail = preferredD?.reserve ? preferred : null;
@@ -1075,10 +1110,14 @@ export default function RoutePlanner() {
                             <Glyph e="🚫" /> Route Blocked by Regulation
                           </button>
                         ) : preferred ? (
+                          // Deliberately NOT `disabled` when blocked: a greyed-out
+                          // button that swallows the click is the same dead end as
+                          // the silent no-op. It stays clickable and answers with a
+                          // toast naming the blocker.
                           <button
                             className="btn btn-primary"
-                            style={{ padding: '8px 20px', opacity: canAfford ? 1 : 0.5 }}
-                            disabled={!canAfford}
+                            style={{ padding: '8px 20px', opacity: blockReason ? 0.5 : 1 }}
+                            title={blockReason ?? undefined}
                             onClick={() => handleOpenRoute(preferred.id)}
                           >
                             Open Route with {preferred.tailNumber || preferred.name}{!preferredD.idle ? ' · shares hours' : ''}
@@ -1098,6 +1137,33 @@ export default function RoutePlanner() {
                           </span>
                         )}
                       </div>
+                      {/* Gate / slot shortfalls at either endpoint, with an inline fix.
+                          These are hard engine requirements — without them the route
+                          cannot open, whatever the forecast above says. */}
+                      {!blocked && gateTrouble.length > 0 && (
+                        <div style={{ fontSize: 12, marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {gateTrouble.map(g => (
+                            !g.hasGate ? (
+                              <span key={g.code} style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <Glyph e="⚠" /> No gate at {g.code} — you need one at both ends to fly this route
+                                <AddGateButton code={g.code} />
+                              </span>
+                            ) : (
+                              <span key={g.code} style={{ color: 'var(--yellow)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <Glyph e="⚠" /> Not enough gate slots at {g.code} ({g.used}/{g.cap} used, this route needs {frequency})
+                                <AddGateButton code={g.code} />
+                              </span>
+                            )
+                          ))}
+                        </div>
+                      )}
+                      {/* Anything else the engine would reject (block-hours, network
+                          reach, regulation) — cash has its own line below. */}
+                      {!blocked && blockReason && gateTrouble.length === 0 && canAfford && (
+                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 6 }}>
+                          <Glyph e="⚠" /> {blockReason}
+                        </div>
+                      )}
                       {!blocked && reserveTail && (
                         <div style={{ fontSize: 12, color: 'var(--yellow)', marginBottom: 4 }}>
                           <Glyph e="🛡️" size={12} /> {reserveTail.tailNumber || reserveTail.name} is on reserve at {reserveTail.reserveBase} — opening this route takes it off standby, so it stops covering your other {simulation.type.name}s there.
