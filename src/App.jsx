@@ -288,6 +288,21 @@ function AppInner() {
 
   const navigate = (id) => { setActiveTab(id); setOpenGroup(null); };
 
+  // Deep links. Headwinds' shell has listened for this since the news feed
+  // shipped; solo never needed it until the Dashboard's alerts became links,
+  // and an alert that fires an event nobody listens for is worse than an alert
+  // that is plainly inert. detail is a tab id, or { tab, focus }.
+  useEffect(() => {
+    const onNavigate = (e) => {
+      const d = e?.detail;
+      const id = typeof d === 'string' ? d : d?.tab;
+      if (typeof id !== 'string' || !TABS.some(t => t.id === id)) return;
+      navigate(id);
+    };
+    window.addEventListener('hw:navigate', onNavigate);
+    return () => window.removeEventListener('hw:navigate', onNavigate);
+  }, []);
+
   const tabContent = {
     dashboard:   <Dashboard />,
     map:         <RouteMap />,
