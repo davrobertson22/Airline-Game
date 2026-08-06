@@ -67,6 +67,11 @@ import {
   CODESHARE_WEEKLY_FEE_BY_TIER,
   CODESHARE_DURATION_WEEKS,
 } from '../data/alliances.js';
+import {
+  LOAN_MIN_PRINCIPAL, amortizedWeeklyPayment, outstandingBalance,
+  getLoanProduct, loanProductForTerm, loanRate, borrowingCapacity,
+  unencumberedOwnedFleet, isPledged, loanSecuredOn,
+} from '../data/credit.js';
 import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
          marketingAwarenessGain, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
          campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor } from '../data/overhead.js';
@@ -829,6 +834,18 @@ function reducer(state, action) {
 
     case 'RETIRE_AIRCRAFT': {
       const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
+      // Same reasoning as SELL_AIRCRAFT: retiring pledged metal would destroy
+      // the security while the debt survives.
+      if (isPledged(state, action.aircraftId)) {
+        const why = 'This aircraft is pledged against an aircraft loan. Repay the loan to release it.';
+        return {
+          ...state,
+          error: why,
+          pendingToasts: [...(state.pendingToasts ?? []), {
+            type: 'warning', title: '🔒 Pledged as collateral', message: why, duration: 9000,
+          }],
+        };
+      }
       // Settle any live reserve covers involving this tail before removal.
       const settled       = settleCoversForRemoval(state, action.aircraftId);
       const updatedRoutes = settled.routes.filter(r => r.aircraftId !== action.aircraftId);
@@ -1007,6 +1024,22 @@ function reducer(state, action) {
       // this, selling a leased plane pays out the full purchase-price NAV of an
       // aeroplane that was never bought.
       if (!aircraft || aircraft.ownershipType !== 'owned') return state;
+      // A tail pledged against aircraft finance is the lender's security. Selling
+      // it would hand the player the cash AND leave the loan standing against
+      // nothing — the oldest trick in asset-backed lending.
+      if (isPledged(state, action.aircraftId)) {
+        const loan = loanSecuredOn(state, action.aircraftId);
+        const why = `This aircraft is pledged against ${loan ? `a $${loan.principal.toLocaleString()} aircraft loan` : 'an aircraft loan'}. Repay the loan to release it.`;
+        // A toast as well as state.error: solo has no consumer for `error`, and
+        // this is a refusal a player can walk straight into from the Fleet screen.
+        return {
+          ...state,
+          error: why,
+          pendingToasts: [...(state.pendingToasts ?? []), {
+            type: 'warning', title: '🔒 Pledged as collateral', message: why, duration: 9000,
+          }],
+        };
+      }
       const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
       const remaining     = valueRemaining(aircraft?.ageWeeks, type);
       const sellAbsWeek   = absoluteWeek(state.year, state.week);
@@ -3017,11 +3050,7 @@ function reducer(state, action) {
         .map(loan => {
           if (loan.weeksRemaining <= 0) return null;
           const weeklyRate = loan.interestRate / 52;
-          // Outstanding balance via present-value formula; weeklyRate=0 → flat principal
-          const remainingBal = weeklyRate > 0
-            ? Math.round(loan.weeklyPayment * (1 - Math.pow(1 + weeklyRate, -loan.weeksRemaining)) / weeklyRate)
-            : loan.weeklyPayment * loan.weeksRemaining;
-          const interestThisWeek = Math.round(remainingBal * weeklyRate);
+          const interestThisWeek = Math.round(outstandingBalance(loan) * weeklyRate);
           totalLoanPayments += loan.weeklyPayment;
           totalLoanInterest += interestThisWeek;
           return {
@@ -3602,17 +3631,49 @@ function reducer(state, action) {
     }
 
     case 'TAKE_LOAN': {
-      // action: { principal, interestRate (annual), termWeeks }
-      const { principal, interestRate, termWeeks } = action;
-      // Reject degenerate loans regardless of UI path.
-      if (!(principal > 0) || !(termWeeks > 0) || !(interestRate >= 0)) return state;
-      const weeklyRate = interestRate / 52;
-      // Amortized weekly payment: P * r * (1+r)^n / ((1+r)^n - 1)
-      const weeklyPayment = weeklyRate > 0
-        ? Math.round(principal * weeklyRate * Math.pow(1 + weeklyRate, termWeeks) / (Math.pow(1 + weeklyRate, termWeeks) - 1))
-        : Math.round(principal / termWeeks);
+      // action: { productId, principal }
+      //
+      // The rate is NOT the client's to choose. It used to be — `interestRate`
+      // came in on the action and went straight onto the loan, so an airline the
+      // model grades F, which should be paying 18%, could ask for the 3% floor
+      // and get it. The client now names a PRODUCT and the engine prices it
+      // (see data/credit.js). `action.interestRate` and `action.termWeeks` are
+      // read only to identify which product a legacy payload meant.
+      const product = getLoanProduct(action.productId)
+        ?? (action.termWeeks != null ? loanProductForTerm(action.termWeeks) : null);
+      if (!product) return { ...state, error: 'That loan product is not on offer.' };
+
+      const principal = Math.floor(Number(action.principal) || 0);
+      if (!(principal >= LOAN_MIN_PRINCIPAL)) {
+        return { ...state, error: `The smallest loan available is $${LOAN_MIN_PRINCIPAL.toLocaleString()}.` };
+      }
+
+      // Collateral is taken at signing, so it must be checked before capacity —
+      // an airline with nothing to pledge gets a reason, not a bare zero.
+      let collateralIds;
+      if (product.secured) {
+        collateralIds = unencumberedOwnedFleet(state).map(a => a.id);
+        if (collateralIds.length === 0) {
+          return { ...state, error: 'Aircraft finance is secured on aircraft you own outright. You have none left to pledge.' };
+        }
+      }
+
+      const capacity = borrowingCapacity(state, product.id);
+      if (principal > capacity) {
+        return {
+          ...state,
+          error: capacity > 0
+            ? `Your capacity on ${product.name} is $${capacity.toLocaleString()}.`
+            : `You have no borrowing capacity left on ${product.name}.`,
+        };
+      }
+
+      const interestRate  = loanRate(state, product.id);
+      const termWeeks     = product.termWeeks;
+      const weeklyPayment = amortizedWeeklyPayment(principal, interestRate, termWeeks);
       const newLoan = {
         id:                uid(),
+        productId:         product.id,
         principal,
         interestRate,
         termWeeks,
@@ -3621,9 +3682,13 @@ function reducer(state, action) {
         totalInterestPaid: 0,
         takenWeek:         state.week,
         takenYear:         state.year,
+        // Present only on a secured facility. Its absence is what makes a loan
+        // unsecured everywhere else in the model, so do not write an empty array.
+        ...(collateralIds ? { collateralIds } : {}),
       };
       return {
         ...state,
+        error: null,
         cash:  state.cash + principal,
         loans: [...(state.loans ?? []), newLoan],
       };
@@ -3633,19 +3698,16 @@ function reducer(state, action) {
       // action: { loanId } — early repayment, 2% penalty on remaining principal
       const loan = (state.loans ?? []).find(l => l.id === action.loanId);
       if (!loan) return state;
-      // Remaining balance ≈ outstanding principal (simplified: payment × weeks left minus future interest)
-      // Use simplified outstanding balance formula
-      const weeklyRate = loan.interestRate / 52;
-      const n = loan.weeksRemaining;
-      const remainingBalance = weeklyRate > 0
-        ? Math.round(loan.weeklyPayment * (1 - Math.pow(1 + weeklyRate, -n)) / weeklyRate)
-        : Math.round(loan.weeklyPayment * n);
+      // Outstanding principal, from the same helper the tick and the UI use.
+      const remainingBalance = outstandingBalance(loan);
       const penalty = Math.round(remainingBalance * 0.02);
       const totalRepay = remainingBalance + penalty;
       if (state.cash < totalRepay) return state;
       return {
         ...state,
         cash:  state.cash - totalRepay,
+        // Dropping the loan releases any aircraft it was secured on: every
+        // collateral question in the model is asked of the live loan list.
         loans: (state.loans ?? []).filter(l => l.id !== action.loanId),
       };
     }
