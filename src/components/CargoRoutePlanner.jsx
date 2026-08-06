@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
-import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS, maxFrequency } from '../utils/simulation.js';
+import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS, maxFrequency, currentGameDate } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
@@ -128,6 +128,10 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
 
   const originAirport = getAirport(origin);
   const destAirport   = getAirport(dest);
+  // Project the week the player would actually launch into. Freight is
+  // seasonal now, so a fixed "typical month" would disagree with the tick the
+  // moment they pressed the button.
+  const gd = currentGameDate(state);
   const ready         = !!(originAirport && destAirport);
 
   // One freighter has MAX_WEEKLY_BLOCK_HOURS flying hours a week — long sectors
@@ -143,9 +147,9 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
     if (!ready) return null;
     const dist     = routeDistance(origin, dest);
     const refYield = cargoReferenceYield(origin, dest);
-    const demand   = cargoCityPairDemand(origin, dest);
+    const demand   = cargoCityPairDemand(origin, dest, gd.month);
     return { dist, refYield, demand };
-  }, [origin, dest, ready]);
+  }, [origin, dest, ready, gd.month]);
 
   const effectiveYield = yieldPrice ?? routeData?.refYield ?? 0.5;
 
@@ -207,15 +211,15 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
     let override = null, overrideLaunch = null;
     if (laneRoutes.length > 0) {
       const fleetPlus = [...state.fleet, ac];
-      override       = cargoLaneAllocations([...laneRoutes, route], fleetPlus).get('p') ?? null;
-      overrideLaunch = cargoLaneAllocations([...laneRoutes, { ...route, weeksOpen: 0 }], fleetPlus).get('p') ?? null;
+      override       = cargoLaneAllocations([...laneRoutes, route], fleetPlus, 1.0, { gameDate: gd }).get('p') ?? null;
+      overrideLaunch = cargoLaneAllocations([...laneRoutes, { ...route, weeksOpen: 0 }], fleetPlus, 1.0, { gameDate: gd }).get('p') ?? null;
     }
-    const result       = simulateCargoRoute(route, ac, { month: 6 }, null, 1.0, 1.0, override);
-    const resultLaunch = simulateCargoRoute({ ...route, weeksOpen: 0 }, ac, { month: 6 }, null, 1.0, 1.0, overrideLaunch);
+    const result       = simulateCargoRoute(route, ac, gd, null, 1.0, 1.0, override);
+    const resultLaunch = simulateCargoRoute({ ...route, weeksOpen: 0 }, ac, gd, null, 1.0, 1.0, overrideLaunch);
     if (!result) return null;
     const netProfit = result.profit - type.weeklyLease; // approx (excludes landing/maint; shown separately)
     return { result, resultLaunch, type, netProfit, shared: laneRoutes.length > 0 };
-  }, [routeData, selectedTypeId, frequency, effectiveYield, origin, dest, laneRoutes, state.fleet]);
+  }, [routeData, selectedTypeId, frequency, effectiveYield, origin, dest, laneRoutes, state.fleet, gd.month]);
 
   function handleOpenRoute(aircraftId) {
     dispatch({ type: 'ADD_CARGO_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, yieldPrice: effectiveYield });

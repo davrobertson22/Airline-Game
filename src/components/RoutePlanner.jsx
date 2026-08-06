@@ -5,6 +5,7 @@ import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import {
   baseCityPairDemand, referencePrice, distanceKm,
   simulateRoute, formatMoney, formatPercent, weekToGameDate,
+  hubSpokeCounts, pairConnectivityBonus,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
@@ -653,7 +654,7 @@ export default function RoutePlanner() {
       })()
         + configSpaceQualityBonus(cfg, type)
         + cateringQualityBonus(cateringLevel, routeData.dist))),
-      connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+      connectivityBonus: pairConnectivityBonus(hubSpokeCounts(state.routes ?? []), [state.hub], origin, dest),
       // Brand reach, resolved through the same helper the tick uses. Now that
       // brand is a demand term rather than a revenue multiplier, an offer that
       // omits it is scored as an ESTABLISHED carrier — so a week-one airline

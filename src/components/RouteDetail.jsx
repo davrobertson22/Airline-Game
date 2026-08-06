@@ -10,6 +10,7 @@ import {
 import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
+  hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach,
 } from '../utils/simulation.js';
@@ -234,7 +235,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // satisfaction, cabin product), incl. the hub bonus via the breakdown.
           qualityScore:      routeQualityBreakdown(route, aircraft, state)?.total
             ?? Math.min(100, computeQualityScore({ onTimeRate: 0.85, serviceLevel: 'economy', fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52, customerRating: 3.5 }) + maxHubBonus),
-          connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+          connectivityBonus: pairConnectivityBonus(hubSpokeCounts(state.routes ?? []), [state.hub], origin, dest),
           // See the note on combinedOffer below: without this the share panel
           // scores a brand-new airline as an established one.
           brandReach:        stateBrandReach(state, maxHubBonus, false),
@@ -290,7 +291,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           economySeats: totalEcoSeats, businessSeats: totalBizSeats,
           totalSeats: totalSeatsAll,
           qualityScore: shareResults.find(r => r.airlineId === 'player') ? 70 : 70,
-          connectivityBonus: (origin === state.hub || dest === state.hub) ? 0.20 : 0,
+          connectivityBonus: pairConnectivityBonus(hubSpokeCounts(state.routes ?? []), [state.hub], origin, dest),
           // Brand reach, resolved through the same helper the tick uses. Now
           // that brand is a demand term rather than a revenue multiplier, an
           // offer that omits it is scored as an ESTABLISHED carrier — so a
