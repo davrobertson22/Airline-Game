@@ -144,6 +144,77 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
 }
 
 // ─────────────────────────────────────────────
+// SINGLE-ROUTE REASSIGN (move one route to another tail)
+// ─────────────────────────────────────────────
+// TRANSFER_ROUTES moves a tail's WHOLE network onto an idle aircraft. There was
+// no way to move one route, so up-gauging a single hot pair meant closing it and
+// opening it again — which charges the launch cost a second time and drops the
+// pair back to week 0 of its 16-week maturity ramp. Swapping equipment on a route
+// is routine in a real airline; here it was punished, so players either avoided
+// it or discovered the ramp reset after the fact.
+//
+// Differs from transferCompatibility in two ways that matter: the TARGET may
+// already be flying (that is the point — put the route on a tail with spare
+// hours), so its existing schedule counts toward the block-hour budget; and only
+// this route's legs are range- and restriction-checked.
+export function reassignCompatibility(state, routeId, toAircraftId) {
+  const paxRoutes   = state.routes ?? [];
+  const cargoRoutes = state.cargoRoutes ?? [];
+  const route = paxRoutes.find(r => r.id === routeId) ?? cargoRoutes.find(r => r.id === routeId);
+  if (!route) return { ok: false, reason: 'Route not found' };
+  if (route.aircraftId === toAircraftId) return { ok: false, reason: 'Already on this aircraft' };
+
+  const to     = state.fleet.find(a => a.id === toAircraftId);
+  const toType = to ? getAircraftType(to.typeId) : null;
+  if (!to || !toType) return { ok: false, reason: 'Aircraft not found' };
+  if (to.status === 'retired') return { ok: false, reason: 'Retired' };
+  if (isOutOfService(to)) return { ok: false, reason: 'Out of service' };
+
+  // Reserve covers are engine-managed: the route belongs to the broken tail and
+  // goes home when it returns. Moving it by hand would strand the marker.
+  if (route.coverForAircraftId) return { ok: false, reason: 'Covering for an out-of-service aircraft' };
+
+  const isCargo = cargoRoutes.some(r => r.id === routeId);
+  if (isCargo && !toType.freighter)  return { ok: false, reason: 'Cargo routes need a freighter' };
+  if (!isCargo && toType.freighter)  return { ok: false, reason: 'Freighter — passenger routes need a passenger aircraft' };
+
+  if (routeMaxLegKm(route) > effectiveRangeKm(to, toType)) {
+    return { ok: false, reason: `Out of range: ${route.origin}–${route.destination}` };
+  }
+
+  // Regulatory restrictions re-checked with the NEW aircraft's category. Pair
+  // frequencies do not change, so the totals are the ones already approved.
+  const from     = state.fleet.find(a => a.id === route.aircraftId);
+  const fromType = from ? getAircraftType(from.typeId) : null;
+  if (!fromType || toType.category !== fromType.category) {
+    const allOps = [...paxRoutes, ...cargoRoutes];
+    for (const l of routeLegs(route)) {
+      const pk = routePairKey(l.from, l.to);
+      const pairFreq = allOps.reduce((s, o) =>
+        routeLegs(o).some(ol => routePairKey(ol.from, ol.to) === pk) ? s + (o.weeklyFrequency ?? 0) : s, 0);
+      if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to), pairFreq,
+            freighterBodyClass(toType), { routes: allOps, excludeKey: pk, aircraftType: toType }))
+        return { ok: false, reason: `Not permitted at ${l.from}–${l.to}` };
+    }
+  }
+
+  // Block hours: this route ON TOP of whatever the target already flies, at the
+  // per-month peak so counter-seasonal routes that never overlap can share.
+  const targetRoutes = [...paxRoutes, ...cargoRoutes].filter(r => r.aircraftId === toAircraftId);
+  const withRoute    = [...targetRoutes, route];
+  const months12     = Array.from({ length: 12 }, (_, i) => i + 1);
+  const peakOf = (list) => Math.max(...months12.map(m => list
+    .filter(r => isRouteActive(r, m))
+    .reduce((s, r) => s + routeBlockHours(r, toType, r.weeklyFrequency), 0)));
+  const peak = peakOf(withRoute);
+  if (peak > MAX_WEEKLY_BLOCK_HOURS) {
+    return { ok: false, reason: 'No spare block hours on that aircraft' };
+  }
+
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────
 // RESERVE COVER SETTLEMENT (on sell / retire)
 // ─────────────────────────────────────────────
 // Removing an aircraft that is part of a live cover must not delete routes or
@@ -928,6 +999,11 @@ function reducer(state, action) {
     case 'SELL_AIRCRAFT': {
       // Sell an owned aircraft at NAV minus 5% selling & admin fee.
       const aircraft      = state.fleet.find(a => a.id === action.aircraftId);
+      // Only OWNED aircraft can be sold — leased tails go back via
+      // RETIRE_AIRCRAFT, which charges the early-termination penalty. Without
+      // this, selling a leased plane pays out the full purchase-price NAV of an
+      // aeroplane that was never bought.
+      if (!aircraft || aircraft.ownershipType !== 'owned') return state;
       const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
       const remaining     = valueRemaining(aircraft?.ageWeeks, type);
       const sellAbsWeek   = absoluteWeek(state.year, state.week);
@@ -969,6 +1045,86 @@ function reducer(state, action) {
         fleet: state.fleet.map(a =>
           a.id === toAircraftId   ? { ...a, status: 'assigned', reserveBase: null } :
           a.id === fromAircraftId ? { ...a, status: 'idle' }     : a),
+      };
+    }
+
+    case 'REASSIGN_ROUTE': {
+      // Move ONE route to another tail. The route keeps its identity — id,
+      // weeksOpen ramp, pricing, season, catering — so the pair does not
+      // re-enter its maturity ramp and no launch cost is charged. That is the
+      // whole point: closing and re-opening cost both.
+      const { routeId, toAircraftId } = action;
+      if (!reassignCompatibility(state, routeId, toAircraftId).ok) return state;
+      const move = r => (r.id === routeId ? { ...r, aircraftId: toAircraftId } : r);
+      const nextRoutes = (state.routes ?? []).map(move);
+      const nextCargo  = (state.cargoRoutes ?? []).map(move);
+      const stillFlying = (id) =>
+        nextRoutes.some(r => r.aircraftId === id) || nextCargo.some(r => r.aircraftId === id);
+      const fromId = ((state.routes ?? []).find(r => r.id === routeId)
+                   ?? (state.cargoRoutes ?? []).find(r => r.id === routeId))?.aircraftId;
+      return {
+        ...state,
+        routes:      nextRoutes,
+        cargoRoutes: nextCargo,
+        fleet: state.fleet.map(a => {
+          // Taking a route puts a reserve back into normal service — it is no
+          // longer standing by for anyone.
+          if (a.id === toAircraftId) return { ...a, status: 'assigned', reserveBase: null };
+          // The donor only goes idle if it gave up its last route.
+          if (a.id === fromId && !isOutOfService(a) && a.status !== 'retired') {
+            return { ...a, status: stillFlying(a.id) ? 'assigned' : 'idle' };
+          }
+          return a;
+        }),
+      };
+    }
+
+    // ─── Bulk fleet actions ─────────────────────────────────────────────────
+    // One decision, one write. The Fleet page used to loop a single action per
+    // aircraft, which in multiplayer is N authoritative round-trips — slow, and
+    // a failure partway leaves a partly-applied result underneath a dialog that
+    // promised one outcome ("Sell 18 aircraft — proceeds $X"). CLOSE_ROUTES was
+    // batched for exactly this reason; these follow it.
+    //
+    // Each FOLDS the single-aircraft case rather than reimplementing it, so
+    // reserve settlement, lease penalties, cover teardown and status
+    // recomputation cannot drift from the one-at-a-time path.
+    case 'SELL_AIRCRAFT_BULK':
+    case 'RETIRE_AIRCRAFT_BULK':
+    case 'SCHEDULE_CHECKS':
+    case 'EXTEND_LEASES': {
+      const singleOf = {
+        SELL_AIRCRAFT_BULK:   'SELL_AIRCRAFT',
+        RETIRE_AIRCRAFT_BULK: 'RETIRE_AIRCRAFT',
+        SCHEDULE_CHECKS:      'SCHEDULE_CHECK',
+        EXTEND_LEASES:        'EXTEND_LEASE',
+      };
+      const single = singleOf[action.type];
+      const ids = [...new Set(action.aircraftIds ?? [])].filter(Boolean);
+      if (ids.length === 0) return state;
+      let next = state;
+      let applied = 0, skipped = 0;
+      const sales = [];
+      for (const aircraftId of ids) {
+        const res = reducer(next, { ...action, type: single, aircraftId });
+        // A refusal is either "nothing changed" or "an error was raised" (the
+        // check case reports insufficient cash that way). Neither aborts the
+        // batch: 7 of 12 checks starting before the money runs out is the
+        // honest outcome, and the count comes back so the UI can say so. The
+        // error itself is dropped — state.error is sticky, and one skipped
+        // aircraft must not leave a permanent banner.
+        if (res === next || (res.error && res.error !== next.error)) { skipped += 1; continue; }
+        next = res;
+        applied += 1;
+        if (single === 'SELL_AIRCRAFT' && next.lastSale) sales.push(next.lastSale);
+      }
+      if (applied === 0) return state;
+      return {
+        ...next,
+        // Every tail that actually sold. The used-market listing hook reads
+        // `lastSale`, which alone would list only the final one of a batch.
+        ...(sales.length ? { lastSales: sales, lastSale: sales[sales.length - 1] } : {}),
+        bulkResult: { action: action.type, requested: ids.length, applied, skipped },
       };
     }
 
@@ -1834,6 +1990,25 @@ function reducer(state, action) {
             ? { ...a, leaseRemainingWeeks: a.leaseTermWeeks ?? 104 }
             : a
         ),
+      };
+    }
+
+    case 'EXTEND_LEASE': {
+      // action: { aircraftId, addWeeks } — add weeks onto the CURRENT remaining
+      // term at the same weekly rate, free, at any time. Unlike RENEW_LEASE this
+      // never throws away remaining time: renewing a lease with 40 weeks left
+      // used to reset it to the term and quietly lose whatever was above it. The
+      // nominal term grows to match so the remaining bar can't exceed it.
+      const addWeeks = Math.max(0, Math.round(Number(action.addWeeks) || 0));
+      if (addWeeks === 0) return state;
+      return {
+        ...state,
+        fleet: state.fleet.map(a => {
+          if (a.id !== action.aircraftId || a.ownershipType !== 'lease') return a;
+          const newRemaining = (a.leaseRemainingWeeks ?? 0) + addWeeks;
+          const newTerm      = Math.max(a.leaseTermWeeks ?? 0, newRemaining);
+          return { ...a, leaseRemainingWeeks: newRemaining, leaseTermWeeks: newTerm };
+        }),
       };
     }
 
