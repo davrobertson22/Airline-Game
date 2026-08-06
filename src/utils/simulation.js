@@ -8,7 +8,7 @@ import {
 import { RESERVE_READINESS_MULT, RESERVE_NO_DISPATCH_IF_CHECK_WITHIN_WEEKS, reserveParkingFee, isReserve } from '../data/reserve.js';
 export { baseCityPairDemand } from './market.js';
 import { cargoCityPairDemand, cargoReferenceYield, referencePrice } from './market.js';
-import { LABOR_GROUPS, laborEffects } from '../data/labor.js';
+import { LABOR_GROUPS, fleetCrewScale, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
 import {
@@ -2946,7 +2946,9 @@ export function weeklyTick(state) {
     for (const group of LABOR_GROUPS) {
       const payMult = labor[group.id]?.payMultiplier ?? 1.0;
       const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) ? complexityMult : 1.0;
-      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * fleet.length * famMult);
+      // Narrowbody-EQUIVALENTS, not airframes: see CREW_SCALE_BY_CATEGORY.
+      const crewScale = fleetCrewScale(group.id, fleet, a => getAircraftType(a.typeId));
+      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * crewScale * famMult);
     }
   }
 
