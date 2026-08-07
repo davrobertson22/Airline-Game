@@ -2438,7 +2438,15 @@ export function weeklyTick(state) {
   // overcounting passengers by N×.  Instead, build ONE combined player offer
   // per route group, compute market share once, then split pax proportionally
   // by each aircraft's seat contribution.
-  const demandAllocations = new Map(); // aircraftId → demandResult override
+  // Keyed by ROUTE, not by aircraft. An aeroplane may legally fly several
+  // routes — the reducer has block-hour and network-connectivity rules for
+  // exactly that — so keying by aircraft.id handed a pooled pair's result to
+  // every OTHER route the same tail flew. A narrowbody doing four shuttles a
+  // week on a pair three other aircraft also serve, and the rest of its week on
+  // a pair it has to itself, gave the second route the first route's quarter
+  // share: 19% full instead of 100%, and $665k a week of profit turned into a
+  // loss. Nothing about the second route was different — only who flew it.
+  const demandAllocations = new Map(); // routeId → demandResult override
 
   {
     // Group active routes by sorted routeKey
@@ -2457,7 +2465,21 @@ export function weeklyTick(state) {
       if (group.length < 2) continue; // single aircraft — simulateRoute handles it
 
       const { route: r0 } = group[0];
-      const maturity = r0.weeksOpen != null ? routeMaturityFactor(r0.weeksOpen) : 1;
+      // Lane maturity is the OLDEST route on the pair, not group[0]. The market
+      // has known the service as long as the longest-serving tail has flown it,
+      // and maturity scales the WHOLE pair's demand pool — so group[0] decided
+      // it for every aircraft on the lane.
+      //
+      // Array order made group[0] the oldest route by luck: routes append in
+      // creation order. That luck runs out the moment a player replaces an
+      // airframe, because closing a route and adding its replacement puts a
+      // weeksOpen-0 route into the array. Whether it lands before or after the
+      // survivor — i.e. which of two identical aeroplanes you happened to swap —
+      // was worth 1,762 passengers and $1.06M a week on a contested trunk route.
+      // Matches the cargo rule (lane maturity = MAX weeksOpen).
+      const laneWeeksOpen = group.reduce((m, g) => Math.max(m, g.route.weeksOpen ?? 0), 0);
+      const maturity = group.some(g => g.route.weeksOpen != null)
+        ? routeMaturityFactor(laneWeeksOpen) : 1;
       const market   = buildRouteMarket(r0.origin, r0.destination, gameDate, maturity,
         eventDemandMultFor(r0.origin, r0.destination));
 
@@ -2480,6 +2502,7 @@ export function weeklyTick(state) {
       let totalFreq     = 0;
       let totalQuality  = 0;
       let hasBusinessCabin = false;
+      let premiumSeats  = 0; // Σ seats × that aircraft's ticketPremium
 
       for (const { route, aircraft } of group) {
         const type = getAircraftType(aircraft.typeId);
@@ -2490,8 +2513,10 @@ export function weeklyTick(state) {
         const biz  = (cfg.businessClass ?? 0) * freq;
         totalEcoSeats += eco;
         totalBizSeats += biz;
-        totalSeatsAll += configBodies(cfg) * freq;
+        const bodies = configBodies(cfg) * freq;
+        totalSeatsAll += bodies;
         totalFreq     += freq;
+        premiumSeats  += bodies * (type.ticketPremium ?? 1);
         const raw = computeQualityScore({
           onTimeRate:    fx.onTimeRate,
           cabinPoints:   cabinQualityPoints(cfg),
@@ -2510,10 +2535,29 @@ export function weeklyTick(state) {
 
       const avgQuality = Math.round(totalQuality / group.length);
       const cp0 = r0.classPrices ?? {};
-      const ecoPrice = Math.max(1, cp0.economy ?? r0.ticketPrice ?? 1);
+      // The type's ticket premium, seat-weighted across the group. simulateRoute
+      // applies the flying aircraft's premium to every fare BEFORE the demand
+      // model, so higher prices feed through elasticity; this path applied none,
+      // and a supersonic lane's fares quietly reverted to subsonic as soon as a
+      // second tail joined it. Measured: one Concorde on a contested JFK–LHR sold
+      // 29 seats a week at $3,526 a passenger; two sold 896 each at $2,767 — a
+      // 30x jump in traffic bought by a fare cut nobody made.
+      //
+      // Seat-weighted rather than group[0]'s, because a mixed group has no single
+      // premium and the offer is already a blend of everything else. For the
+      // ordinary case — every aircraft the same type — it is exactly the value
+      // the single-aircraft path would use.
+      const ticketPremium = totalSeatsAll > 0 ? premiumSeats / totalSeatsAll : 1;
+      const ecoPrice = Math.max(1, (cp0.economy ?? r0.ticketPrice ?? 1) * ticketPremium);
+      // No implicit 3.5x business fare. The single-aircraft path returns null
+      // when a route carries no business price, and this one invented one — two
+      // code paths answering the same question differently. It does not fire on
+      // a healthy save (every route-creation path seeds routePricing, and
+      // hydrateRoute projects it on), which is exactly what makes it worth
+      // closing: it was waiting for the first route to reach the tick unpriced.
       const bizPrice = hasBusinessCabin && cp0.businessClass != null
-        ? Math.max(1, cp0.businessClass)
-        : hasBusinessCabin ? ecoPrice * 3.5 : null;
+        ? Math.max(1, cp0.businessClass * ticketPremium)
+        : null;
       const connBonus = computeConnectivityBonus(
         r0.hub, r0.origin, r0.destination, spokeCounts[r0.hub] ?? 0);
 
@@ -2564,7 +2608,7 @@ export function weeklyTick(state) {
         const ecoFrac = totalEcoSeats > 0 ? eco / totalEcoSeats : 1 / group.length;
         const bizFrac = totalBizSeats > 0 ? biz / totalBizSeats : 1 / group.length;
 
-        demandAllocations.set(aircraft.id, {
+        demandAllocations.set(route.id, {
           leisurePax:      Math.round(combinedResult.leisurePax  * ecoFrac),
           businessPax:     Math.round(combinedResult.businessPax * bizFrac),
           economyRevenue:  Math.round(combinedResult.economyRevenue  * ecoFrac),
@@ -2719,7 +2763,7 @@ export function weeklyTick(state) {
 
     const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
-      demandAllocations.get(aircraft.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
+      demandAllocations.get(route.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
       eventDemandMultFor(route.origin, route.destination), ancillaries);
     if (!result) continue;
 
@@ -3147,7 +3191,54 @@ export function weeklyTick(state) {
     + totalDistributionCost + totalReserveParking;
   const cashDelta   = totalRevenue + totalPartnerRevenue - totalCost;
 
+  // ── Pooling invariant self-check (diagnostic only — changes no economics) ───
+  // Aircraft sharing one O&D pair pool their demand in the pre-pass above and
+  // must therefore land within rounding of the SAME load factor. If two ever
+  // diverge in the OUTPUT the pool silently failed, so capture the exact inputs
+  // — including whether the pre-pass actually allocated each route — rather than
+  // leaving it to be noticed as "that route looks a bit empty". This is the
+  // check that would have found the aircraft-keyed allocation years earlier.
+  //
+  // Tolerance is 5 points: a group whose aircraft carry different cabin layouts
+  // splits economy and business seats on different fractions, so small honest
+  // spreads exist.
+  const poolingAnomalies = [];
+  {
+    const groups = new Map();
+    for (const rr of routeResults) {
+      const rt = routes.find(r => r.id === rr.routeId);
+      if (!rt || isMultiStop(rt)) continue;
+      const key = [rt.origin, rt.destination].sort().join('-');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ rr, rt });
+    }
+    for (const [pair, list] of groups) {
+      if (list.length < 2) continue;
+      const lfs = list.map(x => x.rr.loadFactor ?? 0);
+      if (Math.max(...lfs) - Math.min(...lfs) <= 0.05) continue;
+      poolingAnomalies.push({
+        pair,
+        spread: +(Math.max(...lfs) - Math.min(...lfs)).toFixed(3),
+        absWeek,
+        aircraft: list.map(({ rr, rt }) => {
+          const ac = fleet.find(a => a.id === rt.aircraftId);
+          return {
+            routeId: rt.id, aircraftId: rt.aircraftId, freq: rt.weeklyFrequency,
+            loadFactor: +(rr.loadFactor ?? 0).toFixed(3), passengers: rr.passengers,
+            capacityCapped: rr.capacityCapped, pooled: demandAllocations.has(rt.id),
+            status: ac?.status, season: rt.season ?? null,
+            weeksOpen: rt.weeksOpen, config: ac?.config,
+          };
+        }),
+      });
+    }
+    if (poolingAnomalies.length && typeof console !== 'undefined' && console.warn) {
+      console.warn('[pooling-anomaly]', JSON.stringify(poolingAnomalies));
+    }
+  }
+
   return {
+    poolingAnomalies,
     cashDelta:              Math.round(cashDelta),
     totalRevenue:           Math.round(totalRevenue + totalPartnerRevenue),
     totalConnecting:        Math.round(totalConnecting),
