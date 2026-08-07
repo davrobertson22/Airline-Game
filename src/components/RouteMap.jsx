@@ -87,6 +87,16 @@ const HUB_COLOR       = '#ffcf4d';  // gold
 const SPOKE_COLOR     = '#4da6ff';  // sky blue
 const ALLIANCE_COLOR  = '#b794ff';  // purple for alliance members
 const CODESHARE_COLOR = '#38e1ff';  // cyan for codeshare partners
+
+// Rivals, by what kind of airline they are. Deliberately cooler and duller than
+// the partner colours: a partner's network is an asset of yours and should read
+// as one, while a rival's is information.
+const RIVAL_COLORS = {
+  budget:  '#e0803c',
+  legacy:  '#7f95b3',
+  premium: '#c58fd8',
+};
+const RIVAL_DEFAULT_COLOR = '#7f95b3';
 const CARGO_COLOR     = '#e8833a';  // amber for cargo / freight routes
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -151,6 +161,9 @@ export default function RouteMap() {
   const [selectedId, setSelectedId] = useState(null);
   const [showAlliance,  setShowAlliance]  = useState(true);
   const [showCodeshare, setShowCodeshare] = useState(true);
+  // Off by default. Twenty-five carriers put roughly 165 more lines on the map,
+  // and a map you cannot read is not more information than one you can.
+  const [showRivals,    setShowRivals]    = useState(false);
   const [showCargo,     setShowCargo]     = useState(true);
   const [acTypeFilter,  setAcTypeFilter]  = useState('all');  // 'all' | aircraft typeId
   const [airportFilter, setAirportFilter] = useState('all');  // 'all' | IATA code
@@ -427,26 +440,47 @@ export default function RouteMap() {
   // 4a. Derive partner route data (alliance members + codeshare partners)
   const currentAlliance = allianceMembership ? getAlliance(allianceMembership.allianceId) : null;
 
+  // Every carrier's live network, tagged by what they are to you. This loop has
+  // always walked all of them; it used to `continue` on anyone who wasn't a
+  // partner, which made the airlines you are actually competing against the one
+  // thing the map would not draw.
+  //
+  // `contested` marks a rival route on a pair YOU fly. Those are the lines worth
+  // looking at, and they are drawn solid and full-strength while the rest of the
+  // field sits faint behind them — the same treatment the positioning chart
+  // gives the same distinction.
   const partnerRouteData = useMemo(() => {
     const allianceMemberIds   = new Set(currentAlliance?.memberIds ?? []);
     const codesharePartnerIds = new Set(codeshareAgreements.map(a => a.competitorId));
+    const myPairs = new Set((routes ?? []).map(r => [r.origin, r.destination].sort().join('-')));
     const result = [];
     for (const comp of competitors) {
       const isAllianceMember   = allianceMemberIds.has(comp.id);
       const isCodesharePartner = codesharePartnerIds.has(comp.id);
-      if (!isAllianceMember && !isCodesharePartner) continue;
-      const type  = isAllianceMember ? 'alliance' : 'codeshare';
-      const color = isAllianceMember ? ALLIANCE_COLOR : CODESHARE_COLOR;
+      const type = isAllianceMember ? 'alliance' : isCodesharePartner ? 'codeshare' : 'rival';
+      const color = type === 'alliance' ? ALLIANCE_COLOR
+                  : type === 'codeshare' ? CODESHARE_COLOR
+                  : (RIVAL_COLORS[comp.tier] ?? RIVAL_DEFAULT_COLOR);
       for (const routeKey of Object.keys(comp.routes ?? {})) {
         const [a, b] = routeKey.split('-');
         const origin = getAirport(a);
         const dest   = getAirport(b);
         if (!origin || !dest) continue;
-        result.push({ comp, type, color, origin, dest, routeKey });
+        result.push({ comp, type, color, origin, dest, routeKey,
+                      contested: myPairs.has(routeKey) });
       }
     }
+    // Contested last, so they draw on top of the field rather than under it.
+    result.sort((a, b) => (a.contested ? 1 : 0) - (b.contested ? 1 : 0));
     return result;
-  }, [competitors, allianceMembership, codeshareAgreements, currentAlliance]);
+  }, [competitors, allianceMembership, codeshareAgreements, currentAlliance, routes]);
+
+  /** Pairs of yours that a rival also serves — the number on the Rivals toggle. */
+  const contestedRivalCount = useMemo(() => {
+    const pairs = new Set();
+    for (const r of partnerRouteData) if (r.type === 'rival' && r.contested) pairs.add(r.routeKey);
+    return pairs.size;
+  }, [partnerRouteData]);
 
   // 4b. Sync partner overlay layers
   useEffect(() => {
@@ -459,8 +493,10 @@ export default function RouteMap() {
     partnerLayersRef.current.forEach(l => map.removeLayer(l));
     partnerLayersRef.current = [];
 
-    for (const { comp, type, color, origin, dest } of partnerRouteData) {
-      const show = type === 'alliance' ? showAlliance : showCodeshare;
+    for (const { comp, type, color, origin, dest, contested } of partnerRouteData) {
+      const show = type === 'alliance' ? showAlliance
+                 : type === 'codeshare' ? showCodeshare
+                 : showRivals;
       if (!show) continue;
       // The airport filter applies to partner overlays too, so "show me JFK"
       // really means only lines touching JFK. (The aircraft-type filter is
@@ -472,40 +508,57 @@ export default function RouteMap() {
         <div class="map-tip">
           <div class="map-tip-title" style="color:${color}">${origin.code} → ${dest.code}</div>
           <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
-          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${type === 'alliance' ? 'Alliance' : 'Codeshare'}</div>
+          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${
+            type === 'alliance' ? 'Alliance'
+            : type === 'codeshare' ? 'Codeshare'
+            : contested ? 'Competing with you here' : 'Rival'
+          }</div>
         </div>
       `;
+
+      // A partner's network is drawn as it always was. A rival's is drawn
+      // quieter — solid where they are on one of your pairs, and barely there
+      // where they are somewhere you don't fly. That faint layer IS the market:
+      // it is what a route you are thinking about opening looks like before you
+      // open it.
+      const rival    = type === 'rival';
+      const baseOp   = rival ? (contested ? 0.6 : 0.16) : 0.55;
+      const baseWt   = rival ? (contested ? 2 : 1) : 1.5;
+      const dashes   = rival && contested ? null : '5, 6';
 
       for (const pts of segments) {
         const line = L.polyline(pts, {
           color,
-          weight: 1.5,
-          opacity: 0.55 * dim,
-          dashArray: '5, 6',
+          weight: baseWt,
+          opacity: baseOp * dim,
+          ...(dashes ? { dashArray: dashes } : {}),
           smoothFactor: 1,
         });
         line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
-        line.on('mouseover', () => line.setStyle({ opacity: 0.9, weight: 2.5 }));
-        line.on('mouseout',  () => line.setStyle({ opacity: 0.55 * dim, weight: 1.5 }));
+        line.on('mouseover', () => line.setStyle({ opacity: 0.9, weight: baseWt + 1 }));
+        line.on('mouseout',  () => line.setStyle({ opacity: baseOp * dim, weight: baseWt }));
         line.addTo(map);
         partnerLayersRef.current.push(line);
       }
 
-      // Small dot at each endpoint (only if not already in our own airportSet)
-      for (const airport of [origin, dest]) {
-        const dot = L.circleMarker([airport.lat, airport.lon], {
-          radius: 3,
-          fillColor: color,
-          color: color,
-          weight: 1,
-          fillOpacity: 0.7 * dim,
-          interactive: false,
-        });
-        dot.addTo(map);
-        partnerLayersRef.current.push(dot);
+      // Endpoint dots. Skipped for the faint rival field — 165 lines is legible;
+      // 330 extra dots on top of them is not.
+      if (!rival || contested) {
+        for (const airport of [origin, dest]) {
+          const dot = L.circleMarker([airport.lat, airport.lon], {
+            radius: 3,
+            fillColor: color,
+            color: color,
+            weight: 1,
+            fillOpacity: (rival ? 0.5 : 0.7) * dim,
+            interactive: false,
+          });
+          dot.addTo(map);
+          partnerLayersRef.current.push(dot);
+        }
       }
     }
-  }, [partnerRouteData, showAlliance, showCodeshare, selectedId, mapReady, airportFilter]);
+  }, [partnerRouteData, showAlliance, showCodeshare, showRivals, selectedId, mapReady, airportFilter]);
 
   // 4c. Sync cargo route overlay (amber, distinct from green/red passenger lines)
   useEffect(() => {
@@ -861,6 +914,27 @@ export default function RouteMap() {
                   display: 'inline-block',
                 }} />
                 Alliance
+              </button>
+            )}
+
+            {/* Rivals toggle. Counts the ones on your own pairs, because that
+                number is the reason to turn it on. */}
+            {competitors.length > 0 && (
+              <button
+                onClick={() => setShowRivals(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  opacity: showRivals ? 1 : 0.4, transition: 'opacity 0.15s',
+                  color: 'var(--text-muted)', fontSize: 11,
+                }}
+                title={showRivals ? 'Hide rival routes' : 'Show every rival network'}
+              >
+                <span style={{
+                  width: 18, height: 0, borderTop: `2px solid ${RIVAL_DEFAULT_COLOR}`,
+                  display: 'inline-block',
+                }} />
+                Rivals{contestedRivalCount > 0 ? ` (${contestedRivalCount})` : ''}
               </button>
             )}
 
