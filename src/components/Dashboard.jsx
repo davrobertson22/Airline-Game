@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, routeBlockHours, weekToGameDate, formatGameDate, fleetAvgUtilization, rivalSpecsFor } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
 import { isReserve } from '../data/reserve.js';
@@ -135,52 +136,54 @@ export default function Dashboard() {
   // line. This bridge makes the gap explicit, for BOTH what actually happened
   // last week (lastReport) and the coming week (the canonical projectWeek pass).
   //
-  // Identities (mirror simulation.js weeklyTick + the reducer / projectWeek):
-  //   routeOp  = Σ routeResults.profit + totalCargoProfit
-  //            = (route+cargo revenue) − totalOpCost            [op cost incl. landing fees]
-  //   fixed    = totalCost − totalOpCost                        [leases…distribution]
-  //   EBITDA   = routeOp + partner/other revenue − fixed − strike loss
-  //   net      = EBITDA − loan payments − one-time charges − corporate tax
+  // The ladder itself lives in utils/pnlBridge.js — see the header there for why
+  // the opening row is the FULLY-LOADED route figure. In short: the Top Routes
+  // table three inches above this card charges each route its share of the
+  // aircraft's lease and maintenance, and this card's first row used to sum the
+  // engine's per-route `profit`, which does not. Both numbers were right; only
+  // one of them was the one the label promised.
+  //
+  // The bridge is also self-checking. Its `residual` is whatever the itemised
+  // rows fail to explain, and it is asserted to be zero — so a future cost line
+  // added to weeklyTick without being bucketed here shows up as a row called
+  // "Other" instead of quietly vanishing between two subtotals.
   const pnl = useMemo(() => {
-    const fromReport = (r) => {
-      if (!r) return null;
-      const routeOp  = (r.routeResults ?? []).reduce((s, rr) => s + (rr.profit ?? 0), 0)
-                     + (r.totalCargoProfit ?? 0);
-      const otherRev = (r.totalPartnerRevenue ?? 0) + (r.eventDemandAdj ?? 0);
-      const fixed    = Math.max(0, (r.totalCost ?? 0) - (r.totalOpCost ?? 0));
-      const strike   = r.strikeLoss ?? 0;
-      const operating = routeOp + otherRev - fixed - strike;               // EBITDA
-      const loans     = r.loanPayments ?? 0;
-      const oneOff    = (r.leaseRedelivery ?? 0) + (r.seasonalReactivation ?? 0);
-      const tax       = r.corporateTax ?? 0;
+    const shape = (inputs) => {
+      if (!inputs) return null;
+      const b = costBridge(inputs, state);
+      // Costs come off the bridge signed negative; this card's renderer takes
+      // them positive and negates them itself.
+      const cost = (key) => -(b.rows.find(r => r.key === key)?.value ?? 0);
+      const income = (key) => (b.rows.find(r => r.key === key)?.value ?? 0);
+      const ownParked = cost('ownParked');
+      const fixed = ownParked + cost('gates') + cost('labour')
+                  + cost('overhead') + cost('brand') + cost('distribution');
       return {
-        routeOp, otherRev, fixed, strike, operating, loans, oneOff, tax,
-        net: operating - loans - oneOff - tax,
+        routeOp:   b.routeOperating,
+        otherRev:  income('partnerRev'),
+        fixed,
+        strike:    cost('strike'),
+        residual:  cost('residual'),
+        operating: income('ebitda'),
+        loans:     cost('loans'),
+        oneOff:    cost('oneOff'),
+        tax:       cost('tax'),
+        net:       income('net'),
         breakdown: {
-          leases:       r.totalLeases ?? 0,
-          maintenance:  r.totalMaintenance ?? 0,
-          gates:        r.totalGateFees ?? 0,
-          labor:        r.totalLaborCosts ?? 0,
-          overhead:     (r.totalHQCost ?? 0) + (r.totalInsurance ?? 0) + (r.totalFamilyBaseCosts ?? 0),
-          marketing:    (r.totalMarketingSpend ?? 0) + (r.totalLoyaltyCost ?? 0) + (r.totalHubInvestment ?? 0),
-          distribution: (r.totalDistributionCost ?? 0) + (r.totalPartnerFees ?? 0),
+          ownParked,
+          gates:        cost('gates'),
+          labor:        cost('labour'),
+          overhead:     cost('overhead'),
+          marketing:    cost('brand'),
+          distribution: cost('distribution'),
         },
       };
     };
-    const projected = fromReport(proj.report);
-    if (projected) {
-      // Below-the-line items come from the canonical projection so the card's
-      // net EXACTLY equals the "Projected Profit / wk" KPI (proj.netCash).
-      projected.operating = proj.ebitda;
-      projected.loans     = proj.loanPayments;
-      projected.oneOff    = proj.seasonalReactivation;
-      projected.tax       = proj.corporateTax;
-      projected.net       = proj.netCash;
-    }
-    const lastWeek = fromReport(lastReport);
-    if (lastWeek && lastReport?.cashDelta != null) lastWeek.net = lastReport.cashDelta;
-    return { projected, lastWeek };
-  }, [proj, lastReport]);
+    return {
+      projected: shape(proj),
+      lastWeek:  lastReport ? shape(bridgeInputsFromReport(lastReport)) : null,
+    };
+  }, [proj, lastReport, state]);
 
   // ── Top Routes view toggle (projected vs what actually happened) ──────────
   const [routeView, setRouteView] = useState('projected');
@@ -755,9 +758,13 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
   const [showFixed, setShowFixed] = useState(false);
   const two = !!lastWeek;
 
+  // Aircraft ownership is no longer a line here: the FLYING fleet's lease and
+  // maintenance is already inside the route figure above (that is the whole
+  // point of the change), and what remains is the fleet that flew nothing —
+  // which is a cost of a real decision and deserves saying out loud rather than
+  // being averaged into "aircraft leases".
   const FIXED_DETAIL = [
-    ['leases',       'Aircraft leases'],
-    ['maintenance',  'Maintenance'],
+    ['ownParked',    'Leases & maintenance (parked fleet)'],
     ['gates',        'Gates & slots'],
     ['labor',        'Staff & labor'],
     ['overhead',     'HQ, insurance & admin'],
@@ -771,7 +778,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
   const rows = [];
   rows.push({
     label: 'Route operating profit',
-    tip: 'Sum of every route’s revenue minus its direct flying costs (fuel, crew, service, landing fees), passenger and cargo. This is the profit shown in the Top Routes table.',
+    tip: 'Every route’s fully-loaded profit added up — revenue less direct flying costs (fuel, crew, service, landing fees) and less each route’s share of its aircraft’s lease and maintenance. This is the figure in the Top Routes table above, and every line below is a cost no single route carries.',
     lw: lastWeek?.routeOp, pj: projected.routeOp,
   });
   if ((lastWeek?.otherRev ?? 0) !== 0 || projected.otherRev !== 0) rows.push({
@@ -781,7 +788,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
   });
   rows.push({
     label: 'Fixed & overhead costs',
-    tip: 'Costs you pay regardless of how full the planes are: aircraft leases, maintenance, gates, staff, HQ, insurance, marketing, loyalty and distribution.',
+    tip: 'Costs you pay regardless of how full the planes are: gates, staff, HQ, insurance, marketing, loyalty, distribution — and lease and maintenance on any aircraft that flew nothing this week. The flying fleet’s ownership is already inside the line above.',
     lw: lastWeek ? -lastWeek.fixed : null, pj: -projected.fixed,
     expandable: true,
   });
@@ -797,6 +804,14 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
     label: 'Strike revenue loss',
     tip: 'Revenue forfeited to flights cancelled by industrial action.',
     lw: -lastWeek.strike, pj: 0,
+  });
+  // Should never appear. If it does, a cost line reached weeklyTick without
+  // reaching the bridge, and this row is the money it would otherwise have
+  // swallowed between two subtotals.
+  if ((lastWeek?.residual ?? 0) !== 0 || projected.residual !== 0) rows.push({
+    label: 'Unattributed',
+    tip: 'Costs this breakdown could not account for. This should always be zero — if you can see it, please report it.',
+    lw: lastWeek ? -lastWeek.residual : null, pj: -projected.residual,
   });
   rows.push({
     label: 'Operating profit',
@@ -837,7 +852,7 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
         <div className="card-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           Weekly P&amp;L
-          <InfoTip text="Why route profit doesn't add up to total profit: routes only carry their direct flying costs. Fixed costs, financing and tax sit below the line. This bridge reconciles the two." />
+          <InfoTip text="Why route profit doesn't add up to total profit: a route carries its own flying costs and its share of its aircraft, and nothing else. Gates, staff, HQ, marketing, financing and tax sit below the line. This bridge reconciles the two, and it is checked to account for every dollar." />
         </div>
         {!two && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>last-week actuals appear after your first full week</span>}
       </div>
