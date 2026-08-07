@@ -115,7 +115,9 @@ test('a tail\'s other route is unaffected by the pair it shares', () => {
   assert.equal(leaky.by.OWN.passengers, control.by.OWN.passengers,
     'the same route flown by a different tail must carry the same passengers');
   assert.equal(leaky.by.OWN.revenue, control.by.OWN.revenue);
-  assert.ok(leaky.by.OWN.loadFactor > 0.9,
+  // "Near full" now means the achievable ceiling, not 100% — a route whose
+  // demand exceeds its seats sells about 87% of them (see load-factor-test).
+  assert.ok(leaky.by.OWN.loadFactor > 0.8,
     `an uncontested route with this much demand should be near full, got ${(leaky.by.OWN.loadFactor * 100).toFixed(1)}%`);
 });
 

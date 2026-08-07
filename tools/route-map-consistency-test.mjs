@@ -140,9 +140,19 @@ test('contested routes are NOT at a 100% load factor', () => {
 });
 
 test('the uncontested route DOES still fill (the fixture isolates the rival)', () => {
+  // "Full" is the achievable ceiling now, not every seat: a monopoly with more
+  // demand than aeroplane still cannot sell a Tuesday like a Friday. What makes
+  // this a control is that it fills BETTER than the contested pairs beside it,
+  // which is the comparison the fixture was built for.
   const solo = routes[2];
-  assert.ok(rr[solo.id].loadFactor > 0.99,
-    `${solo.origin}-${solo.destination} is a monopoly and should still run full, got ${(rr[solo.id].loadFactor * 100).toFixed(1)}%`);
+  const soloLF = rr[solo.id].loadFactor;
+  assert.ok(soloLF > 0.80,
+    `${solo.origin}-${solo.destination} is a monopoly and should still run near full, got ${(soloLF * 100).toFixed(1)}%`);
+  for (const r of routes.slice(0, 2)) {
+    assert.ok(soloLF > rr[r.id].loadFactor,
+      `the monopoly (${(soloLF * 100).toFixed(1)}%) should outfill the contested ` +
+      `${r.origin}-${r.destination} (${(rr[r.id].loadFactor * 100).toFixed(1)}%)`);
+  }
 });
 
 console.log('\n── 1. The map table agrees with the engine ──────────────');
@@ -188,11 +198,19 @@ test('no contested route is displayed at 100%', () => {
   }
 });
 
-test('and the uncontested route is still shown at 100% (no over-correction)', () => {
+test('and the uncontested route still outreads the contested ones on the map', () => {
+  // The over-correction this guards against is the map applying the rival to
+  // every route rather than the contested ones. Pinning it to a literal 100%
+  // stopped being the way to check that the moment 100% stopped being reachable.
   const solo = routes[2];
-  const key = [solo.origin, solo.destination].sort().join('~');
-  const row = renderedLoadPercents().find(s => s.pair === key);
-  assert.equal(row.pct, 100, `${key} should still read 100% on the map, got ${row.pct}%`);
+  const shown = renderedLoadPercents();
+  const soloPct = shown.find(s => s.pair === [solo.origin, solo.destination].sort().join('~')).pct;
+  assert.ok(soloPct >= 80, `the monopoly rendered at ${soloPct}%`);
+  for (const r of routes.slice(0, 2)) {
+    const key = [r.origin, r.destination].sort().join('~');
+    assert.ok(soloPct > shown.find(s => s.pair === key).pct,
+      `the monopoly (${soloPct}%) should read higher than ${key}`);
+  }
 });
 
 console.log('\n── 2. Profit agrees too (same root cause) ───────────────');

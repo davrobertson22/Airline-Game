@@ -789,6 +789,123 @@ export function cargoReferenceYield(originCode, destCode) {
 }
 
 /** Convenience: reference revenue per tonne ($, one-way) on a route. */
+// ─── Load-factor realism (spill against an achievable ceiling + weekly variance) ──
+//
+// Every route simulator filled seats with a flat min(demand, capacity), so the
+// moment weekly demand exceeded weekly seats the airline banked EVERY seat —
+// 100.0% load factor, forever, in both directions. Real airlines sit at ~83%
+// system load factor *while* their best flights sell out, because demand
+// arrives per departure, per day and per direction and you size for the peak:
+// Friday is full, Tuesday is 60%. Pooling a week into one number erases that
+// entirely, and it is the single biggest term in mature margins running several
+// times reality. No cost rate fixes it — the per-unit costs are right; the
+// denominator was inflated.
+//
+// Three parts:
+//
+//   1. A structural ceiling. Only LOAD_CEILING of a week's seats are
+//      ACHIEVABLE, standing in for day-of-week peaking and directional
+//      imbalance that more demand never cures.
+//   2. Spill against that ceiling. Per-departure demand is treated as
+//      Normal(D, DEMAND_CV·D) and seats sold are E[min(N, C)] through the
+//      standard normal loss function — closed form, no RNG. A deeply
+//      oversubscribed route asymptotes to the ceiling; a route at demand ≈
+//      capacity lands near 87%; a route running 60% full loses well under a
+//      point. It only bites full aeroplanes, which is the progressive shape a
+//      flat trim could never have.
+//   3. Weekly variance. A deterministic per-route-per-week jitter of up to
+//      ±LOAD_JITTER, hashed from the route key and the absolute week. No
+//      Math.random, so a save replays identically. A sold-out route breathes
+//      between roughly 92.6% and 97.4% instead of pinning at a constant.
+//
+// Parts 1 and 2 are structural and apply everywhere, including in previews —
+// a forecast that promises 100% on a route the tick will fill to 93% is the
+// same lie in a nicer font. Part 3 is applied only by the tick: a forecast
+// should show the expected week, not a specific week's dice. That is a bounded,
+// symmetric ±2.5% and the suite asserts the bound rather than ignoring it.
+
+/** The share of a week's seats that is actually sellable. */
+export const LOAD_CEILING = 0.95;
+
+/** Half-width of the weekly load variance. */
+export const LOAD_JITTER = 0.025;
+
+/**
+ * Per-departure demand spread, as a coefficient of variation. At 0.30 a route
+ * with demand exactly equal to capacity lands at 85.4%, which reads as too
+ * harsh for a route the airline sized correctly; 0.25 puts parity near 87% and
+ * leaves the oversubscribed asymptote at the ceiling.
+ */
+export const DEMAND_CV = 0.25;
+
+/** Standard normal pdf. */
+const _phi = (z) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+
+/** Standard normal cdf (Abramowitz–Stegun 7.1.26, |err| < 1.5e-7). */
+function _Phi(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 +
+               t * (-1.821255978 + t * 1.330274429))));
+  const p = 1 - _phi(Math.abs(z)) * poly;
+  return z >= 0 ? p : 1 - p;
+}
+
+/**
+ * Expected seats sold when demand ~ Normal(demand, cv·demand) meets a hard
+ * capacity: E[min(X, cap)] = D − σ·L(z), where L(z) = φ(z) − z·(1 − Φ(z)).
+ * Always ≤ min(demand, cap), and ≈ demand when demand is well under capacity.
+ */
+export function expectedCarried(demand, cap, cv = DEMAND_CV) {
+  const D = Math.max(0, Number(demand) || 0);
+  const C = Math.max(0, Number(cap) || 0);
+  if (D <= 0 || C <= 0) return 0;
+  const sigma = cv * D;
+  if (sigma <= 0) return Math.min(D, C);
+  const z = (C - D) / sigma;
+  const loss = _phi(z) - z * (1 - _Phi(z));
+  return Math.max(0, Math.min(C, D - sigma * loss));
+}
+
+/**
+ * This week's load multiplier for one route, in [1 − LOAD_JITTER, 1 + LOAD_JITTER].
+ * Keyed on (route key, absolute week) through FNV-1a with a murmur3 finalizer.
+ * Deterministic: the same save replays to the same numbers.
+ */
+export function weeklyLoadJitter(routeKey, absWeek) {
+  const s = `${routeKey}|${Math.floor(Number(absWeek) || 0)}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // FNV-1a alone clusters here: for near-identical keys ("r0|31" vs "r0|32")
+  // the difference never leaves the low bits, and the division below reads the
+  // HIGH bits — every week would land at ~0.5 and nothing would vary. The
+  // finalizer avalanches the low bits across the whole word.
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  const u = (h >>> 0) / 0xffffffff;
+  return 1 - LOAD_JITTER + 2 * LOAD_JITTER * u;
+}
+
+/**
+ * The factor a route's demand is scaled by: spill against the achievable
+ * ceiling, times this week's jitter, never above physical capacity.
+ *
+ * @param {number} demand    one-way weekly demand
+ * @param {number} capacity  one-way weekly seats (or tonnes)
+ * @param {number} jitter    1 for the expected week (previews); the tick passes
+ *                           weeklyLoadJitter()
+ */
+export function loadDemandScale(demand, capacity, jitter = 1) {
+  const D = Math.max(0, Number(demand) || 0);
+  const C = Math.max(0, Number(capacity) || 0);
+  if (D <= 0 || C <= 0) return 1;
+  const carried = expectedCarried(D, C * LOAD_CEILING) * (Number(jitter) || 1);
+  return Math.min(carried, C) / D;
+}
+
 export function cargoReferenceRevenuePerTonne(originCode, destCode) {
   return Math.round(cargoReferenceYield(originCode, destCode) * routeDistance(originCode, destCode));
 }

@@ -18,7 +18,7 @@ import {
   simulateCargoRoute, cargoLaneAllocations, weeklyTick, referencePrice,
   CARGO_BACKHAUL_FACTOR, FREIGHTER_CAPTURE_RATE,
 } from '../src/utils/simulation.js';
-import { cargoReferenceYield as cy } from '../src/utils/market.js';
+import { cargoReferenceYield as cy, LOAD_CEILING } from '../src/utils/market.js';
 import { projectWeek } from '../src/utils/financeProjection.js';
 
 let passed = 0, failed = 0;
@@ -95,9 +95,16 @@ test('tonnes carried never exceed capacity (payload × freq)', () => {
   assert.ok(r.tonnes <= getAircraftType('b777f').payloadTonnes * 7 + 1);
   assert.ok(r.loadFactor <= 1.0001);
 });
-test('capacity-bound marquee lane runs at ~100% load', () => {
+test('capacity-bound marquee lane runs at the ceiling, not at 100%', () => {
+  // This used to assert > 99%, and it passed because a lane with more freight
+  // than aeroplane sold every single tonne, every week, forever. Freight peaks
+  // by day and by direction exactly as passengers do — HKG-FRA is a Tuesday
+  // business with a light return leg — so the achievable share of a week's
+  // capacity is LOAD_CEILING, and a deeply oversubscribed lane asymptotes to it.
   const r = simulateCargoRoute(cRoute('HKG', 'FRA', 'f'), freighter('b777f'), { month: 6 });
-  assert.ok(r.loadFactor > 0.99);
+  assert.ok(r.loadFactor > 0.90, `oversubscribed lane sat at ${(r.loadFactor * 100).toFixed(2)}%`);
+  assert.ok(r.loadFactor <= LOAD_CEILING + 1e-9,
+    `${(r.loadFactor * 100).toFixed(2)}% is above the ${LOAD_CEILING * 100}% ceiling`);
 });
 test('revenue applies backhaul factor (1+f), not double headhaul', () => {
   const r = simulateCargoRoute(cRoute('HKG', 'FRA', 'f'), freighter('b777f'), { month: 6 });
@@ -216,7 +223,12 @@ test('two freighters on one lane split ONE pool — total ≈ solo (was 2×)', (
   const soloT = solo.cargoRouteResults[0].tonnes;
   const duoT  = duo.cargoRouteResults.reduce((s, r) => s + r.tonnes, 0);
   assert.ok(solo.cargoRouteResults[0].loadFactor < 0.999, 'lane must be demand-bound for this test');
-  assert.ok(approx(duoT, soloT, 2), `duo total ${duoT} should ≈ solo ${soloT} (pre-fix it doubled)`);
+  // Not exactly equal any more, and it should not be: a second freighter is
+  // real capacity, and capacity is what absorbs a peaky week. The lane carries
+  // about 5% more with two aeroplanes than with one — against the 2x it claimed
+  // before pooling, and against the 15x the spam test below still guards.
+  assert.ok(approx(duoT, soloT, 8), `duo total ${duoT} should ≈ solo ${soloT} (pre-fix it doubled)`);
+  assert.ok(duoT >= soloT, 'more capacity never carries less');
   const [a, b] = duo.cargoRouteResults.map(r => r.tonnes);
   assert.ok(approx(a, b, 3), `identical freighters split evenly (${a} vs ${b})`);
 });
