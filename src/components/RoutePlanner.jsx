@@ -10,6 +10,7 @@ import {
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
+  rivalSpecsFor,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -608,8 +609,9 @@ export default function RoutePlanner() {
       { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel },
       simAircraft,
       gameDate,
-      state.labor ?? null, 1.0, null, [], avgUtil, satisfaction,
+      state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,
       eventDemand.multFor(origin, dest),
+      state.ancillaries ?? null, state.competitors ?? [],
     );
     if (!result) return null;
 
@@ -618,8 +620,9 @@ export default function RoutePlanner() {
       { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel, weeksOpen: 0 },
       simAircraft,
       gameDate,
-      state.labor ?? null, 1.0, null, [], avgUtil, satisfaction,
+      state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,
       eventDemand.multFor(origin, dest),
+      state.ancillaries ?? null, state.competitors ?? [],
     );
 
     // Connecting passenger estimate

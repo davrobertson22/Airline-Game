@@ -8,7 +8,8 @@ import {
 import { RESERVE_READINESS_MULT, RESERVE_NO_DISPATCH_IF_CHECK_WITHIN_WEEKS, reserveParkingFee, isReserve } from '../data/reserve.js';
 export { baseCityPairDemand } from './market.js';
 import { cargoCityPairDemand, cargoReferenceYield, referencePrice,
-         cargoBackhaulFactor, cargoSeasonalFactor } from './market.js';
+         cargoBackhaulFactor, cargoSeasonalFactor,
+         loadDemandScale, weeklyLoadJitter, LOAD_CEILING } from './market.js';
 import { LABOR_GROUPS, fleetCrewScale, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
@@ -39,7 +40,6 @@ import {
   CONNECTIVITY_LEGACY_SPOKES,
   directionalSeasonalSkew,
   directionalLoadMultiplier,
-  COMPETITOR_AIRLINES,
   computeConnectingDemand,
   HUB_TIERS,
   PRICE_CAP_MULTIPLE,
@@ -855,6 +855,56 @@ export function defaultConfig(totalSeats) {
 }
 
 /**
+ * Every rival offer contesting one O&D pair: the carriers whose live networks
+ * include it, plus any encroachment challenger camped on it.
+ *
+ * The dedupe is the part worth reading. An encroachment spec names a REAL
+ * carrier — `tickEncroachment` draws `competitorId` straight out of the bank —
+ * but `buildEncroachmentOffer` publishes it as `encroach:<id>` while
+ * `buildCompetitorOffer` publishes the same carrier as `<id>`, so the market
+ * model counts them as two different airlines with two independent fare and
+ * frequency bundles. That never showed up while the carrier half always
+ * returned null. It would now, on any pair a rival already served before it was
+ * drawn as an entrant.
+ *
+ * The synthetic entrant is what gets dropped, not the real network: a scheduled
+ * route is the carrier's actual capacity on the pair, and the spec is a
+ * ramping stand-in for capacity that in this case already exists.
+ *
+ * @param {object[]|null} competitors   state.competitors — the live bank
+ * @param {object[]|null} specs         encroachment specs on this pair
+ * @param {object}        market        from buildRouteMarket
+ */
+export function rivalOffersFor(competitors, specs, market) {
+  const key = [market.origin, market.destination].sort().join('-');
+  const serving = new Set();
+  const offers = [];
+  for (const c of competitors ?? []) {
+    if (!c?.routes?.[key]) continue;
+    const offer = buildCompetitorOffer(c, market);
+    if (!offer) continue;
+    serving.add(c.id);
+    offers.push(offer);
+  }
+  for (const spec of specs ?? []) {
+    if (spec?.competitorId != null && serving.has(spec.competitorId)) continue;
+    const offer = buildEncroachmentOffer(spec, market);
+    if (offer) offers.push(offer);
+  }
+  return offers;
+}
+
+/**
+ * The encroachment challengers contesting one pair, in the shape simulateRoute
+ * expects. Previews used to pass `[]` here, which quietly exempted every
+ * forecast from the one rival the player could actually see coming.
+ */
+export function rivalSpecsFor(state, origin, destination) {
+  const spec = state?.encroachments?.[routePairKey(origin, destination)];
+  return spec ? [spec] : [];
+}
+
+/**
  * Simulate one week of a route.
  *
  * Demand is computed via the rich demand model in demand.js:
@@ -871,7 +921,7 @@ export function defaultConfig(totalSeats) {
  *                                           empties seats instead of skimming revenue.
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null, competitors = null) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -970,16 +1020,23 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   if (demandOverride) {
     demandResult = demandOverride;
   } else {
-    const competitorOffers = COMPETITOR_AIRLINES
-      .map(c => buildCompetitorOffer(c, market))
-      .filter(Boolean);
-    // Injected challengers (e.g. route encroachment) contest this O&D directly.
-    if (encroachmentSpecs && encroachmentSpecs.length) {
-      for (const spec of encroachmentSpecs) {
-        const offer = buildEncroachmentOffer(spec, market);
-        if (offer) competitorOffers.push(offer);
-      }
-    }
+    // The LIVE carrier bank, handed in by the caller — never the
+    // COMPETITOR_AIRLINES module constant.
+    //
+    // This loop read that constant, and it was a dead branch for the whole life
+    // of the file. sampleAndInitializeCompetitors does `{ ...c, routes: {} }` and
+    // then fills in the COPIES it hands to state.competitors, so every entry in
+    // the constant keeps an empty routes map forever — and buildCompetitorOffer
+    // returns null on `competitor.routes[routeKey]`. Measured: 0 offers on 156 of
+    // the 156 pairs the sampled carriers actually fly. Every route in the game
+    // was scored as an uncontested monopoly, while RoutePlanner's share panel
+    // (which reads the live bank) sat next to the forecast telling the player
+    // they would get 58% of a market the forecast handed them all of.
+    //
+    // A caller that passes nothing gets an empty bank rather than a silently
+    // empty constant, so a missed call site reads as "no rivals supplied"
+    // instead of masquerading as "no rivals exist".
+    const competitorOffers = rivalOffersFor(competitors, encroachmentSpecs, market);
     competitorOffersCount = competitorOffers.length;
     const allOffers = [playerOffer, ...competitorOffers];
     const shareResults = computeMarketShare(market, allOffers);
@@ -993,6 +1050,20 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // Capacity reflects the REAL configured seat count (premium cabins + any empty
   // floor reduce it below the aircraft's max economy-equivalent units).
   const totalCapOneWay = configBodies(config) * route.weeklyFrequency;
+
+  // Load-factor realism: spill against an achievable ceiling, times this week's
+  // jitter. Applied to the demand POOL before the cabin fan-out so class
+  // allocation, downgrade spill and involuntary upgrades all stay internally
+  // consistent. `route.loadJitter` is attached by weeklyTick; a preview leaves
+  // it absent and gets the expected week (see market.js).
+  const loadScale = loadDemandScale(leisurePax + businessPax, totalCapOneWay, route.loadJitter ?? 1);
+  if (loadScale !== 1) {
+    // Whole passengers: the class fan-out and the involuntary-upgrade block
+    // below both do integer arithmetic, and a fractional pool leaks fractions
+    // all the way to a route table reading 4,276.271 pax/wk.
+    leisurePax  = Math.round(leisurePax  * loadScale);
+    businessPax = Math.round(businessPax * loadScale);
+  }
 
   // Directional seasonal skew: when the two ends of a route are in different
   // seasons the traffic is lopsided, and symmetric seats cannot carry a
@@ -1262,7 +1333,7 @@ export function pairConnectivityBonus(spokeCounts, hubCodes, origin, destination
  * @param {object} [gameDate={month:6}]
  * @returns {object|null}   null if an aircraft/airport is invalid or a leg exceeds range
  */
-export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null) {
+export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null, competitors = null) {
   const type  = getAircraftType(aircraft.typeId);
   if (!type) return null;
   const stops = routeStops(route);
@@ -1322,8 +1393,10 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
       marketingBoost: route.marketingBoost ?? 0,
       brandReach: route.brandReach ?? 1,
     };
-    const competitorOffers = COMPETITOR_AIRLINES
-      .map(c => buildCompetitorOffer(c, market)).filter(Boolean);
+    // Live bank, same as the single-leg path. Headwinds fixed simulateRoute and
+    // left this one reading the dead constant, so every multi-stop route there
+    // is still a monopoly; there is no reason to inherit that.
+    const competitorOffers = rivalOffersFor(competitors, null, market);
     const [res] = computeMarketShare(market, [offer, ...competitorOffers]);
     const legIdxs = [];
     for (let k = seg.fromIdx; k < seg.toIdx; k++) legIdxs.push(k);
@@ -1577,7 +1650,16 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
 
   // ── Capacity & load ──────────────────────────────────────────────────────────
   const capacityTonnes = type.payloadTonnes * route.weeklyFrequency;   // one-way
-  const tonnesOneWay   = Math.min(demandTonnes, capacityTonnes);
+  // Same spill-and-jitter model as passenger routes (see market.js). Freight
+  // peaks and directional imbalance are, if anything, worse than passengers —
+  // a lane's headhaul is a Tuesday-to-Thursday business.
+  // Whole tonnes, for the same reason the passenger pool is rounded to whole
+  // passengers: revenue and handling are charged off this number and the result
+  // reports it, so a fractional carry would have the freight table showing 676t
+  // beside revenue billed for 676.77t.
+  const tonnesOneWay   = Math.round(Math.min(
+    demandTonnes * loadDemandScale(demandTonnes, capacityTonnes, route.loadJitter ?? 1),
+    capacityTonnes));
   const loadFactor     = capacityTonnes > 0 ? tonnesOneWay / capacityTonnes : 0;
 
   // Revenue covers both directions, with backhaul imbalance (return leg lighter).
@@ -2158,7 +2240,19 @@ export function weeklyTick(state) {
   const routeCatering = state.routeCatering ?? {};
   // Airline-wide ancillary policy (null = inactive → zero revenue/cost/quality).
   const ancillaries   = state.ancillaries   ?? null;
-  const routes = rawRoutes.map(r => hydrateRoute(r, routePricing, routeCatering));
+  // Attach this week's load jitter alongside the pair's price and catering.
+  //
+  // Keyed on the PAIR and the absolute week, not on the route id. A good week
+  // for JFK-LAX is a good week for every aeroplane on JFK-LAX — and, less
+  // poetically, aircraft sharing a pair pool their demand and are required to
+  // land on the same load factor. Per-route jitter would let two tails on one
+  // lane drift up to five points apart and trip the pooling invariant that
+  // exists to catch exactly that.
+  const withJitter = (r) => ({
+    ...hydrateRoute(r, routePricing, routeCatering),
+    loadJitter: weeklyLoadJitter(routePairKey(r.origin, r.destination), absWeek),
+  });
+  const routes = rawRoutes.map(withJitter);
   // Routes operating THIS month. Dormant seasonal routes must not provide network
   // feed, interline adjacency, or cannibalization while they're out of season.
   const activeRoutes = routes.filter(r => isRouteActive(r, gameDate.month));
@@ -2586,15 +2680,9 @@ export function weeklyTick(state) {
           partnerContestedKeys.has(pairKeyOf(r0.origin, r0.destination))),
       };
 
-      const competitorOffers = COMPETITOR_AIRLINES
-        .map(c => buildCompetitorOffer(c, market))
-        .filter(Boolean);
-      // Inject any encroachment challengers contesting this O&D pair.
+      // Live bank — see the note in simulateRoute.
       const rkPre = [r0.origin, r0.destination].sort().join('-');
-      for (const spec of encroachByPair(rkPre)) {
-        const offer = buildEncroachmentOffer(spec, market);
-        if (offer) competitorOffers.push(offer);
-      }
+      const competitorOffers = rivalOffersFor(competitors, encroachByPair(rkPre), market);
       const [combinedResult] = computeMarketShare(market, [combinedOffer, ...competitorOffers]);
 
       // Distribute pax to each aircraft proportionally by seat share
@@ -2666,7 +2754,7 @@ export function weeklyTick(state) {
         brandReach: brandReachFor(tagHubQuality, stopsList, false),
         ...(tagHcf ? { hubCostFactors: tagHcf } : {}),
       };
-      const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries);
+      const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries, competitors);
       if (!result) continue;
 
       const cateringRev    = result.cateringRevenue ?? 0;
@@ -2764,7 +2852,7 @@ export function weeklyTick(state) {
     const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
       demandAllocations.get(route.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
-      eventDemandMultFor(route.origin, route.destination), ancillaries);
+      eventDemandMultFor(route.origin, route.destination), ancillaries, competitors);
     if (!result) continue;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
@@ -2956,10 +3044,13 @@ export function weeklyTick(state) {
 
   // Same-lane pooling: several freighters on one city pair share ONE demand
   // pool (see cargoLaneAllocations) instead of each claiming the full market.
-  const cargoAllocations = cargoLaneAllocations(cargoRoutes, fleet, awarenessMultiplier,
+  // Jittered copies, same as the passenger routes above — and built once, so the
+  // lane pooling and the simulator agree about which week this is.
+  const freightRoutes = (cargoRoutes ?? []).map(withJitter);
+  const cargoAllocations = cargoLaneAllocations(freightRoutes, fleet, awarenessMultiplier,
     { gameDate, demandMultFor: eventDemandMultFor });
 
-  for (const route of cargoRoutes) {
+  for (const route of freightRoutes) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft || isOutOfService(aircraft)) continue;
 

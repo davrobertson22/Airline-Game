@@ -285,7 +285,12 @@ export function tickEncroachment({ routes = [], routePricing = {}, lastReport = 
       // Pick a challenger. Growth-hungry personalities (aggressive/expansionist/
       // copycat) jump on fat routes first; otherwise prefer a budget carrier
       // (sharper undercut) ~half the time.
-      const pool   = competitors.filter(Boolean);
+      // A carrier that already flies this pair cannot "enter" it. Before the
+      // live bank reached the demand model this was harmless — the carrier's own
+      // offer was always null — and it would now put the same airline on the
+      // pair twice, once as itself and once as `encroach:<its own id>`, with two
+      // independent fare and frequency ramps.
+      const pool   = competitors.filter(c => c && !c.routes?.[key]);
       const hungry = pool.filter(c =>
         c._archetype === 'aggressive' || c._archetype === 'expansionist' || c._archetype === 'copycat');
       const budgets = pool.filter(c => c.tier === 'budget');

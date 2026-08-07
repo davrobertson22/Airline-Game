@@ -12,7 +12,7 @@ import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
   hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
-  buildEventDemandModel, stateBrandReach,
+  buildEventDemandModel, stateBrandReach, rivalSpecsFor,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -256,7 +256,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
     if (playerRoutes.length === 0) return [];
 
     // Build combined demand allocation when there are multiple aircraft
-    const demandAllocations = new Map(); // aircraftId → demandOverride
+    const demandAllocations = new Map(); // routeId → demandOverride
     if (playerRoutes.length > 1) {
       let totalEcoSeats = 0, totalBizSeats = 0, totalSeatsAll = 0, totalFreq = 0;
       let hasBusinessCabin = false;
@@ -329,9 +329,10 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
       // same labor / utilization / satisfaction inputs the engine uses.
       const result = simulateRoute(route, aircraft, gameDate, state.labor ?? null, 1.0,
-        demandAllocations.get(aircraft.id) ?? null, [],
+        demandAllocations.get(route.id) ?? null, rivalSpecsFor(state, route.origin, route.destination),
         fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
-        state.satisfaction ?? null, eventDemand.multFor(origin, dest));
+        state.satisfaction ?? null, eventDemand.multFor(origin, dest),
+        state.ancillaries ?? null, state.competitors ?? []);
       if (!result) return [];
       const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
         : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);

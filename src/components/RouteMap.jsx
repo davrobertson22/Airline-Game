@@ -4,7 +4,7 @@ import { getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
   simulateRoute, simulateCargoRoute, cargoLaneAllocations, formatMoney, currentGameDate,
-  fleetAvgUtilization, buildEventDemandModel,
+  fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
 } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { getAlliance } from '../data/alliances.js';
@@ -263,8 +263,8 @@ export default function RouteMap() {
       const aircraft = fleet.find(a => a.id === r.aircraftId);
       const result = !aircraft ? null
         : (rrById[r.id] ?? simulateRoute(r, aircraft, gd, state.labor ?? null, proj.fuelMultiplier,
-            null, [], avgUtil, state.satisfaction ?? null,
-            evDemand.multFor(r.origin, r.destination)));
+            null, rivalSpecsFor(state, r.origin, r.destination), avgUtil, state.satisfaction ?? null,
+            evDemand.multFor(r.origin, r.destination), state.ancillaries ?? null, state.competitors ?? []));
       return { r, origin, dest, result };
     }).filter(Boolean);
   }, [routes, cargoRoutes, fleet, rrById, proj, gd, state.labor, state.satisfaction, state.activeEvents]);

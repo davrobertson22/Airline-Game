@@ -7,7 +7,7 @@ import {
   maintenanceMultiplier, ageLabel,
   simulateRoute, weeklyBlockHours, currentGameDate,
   MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
-  freighterLandingCategory,
+  freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
@@ -315,7 +315,13 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const gd             = currentGameDate(state);
   const aircraftRoutes = routes.filter(r => r.aircraftId === aircraft.id);
   const routeResults   = aircraftRoutes.map(r => {
-    const result = simulateRoute(r, aircraft, gd);
+    const result = simulateRoute(r, aircraft, gd, state.labor ?? null,
+      state.fuelPrice?.index ?? state.fuelMultiplier ?? 1.0, null,
+      rivalSpecsFor(state, r.origin, r.destination),
+      fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
+      state.satisfaction ?? null,
+      buildEventDemandModel(state.activeEvents).multFor(r.origin, r.destination),
+      state.ancillaries ?? null, state.competitors ?? []);
     if (!result) return null;
     const bh = type ? weeklyBlockHours(result.distance, r.weeklyFrequency, type) : 0;
     return { route: r, result, blockHrs: bh };
