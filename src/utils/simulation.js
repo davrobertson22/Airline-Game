@@ -2671,7 +2671,8 @@ export function weeklyTick(state) {
         ...result,
         revenue:       routeRevenue,
         marketingLift: Math.round(result.revenue * (tagMarketingLift / (1 + tagMarketingLift))),
-        loyaltyLift:   Math.round(result.revenue * tagLoyaltyBoost),
+        // Backed out, matching the single-leg path above.
+        loyaltyLift:   Math.round(result.revenue * (tagLoyaltyBoost / (1 + tagLoyaltyBoost))),
         allianceLift:  0,
         landingFee,
         profit:        Math.round(routeRevenue - result.totalOpCost - landingFee),
@@ -2878,13 +2879,18 @@ export function weeklyTick(state) {
       routeId: route.id,
       ...result,
       revenue:          routeRevenue,
-      // Revenue attributable to your net marketing position. `result.revenue`
-      // already CONTAINS the campaign effect (it went through the demand model),
-      // so back it out — revenue × lift/(1+lift) — instead of multiplying an
-      // already-boosted figure by the lift again.
+      // Revenue attributable to each brand lever. All three are already INSIDE
+      // result.revenue — they went through the demand model — so every one is
+      // backed out, revenue × lift/(1+lift), rather than multiplied on top of an
+      // already-boosted figure. Marketing was moved to this form when campaigns
+      // became a demand term; loyalty and alliance kept the multiply-on-top
+      // shape they had while they were still post-cap revenue multipliers, which
+      // over-reported both by a factor of (1 + lift).
+      //
+      // Attribution for the UI only — nothing downstream sums these into revenue.
       marketingLift:    Math.round(result.revenue * (marketingLift / (1 + marketingLift))),
-      loyaltyLift:      Math.round(result.revenue * loyaltyLift),
-      allianceLift:     Math.round(result.revenue * allianceLift),
+      loyaltyLift:      Math.round(result.revenue * (loyaltyLift  / (1 + loyaltyLift))),
+      allianceLift:     Math.round(result.revenue * (allianceLift / (1 + allianceLift))),
       landingFee,
       profit:           Math.round(routeRevenue - result.totalOpCost - landingFee),
       weeklyLeaseCost,

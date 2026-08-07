@@ -1,84 +1,25 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, referencePrice, loyaltyPenetration, loyaltyPaxBase, loyaltyEffectiveStrength, loyaltyReputationBonus, fleetAvgUtilization } from '../utils/simulation.js';
-import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { LABOR_GROUPS, laborEffects, moraleColor } from '../data/labor.js';
-import { computeQualityScore } from '../models/demand.js';
+import { calcPositioning, competitorField, strategyLabel } from '../models/positioning.js';
 import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import { awarenessDemandMultiplier } from '../data/overhead.js';
 import { Glyph } from './Icons.jsx';
-
-// Competitor brand benchmarks (fixed reference points for positioning map)
-const COMPETITOR_POSITIONS = [
-  { id: 'zoomjet',  name: 'ZoomJet',   x: 0.28, y: 0.12, color: '#ffb43d' },
-  { id: 'globalair',name: 'Global Air', x: 0.58, y: 0.55, color: '#3ea6ff' },
-  { id: 'apexair',  name: 'Apex Air',   x: 0.82, y: 0.88, color: '#a98bff' },
-];
 
 // ─── Pure calculation functions ───────────────────────────────────────────────
 
 // calcReputation now lives in models/reputation.js — shared with the engine,
 // so the numbers this page shows are the ones weeklyTick actually applies.
+//
+// calcPositioning and strategyLabel now live in models/positioning.js for the
+// same reason, alongside competitorPositioning — which is what replaced the
+// three literal rivals this file used to draw. They were real carriers pinned
+// to frozen coordinates, and a world samples 25 of 70, so most games plotted at
+// least one competitor the player would never meet while the 25 who were
+// actually out there went undrawn.
 
-function calcPositioning(state) {
-  const { fleet, routes } = state;
-  if (routes.length === 0) return { x: 0.5, y: 0.5, pricePremium: 0, bizCapRatio: 0 };
-
-  let totalSeats     = 0;
-  let bizFirstSeats  = 0;
-  let pricePremSum   = 0;
-  let qualitySum     = 0;
-  let routeCount     = 0;
-
-  for (const route of routes) {
-    const aircraft = fleet.find(a => a.id === route.aircraftId);
-    const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
-    if (!aircraft || !type) continue;
-
-    const cfg = aircraft.config ?? {};
-    bizFirstSeats += (cfg.firstClass ?? 0) + (cfg.businessClass ?? 0);
-    totalSeats    += type.seats;
-
-    const refP          = referencePrice(route.origin, route.destination);
-    const pricePremium  = (route.ticketPrice / Math.max(1, refP)) - 1;
-    pricePremSum       += pricePremium;
-
-    const seatQN  = { basic: 0, standard: 0.4, premium: 0.7, luxury: 1.0 }[cfg.seatQuality  ?? 'standard'] ?? 0.4;
-    const servQN  = { basic: 0, standard: 0.4, premium: 0.7, luxury: 1.0 }[cfg.serviceQuality ?? 'standard'] ?? 0.4;
-    qualitySum   += (seatQN + servQN) / 2;
-    routeCount++;
-  }
-
-  if (routeCount === 0) return { x: 0.5, y: 0.5, pricePremium: 0, bizCapRatio: 0 };
-
-  const bizCapRatio    = totalSeats > 0 ? bizFirstSeats / totalSeats : 0;
-  const avgPricePrem   = pricePremSum / routeCount;
-  const avgQuality     = qualitySum / routeCount;
-
-  // X = Leisure (0) ↔ Business (1)
-  // Business positioning driven by: cabin mix, premium pricing
-  const bizFocus = Math.max(0, Math.min(1,
-    bizCapRatio * 1.5 + (avgPricePrem > 0.2 ? 0.2 : avgPricePrem > 0 ? 0.1 : -0.05) + 0.15
-  ));
-
-  // Y = Budget (0) ↔ Premium (1)
-  // Premium driven by: quality + price level
-  const premiumLevel = Math.max(0, Math.min(1,
-    avgQuality * 0.65 + Math.max(-0.2, Math.min(0.35, avgPricePrem + 0.3))
-  ));
-
-  return { x: bizFocus, y: premiumLevel, pricePremium: avgPricePrem, bizCapRatio };
-}
-
-function strategyLabel(pos) {
-  const { x, y } = pos;
-  if (y >= 0.6 && x >= 0.55) return { name: 'Premium Full-Service', color: '#a98bff', emoji: '💎', description: 'Positioned for business and premium leisure travel. High revenue per seat, brand commands a price premium. Focus on service consistency and business-friendly routes.' };
-  if (y >= 0.6 && x <  0.55) return { name: 'Luxury Leisure',       color: '#38d39f', emoji: '🌴', description: 'Upscale but leisure-oriented. Sells a premium holiday experience. Strong in resort routes and seasonal markets. Demand is highly seasonal.' };
-  if (y <  0.4 && x >= 0.55) return { name: 'Budget Business',      color: '#3ea6ff', emoji: '💼', description: 'Affordable business travel, think no-frills but reliable on corporate corridors. Works on short-haul business routes with high frequency.' };
-  if (y <  0.4 && x <  0.55) return { name: 'Low-Cost Carrier',     color: '#ffb43d', emoji: '✂️', description: 'Volume over margin. Fill planes at low prices, minimise costs everywhere. Works best with high frequency, large fleets, and dense leisure routes.' };
-  return { name: 'Mid-Market',               color: '#93a4ba', emoji: '🔄', description: 'Sitting in the middle. Not strongly differentiated yet. Consider pushing toward Premium or Low-Cost, the middle is the hardest place to compete.' };
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -96,6 +37,9 @@ export default function Reputation() {
   ), [state]);  // eslint-disable-line
   const pos = useMemo(() => calcPositioning(state), [state]);
   const strategy = strategyLabel(pos);
+  // Every rival with a network, positioned from it. The chart draws the whole
+  // field and labels the ones flying a pair you fly.
+  const field = useMemo(() => competitorField(state), [state]);
 
   // One representative route per city pair (multiple aircraft on a pair share
   // the same brand effect), so counts here match the Network Reach summary.
@@ -186,7 +130,7 @@ export default function Reputation() {
         {/* ── Positioning matrix ── */}
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-title">Market Positioning</div>
-          <PositioningMatrix pos={pos} airlineName={airlineName} strategy={strategy} />
+          <PositioningMatrix pos={pos} airlineName={airlineName} strategy={strategy} field={field} />
           <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8,
             background: strategy.color + '14', border: `1px solid ${strategy.color}33` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -409,7 +353,10 @@ function StrategyCard({ emoji, name, active, color, howTo, payoff }) {
   );
 }
 
-function PositioningMatrix({ pos, airlineName, strategy }) {
+/** How many rivals get a name before the quadrant turns into a smudge. */
+const MAX_LABELLED_RIVALS = 6;
+
+function PositioningMatrix({ pos, airlineName, strategy, field = [] }) {
   const W = 320, H = 220, PAD = 36;
   const plotW = W - PAD * 2;
   const plotH = H - PAD * 2;
@@ -447,13 +394,25 @@ function PositioningMatrix({ pos, airlineName, strategy }) {
       <text x={PAD + 4}               y={PAD + plotH - 4}  fontSize="8.5" fill="var(--text-dim)">Budget Leisure</text>
       <text x={PAD + plotW/2 + 4}     y={PAD + plotH - 4}  fontSize="8.5" fill="var(--text-dim)">Budget Business</text>
 
-      {/* Competitor dots */}
-      {COMPETITOR_POSITIONS.map(c => (
-        <g key={c.id}>
-          <circle cx={toSX(c.x)} cy={toSY(c.y)} r={6} fill={c.color + '44'} stroke={c.color} strokeWidth="1.5" />
-          <text x={toSX(c.x) + 8} y={toSY(c.y) + 4} fontSize="9" fill={c.color}>{c.name}</text>
-        </g>
-      ))}
+      {/* The field. Every rival with a network gets a dot — that shape IS the
+          market, and it is worth seeing whole. Only the carriers flying a pair
+          you fly get a name; the rest would be an unreadable pile of text at
+          twenty-five carriers, and they are not who you are competing with. */}
+      {field.map((c, i) => {
+        const col = strategyLabel(c).color;
+        const named = c.contested && i < MAX_LABELLED_RIVALS;
+        return (
+          <g key={c.id}>
+            <circle
+              cx={toSX(c.x)} cy={toSY(c.y)} r={named ? 6 : 3.5}
+              fill={col + (named ? '44' : '22')} stroke={col}
+              strokeWidth={named ? 1.5 : 1} strokeOpacity={named ? 1 : 0.55} />
+            {named && (
+              <text x={toSX(c.x) + 8} y={toSY(c.y) + 4} fontSize="9" fill={col}>{c.name}</text>
+            )}
+          </g>
+        );
+      })}
 
       {/* Player position */}
       <circle cx={toSX(pos.x)} cy={toSY(pos.y)} r={9} fill={strategy.color + '33'} stroke={strategy.color} strokeWidth="2.5" />

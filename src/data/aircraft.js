@@ -18,12 +18,22 @@
 // cruiseKmh:            cruise speed override (km/h). Freighters share one
 //                       category, so they cannot take a speed from the category
 //                       table the way passenger types do — each carries its own.
+// eis:                  year of entry into service. Inert to the engine — nothing
+//                       reads it at runtime — but it is the vintage the delivered
+//                       -age bands below are derived from, and the consistency
+//                       suite uses it to check that every type's arrival age and
+//                       price floor match its generation. Without it those three
+//                       checks silently do not run.
 // deliveredAgeWeeks:    age (in weeks) the airframe arrives at. Used conversions
 //                       are NOT new builds: purchasePrice is what a frame of that
 //                       vintage costs, and it arrives already that old, so it
 //                       starts on a higher maintenanceMultiplier, has fewer years
 //                       of life left, and depreciates from its delivered value.
 //                       Omit (or 0) for anything still in production.
+//                       Bands by eis: <= 1974 → 832w (16y), <= 1984 → 624w (12y),
+//                       <= 1994 → 520w (10y), <= 2004 → 312w (6y), else 0.
+//                       Supersonic is exempt — Concorde is a deliberate prestige
+//                       money-loser and an age penalty would just make it unusable.
 // category:             used to group aircraft in the market UI
 // image:                Wikimedia Commons photo URL
 //
@@ -41,6 +51,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Concorde',
     manufacturer: 'Aérospatiale/BAC',
     category: 'Supersonic',
+    eis: 1976,
     seats: 128,
     range: 7_250,
     runwayFt: 10800,
@@ -61,6 +72,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A220-100',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2016,
     seats: 135,
     range: 6_700,
     runwayFt: 4800,
@@ -78,6 +90,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A318',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2003,
     seats: 132,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_700,
@@ -96,6 +109,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A319ceo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 1996,
     seats: 156,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_900,
@@ -120,6 +134,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A220-300',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2016,
     seats: 160,
     range: 6_300,
     runwayFt: 5000,
@@ -136,6 +151,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A319neo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2019,
     seats: 160,
     range: 6_850,
     runwayFt: 5200,
@@ -158,6 +174,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A320ceo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 1988,
     seats: 186,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 6_150,
@@ -182,6 +199,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A320neo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2016,
     seats: 194,
     range: 6_300,
     runwayFt: 5600,
@@ -204,6 +222,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A321ceo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 1994,
     seats: 220,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_930,
@@ -228,6 +247,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A321neo',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2017,
     seats: 244,
     range: 7_400,
     runwayFt: 5700,
@@ -250,6 +270,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A321XLR',
     manufacturer: 'Airbus',
     category: 'Narrow Body',
+    eis: 2024,
     seats: 244,
     range: 8_700,
     runwayFt: 7500,
@@ -272,6 +293,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A310-300',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1986,
     seats: 280,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 9_600,
@@ -289,6 +311,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A300-600R',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1988,
     seats: 361,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 7_700,
@@ -306,6 +329,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A330-200',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1998,
     seats: 406,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_400,
@@ -330,6 +354,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A340-300',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1993,
     seats: 440,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_500,
@@ -347,6 +372,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A330-300',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1994,
     seats: 440,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_750,
@@ -371,6 +397,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A330-900neo',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2018,
     seats: 460,
     range: 13_334,
     runwayFt: 8200,
@@ -387,6 +414,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A340-600',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2002,
     seats: 475,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 14_600,
@@ -404,6 +432,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A350-900',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2015,
     seats: 440,
     range: 15_000,
     runwayFt: 8000,
@@ -420,6 +449,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A350-900ULR',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2018,
     seats: 440,   // same airframe as the A350-900; carriers configure capacity down
     range: 18_000,
     runwayFt: 8900,
@@ -436,6 +466,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A350-1000',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2018,
     seats: 480,
     range: 16_100,
     runwayFt: 8500,
@@ -452,6 +483,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A380',
     manufacturer: 'Airbus',
     category: 'Double Deck',
+    eis: 2007,
     seats: 853,
     range: 15_200,
     runwayFt: 9800,
@@ -476,6 +508,7 @@ export const AIRCRAFT_TYPES = [
     name: 'CASA CN-235-300',
     manufacturer: 'Airbus/CASA',
     category: 'Turboprop',
+    eis: 1998,
     seats: 51,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 4_355,
@@ -495,6 +528,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Let L-410 Turbolet',
     manufacturer: 'Aircraft Industries',
     category: 'Turboprop',
+    eis: 1971,
     seats: 19,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_380,
@@ -514,6 +548,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Antonov An-148-100B',
     manufacturer: 'Antonov',
     category: 'Regional Jet',
+    eis: 2009,
     seats: 89,
     range: 5_100,
     runwayFt: 6200,
@@ -532,6 +567,7 @@ export const AIRCRAFT_TYPES = [
     name: 'ATR 42-600',
     manufacturer: 'ATR',
     category: 'Turboprop',
+    eis: 2012,
     seats: 50,
     range: 1_326,
     runwayFt: 3600,
@@ -548,6 +584,7 @@ export const AIRCRAFT_TYPES = [
     name: 'ATR 72-600',
     manufacturer: 'ATR',
     category: 'Turboprop',
+    eis: 2011,
     seats: 78,
     range: 1_528,
     runwayFt: 4200,
@@ -566,6 +603,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Beechcraft 1900D',
     manufacturer: 'Beechcraft',
     category: 'Turboprop',
+    eis: 1991,
     seats: 19,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_776,
@@ -585,6 +623,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-200Adv',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1971,
     seats: 136,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_800,
@@ -602,6 +641,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 717-200',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1999,
     seats: 134,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_645,
@@ -619,6 +659,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 727-200Adv',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1972,
     seats: 189,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 4_820,
@@ -636,6 +677,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-500',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1990,
     seats: 140,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_200,
@@ -653,6 +695,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-300',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1984,
     seats: 149,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_400,
@@ -670,6 +713,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-700',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1998,
     seats: 149,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_370,
@@ -687,6 +731,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-400',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1988,
     seats: 189,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_800,
@@ -704,6 +749,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 707-320B',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1962,
     seats: 189,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 10_650,
@@ -721,6 +767,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 7',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2023,
     seats: 172,
     range: 7_037,
     runwayFt: 5300,
@@ -737,6 +784,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-800',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1998,
     seats: 189,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_765,
@@ -757,6 +805,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 8',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2017,
     seats: 210,
     range: 6_570,
     runwayFt: 5700,
@@ -773,6 +822,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-900ER',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2007,
     seats: 220,
     range: 5_925,
     runwayFt: 5700,
@@ -789,6 +839,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 9',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2018,
     seats: 220,
     range: 6_110,
     runwayFt: 5700,
@@ -805,6 +856,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 10',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2025,
     seats: 230,
     range: 5_740,
     runwayFt: 6050,
@@ -821,6 +873,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 757-200',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1983,
     seats: 239,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 7_222,
@@ -845,6 +898,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 757-300',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1999,
     seats: 295,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_295,
@@ -869,6 +923,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 767-200ER',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 1984,
     seats: 290,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 12_200,
@@ -893,6 +948,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 767-300ER',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 1988,
     seats: 351,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_090,
@@ -918,6 +974,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 767-400ER',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2000,
     seats: 375,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 10_415,
@@ -935,6 +992,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 787-8',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2011,
     seats: 381,
     range: 13_620,
     runwayFt: 8200,
@@ -957,6 +1015,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777-200ER',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 1997,
     seats: 440,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_080,
@@ -974,6 +1033,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 787-9',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2014,
     seats: 420,
     range: 14_140,
     runwayFt: 9000,
@@ -996,6 +1056,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-200B',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1971,
     seats: 550,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 12_700,
@@ -1013,6 +1074,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777-200LR',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2006,
     seats: 440,
     range: 15_843,
     runwayFt: 9800,
@@ -1029,6 +1091,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 787-10',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2018,
     seats: 440,
     range: 11_730,
     runwayFt: 9000,
@@ -1051,6 +1114,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747SP',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1976,
     seats: 400,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 15_400,
@@ -1068,6 +1132,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777-300ER',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2004,
     seats: 550,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_650,
@@ -1085,6 +1150,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-400',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1989,
     seats: 605,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_445,
@@ -1102,6 +1168,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-400D',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1991,
     seats: 660,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_700,
@@ -1119,6 +1186,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777X-8',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2029,
     seats: 440,
     range: 16_090,
     runwayFt: 9500,
@@ -1135,6 +1203,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777X-9',
     manufacturer: 'Boeing',
     category: 'Wide Body',
+    eis: 2027,
     seats: 550,
     range: 13_500,
     runwayFt: 9800,
@@ -1151,6 +1220,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-8I',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 2012,
     seats: 605,
     range: 14_816,
     runwayFt: 9800,
@@ -1169,6 +1239,7 @@ export const AIRCRAFT_TYPES = [
     name: 'CRJ-200',
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
+    eis: 1996,
     seats: 52,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_048,
@@ -1186,6 +1257,7 @@ export const AIRCRAFT_TYPES = [
     name: 'CRJ-700',
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
+    eis: 2001,
     seats: 78,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_716,
@@ -1203,6 +1275,7 @@ export const AIRCRAFT_TYPES = [
     name: 'CRJ-900',
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
+    eis: 2003,
     seats: 90,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_876,
@@ -1220,6 +1293,7 @@ export const AIRCRAFT_TYPES = [
     name: 'CRJ-1000',
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
+    eis: 2010,
     seats: 104,
     range: 3_004,
     runwayFt: 6200,
@@ -1238,6 +1312,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Avro RJ85',
     manufacturer: 'British Aerospace',
     category: 'Regional Jet',
+    eis: 1993,
     seats: 112,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_300,
@@ -1255,6 +1330,7 @@ export const AIRCRAFT_TYPES = [
     name: 'BAe 146-200',
     manufacturer: 'British Aerospace',
     category: 'Regional Jet',
+    eis: 1983,
     seats: 112,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_650,
@@ -1274,6 +1350,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Britten-Norman Islander',
     manufacturer: 'Britten-Norman',
     category: 'Turboprop',
+    eis: 1967,
     seats: 9,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 774,
@@ -1293,6 +1370,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Cessna 208B Grand Caravan EX',
     manufacturer: 'Cessna',
     category: 'Turboprop',
+    eis: 2013,
     seats: 14,
     range: 1_982,
     runwayFt: 2400,
@@ -1311,6 +1389,7 @@ export const AIRCRAFT_TYPES = [
     name: 'COMAC ARJ21-700',
     manufacturer: 'COMAC',
     category: 'Regional Jet',
+    eis: 2016,
     seats: 97,
     range: 3_700,
     runwayFt: 5600,
@@ -1327,6 +1406,7 @@ export const AIRCRAFT_TYPES = [
     name: 'COMAC C919',
     manufacturer: 'COMAC',
     category: 'Narrow Body',
+    eis: 2023,
     seats: 192,
     range: 5_555,
     runwayFt: 6600,
@@ -1345,6 +1425,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Dash 8-300',
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
+    eis: 1989,
     seats: 56,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_558,
@@ -1362,6 +1443,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Dash 8 Q400',
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
+    eis: 2000,
     seats: 90,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_040,
@@ -1381,6 +1463,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer ERJ-135',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 1999,
     seats: 37,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_241,
@@ -1398,6 +1481,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer ERJ-145',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 1996,
     seats: 50,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_870,
@@ -1415,6 +1499,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer ERJ-170',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2004,
     seats: 80,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_735,
@@ -1432,6 +1517,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E175',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2005,
     seats: 88,
     range: 3_735,
     runwayFt: 4700,
@@ -1448,6 +1534,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E175-E2',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2030,
     seats: 90,
     range: 3_735,
     runwayFt: 4700,
@@ -1464,6 +1551,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E190',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2005,
     seats: 114,
     range: 4_537,
     runwayFt: 5700,
@@ -1483,6 +1571,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E190-E2',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2018,
     seats: 114,
     range: 5_460,
     runwayFt: 4400,
@@ -1499,6 +1588,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E195',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2006,
     seats: 124,
     range: 4_260,
     runwayFt: 5900,
@@ -1515,6 +1605,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E195-E2',
     manufacturer: 'Embraer',
     category: 'Regional Jet',
+    eis: 2019,
     seats: 146,
     range: 5_600,
     runwayFt: 4850,
@@ -1539,6 +1630,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Fokker 70',
     manufacturer: 'Fokker',
     category: 'Regional Jet',
+    eis: 1994,
     seats: 85,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_410,
@@ -1556,6 +1648,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Fokker 100',
     manufacturer: 'Fokker',
     category: 'Regional Jet',
+    eis: 1988,
     seats: 122,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_170,
@@ -1575,6 +1668,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Ilyushin Il-96-300',
     manufacturer: 'Ilyushin',
     category: 'Wide Body',
+    eis: 1993,
     seats: 300,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_500,
@@ -1594,6 +1688,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Irkut MC-21-300',
     manufacturer: 'Irkut',
     category: 'Narrow Body',
+    eis: 2025,
     seats: 211,
     range: 6_400,
     runwayFt: 7000,
@@ -1612,6 +1707,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Lockheed L-1011 TriStar',
     manufacturer: 'Lockheed',
     category: 'Wide Body',
+    eis: 1972,
     seats: 400,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_670,
@@ -1631,6 +1727,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Douglas DC-9-50',
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
+    eis: 1975,
     seats: 139,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_100,
@@ -1648,6 +1745,7 @@ export const AIRCRAFT_TYPES = [
     name: 'McDonnell Douglas MD-90',
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
+    eis: 1995,
     seats: 172,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_800,
@@ -1665,6 +1763,7 @@ export const AIRCRAFT_TYPES = [
     name: 'McDonnell Douglas MD-80',
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
+    eis: 1980,
     seats: 172,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_635,
@@ -1682,6 +1781,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Douglas DC-10-30',
     manufacturer: 'McDonnell Douglas',
     category: 'Wide Body',
+    eis: 1972,
     seats: 380,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_700,
@@ -1699,6 +1799,7 @@ export const AIRCRAFT_TYPES = [
     name: 'McDonnell Douglas MD-11',
     manufacturer: 'McDonnell Douglas',
     category: 'Wide Body',
+    eis: 1990,
     seats: 410,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 12_455,
@@ -1718,6 +1819,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Mitsubishi SpaceJet M90',
     manufacturer: 'Mitsubishi',
     category: 'Regional Jet',
+    eis: 2026,
     seats: 92,
     range: 3_770,
     runwayFt: 6300,
@@ -1736,6 +1838,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Pilatus PC-12 NGX',
     manufacturer: 'Pilatus',
     category: 'Turboprop',
+    eis: 2020,
     seats: 9,
     range: 1_846,
     runwayFt: 2600,
@@ -1754,6 +1857,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Saab 340B',
     manufacturer: 'Saab',
     category: 'Turboprop',
+    eis: 1989,
     seats: 37,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_560,
@@ -1771,6 +1875,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Saab 2000',
     manufacturer: 'Saab',
     category: 'Turboprop',
+    eis: 1994,
     seats: 58,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_868,
@@ -1790,6 +1895,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Short 360',
     manufacturer: 'Short Brothers',
     category: 'Turboprop',
+    eis: 1982,
     seats: 39,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_178,
@@ -1809,6 +1915,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Sukhoi Superjet 100',
     manufacturer: 'Sukhoi',
     category: 'Regional Jet',
+    eis: 2011,
     seats: 108,
     range: 4_578,
     runwayFt: 5900,
@@ -1827,6 +1934,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Tupolev Tu-204-100',
     manufacturer: 'Tupolev',
     category: 'Narrow Body',
+    eis: 1996,
     seats: 210,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_500,
@@ -1846,6 +1954,7 @@ export const AIRCRAFT_TYPES = [
     name: 'DHC-6 Twin Otter 400',
     manufacturer: 'Viking Air',
     category: 'Turboprop',
+    eis: 2010,
     seats: 19,
     range: 1_705,
     runwayFt: 1200,
@@ -1870,6 +1979,7 @@ export const AIRCRAFT_TYPES = [
     name: 'ATR 72-600F',
     manufacturer: 'ATR',
     category: 'Freighter',
+    eis: 2020,
     freighter: true,
     seats: 0,
     payloadTonnes: 9,
@@ -1889,6 +1999,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-800BCF',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 2018,
     freighter: true,
     seats: 0,
     payloadTonnes: 23,
@@ -1909,6 +2020,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 767-300F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1995,
     freighter: true,
     seats: 0,
     payloadTonnes: 52,
@@ -1928,6 +2040,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A330-200F',
     manufacturer: 'Airbus',
     category: 'Freighter',
+    eis: 2010,
     freighter: true,
     seats: 0,
     payloadTonnes: 70,
@@ -1947,6 +2060,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 2009,
     freighter: true,
     seats: 0,
     payloadTonnes: 102,
@@ -1966,6 +2080,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-400F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1993,
     freighter: true,
     seats: 0,
     payloadTonnes: 112,
@@ -1986,6 +2101,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Antonov An-124-100 Ruslan',
     manufacturer: 'Antonov',
     category: 'Freighter',
+    eis: 1986,
     freighter: true,
     seats: 0,
     payloadTonnes: 120,
@@ -2006,6 +2122,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-8F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 2011,
     freighter: true,
     seats: 0,
     payloadTonnes: 137,
@@ -2025,6 +2142,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Antonov An-225 Mriya',
     manufacturer: 'Antonov',
     category: 'Freighter',
+    eis: 1988,
     freighter: true,
     seats: 0,
     payloadTonnes: 250,
@@ -2050,6 +2168,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Douglas DC-3',
     manufacturer: 'Douglas',
     category: 'Turboprop',
+    eis: 1936,
     seats: 32,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
@@ -2067,6 +2186,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Douglas DC-8-63',
     manufacturer: 'Douglas',
     category: 'Narrow Body',
+    eis: 1967,
     seats: 259,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 11_000,
@@ -2084,6 +2204,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Sud Aviation Caravelle',
     manufacturer: 'Sud Aviation',
     category: 'Narrow Body',
+    eis: 1959,
     seats: 140,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_300,
@@ -2101,6 +2222,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Hawker Siddeley Trident 3B',
     manufacturer: 'Hawker Siddeley',
     category: 'Narrow Body',
+    eis: 1971,
     seats: 180,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2118,6 +2240,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Vickers VC10',
     manufacturer: 'Vickers',
     category: 'Narrow Body',
+    eis: 1964,
     seats: 151,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_400,
@@ -2135,6 +2258,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Convair 990 Coronado',
     manufacturer: 'Convair',
     category: 'Narrow Body',
+    eis: 1962,
     seats: 149,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_100,
@@ -2152,6 +2276,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Tupolev Tu-154M',
     manufacturer: 'Tupolev',
     category: 'Narrow Body',
+    eis: 1984,
     seats: 180,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_200,
@@ -2169,6 +2294,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Tupolev Tu-134',
     manufacturer: 'Tupolev',
     category: 'Regional Jet',
+    eis: 1967,
     seats: 96,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_000,
@@ -2186,6 +2312,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Ilyushin Il-62M',
     manufacturer: 'Ilyushin',
     category: 'Narrow Body',
+    eis: 1974,
     seats: 186,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 10_000,
@@ -2203,6 +2330,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Ilyushin Il-86',
     manufacturer: 'Ilyushin',
     category: 'Wide Body',
+    eis: 1980,
     seats: 350,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_000,
@@ -2220,6 +2348,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Yakovlev Yak-42',
     manufacturer: 'Yakovlev',
     category: 'Narrow Body',
+    eis: 1980,
     seats: 120,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_000,
@@ -2237,6 +2366,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Yakovlev Yak-40',
     manufacturer: 'Yakovlev',
     category: 'Regional Jet',
+    eis: 1968,
     seats: 40,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_800,
@@ -2254,6 +2384,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Fokker F27 Friendship',
     manufacturer: 'Fokker',
     category: 'Turboprop',
+    eis: 1958,
     seats: 52,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
@@ -2271,6 +2402,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Fokker F28 Fellowship',
     manufacturer: 'Fokker',
     category: 'Regional Jet',
+    eis: 1969,
     seats: 85,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2288,6 +2420,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 720B',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 1961,
     seats: 165,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_700,
@@ -2305,6 +2438,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-100',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1970,
     seats: 550,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_800,
@@ -2322,6 +2456,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 747-300',
     manufacturer: 'Boeing',
     category: 'Double Deck',
+    eis: 1983,
     seats: 605,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 11_700,
@@ -2339,6 +2474,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A300B4',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1975,
     seats: 345,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_400,
@@ -2356,6 +2492,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A310-200',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 1983,
     seats: 280,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 6_800,
@@ -2373,6 +2510,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Lockheed L-188 Electra',
     manufacturer: 'Lockheed',
     category: 'Turboprop',
+    eis: 1959,
     seats: 104,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_500,
@@ -2390,6 +2528,7 @@ export const AIRCRAFT_TYPES = [
     name: 'BAC One-Eleven 500',
     manufacturer: 'BAC',
     category: 'Narrow Body',
+    eis: 1968,
     seats: 119,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2407,6 +2546,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Convair 580',
     manufacturer: 'Convair',
     category: 'Turboprop',
+    eis: 1960,
     seats: 56,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_900,
@@ -2424,6 +2564,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 8-200',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
+    eis: 2021,
     seats: 200,
     range: 6_570,
     runwayFt: 5800,
@@ -2440,6 +2581,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A330-800neo',
     manufacturer: 'Airbus',
     category: 'Wide Body',
+    eis: 2020,
     seats: 406,
     range: 15_100,
     runwayFt: 8000,
@@ -2456,6 +2598,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Sukhoi Superjet SJ-100',
     manufacturer: 'Sukhoi',
     category: 'Regional Jet',
+    eis: 2026,
     seats: 108,
     range: 3_000,
     runwayFt: 5900,
@@ -2472,6 +2615,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Irkut MC-21-310',
     manufacturer: 'Irkut',
     category: 'Narrow Body',
+    eis: 2026,
     seats: 211,
     range: 3_830,
     runwayFt: 7000,
@@ -2488,6 +2632,7 @@ export const AIRCRAFT_TYPES = [
     name: 'COMAC C929',
     manufacturer: 'COMAC',
     category: 'Wide Body',
+    eis: 2029,
     seats: 440,
     range: 12_000,
     runwayFt: 9200,
@@ -2504,6 +2649,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Dornier 328',
     manufacturer: 'Dornier',
     category: 'Turboprop',
+    eis: 1993,
     seats: 33,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_850,
@@ -2521,6 +2667,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Dornier 328JET',
     manufacturer: 'Dornier',
     category: 'Regional Jet',
+    eis: 1999,
     seats: 34,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_665,
@@ -2538,6 +2685,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Dornier 228',
     manufacturer: 'Dornier',
     category: 'Turboprop',
+    eis: 1982,
     seats: 19,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_110,
@@ -2555,6 +2703,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer EMB-120 Brasilia',
     manufacturer: 'Embraer',
     category: 'Turboprop',
+    eis: 1985,
     seats: 30,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_750,
@@ -2572,6 +2721,7 @@ export const AIRCRAFT_TYPES = [
     name: 'BAe Jetstream 31',
     manufacturer: 'British Aerospace',
     category: 'Turboprop',
+    eis: 1982,
     seats: 19,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_260,
@@ -2589,6 +2739,7 @@ export const AIRCRAFT_TYPES = [
     name: 'BAe Jetstream 41',
     manufacturer: 'British Aerospace',
     category: 'Turboprop',
+    eis: 1992,
     seats: 29,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_433,
@@ -2606,6 +2757,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Saab 340A',
     manufacturer: 'Saab',
     category: 'Turboprop',
+    eis: 1984,
     seats: 34,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_430,
@@ -2623,6 +2775,7 @@ export const AIRCRAFT_TYPES = [
     name: 'De Havilland Dash 8-100',
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
+    eis: 1984,
     seats: 40,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_890,
@@ -2640,6 +2793,7 @@ export const AIRCRAFT_TYPES = [
     name: 'De Havilland Dash 8-200',
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
+    eis: 1995,
     seats: 40,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_084,
@@ -2657,6 +2811,7 @@ export const AIRCRAFT_TYPES = [
     name: 'De Havilland Dash 7',
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
+    eis: 1978,
     seats: 54,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_300,
@@ -2674,6 +2829,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Xian MA60',
     manufacturer: 'Xian',
     category: 'Turboprop',
+    eis: 2000,
     seats: 60,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_600,
@@ -2691,6 +2847,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Xian MA600',
     manufacturer: 'Xian',
     category: 'Turboprop',
+    eis: 2008,
     seats: 60,
     range: 1_600,
     runwayFt: 4300,
@@ -2707,6 +2864,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Cessna 408 SkyCourier',
     manufacturer: 'Cessna',
     category: 'Turboprop',
+    eis: 2022,
     seats: 19,
     range: 1_660,
     runwayFt: 3600,
@@ -2723,6 +2881,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Antonov An-24',
     manufacturer: 'Antonov',
     category: 'Turboprop',
+    eis: 1962,
     seats: 52,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
@@ -2740,6 +2899,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer EMB-110 Bandeirante',
     manufacturer: 'Embraer',
     category: 'Turboprop',
+    eis: 1973,
     seats: 21,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
@@ -2757,6 +2917,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A350F',
     manufacturer: 'Airbus',
     category: 'Freighter',
+    eis: 2027,
     seats: 0,
     range: 8_700,
     runwayFt: 8600,
@@ -2776,6 +2937,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777-8F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 2028,
     seats: 0,
     range: 8_200,
     runwayFt: 10000,
@@ -2795,6 +2957,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 757-200PF',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1987,
     seats: 0,
     range: 5_800,
     runwayFt: 6200,
@@ -2815,6 +2978,7 @@ export const AIRCRAFT_TYPES = [
     name: 'McDonnell Douglas MD-11F',
     manufacturer: 'McDonnell Douglas',
     category: 'Freighter',
+    eis: 1991,
     seats: 0,
     range: 7_300,
     runwayFt: 10200,
@@ -2835,6 +2999,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A300-600F',
     manufacturer: 'Airbus',
     category: 'Freighter',
+    eis: 1994,
     seats: 0,
     range: 7_400,
     runwayFt: 7700,
@@ -2855,6 +3020,7 @@ export const AIRCRAFT_TYPES = [
     name: 'McDonnell Douglas DC-10-30F',
     manufacturer: 'McDonnell Douglas',
     category: 'Freighter',
+    eis: 1980,
     seats: 0,
     range: 5_900,
     runwayFt: 9800,
@@ -2875,6 +3041,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-400F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1993,
     seats: 0,
     range: 3_500,
     runwayFt: 6400,
@@ -2895,6 +3062,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737-300F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1991,
     seats: 0,
     range: 3_400,
     runwayFt: 5900,
@@ -2915,6 +3083,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 727-200F',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1983,
     seats: 0,
     range: 3_500,
     runwayFt: 6800,
@@ -2935,6 +3104,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Douglas DC-8-73F',
     manufacturer: 'Douglas',
     category: 'Freighter',
+    eis: 1982,
     seats: 0,
     range: 7_400,
     runwayFt: 9000,
@@ -2955,6 +3125,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Embraer E190F',
     manufacturer: 'Embraer',
     category: 'Freighter',
+    eis: 2024,
     seats: 0,
     range: 4_500,
     runwayFt: 6200,
@@ -2975,6 +3146,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Airbus A321P2F',
     manufacturer: 'Airbus',
     category: 'Freighter',
+    eis: 2021,
     seats: 0,
     range: 4_300,
     runwayFt: 6400,
@@ -2995,6 +3167,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 767-200SF',
     manufacturer: 'Boeing',
     category: 'Freighter',
+    eis: 1990,
     seats: 0,
     range: 6_000,
     runwayFt: 8200,
@@ -3015,6 +3188,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Antonov An-12',
     manufacturer: 'Antonov',
     category: 'Freighter',
+    eis: 1959,
     seats: 0,
     range: 3_600,
     runwayFt: 5900,
