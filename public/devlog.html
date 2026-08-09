@@ -62,6 +62,29 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 9, 2026</p>
+      <h2>The numbers on screen now match the numbers you are charged</h2>
+      <p>A player sent in a screenshot of the Weekly P&amp;L on their dashboard: last week&rsquo;s operating profit less last week&rsquo;s tax came to more than the net profit printed underneath it, by eighteen million dollars, while the projected column beside it reconciled perfectly. Their words: &ldquo;I made less and had more costs and yet somehow I&rsquo;m making more money.&rdquo;</p>
+      <p>The bottom line was right &mdash; it has always been the real change in your cash balance. What was missing was two rows above it.</p>
+      <ul>
+        <li><strong>Heavy checks and AOG repairs now have their own line.</strong> A C or D check falling due, or an unplanned repair after a mechanical failure, is real cash leaving the airline in a single week, and it never appeared anywhere on the card. It does now, net of any insurance recovery. Because that spend is lumpy and event-driven, the projected column shows a dash rather than forecasting zero &mdash; the game will not pretend to predict a D check.</li>
+        <li><strong>Strike weeks show the net damage.</strong> The card used to show only the revenue you lost to cancelled flights, not the fuel, crew and service cost those cancelled flights never incurred. The line is now the difference between them, which is what the walkout actually cost you.</li>
+        <li><strong>Corporate tax explains what it is charged on.</strong> Tax is worked out on earnings before tax, not on the operating profit sitting directly above it &mdash; fleet depreciation, loan interest, one-time charges and heavy-check spend all come off first. Depreciation is deducted for tax but costs you no cash, which is why the bill usually reads as less than 21% of the profit on screen. There is now a greyed memo line below the total showing that week&rsquo;s depreciation, so the gap is visible instead of mysterious. It changes none of the totals.</li>
+        <li><strong>A lease being handed back is no longer dropped from the forecast.</strong> In any week an aircraft reaches the end of its lease, the redelivery charge is subtracted from your projected profit &mdash; but the projected column&rsquo;s one-time charges row was leaving it out, so that column stopped adding up too.</li>
+        <li><strong>Alliance and codeshare carriers had a phantom cost.</strong> The Finance page&rsquo;s cost bridge was counting partner revenue once as income and once inside route revenue, which surfaced as a mystery &ldquo;Other&rdquo; row worth exactly your partner earnings. Gone.</li>
+      </ul>
+      <p>Both cards now carry a guard: if the simulation ever moves cash that the breakdown cannot name, an &ldquo;Other&rdquo; row appears and says so, instead of the money disappearing between two subtotals. It should always be zero. More on where the money goes in the <a href="/route-economics.html">route economics guide</a>.</p>
+
+      <p>Two more fixes in the same vein &mdash; places where the game told you one thing and did another.</p>
+      <ul>
+        <li><strong>The fuel desk was quoting a price it did not honour.</strong> When hedging changed to price contracts off where fuel is expected to average over the term, the panel you buy from never got the memo &mdash; it kept quoting the old figure, your spot price plus the premium, and then locked you in at the correct, different rate. With fuel cheap the two drift a long way apart: one player was quoted 0.873&times; and charged 0.991&times;. The quote and the contract are now the same calculation, so the number on the button is the number you get. The blurb no longer claims you are locking in today&rsquo;s price, because you are not &mdash; you are locking in a fixed rate against where fuel is heading, which is the whole point of the hedge. Your existing contracts were always charged correctly; only the quote was wrong.</li>
+        <li><strong>&ldquo;vs Market&rdquo; on an active contract was understating the gap.</strong> A contract at 0.991&times; against a market at 0.794&times; was reported as 19.7% over market. It is 24.8%. The figure was subtracting two multipliers and printing the result as a percentage.</li>
+        <li><strong>The route planner could go blank when picking an aircraft.</strong> Selecting an aircraft type you already operate could grey out the screen instead of showing the aircraft list. Types you did not own were unaffected, which is why it looked so arbitrary. Fixed.</li>
+        <li><strong>Route detail could go blank on your busiest routes.</strong> Opening the detail page for a city pair you serve with two or more aircraft greyed out the screen. Ironically it only affected routes you had invested in enough to fly more than one plane on. Fixed &mdash; and both this and the route planner fault were the same kind of mistake, so the test suite now checks every screen for it automatically before anything ships.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <p class="date">August 7, 2026</p>
       <h2>Your planes stop being permanently full, and the other airlines start flying against you</h2>
       <p>This is the biggest change to the simulation since the hub overhaul, and the first thing you will notice is that your load factors went down. That is the point. Twenty-eight items from a full audit of the game landed over the last two days &mdash; most of them are quiet corrections, but two of them change what the game <em>is</em>.</p>

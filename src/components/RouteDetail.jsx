@@ -206,13 +206,21 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   // Competitors on this route
   const competitorsOnRoute = (state.competitors ?? []).filter(c => c.routes?.[routeKey]);
 
-  // Build market share
-  const { shareResults } = useMemo(() => {
+  // Hub quality bonus for this O&D. Hoisted above the memos because BOTH
+  // shareResults and playerSims need it: playerSims feeds it to stateBrandReach
+  // when building the combined offer for a multi-aircraft route, and while it
+  // lived inside the shareResults callback that reference was a live
+  // ReferenceError — a grey screen on any pair the player flies with 2+ tails.
+  const maxHubBonus = useMemo(() => {
     const hubBonus = (code) => {
       const tier = hubs[code]?.tier;   // tier 0 (Focus City) is valid — check != null
       return tier != null ? (HUB_TIERS[tier]?.qualityBonus ?? 0) : 0;
     };
-    const maxHubBonus = Math.max(hubBonus(origin), hubBonus(dest));
+    return Math.max(hubBonus(origin), hubBonus(dest));
+  }, [hubs, origin, dest]);
+
+  // Build market share
+  const { shareResults } = useMemo(() => {
 
     let playerOffer = null;
     if (playerRoutes.length > 0) {
@@ -247,7 +255,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
     const allOffers  = [...(playerOffer ? [playerOffer] : []), ...compOffers];
     const results    = computeMarketShare(market, allOffers);
     return { shareResults: results };
-  }, [playerRoutes, competitorsOnRoute, market, origin, dest, state.hub, hubs]);
+  }, [playerRoutes, competitorsOnRoute, market, origin, dest, state.hub, hubs, maxHubBonus]);
 
   // Live simulate each player aircraft.
   // When multiple aircraft share this O&D we pre-compute combined demand and
@@ -340,7 +348,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       return [{ route, aircraft, type, result: { ...result, weeklyLeaseCost, weeklyMaintCost,
         trueProfit: result.revenue - (result.totalOpCost ?? 0) - weeklyLeaseCost - weeklyMaintCost } }];
     });
-  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults, rrById, eventDemand]);
+  }, [playerRoutes, state.fleet, gameDate, competitorsOnRoute, market, origin, dest, state.hub, shareResults, rrById, eventDemand, maxHubBonus]);
 
   // result.passengers is one-way (per direction) — directly comparable to market demand.
   const totalPax     = playerSims.reduce((s, {result}) => s + result.passengers, 0);

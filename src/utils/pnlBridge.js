@@ -29,8 +29,9 @@
 // added in. The first row here is labelled "Route revenue" and the partner
 // share gets a line of its own further down, so reading the report's total into
 // that row counts the same money twice — the residual lands at exactly minus the
-// partner revenue. (Headwinds' copy of this module does precisely that; it has
-// no test, and its residual row was waiting to prove it.) The first row is the
+// partner revenue. (Headwinds' copy carried that defect until 2026-08-09 and
+// showed a bogus "Other" row to every allied carrier; both copies are fixed and
+// both are now covered by tools/pnl-reconcile-test.mjs.) The first row is the
 // report total LESS partner revenue, which is what the label already claimed.
 // Margins still divide by the all-in figure, because that is what the airline
 // actually took in.
@@ -99,7 +100,10 @@ export function costBridge(proj, state = {}) {
                      + n(r.totalFamilyBaseCosts) + n(r.totalMroBaseCosts);
   const brand        = n(r.totalMarketingSpend) + n(r.totalLoyaltyCost) + n(r.totalHubInvestment);
   const distribution = n(r.totalDistributionCost) + n(r.totalPartnerFees);
-  const strike       = n(r.strikeLoss);
+  // A strike forfeits revenue but SAVES the variable cost of the flights it
+  // cancelled, and the engine credits that saving back. Only the net number
+  // reconciles — and only the net number is the truth about the damage.
+  const strike       = n(r.strikeLoss) - n(r.strikeVariableSaved);
 
   const ebitda = n(proj?.ebitda);
   // Anything totalCost carries that the buckets above don't name. Should be 0.
@@ -110,8 +114,17 @@ export function costBridge(proj, state = {}) {
 
   const loans   = n(proj?.loanPayments);
   const oneOff  = n(proj?.seasonalReactivation) + n(proj?.leaseRedelivery);
+  // Heavy checks (C/D) and AOG repairs net of insurance. The engine charges
+  // these below EBITDA and outside report.totalCost, so they are invisible to
+  // everything upstream of this line. A projection cannot forecast them, so it
+  // supplies nothing and this is 0 there.
+  const unplanned = n(proj?.unplannedMaint);
   const tax     = n(proj?.corporateTax);
   const netProfit = n(proj?.netCash);
+  // The residual above only guards revenue → EBITDA. This one guards EBITDA →
+  // net, so the ladder is checked end to end: if the engine ever takes cash out
+  // below EBITDA without a row here, it shows up instead of vanishing.
+  const netResidual = netProfit - (ebitda - loans - oneOff - unplanned - tax);
 
   const rows = [];
   const push = (key, label, value, kind, tip) => rows.push({ key, label, value, kind, tip });
@@ -150,7 +163,11 @@ export function costBridge(proj, state = {}) {
     'Everything the airline earns and spends in operation, before financing and tax.');
   if (loans)  push('loans',  'Loan payments',     -loans,  'cost', 'Weekly interest and principal on outstanding debt.');
   if (oneOff) push('oneOff', 'One-time charges',  -oneOff, 'cost', 'Lease redelivery on returned aircraft and seasonal route reactivation fees.');
-  if (tax)    push('tax',    'Corporate tax',     -tax,    'cost', 'Charged on taxable profit — loan principal is not deductible.');
+  if (unplanned) push('unplanned', 'Heavy checks & AOG', -unplanned, 'cost',
+    'Scheduled heavy maintenance (C and D checks) that fell due this week, plus unplanned AOG repairs after a mechanical failure, net of any insurance recovery. Lumpy by nature — a D check lands in one week rather than spread across the year — so it is charged here rather than in your weekly fixed costs, and a projection cannot forecast it.');
+  if (tax)    push('tax',    'Corporate tax',     -tax,    'cost', 'Charged on taxable profit — the base is EBITDA less depreciation, loan INTEREST (principal is not deductible), one-time charges and heavy-check/AOG spend. Depreciation is deducted for tax but costs no cash, so the charge usually reads as less than the headline rate against the operating profit above.');
+  if (netResidual) push('netResidual', 'Other (below the line)', netResidual, 'cost',
+    'Cash the engine moved between operating profit and the bottom line that no row above names. This should always be zero — if you are seeing it, a charge was added below EBITDA without being added to this breakdown.');
   push('net', 'Net profit', netProfit, 'total',
     'The actual change in your cash balance this week.');
 
@@ -163,7 +180,7 @@ export function costBridge(proj, state = {}) {
     rows, revenue, routeOperating, netProfit,
     routeMargin: margin(routeOperating),
     netMargin:   margin(netProfit),
-    residual,
+    residual, netResidual,
   };
 }
 
@@ -173,8 +190,13 @@ export function costBridge(proj, state = {}) {
  * The projection carries its below-the-line items as top-level fields; a stored
  * report carries them on the report itself, and its `cashDelta` has already had
  * tax taken off. EBITDA is rebuilt from the report's own identity — revenue less
- * the strike loss less total cost — rather than being handed in, so the residual
- * stays a real check on last week rather than an arithmetic tautology.
+ * the NET strike impact less total cost — rather than being handed in, so the
+ * residual stays a real check on last week rather than an arithmetic tautology.
+ *
+ * `unplannedMaint` is the term that made the Dashboard's weekly P&L card fail to
+ * add up: the engine charges heavy checks and AOG repairs (net of insurance)
+ * below EBITDA and OUTSIDE report.totalCost, so nothing that reads totalCost can
+ * see them. They are real cash and they need their own row.
  *
  * @param {object} report  state.lastReport
  */
@@ -183,10 +205,11 @@ export function bridgeInputsFromReport(report) {
   const r = report ?? {};
   return {
     report: r,
-    ebitda:               n(r.totalRevenue) - n(r.strikeLoss) - n(r.totalCost),
+    ebitda:               n(r.totalRevenue) - n(r.strikeLoss) + n(r.strikeVariableSaved) - n(r.totalCost),
     loanPayments:         n(r.loanPayments),
     seasonalReactivation: n(r.seasonalReactivation),
     leaseRedelivery:      n(r.leaseRedelivery),
+    unplannedMaint:       n(r.maintenanceChecks?.spend) + n(r.mro?.aogSpend) - n(r.mro?.aogInsurance),
     corporateTax:         n(r.corporateTax),
     netCash:              n(r.cashDelta),
   };

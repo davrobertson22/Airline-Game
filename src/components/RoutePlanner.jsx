@@ -27,6 +27,7 @@ import TagRoutePlanner from './TagRoutePlanner.jsx';
 import RouteFinder from './RouteFinder.jsx';
 import InfoTip from './InfoTip.jsx';
 import AddGateButton from './AddGateButton.jsx';
+import ReserveNotice, { reserveOptionTag } from './ReserveNotice.jsx';
 import { useToast } from './ToastSystem.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 

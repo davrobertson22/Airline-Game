@@ -167,7 +167,14 @@ export default function Dashboard() {
         operating: income('ebitda'),
         loans:     cost('loans'),
         oneOff:    cost('oneOff'),
+        // Heavy checks and AOG repairs net of insurance. The engine charges
+        // these below EBITDA and outside report.totalCost, so nothing that
+        // reads totalCost can see them — they need their own line or last
+        // week's column silently fails to add up to its own total.
+        unplanned: cost('unplanned'),
         tax:       cost('tax'),
+        // The bridge's below-the-line guard. Should always be zero.
+        netResidual: cost('netResidual'),
         net:       income('net'),
         breakdown: {
           ownParked,
@@ -179,8 +186,13 @@ export default function Dashboard() {
         },
       };
     };
+    const projected = shape(proj);
+    // projectWeek has no concept of heavy checks or AOG — they are lumpy and
+    // event-driven, and forecasting them as zero would be the same lie in
+    // miniature. `null` (not 0) so the card can print "not forecast".
+    if (projected) projected.unplanned = null;
     return {
-      projected: shape(proj),
+      projected,
       lastWeek:  lastReport ? shape(bridgeInputsFromReport(lastReport)) : null,
     };
   }, [proj, lastReport, state]);
@@ -468,7 +480,11 @@ export default function Dashboard() {
 
       {/* ── Weekly P&L bridge (incl. cost-mix bar) ───────────────────────── */}
       {pnl.projected && (routes.length > 0 || cargoRoutes.length > 0 || pnl.lastWeek) && (
-        <WeeklyPnL lastWeek={pnl.lastWeek} projected={pnl.projected} costBreakdown={totalWeeklyCosts > 0 ? costBreakdown : null} />
+        <WeeklyPnL lastWeek={pnl.lastWeek} projected={pnl.projected} costBreakdown={totalWeeklyCosts > 0 ? costBreakdown : null}
+          depreciation={{
+            lw: financialHistory?.[financialHistory.length - 1]?.depreciation ?? 0,
+            pj: proj?.depreciation ?? 0,
+          }} />
       )}
 
       {/* ── Board objectives ─────────────────────────────────────────────── */}
@@ -754,7 +770,7 @@ function TrendBadge({ value, isPercent }) {
 // Reconciles per-route operating profit (the Top Routes table) down to the real
 // bottom line, side by side for last week (actual) and this week (projected).
 
-function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
+function WeeklyPnL({ lastWeek, projected, costBreakdown, depreciation }) {
   const [showFixed, setShowFixed] = useState(false);
   const two = !!lastWeek;
 
@@ -777,16 +793,19 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
 
   const rows = [];
   rows.push({
+    key: 'routeOp', kind: 'line',
     label: 'Route operating profit',
     tip: 'Every route’s fully-loaded profit added up — revenue less direct flying costs (fuel, crew, service, landing fees) and less each route’s share of its aircraft’s lease and maintenance. This is the figure in the Top Routes table above, and every line below is a cost no single route carries.',
     lw: lastWeek?.routeOp, pj: projected.routeOp,
   });
   if ((lastWeek?.otherRev ?? 0) !== 0 || projected.otherRev !== 0) rows.push({
+    key: 'otherRev', kind: 'line',
     label: 'Partner & other revenue',
     tip: 'Alliance and codeshare revenue not tied to a single route.',
     lw: lastWeek?.otherRev, pj: projected.otherRev,
   });
   rows.push({
+    key: 'fixed', kind: 'line',
     label: 'Fixed & overhead costs',
     tip: 'Costs you pay regardless of how full the planes are: gates, staff, HQ, insurance, marketing, loyalty, distribution — and lease and maintenance on any aircraft that flew nothing this week. The flying fleet’s ownership is already inside the line above.',
     lw: lastWeek ? -lastWeek.fixed : null, pj: -projected.fixed,
@@ -797,48 +816,98 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
       const lwv = lastWeek?.breakdown?.[key] ?? 0;
       const pjv = projected.breakdown?.[key] ?? 0;
       if (lwv === 0 && pjv === 0) continue;
-      rows.push({ label, lw: lastWeek ? -lwv : null, pj: -pjv, detail: true });
+      rows.push({ key: `fixed.${key}`, kind: 'detail', label, lw: lastWeek ? -lwv : null, pj: -pjv, detail: true });
     }
   }
   if ((lastWeek?.strike ?? 0) !== 0) rows.push({
-    label: 'Strike revenue loss',
-    tip: 'Revenue forfeited to flights cancelled by industrial action.',
+    key: 'strike', kind: 'line',
+    label: 'Strike impact (net)',
+    tip: 'Revenue forfeited to flights cancelled by industrial action, LESS the '
+       + 'fuel, crew and service cost those cancelled flights did not incur. '
+       + 'The engine credits that saving back, so this line is the net damage.',
     lw: -lastWeek.strike, pj: 0,
   });
   // Should never appear. If it does, a cost line reached weeklyTick without
   // reaching the bridge, and this row is the money it would otherwise have
   // swallowed between two subtotals.
   if ((lastWeek?.residual ?? 0) !== 0 || projected.residual !== 0) rows.push({
+    key: 'residual', kind: 'line',
     label: 'Unattributed',
     tip: 'Costs this breakdown could not account for. This should always be zero — if you can see it, please report it.',
     lw: lastWeek ? -lastWeek.residual : null, pj: -projected.residual,
   });
   rows.push({
+    key: 'operating', kind: 'subtotal',
     label: 'Operating profit',
     tip: 'Revenue minus ALL operating and fixed costs (EBITDA), before financing and tax.',
     lw: lastWeek?.operating, pj: projected.operating,
     subtotal: true,
   });
   if ((lastWeek?.loans ?? 0) !== 0 || projected.loans !== 0) rows.push({
+    key: 'loans', kind: 'line',
     label: 'Loan payments',
     tip: 'Weekly interest + principal on outstanding loans.',
     lw: lastWeek ? -lastWeek.loans : null, pj: -projected.loans,
   });
   if ((lastWeek?.oneOff ?? 0) !== 0 || projected.oneOff !== 0) rows.push({
+    key: 'oneOff', kind: 'line',
     label: 'One-time charges',
     tip: 'Lease redelivery and seasonal route reactivation fees.',
     lw: lastWeek ? -lastWeek.oneOff : null, pj: -projected.oneOff,
   });
+  if ((lastWeek?.unplanned ?? 0) !== 0 || (projected.unplanned ?? 0) !== 0) rows.push({
+    key: 'unplanned', kind: 'line',
+    label: 'Heavy checks & AOG',
+    tip: 'Scheduled heavy maintenance (C and D checks) that fell due this week, '
+       + 'plus unplanned AOG repairs after a mechanical failure, net of any '
+       + 'insurance recovery. Real cash, and it does not sit in your weekly '
+       + 'fixed costs — a D check lands in one week, not spread over the year. '
+       + 'Because it is lumpy and event-driven, the projection does not forecast '
+       + 'it: the column shows a dash rather than pretending the answer is zero.',
+    lw: lastWeek ? -lastWeek.unplanned : null,
+    pj: projected.unplanned == null ? null : -projected.unplanned,
+    pjNote: 'Not forecast — heavy checks and AOG are lumpy and event-driven.',
+  });
   if ((lastWeek?.tax ?? 0) !== 0 || projected.tax !== 0) rows.push({
+    key: 'tax', kind: 'line',
     label: 'Corporate tax',
-    tip: '21% of taxable profit.',
+    tip: '21% of taxable profit — and taxable profit is NOT the operating profit '
+       + 'shown above. The base is earnings before tax: operating profit LESS '
+       + 'fleet depreciation, loan INTEREST (principal is not deductible), '
+       + 'one-time charges, and heavy-check/AOG spend. Depreciation is deducted '
+       + 'for tax but costs no cash, so the tax charged will usually read as '
+       + 'less than 21% of the operating profit on this card. That gap is the '
+       + 'depreciation memo below, not a discount.',
     lw: lastWeek ? -lastWeek.tax : null, pj: -projected.tax,
   });
+  if ((lastWeek?.netResidual ?? 0) !== 0 || (projected.netResidual ?? 0) !== 0) rows.push({
+    key: 'netResidual', kind: 'line',
+    label: 'Other',
+    tip: 'Money the engine moved between operating profit and the bottom line '
+       + 'that this card cannot name. It should ALWAYS be zero — if you can see '
+       + 'this row, a charge was added to the weekly tick without being added '
+       + 'to this breakdown. Please report it.',
+    lw: lastWeek ? -lastWeek.netResidual : null, pj: -(projected.netResidual ?? 0),
+  });
   rows.push({
+    key: 'net', kind: 'total',
     label: 'Net profit',
-    tip: 'The actual change in your cash balance for the week.',
+    tip: 'The actual change in your cash balance for the week. Every row above '
+       + 'adds up to this figure exactly.',
     lw: lastWeek?.net, pj: projected.net,
     total: true,
+  });
+  if ((depreciation?.lw ?? 0) !== 0 || (depreciation?.pj ?? 0) !== 0) rows.push({
+    key: 'depreciation', kind: 'memo',
+    label: 'Depreciation (tax only, non-cash)',
+    tip: 'How much value your fleet lost this week on paper. It is deducted when '
+       + 'the tax base is worked out, but no money leaves the airline — which is '
+       + 'why it sits BELOW the net profit line as a memo and changes none of '
+       + 'the totals above. It is also the main reason the tax bill reads as '
+       + 'less than 21% of the operating profit shown.',
+    lw: lastWeek ? -(depreciation?.lw ?? 0) : null,
+    pj: -(depreciation?.pj ?? 0),
+    memo: true,
   });
 
   const colStyle = { textAlign: 'right', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' };
@@ -869,15 +938,24 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
 
         {rows.map((r, i) => {
           const strong = r.subtotal || r.total;
+          const memo   = r.kind === 'memo';
           const rowPad = strong ? '6px 0' : r.detail ? '2px 0' : '4px 0';
-          const border = strong ? '1px solid var(--border)' : 'none';
+          // The memo sits below the bottom line and must never be mistaken for a
+          // cash cost: dashed rule, dimmed, italic, and no red/green treatment.
+          const border = memo ? '1px dashed var(--border)' : strong ? '1px solid var(--border)' : 'none';
+          const labelColor = memo ? 'var(--text-dim)'
+            : (r.key === 'netResidual' || r.key === 'residual') ? 'var(--red)'
+            : r.detail ? 'var(--text-dim)' : strong ? 'var(--text)' : 'var(--text-muted)';
+          const cellColor = (v) => memo ? 'var(--text-dim)' : valColor(v, strong);
+          const cellFont  = r.detail || memo ? 11 : strong ? 13 : 12;
           return [
-            <span key={`l${i}`} style={{
+            <span key={`l${i}`} data-pnl-row={r.key ?? `row${i}`} data-pnl-kind={r.kind ?? 'line'} style={{
               padding: rowPad, borderTop: border,
               paddingLeft: r.detail ? 16 : 0,
-              fontSize: r.detail ? 11 : 12.5,
-              fontWeight: strong ? 700 : r.detail ? 400 : 500,
-              color: r.detail ? 'var(--text-dim)' : strong ? 'var(--text)' : 'var(--text-muted)',
+              fontSize: r.detail || memo ? 11 : 12.5,
+              fontStyle: memo ? 'italic' : 'normal',
+              fontWeight: strong ? 700 : r.detail || memo ? 400 : 500,
+              color: labelColor,
               display: 'flex', alignItems: 'center', gap: 5,
             }}>
               {r.expandable ? (
@@ -893,11 +971,16 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown }) {
               {r.tip && !r.detail && <InfoTip text={r.tip} />}
             </span>,
             ...(two ? [
-              <span key={`w${i}`} style={{ ...colStyle, padding: rowPad, borderTop: border, fontWeight: strong ? 700 : 400, fontSize: r.detail ? 11 : strong ? 13 : 12, color: valColor(r.lw, strong) }}>
+              <span key={`w${i}`} data-pnl-col="lw" data-pnl-row={r.key ?? `row${i}`}
+                data-pnl-kind={r.kind ?? 'line'} data-pnl-exact={r.lw == null ? '' : String(r.lw)}
+                style={{ ...colStyle, padding: rowPad, borderTop: border, fontWeight: strong ? 700 : 400, fontStyle: memo ? 'italic' : 'normal', fontSize: cellFont, color: cellColor(r.lw) }}>
                 {signed(r.lw)}
               </span>,
             ] : []),
-            <span key={`p${i}`} style={{ ...colStyle, padding: rowPad, borderTop: border, fontWeight: strong ? 700 : 400, fontSize: r.detail ? 11 : strong ? 13 : 12, color: valColor(r.pj, strong) }}>
+            <span key={`p${i}`} data-pnl-col="pj" data-pnl-row={r.key ?? `row${i}`}
+              data-pnl-kind={r.kind ?? 'line'} data-pnl-exact={r.pj == null ? '' : String(r.pj)}
+              title={r.pj == null ? r.pjNote : undefined}
+              style={{ ...colStyle, padding: rowPad, borderTop: border, fontWeight: strong ? 700 : 400, fontStyle: memo ? 'italic' : 'normal', fontSize: cellFont, color: cellColor(r.pj) }}>
               {signed(r.pj)}
             </span>,
           ];
