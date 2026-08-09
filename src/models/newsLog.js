@@ -239,6 +239,39 @@ export function buildWeekNews({
 }
 
 /**
+ * News rows for the one-off over-cap schedule trim — ONE per aircraft, never
+ * one per frequency decrement.
+ *
+ * This migration edits schedules the player paid launch costs for, so the
+ * record has to be durable. A toast is drained by the next screen; a news row
+ * is still there next week when they wonder why a route got smaller.
+ *
+ * Stamped with the save's own game week, like every other row (no wall clock).
+ */
+export function scheduleTrimNews(notices, { absWeek = 0, year = 1, week = 1 } = {}) {
+  return (notices ?? [])
+    .filter(n => (n?.cuts ?? []).length > 0)
+    .map((n, i) => ({
+      id: `trim${absWeek}-${i}`,
+      absWeek, year, week,
+      category: 'fleet', kind: 'schedule_trim', tier: 1,
+      subject: n.tailNumber || n.name || 'An aircraft',
+      icon: '⏱',
+      data: {
+        aircraft:   n.tailNumber || n.name || null,
+        aircraftId: n.aircraftId ?? null,
+        capHours:   n.capHours ?? null,
+        peakBefore: n.peakBefore ?? null,
+        peakAfter:  n.peakAfter ?? null,
+        cuts: (n.cuts ?? []).map(c => ({
+          origin: c.origin, destination: c.destination, cargo: !!c.cargo,
+          fromFrequency: c.fromFrequency, toFrequency: c.toFrequency, closed: !!c.closed,
+        })),
+      },
+    }));
+}
+
+/**
  * Append this week's rows to the log, newest LAST, capped.
  *
  * Stored oldest-first so appending is a push and the cap trims from the front;

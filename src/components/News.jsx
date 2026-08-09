@@ -83,6 +83,23 @@ function compose(item) {
     case 'competitor_note':
       return { headline: '', sub: d.description ?? null, standalone: true };
 
+    // One-off migration: a schedule that was flying past the physical
+    // block-hour limit was trimmed back. Spelled out in full — this changed
+    // something the player paid for.
+    case 'schedule_trim': {
+      const cuts = (d.cuts ?? []).map(c => {
+        const lane = `${c.origin}–${c.destination}`;
+        return c.closed
+          ? `${lane} closed (was ${c.fromFrequency}/wk)`
+          : `${lane} ${c.fromFrequency} → ${c.toFrequency}/wk`;
+      });
+      return {
+        headline: `was trimmed to the ${d.capHours}h weekly flying limit`,
+        sub: `${d.aircraft ?? 'It'} was scheduled for ${Math.round(d.peakBefore ?? 0)}h a week against a `
+           + `${d.capHours}h limit. ${cuts.join(' · ')}${cuts.length ? '.' : ''}`,
+      };
+    }
+
     default: {
       // Competitor events. A single move keeps the simulation's own sentence;
       // a rolled-up week gets a summary plus the full list on demand.
