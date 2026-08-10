@@ -1,6 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, routeBlockHours, weekToGameDate, formatGameDate, fleetAvgUtilization, rivalSpecsFor } from '../utils/simulation.js';
+import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, routeBlockHours, weekToGameDate, formatGameDate, fleetAvgUtilization, rivalSpecsFor,
+  stateLoungeFields,
+} from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -53,7 +55,11 @@ export default function Dashboard() {
     return routes.map(route => {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       const result = !aircraft ? null
-        : (rrById[route.id] ?? simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
+        : (rrById[route.id] ?? simulateRoute(
+            // Lounge fields — without them this fallback quotes the full
+            // third-party premium ground rate on a route the tick discounts.
+            { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+            aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
             rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
             1.0, state.ancillaries ?? null, state.competitors ?? []));
       return { route, result };

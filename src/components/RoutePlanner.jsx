@@ -11,6 +11,7 @@ import {
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
   rivalSpecsFor,
+  stateLoungeFields,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -666,7 +667,8 @@ export default function RoutePlanner() {
     const satisfaction = state.satisfaction ?? null;
 
     const result = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel },
+      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel,
+        ...stateLoungeFields(state, origin, dest) },
       simAircraft,
       gameDate,
       state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,
@@ -677,7 +679,8 @@ export default function RoutePlanner() {
 
     // Also simulate week-0 (launch day) so the player sees the maturity ramp effect.
     const resultLaunch = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel, weeksOpen: 0 },
+      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel, weeksOpen: 0,
+        ...stateLoungeFields(state, origin, dest) },
       simAircraft,
       gameDate,
       state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,

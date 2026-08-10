@@ -163,6 +163,11 @@ export function buildEncroachmentOffer(spec, market) {
     // encroacher with no brand model sits at parity (1) rather than being
     // scored as an unknown carrier.
     brandReach:        spec.brandReach ?? 1,
+    // Airport lounges — the same story as brandReach one field up. Solo AI
+    // encroachers carry no figure and stay at parity, which is correct: the AI
+    // bank has no lounge network to model. The field exists so a preview or a
+    // ported multiplayer rival spec can supply one without a second edit here.
+    loungeAppeal:      spec.loungeAppeal ?? 1,
   };
 }
 

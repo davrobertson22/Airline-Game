@@ -34,6 +34,7 @@ import {
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo,
+  stateLoungeFields,
 } from '../utils/simulation.js';
 
 const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -244,7 +245,9 @@ export default function Routes() {
     if (rr) return rr;
     const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
     const evMult  = buildEventDemandModel(state.activeEvents).multFor(route.origin, route.destination);
-    return simulateRoute(route, aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
+    return simulateRoute(
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null, evMult,
       state.ancillaries ?? null, state.competitors ?? []);
   };
@@ -1047,7 +1050,12 @@ function TagRouteCard({ route, onClose }) {
   const aircraft = fleet.find(a => a.id === route.aircraftId);
   const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
   const stops    = routeStops(route);
-  const sim      = aircraft ? simulateTagRoute(route, aircraft, gd, state.labor ?? null, 1.0,
+  // Lounge fields on the rotation's TRUE endpoints — the same three the tick
+  // attaches. Without them this card understates a two-lounge rotation's weekly
+  // profit by the whole premium ground discount.
+  const sim      = aircraft ? simulateTagRoute(
+    { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+    aircraft, gd, state.labor ?? null, 1.0,
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null, buildEventDemandModel(state.activeEvents).multFor,
     state.ancillaries ?? null, state.competitors ?? []) : null;
@@ -2375,7 +2383,8 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const validDest = dest && dest !== origin && AIRPORTS.find(a => a.code === dest);
   const preview   = validDest && aircraft
     ? simulateRoute({ origin, destination: dest, aircraftId, weeklyFrequency: frequency,
-        ticketPrice: Number(ticketPrice) || referencePrice(origin, dest) }, aircraft, gd,
+        ticketPrice: Number(ticketPrice) || referencePrice(origin, dest),
+        ...stateLoungeFields(state, origin, dest) }, aircraft, gd,
         null, 1.0, null, rivalSpecsFor(state, origin, dest), null, null,
         buildEventDemandModel(state.activeEvents).multFor(origin, dest),
         state.ancillaries ?? null, state.competitors ?? [])

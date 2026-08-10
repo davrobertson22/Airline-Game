@@ -10,6 +10,9 @@ import {
   weekToGameDate,
   configRangeMod,
 } from '../utils/simulation.js';
+import {
+  wifiInstallCost, wifiRetrofitCost, wifiLeaseSurcharge, WIFI_WEEKLY_OPEX,
+} from '../data/wifi.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
@@ -151,6 +154,10 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const defaultEngine = engines.find(e => e.default) ?? engines[0];
   const [selectedEngineId, setSelectedEngineId] = useState(defaultEngine?.id ?? null);
   const [hasWingtips, setHasWingtips]            = useState(false);
+  // Line-fit connectivity. Cheaper now than retrofitting later (see data/wifi.js),
+  // which is the whole reason it belongs on the order form rather than only on
+  // the Fleet page.
+  const [hasWifi, setHasWifi]                    = useState(false);
 
   // ── Quantity ──────────────────────────────────────────────────────────────
   const [quantity, setQuantity] = useState(1);
@@ -288,18 +295,26 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const enginePriceAdj  = Math.round(baseUnitPrice * (enginePriceMod - 1));
   const unitBuyPrice    = Math.round(baseUnitPrice * enginePriceMod) + wingtipCost;
   const totalBuyPrice   = unitBuyPrice * quantity;
+  // Owned: connectivity capex falls due up front, on top of the airframe price.
+  // Leased: the lessor amortises it into the rate instead (wifiLeaseAdj below),
+  // so charging it here too would bill for the same antenna twice. Both mirror
+  // ORDER_AIRCRAFT exactly — if these drift, the quote on screen is a lie.
+  const unitWifiFee     = (hasWifi && mode === 'buy') ? wifiInstallCost() : 0;
+  const totalWifiFee    = unitWifiFee * quantity;
+  const buyTotalDue     = totalBuyPrice + totalWifiFee;
 
   const baseWeeklyLease  = type.weeklyLease;
   const engineLeaseAdj   = Math.round(baseWeeklyLease * (enginePriceMod - 1));
   const wingtipLeaseAdj  = (hasWingtips && wingtipDef) ? Math.round((wingtipDef.cost ?? 0) / 200) : 0;
-  const unitWeeklyLease  = baseWeeklyLease + engineLeaseAdj + wingtipLeaseAdj;
+  const wifiLeaseAdj     = hasWifi ? wifiLeaseSurcharge() : 0;
+  const unitWeeklyLease  = baseWeeklyLease + engineLeaseAdj + wingtipLeaseAdj + wifiLeaseAdj;
   const totalWeeklyLease = unitWeeklyLease * quantity;
   const unitLeaseDeposit  = unitWeeklyLease * 12;   // 3 months (12 weeks) upfront
   const totalLeaseDeposit = unitLeaseDeposit * quantity;
 
-  const canAfford     = mode === 'buy' ? cash >= totalBuyPrice : cash >= totalLeaseDeposit;
+  const canAfford     = mode === 'buy' ? cash >= buyTotalDue : cash >= totalLeaseDeposit;
   const maxAffordable = mode === 'buy'
-    ? Math.max(0, Math.floor(cash / unitBuyPrice))
+    ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitWifiFee)))
     : Math.max(0, Math.floor(cash / unitLeaseDeposit));
 
   function setQty(n) { setQuantity(Math.max(1, Math.min(100, n))); }
@@ -311,6 +326,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
       ownershipType: mode === 'buy' ? 'owned' : 'lease',
       engineId:      selectedEngine?.id ?? null,
       hasWingtips,
+      hasWifi,
       quantity,
       config:        cabinConfig,
       name:          customName.trim() || null,
@@ -488,6 +504,32 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             </section>
           )}
 
+          {/* ── Onboard connectivity ─────────────────────────────────────── */}
+          {!isFreighter && (
+            <section style={{ marginBottom: 18 }}>
+              <div style={sectionTitle}>Onboard Connectivity</div>
+              <label style={{ display: 'flex', gap: 10, padding: '9px 12px', borderRadius: 7, border: `1px solid ${hasWifi ? 'var(--accent)' : 'var(--border)'}`, background: hasWifi ? 'rgba(56,139,253,0.08)' : 'var(--surface2)', cursor: 'pointer', transition: 'all 0.15s' }}>
+                <input type="checkbox" checked={hasWifi} onChange={e => setHasWifi(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--accent)' }} />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Wi-Fi &amp; streaming package</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                    Satellite antenna, modem and cabin access points, fitted on the production line.
+                    Passengers now expect connectivity, and an aircraft without it takes a quality
+                    penalty on every route it flies. What you charge for it is a separate,
+                    airline-wide decision on the Ancillaries tab.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, flexWrap: 'wrap' }}>
+                    {mode === 'buy'
+                      ? <span style={{ color: 'var(--text-muted)' }}>+{formatMoney(wifiInstallCost())} per aircraft</span>
+                      : <span style={{ color: 'var(--text-muted)' }}>+{formatMoney(wifiLeaseSurcharge())}/wk per aircraft</span>}
+                    <span style={{ color: 'var(--text-muted)' }}>−{formatMoney(WIFI_WEEKLY_OPEX)}/wk to run</span>
+                    <span style={{ color: 'var(--yellow)' }}>fitting it later costs {formatMoney(wifiRetrofitCost())}</span>
+                  </div>
+                </div>
+              </label>
+            </section>
+          )}
+
           {/* ── Cabin configuration (passenger aircraft only) ────────────── */}
           {!isFreighter && (
           <section style={{ marginBottom: 18 }}>
@@ -648,13 +690,19 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                     <span style={{ color: 'var(--text)' }}>{formatMoney(unitBuyPrice)} × {quantity}</span>
                   </div>
                 )}
+                {totalWifiFee > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }}>
+                    <span>Wi-Fi package — one-off{quantity > 1 ? ` × ${quantity}` : ''}</span>
+                    <span style={{ color: 'var(--text)' }}>+{formatMoney(totalWifiFee)}</span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700, fontSize: 15 }}>
                   <span>Total{quantity > 1 ? ` (${quantity} aircraft)` : ''}</span>
-                  <span style={{ color: canAfford ? 'var(--green)' : 'var(--red)' }}>{formatMoney(totalBuyPrice)}</span>
+                  <span style={{ color: canAfford ? 'var(--green)' : 'var(--red)' }}>{formatMoney(buyTotalDue)}</span>
                 </div>
                 {!canAfford && (
                   <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
-                    Need {formatMoney(totalBuyPrice - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
+                    Need {formatMoney(buyTotalDue - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, textAlign: 'right' }}>Full payment due at order</div>

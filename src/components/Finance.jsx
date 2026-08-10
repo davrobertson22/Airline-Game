@@ -7,6 +7,7 @@ import {
   CLASS_FARE_MULTIPLIERS,
   weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor,
+  stateLoungeFields,
 } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
@@ -369,7 +370,12 @@ function PLStatement({ proj }) {
     return routes.map(route => {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) return null;
-    const result = simulateRoute(route, aircraft, gd, labor, proj.fuelMultiplier, null,
+    // Lounge fields, or this table stops reconciling to the report totals it
+    // exists to reconcile to: a lounge owner is shown nearly 3x the premium
+    // ground cost the tick actually charges.
+    const result = simulateRoute(
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      aircraft, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtilization, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? []);
     if (!result) return null;
@@ -2214,7 +2220,9 @@ function UnitEconomics({ proj }) {
     if (!a || !type) return null;
     // Simulate with the engine's labor + fuel multiplier so costs match; use the
     // engine's BOOKED revenue (incl. connecting feed + demand lifts) for RASK/yield.
-    const raw = simulateRoute(route, a, gd, labor, proj.fuelMultiplier, null,
+    const raw = simulateRoute(
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      a, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? []);
     if (!raw) return null;
@@ -2362,7 +2370,9 @@ function Forecast({ proj }) {
   const fcAvgUtil     = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
   const routeData = routes.map(r => {
     const a = fleet.find(x => x.id === r.aircraftId);
-    return a ? simulateRoute(r, a, gd, fcLaborState, fuelMultiplier, null,
+    return a ? simulateRoute(
+      { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
+      a, gd, fcLaborState, fuelMultiplier, null,
       rivalSpecsFor(state, r.origin, r.destination), fcAvgUtil, state.satisfaction ?? null,
       1.0, state.ancillaries ?? null, state.competitors ?? []) : null;
   }).filter(Boolean);
