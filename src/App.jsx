@@ -13,11 +13,12 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon } from './components/Icons.jsx';
+import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon } from './components/Icons.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
 import Competition from './components/Competition.jsx';
 import RoutePlanner from './components/RoutePlanner.jsx';
+import RouteFinderScreen from './components/RouteFinderScreen.jsx';
 import Airports from './components/Airports.jsx';
 import RouteMap from './components/RouteMap.jsx';
 import Operations from './components/Operations.jsx';
@@ -126,6 +127,7 @@ function HelpIcon({ size = 15 }) {
 const TABS = [
   { id: 'dashboard',   label: 'Dashboard',     Icon: DashboardIcon   },
   { id: 'map',         label: 'Map',           Icon: MapIcon         },
+  { id: 'finder',      label: 'Route Finder',  Icon: SearchIcon      },
   { id: 'planner',     label: 'Route Planner', Icon: PlannerIcon     },
   { id: 'routes',      label: 'Routes',        Icon: RoutesIcon      },
   { id: 'fleet',       label: 'Fleet',         Icon: FleetIcon       },
@@ -152,7 +154,7 @@ const TABS_BY_ID = Object.fromEntries(TABS.map(t => [t.id, t]));
 const NAV_GROUPS = [
   { id: 'dashboard' },
   { id: 'news' },
-  { label: 'Network',  Icon: MapIcon,        children: ['map', 'planner', 'routes'] },
+  { label: 'Network',  Icon: MapIcon,        children: ['map', 'finder', 'planner', 'routes'] },
   { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
   { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
   { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'alliances', 'competition'] },
@@ -307,6 +309,7 @@ function AppInner() {
   const tabContent = {
     dashboard:   <Dashboard />,
     map:         <RouteMap />,
+    finder:      <RouteFinderScreen />,
     planner:     <RoutePlanner />,
     routes:      <Routes />,
     fleet:       <Fleet />,

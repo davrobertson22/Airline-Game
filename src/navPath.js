@@ -19,6 +19,7 @@
 export const TAB_LABELS = {
   dashboard:    'Dashboard',
   map:          'Map',
+  finder:       'Route Finder',
   planner:      'Route Planner',
   routes:       'Routes',
   fleet:        'Fleet',
@@ -41,6 +42,7 @@ export const TAB_LABELS = {
 // a top-level button and needs no path prefix.
 export const TAB_GROUP = {
   map:          'Network',
+  finder:       'Network',
   planner:      'Network',
   routes:       'Network',
   fleet:        'Fleet',
