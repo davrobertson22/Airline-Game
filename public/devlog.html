@@ -43,6 +43,9 @@
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
   </style>
+  <!-- Google AdSense -->
+  <meta name="google-adsense-account" content="ca-pub-5123198950074938">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5123198950074938" crossorigin="anonymous"></script>
 </head>
 <body>
   <header class="site">
@@ -60,6 +63,37 @@
   <main>
     <h1>Devlog</h1>
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
+
+    <div class="entry">
+      <p class="date">August 10, 2026</p>
+      <h2>Wi-Fi is fitted to an aeroplane, and a lounge is a room you build</h2>
+      <p>Two of the à la carte products on the Ancillaries tab were pretending to be things they are not. Ticking &ldquo;offered&rdquo; on Wi-Fi gave every aircraft in your fleet connectivity that afternoon, free of any hardware. Ticking &ldquo;offered&rdquo; on Lounge Passes sold day passes into a lounge you had never built, at an airport you might not even serve. Both were policy switches standing in for capital you had never spent.</p>
+      <p>They are now the two things they were always describing: an antenna bolted to a particular airframe, and a room with your name over the door in a particular terminal.</p>
+
+      <p><strong>Wi-Fi is a fleet decision now, not a policy one.</strong></p>
+      <ul>
+        <li><strong>Fit it when you order the aircraft, for $750,000.</strong> There is a Wi-Fi package on the order form alongside the engine choice and the wingtips. Lease instead of buy and the lessor amortises it into the weekly rate rather than taking it up front.</li>
+        <li><strong>Or retrofit later, for $1,050,000.</strong> Same kit, more money &mdash; a hangar slot, fresh paperwork and an aeroplane earning nothing while the work is done. That gap is the entire reason the checkbox on the order form is worth thinking about. The Fleet page will do one aircraft or a whole selection at once, and quotes the price on the button before you commit.</li>
+        <li><strong>It costs $1,500 a week per fitted aircraft, flying or not.</strong> The airtime commitment and the support contract are bought by the airframe, not by the flight, so a jet sitting on a reserve stand or in a D check still pays. Over-fitting a fleet quietly costs money.</li>
+        <li><strong>You still set the price, and you still set it once for the whole airline.</strong> Nothing about the Ancillaries tab has changed there. What has changed is that setting a price does nothing on routes flown by an aircraft that cannot deliver it.</li>
+        <li><strong>An unfitted aeroplane sells no Wi-Fi and takes the penalty for not having it.</strong> Connectivity is expected now; an aircraft without it loses quality on every route it flies, exactly as before &mdash; but now it is the metal that decides, not the policy screen. The Ancillaries tab tells you how much of your fleet is fitted, weighted by seats, because that is the fraction of your passengers who actually find it on board.</li>
+      </ul>
+
+      <p><strong>Lounges are built, at one airport at a time.</strong></p>
+      <ul>
+        <li><strong>$12,000,000 to fit out, ten weeks before the doors open, $85,000 a week to run.</strong> You can build one at any airport where you already hold a gate &mdash; it does not have to be a hub. Close it and you get 20% of the capex back for the fittings and the lease exit, which is deliberately not very much.</li>
+        <li><strong>It moves business travellers, and only business travellers.</strong> A lounge at one end of a route lifts your standing with the business segment by around 14%, and again at the other end if you have a room there too. A leisure passenger buying the cheapest fare in the market is completely unmoved, because they cannot get in. This is not a quality bonus dressed up &mdash; it sits outside your route quality score and acts directly on the segment it applies to, and Route Detail shows it as its own line.</li>
+        <li><strong>The money back is the ground bill.</strong> You have always paid $60 for every business passenger and $110 for every first passenger for lounge access and premium ground service &mdash; that was you renting somebody else&rsquo;s room. At an airport where you own the lounge that drops to about a third, because you are still feeding and staffing the place but no longer paying a contractor&rsquo;s margin per head. It scales with premium traffic, which is why a lounge pays for itself at a hub pushing real business volume and slowly bleeds at a thin outstation.</li>
+        <li><strong>Day passes need a room.</strong> The Lounge Passes product on the Ancillaries tab now sells only on routes that touch a lounge you own. One end, half the passes.</li>
+        <li><strong>Two switches decide who gets in free.</strong> Letting your own loyalty members walk in costs you on every guest and earns no pass revenue from them; what you get back is a stronger pull with exactly the travellers who choose an airline on the ground experience. Letting an alliance partner&rsquo;s members in costs slightly more than the settlement fee you collect for hosting them &mdash; what you are really buying there is the reciprocal right for your business travellers to use partner lounges at every station where a partner has a room and you do not. You have to run at least one lounge yourself to trade on that; you cannot swap access you do not have.</li>
+      </ul>
+
+      <ul>
+        <li><strong>Your existing fleet starts with no Wi-Fi, and your Lounge Passes stop earning &mdash; read this one.</strong> There was no honest way to hand every aircraft in every save a million dollars of hardware it never bought, so nothing in your fleet is fitted. Every aeroplane you own is now an aeroplane without Wi-Fi, taking the penalty for it, and Lounge Passes earn nothing until you have built somewhere for them to be used. On a typical route that is about four quality points off until you spend the money. It is a real hit and it is deliberate: the whole point of the change is that these things now cost something. The Ancillaries tab shows you where you stand on both, and the Fleet page will retrofit a whole selection in one go.</li>
+      </ul>
+
+      <p>Whether a lounge is worth building is a genuine question rather than an obvious yes &mdash; $85,000 a week is a lot of route profit, and the ground-cost saving only arrives if you are actually carrying premium passengers through that station. <a href="/route-economics.html">Route economics</a> covers how those costs work, and <a href="/demand-and-quality.html">demand and quality</a> covers what business travellers weigh. Come and argue about the numbers on the <a href="/contact.html">Discord</a>.</p>
+    </div>
 
     <div class="entry">
       <p class="date">August 9, 2026</p>
