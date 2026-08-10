@@ -123,6 +123,26 @@ const save = {
   // Pinning awareness removes the confound rather than relaxing the assertion.
   awareness: 65,
 };
+// freshState() seeds 25 RANDOMLY-generated AI carriers, and on some runs one of
+// them happens to fly a fixture pair — halving the "monopoly" route's load
+// factor and flaking this suite (~1 run in 3, measured). The fixture's whole
+// point is that ONLY the hand-built encroacher contests these pools, so strip
+// every AI route that touches a fixture pair. The carriers themselves stay: the
+// hydration path treats an empty competitor list differently, and the point here
+// is isolation, not emptiness.
+//
+// Ported from the Headwinds copy of this suite, which has had it since the
+// route-map fix landed. This one did not, which is exactly the kind of drift
+// that makes a shared engine's two test suites disagree about the same bug.
+{
+  const fixturePairs = new Set(SPOKES.map(d => routePairKey(HUB, d)));
+  save.competitors = (save.competitors ?? []).map(c => ({
+    ...c,
+    routes: Object.fromEntries(
+      Object.entries(c.routes ?? {}).filter(([pair]) => !fixturePairs.has(pair)),
+    ),
+  }));
+}
 store.set('bbae_save_v2', JSON.stringify(save));
 
 const render = (el) => renderToString(React.createElement(GameProvider, null, el));
