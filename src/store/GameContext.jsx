@@ -14,6 +14,7 @@ import {
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
+import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects } from '../data/labor.js';
@@ -2428,123 +2429,44 @@ function reducer(state, action) {
       return { ...state, victoryAcknowledged: true };
 
     case 'ADVANCE_WEEK': { try {
-      // ── Events: tick existing, roll for new ──────────────────────────────
-      const { updated: survivingEvents, expired: expiredEvents } =
-        tickEvents(state.activeEvents ?? []);
-      const newEvents  = rollEvents(survivingEvents);
-      const allEvents  = [...survivingEvents, ...newEvents];
+      // ── Deterministic pre-tick prep (utils/tickPrep.js) ────────────────────
+      // Events aged and expired, the fuel shock folded into the index so hedges
+      // cover it, grounding and heavy-check countdowns run down, reserve covers
+      // dispatched, seasonal routes flipped, bases and lounges opened. It lives
+      // in its own module because projectWeek has to run the IDENTICAL prep — a
+      // forecast built on the raw state is a forecast of a week that cannot
+      // happen (see the header of tickPrep.js for what that cost us).
+      //
+      // The only random draw inside is rollEvents, and it is the first draw this
+      // case made before the extraction too, so the RNG sequence is unchanged.
+      // tickFuelPrice stays below, in its original order.
+      const prep = prepareWeek(state);
+      const {
+        survivingEvents, expiredEvents, newEvents, allEvents, eventOtpDelta,
+        baseFuelIndex, currentFuelIndex, fuelMultiplier, fuelPriceHistory,
+        activeHedges, liveHedges,
+        gameMonth, gameDate, curAbsWeek,
+        completedChecks, tickedFleetPre, coverPass,
+        seasonalReactivationCost: seasonalReactivationCostPrep,
+        seasonalReactivations, seasonAdjustedRoutes,
+        baseBuild, tickedBases, loungeBuild, tickedLounges,
+        laborThisWeek,
+      } = prep;
+      let seasonalReactivationCost = seasonalReactivationCostPrep;
+      const nowAbsWeek = curAbsWeek;
 
-      // ── Compute event effects on this week's finances ──────────────────
-      // Fuel shocks scale the fuel multiplier below. Demand shocks (global +
-      // regional) are applied INSIDE weeklyTick — they shrink each route's
-      // passenger pool so load factors genuinely drop, rather than skimming a
-      // flat revenue adjustment off fully-booked flights.
-      let fuelMult = 1.0;
-      let eventOtpDelta = 0;
-      for (const ev of allEvents) {
-        const fx = ev.effects ?? {};
-        if (fx.fuelMult) fuelMult *= fx.fuelMult;
-        // Operational disruption stacks additively and is capped, so a bad week
-        // is bad rather than catastrophic (the floor in laborEffects is 0.35).
-        if (fx.otpDelta) eventOtpDelta += fx.otpDelta;
-      }
-      eventOtpDelta = Math.min(0.25, eventOtpDelta);
-
-      // ── Fuel price + hedging ──────────────────────────────────────────
-      // The WALK's index — what the market would be doing with no events on.
-      // This is what carries forward: an event's shock is transient and must
-      // disappear when the event ends, so it never enters the stored series.
-      const baseFuelIndex    = state.fuelPrice?.index ?? 1.0;
-      // What the airline actually pays this week. A "fuel price spike" and a
-      // high index are the same commodity move, so the event belongs IN the
-      // index — it used to be a separate multiplier applied AFTER the hedge
-      // blend, with two consequences: being 100% hedged through a +30% spike
-      // did nothing, the one moment hedging exists for; and the price paid
-      // disagreed with the fuel chart on screen.
-      const currentFuelIndex = fuelMult === 1 ? baseFuelIndex : clampFuelIndex(baseFuelIndex * fuelMult);
-      const nowAbsWeek       = absoluteWeek(state.year, state.week);
-      const allHedges        = state.hedgeContracts ?? [];
-      const activeHedges     = allHedges.filter(h => h.expiryAbsWeek > nowAbsWeek);
-      // effectiveFuelMultiplier blends hedged (locked price) + unhedged (market
-      // index). The event shock is already inside currentFuelIndex, so hedges
-      // now cover it — which is the entire point of holding one.
-      const fuelMultiplier   = effectiveFuelMultiplier(currentFuelIndex, activeHedges);
-      // Tick market price for NEXT week
+      // Tick market price for NEXT week. Stays here rather than in prepareWeek:
+      // it is a random draw, and a projection must neither predict it nor burn it.
       const nextFuelIndex    = tickFuelPrice(baseFuelIndex);
-      const fuelPriceHistory = [...(state.fuelPrice?.history ?? []), currentFuelIndex].slice(-52);
-      // Drop contracts that have now expired
-      const liveHedges       = allHedges.filter(h => h.expiryAbsWeek > nowAbsWeek);
 
       // Age + mechanical tick must run BEFORE weeklyTick so that aircraft recovering
       // from grounding this week can actually fly and earn revenue.
       const mainBudgetPre = state.maintenanceBudget ?? 1.0;
       const agingRatePre  = Math.max(0.5, 1 + (1 - mainBudgetPre) * 0.5);
 
-      const curAbsWeek = absoluteWeek(state.year, state.week);
-
-      const completedChecks = state.fleet
-        .filter(a => a.status === 'maintenance' && (a.checkWeeksLeft ?? 1) <= 1)
-        .map(a => ({ id: a.id, name: a.name, tailNumber: a.tailNumber ?? '', checkType: a.checkType ?? 'C', forced: !!a.checkForced }));
-
-      const tickedFleetPre = state.fleet.map(a => {
-        const hasRoute = state.routes.some(r => r.aircraftId === a.id)
-          || (state.cargoRoutes ?? []).some(r => r.aircraftId === a.id);
-        if (a.status === 'grounded') {
-          const weeksLeft = (a.groundedWeeksLeft ?? 1) - 1;
-          if (weeksLeft <= 0) return { ...a, status: hasRoute ? 'assigned' : 'idle', groundedWeeksLeft: 0 };
-          return { ...a, groundedWeeksLeft: weeksLeft };
-        }
-        if (a.status === 'maintenance') {
-          const left = (a.checkWeeksLeft ?? 1) - 1;
-          if (left <= 0) return completeCheck(a, curAbsWeek, hasRoute);
-          return { ...a, checkWeeksLeft: left };
-        }
-        return a;
-      });
-
-      // Current in-game month (1-12) drives seasonal demand. Must match the
-      // weekToMonth() formula used by the RoutePlanner/RouteDetail previews so the
-      // forecast the player sees agrees with the actual weekly result. Without this,
-      // weeklyTick falls back to its { month: 6 } default and seasonality is inert.
-      const gameMonth = weekToGameDate(state.week).monthIndex;
-      const gameDate  = { week: state.week, month: gameMonth };
-
-      // ── Reserve aircraft: return finished covers, dispatch new ones ─────────
-      // Runs AFTER the grounding/check countdowns above (so an original that
-      // recovered this week takes its routes back immediately) and BEFORE the
-      // revenue sim (so a new cover earns from the first lost week). Covers are
-      // temporary transfers on the route records; see utils/simulation.js.
-      const lastRouteRevenues = state.financialHistory?.[state.financialHistory.length - 1]?.routeRevenues ?? {};
-      const coverPass = applyReserveCovers({
-        fleet:         tickedFleetPre,
-        routes:        state.routes,
-        cargoRoutes:   state.cargoRoutes ?? [],
-        hubs:          state.hubs ?? {},
-        absWeek:       curAbsWeek,
-        routeRevenues: lastRouteRevenues,
-      });
-
-      // ── Seasonal flights: dormant↔active transitions ─────────────────────────
-      // A seasonal route resuming service this month pays a reactivation fee of
-      // 1/3 of its launch cost. Going dormant is free. seasonState is tracked per
-      // route so the fee is charged once per season, not every week it operates.
-      let seasonalReactivationCost = 0;
-      const seasonalReactivations  = [];
-      const seasonAdjustedRoutes = coverPass.routes.map(r => {
-        if (!r.season) return r;
-        const shouldBeActive = isRouteActive(r, gameMonth);
-        const prevState = r.seasonState ?? (shouldBeActive ? 'active' : 'dormant');
-        if (shouldBeActive && prevState === 'dormant') {
-          const fee = Math.round(routeLaunchCost(routeDistanceKm(r.origin, r.destination)) / 3);
-          seasonalReactivationCost += fee;
-          seasonalReactivations.push({ origin: r.origin, destination: r.destination, fee });
-          return { ...r, seasonState: 'active' };
-        }
-        if (!shouldBeActive && prevState === 'active') {
-          return { ...r, seasonState: 'dormant' };
-        }
-        return { ...r, seasonState: prevState };
-      });
+      // completedChecks, tickedFleetPre, coverPass, gameMonth/gameDate and the
+      // seasonal pass all come from prepareWeek above — the same values, in the
+      // same order, now shared with projectWeek.
 
       // ── Route encroachment: AI carriers contest the player's fat routes ──────
       // Decided from the PRIOR week's outcome (load factor + fares), gated by airline
@@ -2562,24 +2484,14 @@ function reducer(state, action) {
         encroachments: state.encroachments ?? {},
       });
 
-      // ── Jet bases: advance construction BEFORE the week's economics, so a
-      // hangar that finishes this week starts earning its keep immediately.
-      const baseBuild  = tickBaseConstruction(state.mroBases ?? {}, curAbsWeek);
-      const tickedBases = baseBuild.bases;
-
-      // Lounges advance on the same schedule and for the same reason: a room
-      // that finishes its fit-out this week should be earning its keep this
-      // week, not next.
-      const loungeBuild   = tickLoungeConstruction(state.lounges ?? {}, curAbsWeek);
-      const tickedLounges = loungeBuild.lounges;
-
-      // Disruption events reach the schedule through a transient field on the
-      // labor object the tick hands down — see laborEffects. state.labor itself
-      // is untouched, so nothing about it persists past this week.
-      const laborThisWeek = eventOtpDelta > 0
-        ? { ...(state.labor ?? {}), eventOtpDelta }
-        : state.labor;
-      const report = weeklyTick({ ...state, labor: laborThisWeek, fleet: coverPass.fleet, routes: seasonAdjustedRoutes, cargoRoutes: coverPass.cargoRoutes, fuelMultiplier, loyalty: state.loyalty, gameDate, encroachments: updatedEncroachments, activeEvents: allEvents, mroBases: tickedBases, lounges: tickedLounges, loungePolicy: state.loungePolicy ?? null, absWeek: curAbsWeek });
+      // baseBuild/tickedBases and loungeBuild/tickedLounges (construction advanced
+      // BEFORE the week's economics, so a hangar or a room that finishes this week
+      // earns its keep this week) and laborThisWeek also come from prepareWeek.
+      //
+      // prep.tickInput is the whole pre-tick state. The ONLY thing added here is
+      // this week's freshly-rolled AI challengers — a random draw, and therefore
+      // the one input a projection is right not to share.
+      const report = weeklyTick({ ...prep.tickInput, encroachments: updatedEncroachments });
 
       // ── Loyalty program: grow/decay member base + maturity + points debt ──
       // Penetration-based S-curve. Enrollment slows as the base approaches the
