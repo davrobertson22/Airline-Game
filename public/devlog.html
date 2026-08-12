@@ -65,6 +65,35 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 12, 2026</p>
+      <h2>Next week&rsquo;s forecast was predicting a week that could not happen</h2>
+      <p>A player sent in a screenshot of the weekly P&amp;L: route operating profit of $674m last week, $624m forecast for this one, and nothing on the card to explain the fifty million. &ldquo;I don&rsquo;t have any major checks or anything,&rdquo; he said &mdash; and then, in the same breath, &ldquo;I make more than it estimates.&rdquo; Both were true, and they were the same fault.</p>
+      <p>The forecast was being run over your airline exactly as it stands right now, rather than as it will stand on Monday morning. Everything the game does to your airline at the start of a week &mdash; before a single aeroplane pushes back &mdash; was missing from it.</p>
+      <ul>
+        <li><strong>An aeroplane on the last week of a check was written off for a week it spends entirely in the air.</strong> When a C or D check has one week left, or a grounded airframe is due back, it returns to service before the week is flown. The forecast still had it in the hangar, so every route it operates showed as earning nothing. On a big fleet that is easily eight figures, appearing from nowhere and vanishing again seven days later.</li>
+        <li><strong>Reserve cover was invisible.</strong> A spare standing in for a broken aeroplane starts flying the moment the week begins. The forecast showed the covered route dead, which made a reserve you were paying for look like it was doing nothing.</li>
+        <li><strong>An event in its final week was still being charged against you.</strong> A demand slump with one week left is over before the week runs, but the forecast kept applying it.</li>
+        <li><strong>A fuel hedge did nothing in the forecast.</strong> During a fuel price spike the projection showed you the full unhedged price no matter how much of your burn was locked in &mdash; the one moment a hedge exists for. The week itself always charged you the hedged price; only the forecast was wrong.</li>
+      </ul>
+      <p>All four are fixed, and the forecast now runs over exactly the airline the week will be flown by. What remains uncertain is only what is genuinely uncertain: an event that has not been rolled yet, a breakdown that has not happened, a rival that has not moved. The heavy-check line still reads &ldquo;&mdash;&rdquo; rather than a number, because a D check landing on a given week is not something anyone can forecast.</p>
+      <p>If your projections have been reading low and then coming in fine, this was why. See <a href="/route-economics.html">route economics</a> for how a week&rsquo;s profit is put together, and <a href="/fuel-hedging.html">fuel hedging</a> for what a lock actually buys you.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 12, 2026</p>
+      <h2>A reserve aircraft can stand in for more than one aeroplane</h2>
+      <p>A player reported two aircraft grounded at the same hub, two reserves stationed at that hub doing nothing, and no cover on either &mdash; and they were right. A reserve was only offered a breakdown while it was sitting completely still. The moment it picked up its first cover it dropped out of the pool entirely, so the next aeroplane to break down at that base was told there was no spare available, while a fully qualified spare flew nine hours a week of a hundred and forty hour limit.</p>
+      <p>Standing by has always been something you pay for &mdash; parking plus a readiness premium, every week. Paying for a cover that never turns up is the worst version of that.</p>
+      <ul>
+        <li><strong>One reserve now covers as many broken aeroplanes as it has hours for.</strong> That was always the intent: cover is decided route by route, in order of what the route earned last week, and the only limit is the block-hour ceiling.</li>
+        <li><strong>The limit is still a real limit.</strong> A reserve already flying a heavy rotation for one grounded aircraft will refuse a second one it cannot fit, and the hours it is already carrying are counted before it is offered anything else &mdash; no aeroplane quietly ends up scheduled past the week it has.</li>
+        <li><strong>The reason you are given is now the true one.</strong> &ldquo;No same-type reserve at that base&rdquo; used to be reported when there was one and it was simply busy. A busy spare now says its hours are full, which is a different problem with a different answer &mdash; station another one, or accept the gap.</li>
+        <li><strong>An out-of-service aeroplane says when nothing came for it.</strong> If you keep reserves of that type and a grounded aircraft is still sitting on its own routes, the Fleet list says so on the row instead of leaving you to work it out from an empty schedule.</li>
+      </ul>
+      <p>Nothing about stationing a reserve has changed &mdash; same identical-type rule, same hub scope, same costs. See <a href="/fleet-planning.html">fleet planning</a> for when a spare airframe pays for itself, and <a href="/route-economics.html">route economics</a> for what an uncovered week actually costs.</p>
+    </div>
+
+    <div class="entry">
       <p class="date">August 10, 2026</p>
       <h2>Wi-Fi is fitted to an aeroplane, and a lounge is a room you build</h2>
       <p>Two of the à la carte products on the Ancillaries tab were pretending to be things they are not. Ticking &ldquo;offered&rdquo; on Wi-Fi gave every aircraft in your fleet connectivity that afternoon, free of any hardware. Ticking &ldquo;offered&rdquo; on Lounge Passes sold day passes into a lounge you had never built, at an airport you might not even serve. Both were policy switches standing in for capital you had never spent.</p>
