@@ -27,6 +27,7 @@ import {
 import { consumeNavFilter } from '../utils/navIntent.js';
 import { useToast } from './ToastSystem.jsx';
 import { projectWeek } from '../utils/financeProjection.js';
+import { projectRouteAddition } from '../models/pairShare.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
   weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, MIN_SPARE_BLOCK_HOURS, SLOTS_PER_GATE, cargoSlotsUsedAt,
@@ -2381,14 +2382,26 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
 
   const gd        = currentGameDate(state);
   const validDest = dest && dest !== origin && AIRPORTS.find(a => a.code === dest);
-  const preview   = validDest && aircraft
-    ? simulateRoute({ origin, destination: dest, aircraftId, weeklyFrequency: frequency,
+  // Projection, NOT a bare simulateRoute. The old call asked "what would this
+  // aircraft carry ALONE in this market?" — which on a pair you already fly is
+  // the whole pool, so adding a third tail to a saturated lane previewed the
+  // first tail's week again (+$248,645/wk against the +$88,580 the tick books)
+  // and pinned at the 87.3% load ceiling with no hint of saturation. It also
+  // omitted brandReach, so a week-one airline was forecast at the market share
+  // of an established one. projectRouteAddition() pools with your existing tails
+  // exactly as weeklyTick's pre-pass does, ramps a genuinely new pair through its
+  // maturity curve, and resolves rivals and brand through the same helpers the
+  // tick uses. See models/pairShare.js.
+  const projection = validDest && aircraft
+    ? projectRouteAddition(state, {
+        origin, destination: dest, aircraft, weeklyFrequency: Number(frequency),
         ticketPrice: Number(ticketPrice) || referencePrice(origin, dest),
-        ...stateLoungeFields(state, origin, dest) }, aircraft, gd,
-        null, 1.0, null, rivalSpecsFor(state, origin, dest), null, null,
-        buildEventDemandModel(state.activeEvents).multFor(origin, dest),
-        state.ancillaries ?? null, state.competitors ?? [])
+        season,
+        gameDate: gd,
+        eventDemandMult: buildEventDemandModel(state.activeEvents).multFor(origin, dest),
+      })
     : null;
+  const preview = projection?.mature ?? null;
   const dist    = validDest ? Math.round(distanceKm(getAirport(origin), getAirport(dest))) : null;
   const refP    = validDest ? referencePrice(origin, dest) : null;
   const effRange = type && aircraft ? effectiveRangeKm(aircraft, type) : (type?.range ?? 0);

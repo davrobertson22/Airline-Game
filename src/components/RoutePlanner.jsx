@@ -4,14 +4,12 @@ import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import {
   baseCityPairDemand, referencePrice, distanceKm,
-  simulateRoute, formatMoney, formatPercent, weekToGameDate,
+  formatMoney, formatPercent, weekToGameDate,
   hubSpokeCounts, pairConnectivityBonus,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
-  rivalSpecsFor,
-  stateLoungeFields,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -19,6 +17,7 @@ import {
   buildCompetitorOffer, computeQualityScore, cabinQualityPoints,
   computeConnectingDemand, AIRPORT_GATEWAY_SCORES,
 } from '../models/demand.js';
+import { projectRouteAddition } from '../models/pairShare.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import { cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
@@ -666,27 +665,32 @@ export default function RoutePlanner() {
     const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
     const satisfaction = state.satisfaction ?? null;
 
-    const result = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel,
-        ...stateLoungeFields(state, origin, dest) },
-      simAircraft,
+    // Projection, NOT a bare simulateRoute. The old call asked "what would this
+    // aircraft carry ALONE in this market?" — which on a pair you already fly is
+    // the whole pool, so adding a third DCA–GSP tail previewed +$248,645/wk on a
+    // week the tick books at +$88,580 (and +$348,180 on one it books at
+    // −$87,985). projectRouteAddition() pools with your existing tails the way
+    // weeklyTick's pre-pass does, ramps a genuinely new pair through its maturity
+    // curve, counts rivals through the same dedupe, and carries brandReach /
+    // marketingBoost / priceSensitivityReduction so a week-one airline is not
+    // forecast at established-carrier parity. See models/pairShare.js.
+    const projection = projectRouteAddition(state, {
+      origin, destination: dest,
+      aircraft: simAircraft,
+      weeklyFrequency: frequency,
+      ticketPrice: effectivePrice,
+      classPrices,
+      cateringLevel,
       gameDate,
-      state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,
-      eventDemand.multFor(origin, dest),
-      state.ancillaries ?? null, state.competitors ?? [],
-    );
+      eventDemandMult: eventDemand.multFor(origin, dest),
+    });
+    const result = projection?.mature ?? null;
     if (!result) return null;
 
-    // Also simulate week-0 (launch day) so the player sees the maturity ramp effect.
-    const resultLaunch = simulateRoute(
-      { id:'p', origin, destination: dest, aircraftId:'p', weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices, hub: state.hub, cateringLevel, weeksOpen: 0,
-        ...stateLoungeFields(state, origin, dest) },
-      simAircraft,
-      gameDate,
-      state.labor ?? null, 1.0, null, rivalSpecsFor(state, origin, dest), avgUtil, satisfaction,
-      eventDemand.multFor(origin, dest),
-      state.ancillaries ?? null, state.competitors ?? [],
-    );
+    // Week-0 (launch day) so the player sees the maturity ramp. On a pair you
+    // already fly this equals `result`: an added tail joins a market that is
+    // already mature and does not re-ramp it.
+    const resultLaunch = projection.launch;
 
     // Connecting passenger estimate
     const connecting = computeConnectingDemand(
@@ -732,7 +736,8 @@ export default function RoutePlanner() {
     const shareResults = computeMarketShare(routeData.market, allOffers);
     const playerShare  = shareResults.find(s => s.airlineId === 'player');
 
-    return { result, resultLaunch, type, netProfit, totalRevenue, connecting, playerOffer, shareResults, playerShare };
+    return { result, resultLaunch, type, netProfit, totalRevenue, connecting, playerOffer, shareResults, playerShare,
+             shared: projection.shared, pairRouteCount: projection.pairRouteCount };
   }, [routeData, selectedTypeId, frequency, effectivePrice, cateringLevel, effectiveConfig, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest]);
 
   // Gate + slot position at each endpoint for the planned frequency. The engine
