@@ -9,7 +9,7 @@ import {
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
-  maxFrequency, stateBrandReach, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
+  maxFrequency, stateBrandReach, stateSensReduction, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -17,7 +17,7 @@ import {
   buildCompetitorOffer, computeQualityScore, cabinQualityPoints,
   computeConnectingDemand, AIRPORT_GATEWAY_SCORES,
 } from '../models/demand.js';
-import { projectRouteAddition } from '../models/pairShare.js';
+import { projectRouteAddition, playerCampaignBoost } from '../models/pairShare.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import { cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
@@ -725,10 +725,15 @@ export default function RoutePlanner() {
         + configSpaceQualityBonus(cfg, type)
         + cateringQualityBonus(cateringLevel, routeData.dist))),
       connectivityBonus: pairConnectivityBonus(hubSpokeCounts(state.routes ?? []), [state.hub], origin, dest),
-      // Brand reach, resolved through the same helper the tick uses. Now that
+      // Brand reach, resolved through the same helper the tick uses — and the
+      // same one the projection this card is built on already applies. Now that
       // brand is a demand term rather than a revenue multiplier, an offer that
       // omits it is scored as an ESTABLISHED carrier — so a week-one airline
-      // would preview the market share of a household name.
+      // would preview the market share of a household name. The campaign lift
+      // and the loyalty/reputation elasticity blunting are attached for the same
+      // reason: omitting them is not "no opinion", it is "average carrier".
+      priceSensitivityReduction: stateSensReduction(state, 0),
+      marketingBoost: playerCampaignBoost(state, origin, dest),
       brandReach: stateBrandReach(state, 0, false),
     };
     const competitorOffers = competitorsOnRoute.map(c => c.offer).filter(Boolean);

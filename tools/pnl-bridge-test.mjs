@@ -88,7 +88,22 @@ const world = (over = {}) => {
     fleet, routes, cargoRoutes: [],
     routePricing: Object.fromEntries(spokes.map(d =>
       [routePairKey('JFK', d), defaultClassPrices(Math.round(referencePrice('JFK', d)))])),
-    competitors: [], encroachments: [], activeEvents: [], loans: [], hedgeContracts: [],
+    // An INERT carrier rather than an empty bank. reconcileState() reads
+    // `parsed.competitors?.length > 0 ? parsed.competitors :
+    // sampleAndInitializeCompetitors(25)`, so a save with `competitors: []`
+    // arrives at the GameProvider with 25 RANDOMLY SAMPLED rivals — while
+    // bridgeFor() below scores the raw save with none. That is the "two
+    // different airlines" the comment on saveFor warns about, and it was
+    // invisible only for as long as every route in this fixture was
+    // capacity-capped: the load model used to be fed the capped pool, so the
+    // week's numbers could not respond to who else was flying. They can now
+    // (H10), and the model/render comparisons below went flaky run-to-run
+    // ($698.3K vs $686.4K on consecutive runs). This bank has no routes, so
+    // buildCompetitorOffer returns null for every pair and it contests
+    // nothing — identical numbers to the empty bank, minus the resampling.
+    competitors: [{ id: 'inert', name: 'Inert Air', homeHub: 'LHR', tier: 'legacy',
+                    logoId: 'compass', baseQualityScore: 60, cash: 1, weeklyStats: null, routes: {} }],
+    encroachments: [], activeEvents: [], loans: [], hedgeContracts: [],
     financialHistory: [], marketingBudget: 50_000,
     ...over,
   };

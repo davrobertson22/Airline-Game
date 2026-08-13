@@ -65,6 +65,19 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 13, 2026</p>
+      <h2>Full is full: a better model of oversubscribed routes</h2>
+      <p>A second accuracy wave, this one deeper in the demand model. The theme: what happens on a route where more people want to fly than you have seats for.</p>
+      <ul>
+        <li><strong>Genuinely oversubscribed routes now fill further.</strong> The load model distinguishes a route where demand roughly matches capacity (which settles in the high 80s, as before) from one drowning in demand, which now climbs toward the structural ceiling of 95%. Previously both looked identical &mdash; a route with ten times the demand it could seat filled no further than one scraping parity. If you run small metal on fat trunks, your loads and revenue will step up. See <a href="/route-economics.html">route economics</a> for where the extra points come from.</li>
+        <li><strong>Seasonal one-way skew no longer penalises routes that are full both ways.</strong> The directional model docks a route when the peak direction runs out of seats and the off-peak direction flies light &mdash; but a route with deep demand in both directions stays full in both, and now loses nothing. Seasonal leisure routes (think northeast to the Caribbean in winter) were being trimmed a few points they should have kept.</li>
+        <li><strong>Business travellers on all-economy pairs buy economy tickets.</strong> When no carrier on a pair offers a business cabin, that demand now folds into economy &mdash; matching what already happened on uncontested routes. Competitive all-economy markets were losing those passengers entirely, which made head-to-head LCC flying look worse than it should.</li>
+        <li><strong>A multi-stop route and a nonstop on the same pair now share the market.</strong> Fly JFK&ndash;ORD as a nonstop and also as the first leg of a tag rotation, and the two split the pair's demand the way two nonstops always have &mdash; each previously drew from the pool independently. If your network leans on that pattern, those routes will come in lower; the combined figure is now the honest one.</li>
+      </ul>
+      <p>Alongside the model work: market-share panels on Route Details use your real brand reach, lease costs in projections use the rate each aircraft actually signed at, the Dashboard's network load factor handles multi-stop routes correctly, and the Marketplace's "weeks of cash" figure now reflects your whole weekly burn rather than lease rent alone &mdash; it was the most optimistic number in the game.</p>
+    </div>
+
+    <div class="entry">
       <p class="date">August 12, 2026</p>
       <h2>The route planner does the harder sums now</h2>
       <p>An accuracy release, aimed squarely at the gap between what the planning screens promise and what the following week delivers.</p>

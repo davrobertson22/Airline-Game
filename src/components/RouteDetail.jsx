@@ -5,15 +5,16 @@ import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import {
   buildRouteMarket, computeMarketShare, buildCompetitorOffer,
-  computeQualityScore, computeConnectingDemand, HUB_TIERS,
+  computeQualityScore, computeConnectingDemand, routeMaturityFactor, HUB_TIERS,
 } from '../models/demand.js';
+import { playerCampaignBoost } from '../models/pairShare.js';
 import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
   hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
-  stateLoungeFields,
+  stateLoungeFields, stateSensReduction, CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -192,20 +193,33 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const refP          = referencePrice(origin, dest);
   const routeKey      = [origin, dest].sort().join('-');
 
-  // Market — scaled by any active world-event demand shock (pandemic, regional
-  // disruption...) so the detail page matches what the engine actually books.
-  const eventDemand = useMemo(() => buildEventDemandModel(state.activeEvents), [state.activeEvents]);
-  const market      = useMemo(
-    () => buildRouteMarket(origin, dest, gameDate, 1, eventDemand.multFor(origin, dest)),
-    [origin, dest, gameDate.month, eventDemand]
-  );
-  const totalDemand = market.leisureDemand + market.businessDemand;
-
   // Player routes on this pair (either direction)
   const playerRoutes = state.routes.filter(r =>
     (r.origin === origin && r.destination === dest) ||
     (r.origin === dest   && r.destination === origin)
   );
+
+  // Market — scaled by any active world-event demand shock (pandemic, regional
+  // disruption...) so the detail page matches what the engine actually books.
+  //
+  // ...and by the LANE'S MATURITY. This used to pass a hardcoded 1, i.e. the
+  // mature market, on a page whose whole job is to describe the week that is
+  // about to run: weeklyTick builds every route's market at
+  // routeMaturityFactor(weeksOpen) — 0.55 at launch, 1.0 only at week 16. The
+  // derived "unmet demand" (totalDemand − servedPax) therefore invented
+  // thousands of phantom unserved passengers on exactly the young routes where
+  // that number is read as "add frequency here". A pair the player does not fly
+  // has no maturity of its own, so it keeps the mature figure — that IS the
+  // question being asked there ("how big is this market?").
+  const laneWeeksOpen = playerRoutes.reduce((m, r) => Math.max(m, r.weeksOpen ?? 0), 0);
+  const eventDemand = useMemo(() => buildEventDemandModel(state.activeEvents), [state.activeEvents]);
+  const market      = useMemo(
+    () => buildRouteMarket(origin, dest, gameDate,
+      playerRoutes.length ? routeMaturityFactor(laneWeeksOpen) : 1,
+      eventDemand.multFor(origin, dest)),
+    [origin, dest, gameDate.month, eventDemand, playerRoutes.length, laneWeeksOpen]
+  );
+  const totalDemand = market.leisureDemand + market.businessDemand;
 
   // Seasonal dormancy: true when every player route on this pair carries a season
   // window and none of them operates in the current month. The forecast figures
@@ -250,15 +264,29 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
       if (type) {
         const totalFreq = playerRoutes.reduce((s, r) => s + r.weeklyFrequency, 0);
+        // Fares belong to the PAIR, not the route: ADD_ROUTE writes
+        // routePricing[pairKey] and every tail on the lane flies that price, so
+        // that is the single source of truth pairShare.buildPlayerPairOffer
+        // reads and the tick sells at.
+        const cp        = state.routePricing?.[routeKey] ?? route.classPrices ?? {};
+        const ecoPrice  = cp.economy ?? route.ticketPrice;
+        const bizSeats  = (aircraft.config?.businessClass ?? 0) * totalFreq;
         playerOffer = {
           airlineId:         'player',
           origin, destination: dest,
-          economyPrice:      route.classPrices?.economy ?? route.ticketPrice,
-          businessPrice:     route.classPrices?.businessClass ?? null,
+          economyPrice:      ecoPrice,
+          // A business FARE with no business SEATS is not a cabin, and a business
+          // CABIN with no fare set still sells at the engine's own ladder — the
+          // tick prices it at CLASS_FARE_MULTIPLIERS.businessClass × economy, not
+          // at the economy fare. Leaving this null on a J-cabin pair scored the
+          // whole premium cabin as if it were being given away at coach prices.
+          businessPrice:     bizSeats > 0
+            ? Math.max(1, cp.businessClass ?? ecoPrice * CLASS_FARE_MULTIPLIERS.businessClass)
+            : null,
           weeklyFrequency:   totalFreq,
           seatsPerFlight:    type.seats,
           economySeats:      (aircraft.config?.economy ?? type.seats) * totalFreq,
-          businessSeats:     (aircraft.config?.businessClass ?? 0) * totalFreq,
+          businessSeats:     bizSeats,
           totalSeats:        ((aircraft.config?.economy ?? type.seats) + (aircraft.config?.businessClass ?? 0) + (aircraft.config?.premiumEconomy ?? 0) + (aircraft.config?.firstClass ?? 0)) * totalFreq,
           // Same quality the engine computes for this route (morale, utilization,
           // satisfaction, cabin product), incl. the hub bonus via the breakdown.
@@ -271,7 +299,12 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // wrongly on the one screen built to answer it.
           loungeAppeal:      stateLoungeFields(state, origin, dest).loungeAppeal,
           // See the note on combinedOffer below: without this the share panel
-          // scores a brand-new airline as an established one.
+          // scores a brand-new airline as an established one. The campaign lift
+          // and the loyalty/reputation elasticity blunting are attached for the
+          // same reason — weeklyTick puts all three on every player route, and an
+          // offer that omits one is not neutral, it is scored at parity.
+          priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
+          marketingBoost:    playerCampaignBoost(state, origin, dest),
           brandReach:        stateBrandReach(state, maxHubBonus, false),
         };
       }
@@ -289,8 +322,16 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const playerSims = useMemo(() => {
     if (playerRoutes.length === 0) return [];
 
-    // Build combined demand allocation when there are multiple aircraft
-    const demandAllocations = new Map(); // routeId → demandOverride
+    // Build combined demand allocation when there are multiple aircraft.
+    //
+    // Keyed by AIRCRAFT id — the same key the loop below reads it back with, and
+    // the same key Headwinds' twin uses. The comment here used to say "routeId"
+    // and the read below used to honour the comment rather than the code, so the
+    // lookup missed on every multi-tail pair and each tail fell through to a null
+    // demandOverride: back to "what would this aircraft carry ALONE in this
+    // market?", handed out once per tail. That is the exact double-count the
+    // pooling exists to prevent.
+    const demandAllocations = new Map(); // aircraftId → demandOverride
     if (playerRoutes.length > 1) {
       let totalEcoSeats = 0, totalBizSeats = 0, totalSeatsAll = 0, totalFreq = 0;
       let hasBusinessCabin = false;
@@ -315,8 +356,23 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
         const r0   = validSims[0].route;
         const cp0  = r0.classPrices ?? {};
         const ecoP = Math.max(1, cp0.economy ?? r0.ticketPrice ?? 1);
+        // The engine's own J-fare ladder, not a number typed in here. This read
+        // `ecoP * 3.5` where CLASS_FARE_MULTIPLIERS.businessClass — what
+        // ADD_ROUTE seeds, what buildPlayerPairOffer prices with, and what the
+        // tick therefore sells at — is 2.5. A pair with a business cabin and no
+        // J fare set was previewed 40% above the fare it will actually fly.
         const bizP = hasBusinessCabin && cp0.businessClass != null
-          ? Math.max(1, cp0.businessClass) : hasBusinessCabin ? ecoP * 3.5 : null;
+          ? Math.max(1, cp0.businessClass)
+          : hasBusinessCabin ? ecoP * CLASS_FARE_MULTIPLIERS.businessClass : null;
+        // Quality of the POOLED offer: the mean of the engine's own per-route
+        // breakdowns, exactly as pairShare.buildPlayerPairOffer averages them.
+        // This used to be `shareResults.find(...) ? 70 : 70` — a ternary whose
+        // two branches are the same literal, i.e. a flat 70 for every airline in
+        // the game, on the only path a 2+ tail pair ever takes. The single-tail
+        // offer above already scores itself with the real figure.
+        const qs = validSims
+          .map(({ route, aircraft }) => routeQualityBreakdown(route, aircraft, state)?.total)
+          .filter(q => q != null);
         const combinedOffer = {
           airlineId: 'player', origin, destination: dest,
           economyPrice: ecoP, businessPrice: bizP,
@@ -324,12 +380,18 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           seatsPerFlight: Math.round((totalEcoSeats + totalBizSeats) / totalFreq),
           economySeats: totalEcoSeats, businessSeats: totalBizSeats,
           totalSeats: totalSeatsAll,
-          qualityScore: shareResults.find(r => r.airlineId === 'player') ? 70 : 70,
+          qualityScore: qs.length ? Math.round(qs.reduce((s, q) => s + q, 0) / qs.length) : 70,
           connectivityBonus: pairConnectivityBonus(hubSpokeCounts(state.routes ?? []), [state.hub], origin, dest),
           // Brand reach, resolved through the same helper the tick uses. Now
           // that brand is a demand term rather than a revenue multiplier, an
           // offer that omits it is scored as an ESTABLISHED carrier — so a
           // week-one airline would preview the market share of a household name.
+          // Lounges, the campaign lift and the elasticity blunting travel with it
+          // for the same reason: the single-tail offer above carries all four,
+          // and a pair should not be scored differently for having two tails.
+          loungeAppeal: stateLoungeFields(state, origin, dest).loungeAppeal,
+          priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
+          marketingBoost: playerCampaignBoost(state, origin, dest),
           brandReach: stateBrandReach(state, maxHubBonus, false),
         };
         const compOffers = competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean);
@@ -365,7 +427,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       const result = simulateRoute(
         { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
         aircraft, gameDate, state.labor ?? null, 1.0,
-        demandAllocations.get(route.id) ?? null, rivalSpecsFor(state, route.origin, route.destination),
+        demandAllocations.get(aircraft.id) ?? null, rivalSpecsFor(state, route.origin, route.destination),
         fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
         state.satisfaction ?? null, eventDemand.multFor(origin, dest),
         state.ancillaries ?? null, state.competitors ?? []);
