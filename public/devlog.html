@@ -66,6 +66,32 @@
 
     <div class="entry">
       <p class="date">August 13, 2026</p>
+      <h2>Your deposit comes back, your hub connects, and a failed save says so</h2>
+      <p>A fixes release. Four things that were quietly wrong, three of them about money.</p>
+      <ul>
+        <li><strong>Lease security deposits are refundable again.</strong> Ordering a leased aircraft takes twelve weeks of rent up front. That money is now returned in full when you cancel the order before delivery &mdash; which is what the "free to cancel" prompt always promised &mdash; and returned when the aircraft goes back to the lessor, whether the lease runs its full term or you hand it back early. The redelivery fee and the early-termination penalty are unchanged: those are what make an early return expensive. A deposit is a deposit. It now appears as its own line on the weekly P&amp;L when it lands, and it is not taxed, because it is your money coming home rather than income.</li>
+        <li><strong>Connecting traffic no longer depends on which way round you typed the route.</strong> Passengers connecting between two of your own flights at a hub are worth real money, and the model was only finding them when your routes happened to be stored in opposite directions. Build every spoke outward from your hub &mdash; the natural way to build a hub carrier &mdash; and it found none at all. It now sees every pair of spokes regardless of orientation, so a four-spoke hub forms six connecting markets instead of four, or none. If you run a hub, your connecting revenue goes up, in some cases from zero.</li>
+        <li><strong>Statistics agrees with the P&amp;L about cargo.</strong> The Weekly Revenue tile and the revenue-mix chart on the Statistics tab were adding freight revenue on top of a total that already contained it. A cargo-heavy airline's headline revenue read close to double what its P&amp;L said, and the chart's Passenger band absorbed the difference. Both now read the same figure the rest of the game does. Weeks already recorded in your save keep their old numbers, so expect a step in the chart at this update rather than a redrawn history.</li>
+        <li><strong>A save that fails now tells you.</strong> When a browser's storage for the game filled up, the autosave stopped writing and said nothing &mdash; you found out on your next refresh. Saving to a slot could fail the same silent way. Both now say so plainly, and tell you how to free up room.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 13, 2026</p>
+      <h2>One city, one market: metro areas now share their demand</h2>
+      <p>A structural change to how the model thinks about cities served by more than one airport &mdash; and to what a secondary field is actually worth.</p>
+      <ul>
+        <li><strong>A metro area is one market.</strong> New York to London is a single pool of passengers, whether you fly it out of JFK, Newark or LaGuardia. Routes on sibling airports now split that pool and compete inside it, rather than each being priced as a market of its own. If your network flies the same city pair from two fields, those routes will settle lower than they read last week &mdash; the combined figure is the honest one, and it is the one the planner has been quietly disagreeing with.</li>
+        <li><strong>Airports have appeal.</strong> A secondary field pulls fewer passengers than the primary, and how many fewer depends on the trip. LaGuardia is a perfectly good domestic airport and a poor long-haul international one; Newburgh is a long way from Manhattan whatever you are flying. Cheap slots at a quiet field are cheap for a reason, and the model now says so. Where a metro has one meaningful airport, nothing changes.</li>
+        <li><strong>Freight lanes pool the same way.</strong> Two freighters working sibling airports on the same city pair now draw one lane's tonnage between them. Cargo is scored on freight handling and customs throughput rather than passenger convenience, so airport appeal does not apply to it.</li>
+        <li><strong>Rivals live under the same rules.</strong> Competing carriers on a metro lane now feel each other across sibling airports, and their home fields are scored for appeal exactly as yours are. A rival at the secondary airport is a real rival, and a weaker one.</li>
+        <li><strong>The planner previews the pooled lane.</strong> Forecasts are run against the same shared market the weekly tick books, so opening a second field on a city pair you already serve previews the share it will actually carry.</li>
+      </ul>
+      <p>This one moves numbers. Networks built on a single strong gateway are largely unaffected; networks that spread the same city pair across several fields will see those routes converge on what the city can actually supply. <a href="/hub-strategy.html">Hub strategy</a> and <a href="/route-economics.html">route economics</a> are both worth a re-read this week.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 13, 2026</p>
       <h2>Full is full: a better model of oversubscribed routes</h2>
       <p>A second accuracy wave, this one deeper in the demand model. The theme: what happens on a route where more people want to fly than you have seats for.</p>
       <ul>

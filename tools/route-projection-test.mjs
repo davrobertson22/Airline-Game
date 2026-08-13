@@ -247,20 +247,45 @@ for (const r of rows) {
 console.log('');
 
 for (const r of rows) {
-  // Exact, not a band. Every input to both sides is deterministic here (the
-  // fixture pins the calm week and the game month), so a band would only be
-  // wide enough to let the next divergence in unnoticed.
+  // Exact, not a band — with ONE passenger of slack, and not a passenger more.
+  //
+  // Every input to both sides is deterministic here (the fixture pins the calm
+  // week and the game month) except one, and it cannot be pinned: the
+  // projection deliberately forecasts the EXPECTED week, omitting the route's
+  // absWeek so simulateRoute takes weeklyLoadJitter = 1 exactly, while the tick
+  // must roll a real week. weeklyLoadJitter can never RETURN exactly 1 — it is
+  // `1 − J + 2J·(h / 0xffffffff)` over a 32-bit hash, and h / 0xffffffff is
+  // never exactly 0.5 — so calmWeek can only find the closest week there is.
+  // For DCA–GSP that is week 1730 at 1.0000032: six thousandths of a passenger
+  // on this fixture, invisible unless the pre-rounding demand sits within it of
+  // a .5 boundary. On the unserved-pair scenario it does, so the tick rounds to
+  // 1834 where the projection rounds to 1833. Measured across the eight calmest
+  // DCA–GSP weeks (1730, 1018, 3604, 2190, 1086, 3812, 1461, 1421) six agree
+  // exactly and two — 1730 and 3812 — sit one passenger apart, which is the
+  // signature of a rounding boundary rather than of a model disagreement. The
+  // same 1833/1834 (and the same −$197 below) fail on the pre-metro-rework tree
+  // at ~/w3/head/tw, so this is not something the metro pooling introduced.
+  //
+  // One passenger is the smallest band the two paths can share. It hides
+  // nothing: the bare-call control in section 2 is out by hundreds, and the
+  // ±2.5% the jitter is capable of would be ~46 passengers here.
   test(`${r.sc.label} — projected passengers are the passengers the tick books`, () => {
-    assert.equal(r.proj.mature.passengers, r.tick.passengers,
+    assert.ok(Math.abs(r.proj.mature.passengers - r.tick.passengers) <= 1,
       `forecast ${r.proj.mature.passengers} pax vs ${r.tick.passengers} booked (off by `
       + `${r.proj.mature.passengers - r.tick.passengers}). The preview and the tick are answering `
       + 'different questions — see models/pairShare.js.');
   });
 
   test(`${r.sc.label} — projected operating profit is the profit the tick books`, () => {
-    assert.ok(Math.abs(r.proj.mature.profit - r.tick.profit) <= 2,
+    // $2 of arithmetic slack, plus whatever that one rounding-boundary
+    // passenger is worth at this route's realised yield — carrying a passenger
+    // the other side did not carry has to be allowed to move the money by
+    // exactly one fare and by nothing else.
+    const yieldPerPax = r.tick.passengers > 0 ? r.tick.revenue / r.tick.passengers : 0;
+    const band = 2 + Math.abs(r.proj.mature.passengers - r.tick.passengers) * yieldPerPax;
+    assert.ok(Math.abs(r.proj.mature.profit - r.tick.profit) <= band,
       `forecast ${money(r.proj.mature.profit)} vs ${money(r.tick.profit)} booked `
-      + `(off by ${money(r.proj.mature.profit - r.tick.profit)}).`);
+      + `(off by ${money(r.proj.mature.profit - r.tick.profit)}, band ${money(Math.round(band))}).`);
   });
 }
 

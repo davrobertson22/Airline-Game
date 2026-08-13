@@ -48,7 +48,6 @@ import {
 } from './demand.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
-import { memberPairKeysOf, isMetroPair } from '../utils/market.js';
 import {
   configBodies,
   defaultConfig,
@@ -66,7 +65,6 @@ import {
   rivalOffersFor,
   rivalSpecsFor,
   buildEventDemandModel,
-  currentGameDate,
   CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 
@@ -214,22 +212,11 @@ export function playerCampaignBoost(state, origin, destination) {
  * this file drifting away from the tick.
  */
 export function buildRivalPairOffers(state, market) {
-  // Every member pair of the metro-pair lane (data/metros.js), exactly the keys
-  // the tick's metroRivalOffersFor scans. On a non-metro pair this is [the pair
-  // itself] and the call below is the historical single-pair delegation
-  // verbatim. A carrier flying two member pairs fields two offers, which is
-  // right: its two stations genuinely compete inside the one metro market.
-  const offers = [];
-  for (const mk of memberPairKeysOf(market.origin, market.destination)) {
-    const [a, b] = mk.split('-');
-    offers.push(...rivalOffersFor(
-      state.competitors ?? [],
-      rivalSpecsFor(state, mk),
-      market,
-      { origin: a, destination: b },
-    ));
-  }
-  return offers;
+  return rivalOffersFor(
+    state.competitors ?? [],
+    rivalSpecsFor(state, market.origin, market.destination),
+    market,
+  );
 }
 
 /**
@@ -250,46 +237,24 @@ export function buildRivalPairOffers(state, market) {
  * @returns {{ market, offers, results, playerResult, playerShare, totalPax, contested }}
  */
 export function pairMarketShare(state, origin, destination, opts = {}) {
-  // Prefer the real calendar (with absWeek, which drives demand growth over
-  // game time) — a June default would preview an ungrown market against a tick
-  // that books the grown one.
-  const gameDate = opts.gameDate ?? state.gameDate
-    ?? (state.week != null ? currentGameDate(state) : { month: 6 });
+  const gameDate = opts.gameDate ?? state.gameDate ?? { month: 6 };
   const key = routePairKey(origin, destination);
-  const memberKeys = memberPairKeysOf(origin, destination);
 
-  // The player's routes across the WHOLE metro-pair lane (data/metros.js),
-  // sub-grouped by member airport pair — mirroring the tick's pre-pass, which
-  // fields one combined offer per member pair and lets them all fight in the
-  // one pooled market. On a non-metro pair memberKeys is [key] and this is the
-  // historical behavior.
-  //
   // Tag (multi-stop) routes self-contain their O&D split and must not join a
   // pair offer — the tick skips them in the pre-pass for the same reason. The
   // test for that is isMultiStop() and NOT `!r.stops?.length`: hydration gives
   // every single-leg route `stops: [origin, destination]`, so the latter matches
   // only UN-hydrated routes and returns an empty pair on any real save.
-  const laneGroups = new Map(); // memberPairKey → player routes[]
-  for (const r of state.routes ?? []) {
-    const rk = routePairKey(r.origin, r.destination);
-    if (!memberKeys.includes(rk) || isMultiStop(r)) continue;
-    // opts.pairRoutes overrides the REQUESTED pair's routes wholesale (that is
-    // how projectRouteAddition injects a not-yet-real route) — skip state's.
-    if (rk === key && opts.pairRoutes) continue;
-    if (!laneGroups.has(rk)) laneGroups.set(rk, []);
-    laneGroups.get(rk).push(r);
-  }
-  if (opts.pairRoutes) laneGroups.set(key, opts.pairRoutes);
-  const pairRoutes = laneGroups.get(key) ?? [];
-  const laneRoutes = [...laneGroups.values()].flat();
-
-  // Lane maturity is the OLDEST route on the LANE — the tick's rule: the market
-  // has known the service as long as the longest-serving tail on any member
-  // pair has flown it. opts.weeksOpen overrides the requested pair's age and
-  // still joins the lane max, so joining a mature sibling lane previews mature.
-  const laneWeeks = laneRoutes.reduce(
-    (m, r) => Math.max(m, r.weeksOpen ?? 0), opts.weeksOpen ?? 0);
-  const maturity = laneRoutes.length ? routeMaturityFactor(laneWeeks) : 1;
+  const pairRoutes = opts.pairRoutes ?? (state.routes ?? []).filter(
+    (r) => routePairKey(r.origin, r.destination) === key && !isMultiStop(r)
+  );
+  // Route maturity is per-route; a pair flown by several tails ramps with the
+  // OLDEST of them (the market has known the service that long) — the tick's
+  // laneWeeksOpen rule.
+  const weeksOpen = opts.weeksOpen ?? pairRoutes.reduce(
+    (m, r) => Math.max(m, r.weeksOpen ?? 0), 0);
+  const maturity = pairRoutes.some((r) => r.weeksOpen != null)
+    ? routeMaturityFactor(weeksOpen) : 1;
   // The pool the tick will fight over: seasonality × maturity × world events.
   // Defaulting the event multiplier to 1 here left the shock out of the POOL
   // whenever the caller did not supply it, while simulateRoute still applied it
@@ -297,54 +262,32 @@ export function pairMarketShare(state, origin, destination, opts = {}) {
   const market = buildRouteMarket(origin, destination, gameDate, maturity,
     opts.eventDemandMult ?? stateDemandMult(state, origin, destination));
 
-  // One combined player offer per member pair the player serves. The requested
-  // pair's offer is FIRST so playerResult below stays the requested pair's.
-  const playerEntries = []; // { pairKey, offer }
-  for (const [pk, group] of [...laneGroups.entries()]
-    .sort(([a], [b]) => (a === key ? -1 : b === key ? 1 : 0))) {
-    if (!group.length) continue;
-    const offer = buildPlayerPairOffer(state, group);
-    if (offer) playerEntries.push({ pairKey: pk, offer });
-  }
+  const playerOffer = buildPlayerPairOffer(state, pairRoutes);
   const rivalOffers = buildRivalPairOffers(state, market);
-  const offers = [...playerEntries.map((e) => e.offer), ...rivalOffers];
+  const offers = [...(playerOffer ? [playerOffer] : []), ...rivalOffers];
   if (offers.length === 0) {
-    return { market, offers, results: [], playerResult: null, playerResults: [],
-             playerShare: null, totalPax: 0, contested: false, pooled: false };
+    return { market, offers, results: [], playerResult: null,
+             playerShare: null, totalPax: 0, contested: false };
   }
 
   const results = computeMarketShare(market, offers);
-  // The requested pair's own result (offer order above puts it first)…
-  const playerResult = playerEntries.length ? results[0] : null;
-  // …and the player's LANE-WIDE totals: share of a pooled metro market counts
-  // every member pair you serve, or a JFK+EWR carrier would read as two minor
-  // players in a market it dominates.
-  const playerResults = results.slice(0, playerEntries.length);
-  const playerLanePax = playerResults.reduce((s, r) => s + (r.totalPax ?? 0), 0);
+  const playerResult = playerOffer
+    ? results.find((r) => r.airlineId === 'player') ?? null
+    : null;
   const totalPax = results.reduce((s, r) => s + (r.totalPax ?? 0), 0);
-
-  // Would the tick pool this lane? Same rule as the pre-pass: ≥2 player routes
-  // on the lane, or a metro pair with rivals on a member pair OTHER than the
-  // requested one (the solo simulateRoute path never sees those).
-  let pooled = laneRoutes.length >= 2;
-  if (!pooled && isMetroPair(origin, destination)) {
-    pooled = rivalOffers.some((o) => routePairKey(o.origin, o.destination) !== key);
-  }
 
   return {
     market,
     offers,
     results,
     playerResult,
-    playerResults,
     // Share of passengers ACTUALLY CARRIED, capacity caps included — if you only
     // have seats for half the people who'd pick you, you don't hold their share.
-    playerShare: playerEntries.length && totalPax > 0
-      ? playerLanePax / totalPax
-      : playerEntries.length ? 1 : null,
+    playerShare: playerResult && totalPax > 0
+      ? playerResult.totalPax / totalPax
+      : playerResult ? 1 : null,
     totalPax,
     contested: rivalOffers.length > 0,
-    pooled,
   };
 }
 
@@ -518,11 +461,9 @@ export function projectRouteAddition(state, spec) {
       weeksOpen,
     });
     if (!share.playerResult) return { result: null, share };
-    // Mirror the tick: a lane the pre-pass would pool (≥2 player routes across
-    // its member pairs, or rivals on a sibling member pair) takes its slice of
-    // the pooled result; a lone route whose only rivals are on its own pair
-    // runs simulateRoute's own demand path, exactly like the tick's solo path.
-    const override = share.pooled
+    // Mirror the tick: a pair flown by a single tail runs simulateRoute's own
+    // demand path; only a genuinely shared pair needs the pooled split.
+    const override = pairRoutes.length >= 2
       ? sliceForRoute(share.playerResult, previewRoute, aircraft, pairRoutes, fleetPlus)
       : null;
     const route = {
@@ -581,11 +522,7 @@ export function projectRouteAddition(state, spec) {
     launch: launch.result,
     shared: others.length > 0,
     pairRouteCount: pairRoutes.length,
-    // Non-player offers only: a pooled metro lane can field SEVERAL player
-    // sub-offers (one per member pair served), and your own EWR service is not
-    // a rival of your JFK one.
-    rivalCount: Math.max(0,
-      mature.share.offers.length - (mature.share.playerResults?.length ?? 1)),
+    rivalCount: Math.max(0, mature.share.offers.length - 1),
     playerShare: mature.share.playerShare,
   };
 }

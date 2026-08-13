@@ -267,9 +267,18 @@ test('two aeroplanes on one pair still land together', () => {
 test('a half-empty route is left alone', () => {
   // Nothing about this model should touch an airline that is struggling to fill
   // its aeroplanes. It exists to stop a full one from being perfectly full.
+  //
+  // The frequency here was 42/wk, and that stopped producing a half-empty
+  // aeroplane some time before the metro rework: this assertion was ALREADY
+  // failing on ~/w3/head/tw at 80.8%, i.e. the fixture had quietly become a
+  // nearly-full route and was testing the opposite of what it says. (Airport
+  // appeal, wired in the metro rework, trims JFK's domestic pool and moved it
+  // to 78.3% — still nowhere near under-filled.) 56/wk restores the stated
+  // intent with room to spare: measured 58.9% here, and the spill scale the
+  // assertion actually cares about comes back at 0.9994.
   const st = network();
   st.fleet = [st.fleet[0]];
-  st.routes = [{ ...st.routes[0], destination: 'HSV', weeklyFrequency: 42,
+  st.routes = [{ ...st.routes[0], destination: 'HSV', weeklyFrequency: 56,
                  ticketPrice: Math.round(referencePrice(HUB, 'HSV')) }];
   st.routePricing = { [routePairKey(HUB, 'HSV')]:
     defaultClassPrices(Math.round(referencePrice(HUB, 'HSV'))) };
@@ -277,7 +286,7 @@ test('a half-empty route is left alone', () => {
   const r = quietly(() => weeklyTick(st));
   const lf = r.routeResults[0].loadFactor;
   assert.ok(lf < 0.75, `fixture should be under-filled, got ${(lf * 100).toFixed(1)}%`);
-  const seats = 42 * NARROW.seats;
+  const seats = 56 * NARROW.seats;
   const scale = loadDemandScale(lf * seats, seats);
   assert.ok(scale > 0.985, `an under-filled aeroplane lost ${((1 - scale) * 100).toFixed(2)}% to spill`);
 });

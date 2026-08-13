@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useMemo } from 'react';
+import { createContext, useContext, useReducer, useEffect, useMemo, useRef } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
@@ -681,6 +681,10 @@ function reducer(state, action) {
         weeklyLease:        Math.round(type?.weeklyLease ?? 0),
         leaseTermWeeks,
         leaseRemainingWeeks: leaseTermWeeks,
+        // This path charges no deposit, so the tail must say so explicitly. An
+        // absent field would let the refund sites fall through to a rate-derived
+        // default and hand back money that was never paid.
+        leaseDeposit:        0,
       };
       return { ...state, fleet: [...state.fleet, newAircraft] };
     }
@@ -852,10 +856,15 @@ function reducer(state, action) {
     case 'CANCEL_ORDER': {
       const order = (state.pendingOrders ?? []).find(o => o.id === action.orderId);
       if (!order) return state;
-      // Refund purchase price with a 5% cancellation fee; leases cost nothing to cancel
+      // Refund purchase price with a 5% cancellation fee. A lease order refunds
+      // its security deposit in FULL: nothing was delivered, so there is nothing
+      // for the lessor to secure. This used to refund 0 while the Fleet and
+      // Marketplace screens both promised "Lease orders are free to cancel
+      // before delivery" — ordering and cancelling a lease quietly destroyed
+      // twelve weeks of rent.
       const refund = order.ownershipType === 'owned'
         ? Math.round(order.totalPrice * 0.95)
-        : 0;
+        : (order.leaseDeposit ?? 0);
       return {
         ...state,
         cash:          state.cash + refund,
@@ -911,9 +920,16 @@ function reducer(state, action) {
       const penalty = (aircraft?.ownershipType === 'lease' && weeksLeft > 0)
         ? Math.round(leaseRate * weeksLeft * 0.5)
         : 0;
+      // The security deposit comes back when the aircraft does. It is a deposit,
+      // not a fee: the termination penalty above is what makes an early return
+      // expensive, and it is charged in full and unchanged. Tails that never
+      // paid a deposit (the instant LEASE_AIRCRAFT path) carry 0 and get 0.
+      const depositBack = aircraft?.ownershipType === 'lease'
+        ? (aircraft.leaseDeposit ?? 0)
+        : 0;
       return {
         ...state,
-        cash:        state.cash - penalty,
+        cash:        state.cash - penalty + depositBack,
         fleet:       reStatusFleet,
         routes:      updatedRoutes,
         cargoRoutes: updatedCargo,
@@ -2680,6 +2696,9 @@ function reducer(state, action) {
 
       // 3. Apply failures + age + lease countdown
       let leaseRedeliveryCost = 0;
+      // Security deposits returned this week with the airframes they secured.
+      // Cash-only: the deposit never entered the P&L on the way out either.
+      let leaseDepositRefund  = 0;
       const removedAircraftIds   = new Set(writeOffIds);   // lease expiries + AOG write-offs
       const leaseWarningToasts = [];
 
@@ -2769,17 +2788,24 @@ function reducer(state, action) {
               duration: 8000,
             });
           }
-          // Lease expired: charge redelivery fee (4 weeks of rent) and remove
+          // Lease expired: charge redelivery fee (4 weeks of rent), return the
+          // security deposit, and remove the aircraft.
           if (remaining <= 0) {
             const type = getAircraftType(a.typeId);
             // Bill the rate this tail signed at, not whatever the table says today.
             const redeliveryRate = a.weeklyLease ?? type?.weeklyLease ?? 0;
             leaseRedeliveryCost += redeliveryRate * 4;
+            // The deposit is refundable and comes back with the airframe. It is
+            // a pure cash movement in both directions — it was never booked
+            // through the P&L when it was paid at order time, so returning it
+            // is not income and must not be netted against the redelivery fee.
+            const depositBack = a.leaseDeposit ?? 0;
+            leaseDepositRefund += depositBack;
             removedAircraftIds.add(a.id);
             leaseWarningToasts.push({
               type:     'danger',
               title:    `📋 Lease ended — ${a.name}`,
-              message:  `${a.name}'s lease has expired. Aircraft returned; redelivery fee of ${(redeliveryRate * 4).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} charged.`,
+              message:  `${a.name}'s lease has expired. Aircraft returned; redelivery fee of ${(redeliveryRate * 4).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} charged${depositBack > 0 ? `, security deposit of ${depositBack.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} returned` : ''}.`,
               duration: 10000,
             });
             return null; // mark for removal
@@ -3131,10 +3157,16 @@ function reducer(state, action) {
       // Seasonal reactivation fees are a deductible operating expense, treated like
       // lease redelivery: they reduce the tax base and flow through the weekly P&L
       // (so the debrief shows them as a cost line and cash reconciles exactly).
+      // A returned security deposit is a return of capital, not income: the money
+      // was paid out at order time without ever passing through the P&L, so it
+      // must not be taxed on the way back. It IS cash, though, so it belongs in
+      // preTaxProfit below — this game's P&L card is walked row by row against
+      // the week's cash movement, and a movement with no row is a reconciliation
+      // failure by design.
       const taxableIncome   = adjustedCashDelta - weeklyDepreciation - totalLoanInterest - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance;
       const corporateTax    = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
       // Cash movement: operating cash − full loan payment − reactivation fees − tax.
-      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance;
+      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance + leaseDepositRefund;
       const newCash = state.cash + preTaxProfit - corporateTax;
       let newWeek = state.week + 1;
       let newYear = state.year;
@@ -3334,6 +3366,7 @@ function reducer(state, action) {
         loanPayments:       totalLoanPayments,
         loanInterest:       totalLoanInterest,
         leaseRedelivery:    leaseRedeliveryCost,
+        leaseDepositReturned: leaseDepositRefund,
         seasonalReactivation: seasonalReactivationCost,
         corporateTax:       corporateTax,
         depreciation:       weeklyDepreciation,
@@ -3395,7 +3428,14 @@ function reducer(state, action) {
         destinations:   statDest.size,
         fleet:          agedFleet?.length ?? state.fleet?.length ?? 0,
         // Financials (mirror historyEntry so charts reconcile with the P&L)
-        revenue:        (report.totalRevenue ?? 0) + (report.totalCargoRevenue ?? 0),  // grand total operating revenue
+        // report.totalRevenue is ALREADY the grand total: the simulator folds every
+        // freighter's revenue into it inside the cargo loop and then returns it with
+        // partner O&D added. totalCargoRevenue and totalPartnerRevenue are breakdowns
+        // OF that money, not additions to it — the P&L card says so too. Adding cargo
+        // back on here counted every freight dollar twice, so a cargo-heavy airline's
+        // "Weekly Revenue" tile disagreed with its own P&L and the Revenue-mix chart's
+        // Passenger band (revenue − partner − cargo) absorbed the surplus as pax money.
+        revenue:        report.totalRevenue ?? 0,   // grand total operating revenue (incl. cargo + partner)
         partnerRevenue: report.totalPartnerRevenue ?? 0,
         cargoRevenue:   report.totalCargoRevenue   ?? 0,
         cost:           historyEntry.totalCost,
@@ -3497,6 +3537,10 @@ function reducer(state, action) {
           config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
           ownershipType: order.ownershipType,
           weeklyLease:        order.weeklyLease ?? 0,
+          // Carry the security deposit onto the tail. Without this the money
+          // paid at order time had no record attached to the aircraft, so
+          // nothing downstream — redelivery, early return — could give it back.
+          leaseDeposit:       order.leaseDeposit ?? 0,
           leaseTermWeeks:     deliveredLeaseTerm,
           leaseRemainingWeeks: deliveredLeaseTerm,
           fuelMod:       order.fuelMod   ?? 1.0,
@@ -3607,7 +3651,7 @@ function reducer(state, action) {
           // operating cost so that (revenueEffective − totalCostAll) reconciles to cashDelta.
           revenueEffective: Math.round(report.totalRevenue + eventDemandAdj - strikeRevenueLoss),
           totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost + corporateTax + maintCheckSpend + aogSpend,
-          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,
         hubs:              hubsAfterBuild,
@@ -3780,6 +3824,13 @@ function reducer(state, action) {
 
     case 'CLEAR_TOASTS': {
       return { ...state, pendingToasts: [] };
+    }
+
+    case 'PUSH_TOAST': {
+      // A toast raised from outside the weekly tick — used by the autosave to
+      // tell the player their progress has stopped being written to disk.
+      if (!action.toast) return state;
+      return { ...state, pendingToasts: [...(state.pendingToasts ?? []), action.toast] };
     }
 
     case 'CLEAR_ERROR': {
@@ -4015,6 +4066,43 @@ function reconcileState(parsed) {
   };
 }
 
+/**
+ * Write the autosave, and SAY whether it worked.
+ *
+ * The bug this replaces: the autosave was `try { setItem } catch (_) {}`. When
+ * the browser's storage for the site filled up — which a long game does on its
+ * own, and which a couple of manual slots plus a custom logo accelerates — every
+ * subsequent write threw QuotaExceededError, the catch swallowed it, and the
+ * game carried on looking completely normal while persisting nothing. The player
+ * found out at the next refresh, having lost the session, and the Save/Load
+ * screen was still telling them "your game also auto-saves continuously in the
+ * background". A failure the player cannot see is worse than no autosave at all.
+ *
+ * Returns a result rather than throwing so the caller can surface it, and takes
+ * the storage explicitly so it is testable outside a browser.
+ *
+ * @returns {{ok: boolean, reason?: 'quota'|'unavailable'|'error', message?: string}}
+ */
+export function persistAutosave(state, storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
+  if (!storage) return { ok: false, reason: 'unavailable', message: 'This browser is not allowing the game to store data. Private browsing usually causes this.' };
+  try {
+    storage.setItem(SAVE_KEY, JSON.stringify(state));
+    return { ok: true };
+  } catch (err) {
+    // Quota is the case worth naming precisely, because the player can act on
+    // it. Browsers disagree on how they report it: name, legacy code 22, and
+    // Firefox's 1014 are all in the wild.
+    const quota = err && (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 || err.code === 1014
+    );
+    return quota
+      ? { ok: false, reason: 'quota', message: 'Your browser’s storage for this game is full, so your progress is no longer being saved automatically. Delete a save slot to free space — anything you do until then will be lost if you refresh.' }
+      : { ok: false, reason: 'error', message: 'Your progress could not be saved. Anything you do from here will be lost if you refresh.' };
+  }
+}
+
 export function GameProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, () => {
     try {
@@ -4024,8 +4112,25 @@ export function GameProvider({ children }) {
     return freshState();
   });
 
+  // Latched so the warning fires on the transition, not on every state change —
+  // a broken autosave would otherwise queue a toast on every click.
+  const autosaveBroken = useRef(false);
+
   useEffect(() => {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) { /* ignore */ }
+    const result = persistAutosave(state);
+    if (!result.ok && !autosaveBroken.current) {
+      autosaveBroken.current = true;
+      dispatch({ type: 'PUSH_TOAST', toast: {
+        type: 'danger', title: '⚠ Your game is not being saved',
+        message: result.message, duration: 20000,
+      } });
+    } else if (result.ok && autosaveBroken.current) {
+      autosaveBroken.current = false;
+      dispatch({ type: 'PUSH_TOAST', toast: {
+        type: 'success', title: '✓ Saving again',
+        message: 'Your progress is being saved automatically once more.', duration: 8000,
+      } });
+    }
   }, [state]);
 
   // Expose routes already hydrated with their per-pair price, so every consumer can

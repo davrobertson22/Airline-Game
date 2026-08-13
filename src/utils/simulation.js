@@ -9,8 +9,8 @@ import { RESERVE_READINESS_MULT, RESERVE_NO_DISPATCH_IF_CHECK_WITHIN_WEEKS, rese
 export { baseCityPairDemand } from './market.js';
 import { cargoCityPairDemand, cargoReferenceYield, referencePrice,
          cargoBackhaulFactor, cargoSeasonalFactor,
-         loadDemandScale, weeklyLoadJitter, LOAD_CEILING ,
-         metroPairKeyOf, isMetroPair, memberPairKeysOf } from './market.js';
+         loadDemandScale, weeklyLoadJitter, LOAD_CEILING,
+         metroPairKeyOf, memberPairKeysOf } from './market.js';
 import { LABOR_GROUPS, fleetCrewScale, laborEffects } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
@@ -1256,11 +1256,15 @@ export function formatGameDate(state) {
  */
 export function currentGameDate(state) {
   const { monthIndex } = weekToGameDate(state.week);
-  // absWeek drives demand growth over game time (pairDemandGrowth) — same field
-  // tickPrep attaches, so previews built from this default forecast the same
-  // grown market the tick books.
-  return { week: state.week, month: monthIndex,
-           absWeek: (Math.max(1, (state.year ?? 1)) - 1) * 52 + (state.week ?? 1) };
+  // absWeek rides along so every caller that builds a market off this date gets
+  // the world's demand growth — buildRouteMarket keys growth on it and falls
+  // back to 1.0 when it is absent, so leaving it off silently froze every
+  // preview and every UI-side market at year-one demand while the tick grew.
+  return {
+    week: state.week,
+    month: monthIndex,
+    absWeek: ((state.year ?? 1) - 1) * 52 + (state.week ?? 1),
+  };
 }
 
 export function ageLabel(ageWeeks) {
@@ -1309,40 +1313,21 @@ export function defaultConfig(totalSeats) {
  * @param {object[]|null} specs         encroachment specs on this pair
  * @param {object}        market        from buildRouteMarket
  */
-export function rivalOffersFor(competitors, specs, market, pairCodes = null) {
-  const o = pairCodes?.origin      ?? market.origin;
-  const d = pairCodes?.destination ?? market.destination;
-  const key = [o, d].sort().join('-');
+export function rivalOffersFor(competitors, specs, market) {
+  const key = [market.origin, market.destination].sort().join('-');
   const serving = new Set();
   const offers = [];
   for (const c of competitors ?? []) {
     if (!c?.routes?.[key]) continue;
-    const offer = buildCompetitorOffer(c, market, pairCodes);
+    const offer = buildCompetitorOffer(c, market);
     if (!offer) continue;
     serving.add(c.id);
     offers.push(offer);
   }
   for (const spec of specs ?? []) {
     if (spec?.competitorId != null && serving.has(spec.competitorId)) continue;
-    const offer = buildEncroachmentOffer(spec, market, pairCodes);
+    const offer = buildEncroachmentOffer(spec, market);
     if (offer) offers.push(offer);
-  }
-  return offers;
-}
-
-/**
- * Every rival offer contesting a POOLED metro-pair lane: rivalOffersFor() run
- * over every member airport pair of the two metros. Each offer carries the
- * member pair's own codes, so airportAppeal and hub connectivity score the
- * airports the rival actually flies. On a non-metro pair the member list is
- * exactly [the pair itself] and this is byte-identical to rivalOffersFor().
- */
-export function metroRivalOffersFor(competitors, specsByPair, market) {
-  const offers = [];
-  for (const key of memberPairKeysOf(market.origin, market.destination)) {
-    const [a, b] = key.split('-');
-    offers.push(...rivalOffersFor(competitors, specsByPair(key), market,
-      { origin: a, destination: b }));
   }
   return offers;
 }
@@ -2371,9 +2356,7 @@ export function cargoLaneAllocations(cargoRoutes = [], fleet = [], demandMultipl
     // A route the aircraft can't fly carries nothing (simulateCargoRoute
     // returns null) — it must not dilute the shares of routes that do fly.
     if (distanceKm(o, d) > effectiveRangeKm(aircraft, type)) continue;
-    // Lanes are METRO pairs (data/metros.js): a JFK–HKG freighter and an
-    // EWR–HKG freighter serve one New York–Hong Kong freight market.
-    const rk = metroPairKeyOf(route.origin, route.destination);
+    const rk = [route.origin, route.destination].sort().join('-');
     if (!groups.has(rk)) groups.set(rk, []);
     groups.get(rk).push({ route, type });
   }
@@ -2386,14 +2369,8 @@ export function cargoLaneAllocations(cargoRoutes = [], fleet = [], demandMultipl
     // freighters must not be the one place in the world a recession can't reach.
     const laneMult = demandMultiplier
                    * (demandMultFor ? demandMultFor(r0.origin, r0.destination) : 1);
-    // The lane pool is the STRONGEST member pair actually served — freight
-    // masses are airport-specific, so the busiest served member anchors it.
-    const laneDemand = Math.max(...[...new Set(group.map(g =>
-      [g.route.origin, g.route.destination].sort().join('-')))].map(pk => {
-        const [a, b] = pk.split('-');
-        return cargoCityPairDemand(a, b, gameDate?.month);
-      }));
-    const pool     = laneDemand * maturity * FREIGHTER_CAPTURE_RATE * laneMult;
+    const pool     = cargoCityPairDemand(r0.origin, r0.destination, gameDate?.month)
+                   * maturity * FREIGHTER_CAPTURE_RATE * laneMult;
     const refYield = cargoReferenceYield(r0.origin, r0.destination);
     const laneCapacity = group.reduce((s, g) => s + g.type.payloadTonnes * g.route.weeklyFrequency, 0);
     if (laneCapacity <= 0) continue;
@@ -3237,124 +3214,98 @@ export function weeklyTick(state) {
 
   // (hubs + routeCountByAirport were built above, before the network tick.)
 
-  // ── Pre-pass: pool player demand per METRO-PAIR lane ─────────────────────────
-  // Three duplications die here:
-  //
-  //   1. Multiple aircraft on the SAME origin–destination pair: each
-  //      simulateRoute call would independently claim the full market share,
-  //      overcounting passengers by N×. (The original purpose of this pass.)
-  //   2. A tag route's leg competing with a nonstop on the same pair: a tag
-  //      route joins a group ONCE PER SEGMENT, because its JFK–ORD leg sells
-  //      into the JFK–ORD market exactly like a nonstop does. Leaving it out
-  //      ("tag routes self-contain their O&D split") let a tag segment and a
-  //      nonstop on the same pair EACH draw the full pool — measured at 1.74x
-  //      the whole market, booked as real revenue, from nothing but restating
-  //      one route as two.
-  //   3. Multiple airport pairs serving the SAME metro pair (JFK–LHR + EWR–LHR
-  //      + LGA–STN are all New York–London): each pair used to generate a
-  //      near-full metro market of its own, multiplying the true city-to-city
-  //      demand by the number of member pairs served. Routes are now grouped
-  //      into ONE lane per metro pair (data/metros.js), the market is built
-  //      once, and every member pair — the player's routes AND every rival on
-  //      every sibling pair — fights in that single pool.
-  //
-  // Within a lane the player gets ONE combined offer PER MEMBER AIRPORT PAIR
-  // (their JFK service and their EWR service are different products at
-  // different airports and genuinely compete with each other), and each
-  // sub-offer's pooled result is split across its own members by seat share.
-  //
-  // Keyed by ROUTE id — NOT aircraft id. One aircraft may fly several routes
-  // (e.g. a shared JFK-DEN pair plus solo JFK-RDU / JFK-CHS); keying by
-  // aircraft id leaked the shared pair's per-aircraft slice into the SAME
-  // aircraft's OTHER routes, capping their pax at the wrong pair's share
-  // (identical low load factors on unrelated routes).
+  // ── Pre-pass: aggregate player demand per O&D pair ───────────────────────────
+  // When multiple aircraft share the same origin–destination pair each
+  // simulateRoute call would independently claim the full market share,
+  // overcounting passengers by N×.  Instead, build ONE combined player offer
+  // per route group, compute market share once, then split pax proportionally
+  // by each aircraft's seat contribution.
+  // Keyed by ROUTE, not by aircraft. An aeroplane may legally fly several
+  // routes — the reducer has block-hour and network-connectivity rules for
+  // exactly that — so keying by aircraft.id handed a pooled pair's result to
+  // every OTHER route the same tail flew. A narrowbody doing four shuttles a
+  // week on a pair three other aircraft also serve, and the rest of its week on
+  // a pair it has to itself, gave the second route the first route's quarter
+  // share: 19% full instead of 100%, and $665k a week of profit turned into a
+  // loss. Nothing about the second route was different — only who flew it.
   const demandAllocations = new Map(); // routeId → demandResult override
   // `${routeId}|${pairKey}` → { ecoDemand, bizDemand } for a tag route's slice
   // of a pair it shares with other player metal.
   const tagSegmentDemand  = new Map();
 
   {
-    // Group active routes by metro-pair lane, sub-grouped by airport pair. A
-    // tag route joins once per segment (see 2 above), under the lane and pair
-    // of that segment's own endpoints.
-    // Iteration order of both maps is insertion order = routes order, so the
-    // lane representative (first member) is deterministic across ticks.
-    const lanes = new Map(); // laneKey → Map(pairKey → [{ route, aircraft, seg? }])
-    const addMember = (o, d, member) => {
-      const laneKey = metroPairKeyOf(o, d);
-      const rk = [o, d].sort().join('-');
-      if (!lanes.has(laneKey)) lanes.set(laneKey, new Map());
-      const byPair = lanes.get(laneKey);
-      if (!byPair.has(rk)) byPair.set(rk, []);
-      byPair.get(rk).push(member);
-    };
+    // Group active routes by sorted routeKey. A tag route joins a group ONCE
+    // PER SEGMENT: its JFK–ORD leg competes on the JFK–ORD pair exactly like a
+    // nonstop does, and leaving it out ("tag routes self-contain their O&D
+    // split") let a tag segment and a nonstop on the same pair EACH draw the
+    // full demand pool — measured at 1.74x the whole market, all of it booked
+    // as real revenue, from nothing but restating one route as two.
+    const routeGroups = new Map(); // routeKey → [{ route, aircraft, seg? }]
     for (const route of routes) {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       if (!aircraft || isOutOfService(aircraft)) continue;
       if (!isRouteActive(route, gameDate.month)) continue;   // dormant this month
       if (isMultiStop(route)) {
         for (const seg of routeSegments(route)) {
-          addMember(seg.from, seg.to, { route, aircraft, seg });
+          const rk = [seg.from, seg.to].sort().join('-');
+          if (!routeGroups.has(rk)) routeGroups.set(rk, []);
+          routeGroups.get(rk).push({ route, aircraft, seg });
         }
         continue;
       }
-      addMember(route.origin, route.destination, { route, aircraft });
+      const rk = [route.origin, route.destination].sort().join('-');
+      if (!routeGroups.has(rk)) routeGroups.set(rk, []);
+      routeGroups.get(rk).push({ route, aircraft });
     }
 
-    for (const [, byPair] of lanes) {
-      const subGroups   = [...byPair.entries()];
-      const laneMembers = subGroups.flatMap(([, g]) => g);
-      const laneAnchor  = laneMembers.find(g => !g.seg) ?? laneMembers[0];
-      const laneO = laneAnchor.seg?.from ?? laneAnchor.route.origin;
-      const laneD = laneAnchor.seg?.to   ?? laneAnchor.route.destination;
+    // Lanes: one share fight per METRO pair, not per airport pair.
+    //
+    // data/metros.js prices every member pair of a metro pair at the same metro
+    // total — New York↔London is one market however you fly it. Grouping the
+    // share fight by AIRPORT pair then handed that whole market to each member
+    // pair separately, so a player flying JFK–LHR and EWR–LHR drew it twice
+    // (measured: 2,574 pax against 1,292 for the same metal on one pair), and a
+    // rival on a sibling airport was invisible (1,292 contested vs 1,292 alone).
+    // That is the duplication the metro rework set out to kill; pricing was
+    // pooled, the share fight was not.
+    //
+    // Within a lane the player gets one offer PER MEMBER PAIR SERVED — your JFK
+    // and EWR services are genuinely different products competing for the same
+    // travellers — and every member pair is scanned for rivals.
+    const lanes = new Map(); // laneKey → [pairKey, ...]
+    for (const pk of routeGroups.keys()) {
+      const [a, b] = pk.split('-');
+      const laneKey = metroPairKeyOf(a, b);
+      if (!lanes.has(laneKey)) lanes.set(laneKey, []);
+      lanes.get(laneKey).push(pk);
+    }
 
-      // Does this lane need the pooled fight at all?
-      //   · ≥2 player presences on the lane (same pair, sibling member pairs,
-      //     or a tag segment alongside a nonstop) AND ≥2 distinct routes — a
-      //     lane that is only ONE tag route's own segments needs no pooling,
-      //     because simulateTagRoute self-contains the split within a rotation;
-      //   · or a metro pair where a rival contests a SIBLING member pair — the
-      //     solo simulateRoute path only ever sees its own pair's rivals.
-      // A lone route whose only rivals are on its own pair keeps the historical
-      // single-route path: simulateRoute runs the identical fight itself.
-      let needsPool = laneMembers.length >= 2
-        && new Set(laneMembers.map(g => g.route.id)).size >= 2;
-      if (!needsPool && isMetroPair(laneO, laneD)) {
-        const ownKey = [laneO, laneD].sort().join('-');
-        for (const key of memberPairKeysOf(laneO, laneD)) {
-          if (key === ownKey) continue;
-          if ((competitors ?? []).some(c => c?.routes?.[key])
-              || (encroachByPair(key)?.length ?? 0) > 0) {
-            needsPool = true;
-            break;
-          }
-        }
-      }
-      if (!needsPool) continue;
+    for (const [, pairKeys] of lanes) {
+      // Rivals across EVERY member pair of the lane, deduped per pair the same
+      // way the single-aircraft path does.
+      const firstPair = pairKeys[0].split('-');
+      const laneMemberKeys = memberPairKeysOf(firstPair[0], firstPair[1]);
+      const servedByPlayer = new Set(pairKeys);
 
-      // Lane maturity is the OLDEST route on the lane, not laneMembers[0] — the
-      // market has known the service as long as the longest-serving tail has
-      // flown it. Array order made this the oldest route by luck (routes are
-      // appended in creation order) right up until someone closed the founding
-      // route and reopened it, which silently re-ramped the whole lane. Matches
-      // the documented cargo rule (lane maturity = MAX weeksOpen) and pairShare.
-      const laneWeeksOpen = laneMembers.reduce(
-        (m, g) => Math.max(m, g.route.weeksOpen ?? 0), 0);
-      const maturity = laneMembers.some(g => g.route.weeksOpen != null)
-        ? routeMaturityFactor(laneWeeksOpen) : 1;
-      // One market for the whole lane, built at the representative pair. Every
-      // member pair returns the same baseCityPairDemand total by construction
-      // (see the metro-primary mapping in market.js), so which member
-      // represents the lane changes only cosmetic fields (refPrice differences
-      // within a metro are a rounding error on near-identical distances).
-      const market = buildRouteMarket(laneO, laneD, gameDate, maturity,
-        eventDemandMultFor(laneO, laneD));
+      // Does anything actually need pooling here? A lone route whose only
+      // rivals sit on its own pair keeps the historical solo path, byte for
+      // byte — simulateRoute runs exactly the fight it always did. (This is the
+      // old `group.length < 2` + "one tag route's own segments" pair of guards,
+      // restated lane-wide: a tag route that is the lane's only presence still
+      // self-contains its split inside simulateTagRoute.)
+      const presences = pairKeys.reduce(
+        (n, pk) => n + new Set((routeGroups.get(pk) ?? []).map(g => g.route.id)).size, 0);
+      const siblingRivalKeys = laneMemberKeys.filter(k => !servedByPlayer.has(k));
+      const hasSiblingRivals = siblingRivalKeys.some(k =>
+        (encroachByPair(k) ?? []).length > 0
+        || (competitors ?? []).some(c => c?.routes?.[k]));
+      if (presences < 2 && !hasSiblingRivals) continue;
 
-      const fx = laborEffects(labor, avgUtilization, satisfaction);
+      const subs = [];
+      for (const pairKey of pairKeys) {
+        const group = routeGroups.get(pairKey);
+        if (!group || group.length === 0) continue;
 
-      // ── One combined player offer per member airport pair ────────────────────
-      const subOffers = []; // { offer, group, totalEcoSeats, totalBizSeats }
-      for (const [, group] of subGroups) {
         // Pair orientation and pricing anchor: prefer a nonstop member (its
         // routePricing governs the pair); an all-tag group anchors on its first
         // segment.
@@ -3362,29 +3313,47 @@ export function weeklyTick(state) {
         const { route: r0 } = anchor;
         const pairO = anchor.seg?.from ?? r0.origin;
         const pairD = anchor.seg?.to   ?? r0.destination;
+        // Lane maturity is the OLDEST route on the pair, not group[0]. The market
+        // has known the service as long as the longest-serving tail has flown it,
+        // and maturity scales the WHOLE pair's demand pool — so group[0] decided
+        // it for every aircraft on the lane.
+        //
+        // Array order made group[0] the oldest route by luck: routes append in
+        // creation order. That luck runs out the moment a player replaces an
+        // airframe, because closing a route and adding its replacement puts a
+        // weeksOpen-0 route into the array. Whether it lands before or after the
+        // survivor — i.e. which of two identical aeroplanes you happened to swap —
+        // was worth 1,762 passengers and $1.06M a week on a contested trunk route.
+        // Matches the cargo rule (lane maturity = MAX weeksOpen).
+        const laneWeeksOpen = group.reduce((m, g) => Math.max(m, g.route.weeksOpen ?? 0), 0);
+        const maturity = group.some(g => g.route.weeksOpen != null)
+          ? routeMaturityFactor(laneWeeksOpen) : 1;
+        const market   = buildRouteMarket(pairO, pairD, gameDate, maturity,
+          eventDemandMultFor(pairO, pairD));
+
         // Pair-level bonuses (same as the single-aircraft simulateRoute path):
-        // hub investment, catering (distance-amplified), ground staff — all a
-        // property of THIS member pair's endpoints, not of the lane. Previously
+        // hub investment, catering (distance-amplified), ground staff. Previously
         // the combined offer used ONLY the raw quality score — multi-aircraft
         // routes silently lost up to ~30 pts of space/catering/ground/hub quality
         // and the reputation/loyalty price-sensitivity shield in the share fight.
         const groupDist   = routeDistanceKm(pairO, pairD);
         const groupHubQ   = Math.max(
-          hubs[pairO]?.tier ? (HUB_TIERS[hubs[pairO].tier]?.qualityBonus ?? 0) : 0,
+          hubs[pairO]?.tier      ? (HUB_TIERS[hubs[pairO].tier]?.qualityBonus      ?? 0) : 0,
           hubs[pairD]?.tier ? (HUB_TIERS[hubs[pairD].tier]?.qualityBonus ?? 0) : 0,
         );
+        const fx = laborEffects(labor, avgUtilization, satisfaction);
         // Lounge context for the pair — identical for every tail in the group,
         // because it is a property of the two airports, not of the metal.
         const groupLounge = loungeFieldsFor(pairO, pairD);
 
-        // Aggregate capacity across all members in the group
+        // Aggregate capacity across all aircraft in the group
         let totalEcoSeats = 0;
         let totalBizSeats = 0;
         let totalSeatsAll = 0; // ALL cabins (incl. premium economy / first) × freq
-        let premiumSeats  = 0; // Σ seats × that aircraft's ticketPremium
         let totalFreq     = 0;
         let totalQuality  = 0;
         let hasBusinessCabin = false;
+        let premiumSeats  = 0; // Σ seats × that aircraft's ticketPremium
 
         for (const { route, aircraft } of group) {
           const type = getAircraftType(aircraft.typeId);
@@ -3397,19 +3366,15 @@ export function weeklyTick(state) {
           totalBizSeats += biz;
           const bodies = configBodies(cfg) * freq;
           totalSeatsAll += bodies;
-          premiumSeats  += bodies * (type.ticketPremium ?? 1);
           totalFreq     += freq;
+          premiumSeats  += bodies * (type.ticketPremium ?? 1);
           const raw = computeQualityScore({
             onTimeRate:    fx.onTimeRate,
             cabinPoints:   cabinQualityPoints(cfg),
             fleetAgeYears: (aircraft.ageWeeks ?? 0) / 52,
             customerRating: fx.customerRating,
           });
-          // Full per-aircraft quality with every bonus simulateRoute applies —
-          // including this tail's OWN Wi-Fi equipage. Averaging the per-aircraft
-          // figures (rather than scoring the group once at blended coverage) is
-          // what makes an unfitted tail on a shared pair drag the pair's quality
-          // in proportion to how much of the schedule it flies.
+          // Full per-aircraft quality with every bonus simulateRoute applies.
           totalQuality += Math.max(0, Math.min(100,
             raw + fx.groundQualityBonus
             + configSpaceQualityBonus(cfg, type)
@@ -3423,11 +3388,26 @@ export function weeklyTick(state) {
         }
 
         const avgQuality = Math.round(totalQuality / group.length);
+        const cp0 = r0.classPrices ?? {};
+        // The type's ticket premium, seat-weighted across the group. simulateRoute
+        // applies the flying aircraft's premium to every fare BEFORE the demand
+        // model, so higher prices feed through elasticity; this path applied none,
+        // and a supersonic lane's fares quietly reverted to subsonic as soon as a
+        // second tail joined it. Measured: one Concorde on a contested JFK–LHR sold
+        // 29 seats a week at $3,526 a passenger; two sold 896 each at $2,767 — a
+        // 30x jump in traffic bought by a fare cut nobody made.
+        //
+        // Seat-weighted rather than group[0]'s, because a mixed group has no single
+        // premium and the offer is already a blend of everything else. For the
+        // ordinary case — every aircraft the same type — it is exactly the value
+        // the single-aircraft path would use.
+        const ticketPremium = totalSeatsAll > 0 ? premiumSeats / totalSeatsAll : 1;
         // Fares, member-aware: nonstop members all fly the pair's stored fares
         // (routePricing is per-pair), a tag member flies its own segment fare.
         // Seat-weight the group's economy fare so a mixed group's offer is priced
         // at what its seats actually sell for — for an all-nonstop group every
         // member price is identical and this is exactly the old single read.
+        // The type premium is applied group-wide afterwards, exactly as before.
         const memberEcoPrice = (g) => {
           if (g.seg) {
             const sp = g.route.segmentPrices?.[routeSegmentKey(g.seg.from, g.seg.to)];
@@ -3445,78 +3425,84 @@ export function weeklyTick(state) {
           ecoPriceWeighted += memberEcoPrice(g) * seats;
           ecoPriceSeats    += seats;
         }
-        const cp0 = r0.classPrices ?? {};
-        // The type premium, seat-weighted across the group and applied
-        // group-wide — see the Concorde note in the single-aircraft path:
-        // simulateRoute applies the flying aircraft's premium to every fare
-        // BEFORE the demand model, and this path must too, or a supersonic lane's
-        // fares quietly revert to subsonic the moment a second tail joins it.
-        const ticketPremium = totalSeatsAll > 0 ? premiumSeats / totalSeatsAll : 1;
         const baseEcoPrice = ecoPriceSeats > 0
           ? ecoPriceWeighted / ecoPriceSeats
           : (cp0.economy ?? r0.ticketPrice ?? 1);
-        const ecoPrice = Math.max(1, Math.round(baseEcoPrice * ticketPremium));
+        const ecoPrice = Math.max(1, baseEcoPrice * ticketPremium);
+        // No implicit 3.5x business fare. The single-aircraft path returns null
+        // when a route carries no business price, and this one invented one — two
+        // code paths answering the same question differently. It does not fire on
+        // a healthy save (every route-creation path seeds routePricing, and
+        // hydrateRoute projects it on), which is exactly what makes it worth
+        // closing: it was waiting for the first route to reach the tick unpriced.
         const bizPrice = hasBusinessCabin && cp0.businessClass != null
           ? Math.max(1, cp0.businessClass * ticketPremium)
-          : null;  // match single-aircraft path (no implicit 3.5x biz fare)
+          : null;
         const connBonus = computeConnectivityBonus(
           r0.hub, pairO, pairD, spokeCounts[r0.hub] ?? 0);
 
-        subOffers.push({
-          group,
-          totalEcoSeats,
-          totalBizSeats,
-          offer: {
-            airlineId:         'player',
-            // The member pair's OWN codes — this is what lets offerAirportAppeal
-            // score the player's JFK service and EWR service differently inside
-            // the one pooled fight.
-            origin:            pairO,
-            destination:       pairD,
-            economyPrice:      ecoPrice,
-            businessPrice:     bizPrice,
-            weeklyFrequency:   totalFreq,
-            seatsPerFlight:    totalFreq > 0 ? Math.round((totalEcoSeats + totalBizSeats) / totalFreq) : 0,
-            economySeats:      totalEcoSeats,
-            businessSeats:     totalBizSeats,
-            totalSeats:        totalSeatsAll,
-            qualityScore:      avgQuality,
-            connectivityBonus: connBonus,
-            // Reputation/loyalty price-sensitivity shield — same as single-aircraft
-            // routes get via sensReductionFor (was: always 0 for grouped routes).
-            priceSensitivityReduction: sensReductionFor(groupHubQ),
-            // Same targeted-campaign term the single-aircraft path gets.
-            marketingBoost: campaignBoostFor(pairO, pairD),
-            // Same brand-reach term too. The pooled demand this offer produces is
-            // handed straight to each aircraft as a demandOverride, so omitting it
-            // here would exempt every multi-aircraft route from the brand model.
-            brandReach: brandReachFor(groupHubQ, [pairO, pairD],
-              partnerContestedKeys.has(pairKeyOf(pairO, pairD))),
-            // And the same lounge term. The pooled demand this offer produces is
-            // handed straight to each aircraft as a demandOverride, so omitting it
-            // here would exempt every multi-aircraft route from the lounge model —
-            // exactly the hole brandReach fell into on this code path.
-            loungeAppeal: groupLounge.loungeAppeal,
-          },
-        });
+        const combinedOffer = {
+          airlineId:         'player',
+          origin:            pairO,
+          destination:       pairD,
+          economyPrice:      ecoPrice,
+          businessPrice:     bizPrice,
+          weeklyFrequency:   totalFreq,
+          seatsPerFlight:    totalFreq > 0 ? Math.round((totalEcoSeats + totalBizSeats) / totalFreq) : 0,
+          economySeats:      totalEcoSeats,
+          businessSeats:     totalBizSeats,
+          totalSeats:        totalSeatsAll,
+          qualityScore:      avgQuality,
+          connectivityBonus: connBonus,
+          // Reputation/loyalty price-sensitivity shield — same as single-aircraft
+          // routes get via sensReductionFor (was: always 0 for grouped routes).
+          priceSensitivityReduction: sensReductionFor(groupHubQ),
+          // Same targeted-campaign term the single-aircraft path gets.
+          marketingBoost: campaignBoostFor(pairO, pairD),
+          // Same brand-reach term too. The pooled demand this offer produces is
+          // handed straight to each aircraft as a demandOverride, so omitting it
+          // here would exempt every multi-aircraft route from the brand model.
+          brandReach: brandReachFor(groupHubQ, [pairO, pairD],
+            partnerContestedKeys.has(pairKeyOf(pairO, pairD))),
+          // And the same lounge term. The pooled demand this offer produces is
+          // handed straight to each aircraft as a demandOverride, so omitting it
+          // here would exempt every multi-aircraft route from the lounge model.
+          loungeAppeal: groupLounge.loungeAppeal,
+        };
+
+        subs.push({ group, offer: combinedOffer, market, totalEcoSeats, totalBizSeats });
+      }
+      if (subs.length === 0) continue;
+
+      // One market for the lane — every member pair prices identically by
+      // construction, so the first sub-offer's is the lane's.
+      const laneMarket = subs[0].market;
+      // Live bank, not the module constant — see the note in simulateRoute().
+      // Same one-airline-one-offer merge as the single-aircraft path: without it
+      // a pooled pair double-counted every human rival exactly like a solo one.
+      const laneRivalOffers = [];
+      for (const k of laneMemberKeys) {
+        const [ka, kb] = k.split('-');
+        const kMarket = k === pairKeys[0] ? laneMarket
+          : buildRouteMarket(ka, kb, gameDate, laneMarket.maturityFactor,
+              eventDemandMultFor(ka, kb));
+        laneRivalOffers.push(...rivalOffersFor(
+          (competitors ?? []).filter(c => c?.routes?.[k]), encroachByPair(k), kMarket));
       }
 
-      // Live bank, not the module constant — see the note in simulateRoute().
-      // Rivals from EVERY member pair of the lane, with the per-pair
-      // spec-vs-carrier dedupe intact (metroRivalOffersFor) — without that merge
-      // a pooled pair double-counted every human rival exactly like a solo one.
-      // On a non-metro lane this is exactly the old own-pair rivalOffersFor call.
-      const competitorOffers = metroRivalOffersFor(competitors, encroachByPair, market);
-      const results = computeMarketShare(market,
-        [...subOffers.map(s => s.offer), ...competitorOffers]);
+      // ONE share fight for the whole lane: every member pair the player serves
+      // plus every rival on every member pair, softmaxed together.
+      const laneResults = computeMarketShare(
+        laneMarket, [...subs.map(s => s.offer), ...laneRivalOffers]);
 
-      // Distribute each sub-offer's pooled result to its members proportionally
-      // by seat share. Nonstop members take a demandOverride into simulateRoute
-      // exactly as before; a tag member's slice is recorded per SEGMENT and
-      // handed to simulateTagRoute, which then skips its own (whole-pool) share
-      // fight for that segment.
-      subOffers.forEach(({ group, totalEcoSeats, totalBizSeats }, i) => {
-        const subResult = results[i];
+      for (let si = 0; si < subs.length; si++) {
+        const { group, totalEcoSeats, totalBizSeats } = subs[si];
+        const combinedResult = laneResults[si];
+        // Distribute pax to each member proportionally by seat share. Nonstop
+        // members take a demandOverride into simulateRoute exactly as before; a
+        // tag member's slice is recorded per SEGMENT and handed to
+        // simulateTagRoute, which then skips its own (whole-pool) share fight for
+        // that segment.
         for (const g of group) {
           const { route, aircraft, seg } = g;
           const type = getAircraftType(aircraft.typeId);
@@ -3530,27 +3516,27 @@ export function weeklyTick(state) {
 
           if (seg) {
             tagSegmentDemand.set(`${route.id}|${[seg.from, seg.to].sort().join('-')}`, {
-              ecoDemand: Math.round((subResult.leisurePaxUncapped ?? subResult.leisurePax) * ecoFrac),
-              bizDemand: Math.round((subResult.businessPaxUncapped ?? subResult.businessPax) * bizFrac),
+              ecoDemand: Math.round((combinedResult.leisurePaxUncapped ?? combinedResult.leisurePax) * ecoFrac),
+              bizDemand: Math.round((combinedResult.businessPaxUncapped ?? combinedResult.businessPax) * bizFrac),
             });
             continue;
           }
 
           demandAllocations.set(route.id, {
-            leisurePax:      Math.round(subResult.leisurePax  * ecoFrac),
-            businessPax:     Math.round(subResult.businessPax * bizFrac),
+            leisurePax:      Math.round(combinedResult.leisurePax  * ecoFrac),
+            businessPax:     Math.round(combinedResult.businessPax * bizFrac),
             // Pre-cap demand rides along so the load models downstream see the
             // demand the market generated, not the seat count (see simulateRoute).
-            leisurePaxUncapped:  Math.round((subResult.leisurePaxUncapped ?? subResult.leisurePax) * ecoFrac),
-            businessPaxUncapped: Math.round((subResult.businessPaxUncapped ?? subResult.businessPax) * bizFrac),
-            economyRevenue:  Math.round(subResult.economyRevenue  * ecoFrac),
-            businessRevenue: Math.round(subResult.businessRevenue * bizFrac),
-            leisureShare:    subResult.leisureShare,
-            businessShare:   subResult.businessShare,
-            capacityCapped:  subResult.capacityCapped,
+            leisurePaxUncapped:  Math.round((combinedResult.leisurePaxUncapped ?? combinedResult.leisurePax) * ecoFrac),
+            businessPaxUncapped: Math.round((combinedResult.businessPaxUncapped ?? combinedResult.businessPax) * bizFrac),
+            economyRevenue:  Math.round(combinedResult.economyRevenue  * ecoFrac),
+            businessRevenue: Math.round(combinedResult.businessRevenue * bizFrac),
+            leisureShare:    combinedResult.leisureShare,
+            businessShare:   combinedResult.businessShare,
+            capacityCapped:  combinedResult.capacityCapped,
           });
         }
-      });
+      }
     }
   }
   // ── End pre-pass ─────────────────────────────────────────────────────────────
