@@ -3,7 +3,7 @@
 // Run from the project root:  node tools/generate-aircraft-pages.mjs
 // Re-run whenever aircraft data changes, then rebuild (vite copies public/ into dist/).
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { AIRCRAFT_TYPES } from '../src/data/aircraft.js';
@@ -12,6 +12,22 @@ import { fuelCostPerKm } from '../src/utils/fuel.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'public');
 const SITE = 'https://www.tailwindsairlinegame.com';
+
+// Hand-written, Tailwinds-only editorial injected into each category page after
+// the stat table. These are wrapped in TW-ONLY markers on output; the Headwinds
+// build (tools/headwinds-public.mjs in the Headwinds repo) strips anything
+// between those markers and injects its own multiplayer section instead, so the
+// two sites do not publish the same prose on the same generated pages.
+const PICKS_DIR = path.join(ROOT, 'content/aircraft-picks');
+
+function picksFor(file) {
+  const p = path.join(PICKS_DIR, file);
+  if (!existsSync(p)) {
+    console.warn(`  \u26a0 no picks file for ${file} \u2014 page will ship without its editorial section`);
+    return '';
+  }
+  return `    <!-- TW-ONLY:START -->\n${readFileSync(p, 'utf8').trimEnd()}\n    <!-- TW-ONLY:END -->`;
+}
 
 // ── Category → page config ───────────────────────────────────────────────────
 
@@ -181,6 +197,9 @@ function pageShell({ title, description, canonical, h1, lede, body }) {
   <meta name="description" content="${esc(description)}" />
   <link rel="canonical" href="${canonical}" />
   <link rel="icon" type="image/png" href="/favicon.png" />
+  <!-- Google AdSense -->
+  <meta name="google-adsense-account" content="ca-pub-5123198950074938">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5123198950074938" crossorigin="anonymous"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -216,62 +235,56 @@ function enrich(t) {
   };
 }
 
-function rankNote(t, group) {
-  if (t.seats > 0) {
-    const sorted = [...group].filter((x) => x.seats > 0).sort((a, b) => a.fuelSeatKm - b.fuelSeatKm);
-    const rank = sorted.findIndex((x) => x.id === t.id) + 1;
-    const n = sorted.length;
-    const third = rank <= n / 3 ? 'among the most fuel-efficient per seat' : rank > (2 * n) / 3 ? 'toward the thirstier end per seat' : 'mid-pack on per-seat fuel efficiency';
-    return `Fuel efficiency: <b>#${rank} of ${n}</b> in its class (${t.fuelSeatKm.toFixed(2)}¢ per seat-km at base fuel price) — ${third}. Weekly lease works out to <b>$${Math.round(t.leasePerSeat).toLocaleString()}</b> per seat.`;
-  }
-  if (t.payloadTonnes) {
-    const sorted = [...group].filter((x) => x.payloadTonnes).sort((a, b) => a.fuelTonneKm - b.fuelTonneKm);
-    const rank = sorted.findIndex((x) => x.id === t.id) + 1;
-    return `Cargo efficiency: <b>#${rank} of ${sorted.length}</b> freighters (${t.fuelTonneKm.toFixed(1)}¢ per tonne-km at base fuel price). Weekly lease per payload tonne: <b>$${Math.round(t.weeklyLease / t.payloadTonnes).toLocaleString()}</b>.`;
-  }
-  return '';
-}
-
 function statsTable(group, isFreight) {
+  const metric = (t) => (isFreight ? t.fuelTonneKm : t.fuelSeatKm);
+  const ranked = [...group].filter((t) => metric(t) != null).sort((a, b) => metric(a) - metric(b));
+  const rankOf = new Map(ranked.map((t, i) => [t.id, i + 1]));
+  const perUnit = (t) =>
+    isFreight
+      ? t.payloadTonnes
+        ? Math.round(t.weeklyLease / t.payloadTonnes)
+        : null
+      : t.seats > 0
+        ? Math.round(t.leasePerSeat)
+        : null;
   const rows = group
-    .map(
-      (t) => `      <tr>
+    .map((t) => {
+      const rank = rankOf.get(t.id);
+      const unit = perUnit(t);
+      return `      <tr>
         <td><a href="#${t.id}">${esc(t.name)}</a></td>
         <td>${isFreight ? `${t.payloadTonnes} t` : fmtInt(t.seats)}</td>
         <td>${fmtInt(t.range)} km</td>
         <td>${fmtMoney(t.weeklyLease)}</td>
         <td>${fmtMoney(t.purchasePrice)}</td>
         <td>${t.fuelBurnPer100km.toFixed(0)} L</td>
-        <td>${isFreight ? (t.fuelTonneKm ? t.fuelTonneKm.toFixed(1) + '¢' : '—') : t.fuelSeatKm ? t.fuelSeatKm.toFixed(2) + '¢' : '—'}</td>
-      </tr>`
-    )
+        <td>${isFreight ? (t.fuelTonneKm ? t.fuelTonneKm.toFixed(1) + '\u00a2' : '\u2014') : t.fuelSeatKm ? t.fuelSeatKm.toFixed(2) + '\u00a2' : '\u2014'}</td>
+        <td>${rank ? `${rank} / ${ranked.length}` : '\u2014'}</td>
+        <td>${unit ? '$' + fmtInt(unit) : '\u2014'}</td>
+      </tr>`;
+    })
     .join('\n');
   return `    <div class="tablewrap"><table class="stats">
-      <thead><tr><th>Aircraft</th><th>${isFreight ? 'Payload' : 'Seats'}</th><th>Range</th><th>Lease/wk</th><th>Price</th><th>Fuel/100km</th><th>Fuel/${isFreight ? 'tonne' : 'seat'}-km</th></tr></thead>
+      <thead><tr><th>Aircraft</th><th>${isFreight ? 'Payload' : 'Seats'}</th><th>Range</th><th>Lease/wk</th><th>Price</th><th>Fuel/100km</th><th>Fuel/${isFreight ? 'tonne' : 'seat'}-km</th><th>Fuel rank</th><th>Lease/${isFreight ? 'tonne' : 'seat'}</th></tr></thead>
       <tbody>
 ${rows}
       </tbody>
     </table></div>`;
 }
 
-function aircraftCard(t, group, isFreight) {
-  const specs = [
-    isFreight ? `<span>Payload <b>${t.payloadTonnes} tonnes</b></span>` : `<span>Seats <b>${fmtInt(t.seats)}</b></span>`,
-    `<span>Range <b>${fmtInt(t.range)} km</b></span>`,
-    t.runwayFt ? `<span>Runway <b>${fmtInt(t.runwayFt)} ft</b></span>` : '',
-    `<span>Lease <b>${fmtMoney(t.weeklyLease)}/wk</b></span>`,
-    `<span>Buy <b>${fmtMoney(t.purchasePrice)}</b></span>`,
-    `<span>Fuel <b>${t.fuelBurnPer100km.toFixed(0)} L/100km</b> (≈ $${t.fuelKm.toFixed(2)}/km)</span>`,
-    `<span>Maintenance <b>${fmtMoney(t.baseMaintenancePerWk)}/wk</b></span>`,
-  ].join('\n        ');
+function aircraftCard(t, isFreight) {
+  const meta = [
+    esc(t.manufacturer),
+    esc(t.category),
+    t.runwayFt ? `needs ${fmtInt(t.runwayFt)} ft` : '',
+    `maintenance ${fmtMoney(t.baseMaintenancePerWk)}/wk`,
+  ]
+    .filter(Boolean)
+    .join(' \u00b7 ');
   return `    <div class="card" id="${t.id}">
       <h3>${esc(t.name)}</h3>
-      <p class="meta">${esc(t.manufacturer)} · ${esc(t.category)}</p>
-      <div class="specs">
-        ${specs}
-      </div>
+      <p class="meta">${meta}</p>
       <p>${esc(t.description || '')}</p>
-      <p class="note">${rankNote(t, group)}</p>
     </div>`;
 }
 
@@ -289,8 +302,10 @@ for (const page of PAGES) {
     `<h2>All ${group.length} aircraft at a glance</h2>`,
     `<p>Figures are the game's actual values. Fuel cost assumes the base fuel price of $1.20/litre — the live market price in your save drifts between roughly half and nearly double that, which is why <a href="/route-economics.html">fuel hedging</a> matters.</p>`,
     statsTable(group, isFreight),
-    `<h2>Type-by-type notes</h2>`,
-    group.map((t) => aircraftCard(t, group, isFreight)).join('\n'),
+    picksFor(page.file),
+    `<h2>Every type in the category</h2>`,
+    `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, lease, price and fuel; these add the runway each type needs and its weekly maintenance bill.</p>`,
+    group.map((t) => aircraftCard(t, isFreight)).join('\n'),
   ].join('\n');
 
   const html = pageShell({
