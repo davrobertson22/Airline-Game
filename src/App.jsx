@@ -264,6 +264,36 @@ function AppInner() {
     }
   }, [state.phase]);
 
+  // Deep links. Headwinds' shell has listened for this since the news feed
+  // shipped; solo never needed it until the Dashboard's alerts became links,
+  // and an alert that fires an event nobody listens for is worse than an alert
+  // that is plainly inert. detail is a tab id, or { tab, focus }.
+  //
+  // THIS MUST STAY ABOVE the `state.phase === 'setup'` early return below, and
+  // so must any hook added later. A hook placed after that return is only
+  // called while the game is playing, so the first render after setup finishes
+  // has one more hook than the render before it — React throws "Rendered more
+  // hooks than during the previous render", unmounts the whole tree, and the
+  // player gets a black screen. Only a NEW game crosses that boundary; loading
+  // a save goes straight to 'playing' and the count never changes, which is why
+  // this survived every test we had. tools/conditional-hooks-check.mjs now
+  // fails the build if a hook drifts below a component's early return.
+  //
+  // It also sets the tab state directly rather than calling navigate(), which
+  // is declared after the early return and would be in its temporal dead zone
+  // during setup.
+  useEffect(() => {
+    const onNavigate = (e) => {
+      const d = e?.detail;
+      const id = typeof d === 'string' ? d : d?.tab;
+      if (typeof id !== 'string' || !TABS.some(t => t.id === id)) return;
+      setActiveTab(id);
+      setOpenGroup(null);
+    };
+    window.addEventListener('hw:navigate', onNavigate);
+    return () => window.removeEventListener('hw:navigate', onNavigate);
+  }, []);
+
   if (state.phase === 'setup') return <SetupScreen />;
 
   function handleAdvanceWeek() {
@@ -290,21 +320,6 @@ function AppInner() {
   }
 
   const navigate = (id) => { setActiveTab(id); setOpenGroup(null); };
-
-  // Deep links. Headwinds' shell has listened for this since the news feed
-  // shipped; solo never needed it until the Dashboard's alerts became links,
-  // and an alert that fires an event nobody listens for is worse than an alert
-  // that is plainly inert. detail is a tab id, or { tab, focus }.
-  useEffect(() => {
-    const onNavigate = (e) => {
-      const d = e?.detail;
-      const id = typeof d === 'string' ? d : d?.tab;
-      if (typeof id !== 'string' || !TABS.some(t => t.id === id)) return;
-      navigate(id);
-    };
-    window.addEventListener('hw:navigate', onNavigate);
-    return () => window.removeEventListener('hw:navigate', onNavigate);
-  }, []);
 
   const tabContent = {
     dashboard:   <Dashboard />,
