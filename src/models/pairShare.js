@@ -64,6 +64,7 @@ import {
   routeLandingFee,
   rivalOffersFor,
   rivalSpecsFor,
+  buildEventDemandModel,
   CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 
@@ -72,6 +73,27 @@ import {
 // `partnerContestedKeys` and `routePricing` with it — a second private copy is
 // exactly how two files start disagreeing about what a pair is.
 export { routePairKey as pairKeyOf };
+
+/**
+ * The demand multiplier weeklyTick applies to one O&D, resolved from state alone.
+ *
+ * weeklyTick builds `buildEventDemandModel(state.activeEvents).multFor(a, b)`
+ * once and hands it to BOTH buildRouteMarket and simulateRoute. Previews used to
+ * rely on the CALLER having it in hand: pairMarketShare defaulted
+ * `opts.eventDemandMult` to 1 and projectRouteAddition defaulted its own
+ * parameter to 1.0, so a pandemic reached a launch forecast only if the screen
+ * asking for the forecast happened to pass it. Both current call sites do — and
+ * anything else previewed a world with no event in it.
+ *
+ * `eventOnly` is the caller's figure when it has one; otherwise it is resolved
+ * here, so no call site needs editing and none can silently omit it.
+ *
+ * TW: Tailwinds has no per-world demand multiplier (Headwinds' twin of this
+ * helper composes state.worldDemandMult on top). There is nothing to add here.
+ */
+export function stateDemandMult(state, origin, destination, eventOnly) {
+  return eventOnly ?? buildEventDemandModel(state.activeEvents).multFor(origin, destination);
+}
 
 /**
  * Combine every player aircraft on one city pair into the single AirlineOffer
@@ -233,8 +255,12 @@ export function pairMarketShare(state, origin, destination, opts = {}) {
     (m, r) => Math.max(m, r.weeksOpen ?? 0), 0);
   const maturity = pairRoutes.some((r) => r.weeksOpen != null)
     ? routeMaturityFactor(weeksOpen) : 1;
+  // The pool the tick will fight over: seasonality × maturity × world events.
+  // Defaulting the event multiplier to 1 here left the shock out of the POOL
+  // whenever the caller did not supply it, while simulateRoute still applied it
+  // to the route — two halves of one multiplier, applied in different places.
   const market = buildRouteMarket(origin, destination, gameDate, maturity,
-    opts.eventDemandMult ?? 1);
+    opts.eventDemandMult ?? stateDemandMult(state, origin, destination));
 
   const playerOffer = buildPlayerPairOffer(state, pairRoutes);
   const rivalOffers = buildRivalPairOffers(state, market);
@@ -359,10 +385,12 @@ export function projectRouteAddition(state, spec) {
     // it in as part of tickInput; a saved state does not carry it, so this is
     // 1.0 on a real save — exactly what the two call sites passed by hand).
     fuelMultiplier = state.fuelMultiplier ?? 1.0,
-    // TW: Tailwinds has no state.worldDemandMult. The tick's world/event demand
-    // multiplier for an O&D is buildEventDemandModel(state.activeEvents).multFor,
-    // and it goes to BOTH buildRouteMarket and simulateRoute — so it does here.
-    eventDemandMult = 1.0,
+    // TW: Tailwinds has no state.worldDemandMult. The tick's demand multiplier
+    // for an O&D is buildEventDemandModel(state.activeEvents).multFor, and it
+    // goes to BOTH buildRouteMarket and simulateRoute — so it does here. Resolved
+    // from state when the caller passes nothing, so a world event cannot go
+    // missing from a forecast just because the screen asking forgot to opt in.
+    eventDemandMult = buildEventDemandModel(state.activeEvents).multFor(origin, destination),
   } = spec;
   if (!origin || !destination || !aircraft || origin === destination) return null;
 

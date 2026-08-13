@@ -199,11 +199,30 @@ test('no route reads exactly one hundred percent any more', () => {
     'a demand pool bigger than the aeroplane is not the same as an aeroplane that sells out');
 });
 
-test('a saturated network settles where real ones do', () => {
+test('a saturated network settles at the ceiling, not at parity', () => {
+  // UPDATED (H10). This fixture is not a "typical" network: every one of its six
+  // JFK trunk routes has a demand pool 7-13x the seats it flies one-way (ORD
+  // 25,449 vs 2,604; MCO 33,880 vs 2,604). expectedCarried's documented promise
+  // for that case is the structural ceiling — "a deeply oversubscribed route
+  // asymptotes to the ceiling; a route at demand ≈ capacity lands near 87%".
+  //
+  // This assertion used to demand the 80-90% band, and got it, because
+  // simulateRoute handed loadDemandScale the pool computeMarketShare had ALREADY
+  // capped at the seat count. Every route in the game therefore reported
+  // demand == capacity and the asymptote branch was unreachable: this network
+  // read 87.40% mean (85.48-89.52 per route) and a route at true parity read the
+  // same, which is the one distinction the spill model exists to draw. Fed the
+  // demand the market actually generated it now reads 95.08% mean
+  // (92.97-97.35) — LOAD_CEILING × the ±2.5% weekly jitter, exactly.
+  //
+  // The real-world ~83% system figure is a MIXED network's figure and is pinned
+  // by the parity cases above and by demand-conservation-test; an all-saturated
+  // fixture landing there was the artifact, not the target.
   const r = quietly(() => weeklyTick(network()));
   const mean = r.routeResults.reduce((s, x) => s + x.loadFactor, 0) / r.routeResults.length;
-  assert.ok(mean > 0.80 && mean < 0.92,
-    `mean load factor ${(mean * 100).toFixed(2)}% — the target band is the real-world 80-90%`);
+  assert.ok(mean > LOAD_CEILING - LOAD_JITTER - 1e-9 && mean < LOAD_CEILING + LOAD_JITTER + 1e-9,
+    `mean load factor ${(mean * 100).toFixed(2)}% — a network this oversubscribed belongs at `
+    + `the ${(LOAD_CEILING * 100).toFixed(0)}% ceiling ±${(LOAD_JITTER * 100).toFixed(1)}%`);
 });
 
 test('routes still differ from one another', () => {

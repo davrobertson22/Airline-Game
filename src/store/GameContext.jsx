@@ -3171,7 +3171,8 @@ function reducer(state, action) {
       const approxMonth = gameMonth;
       const compPairCounts = buildPairIncumbents(aiCompetitors, state.routes);
       const updatedCompetitors = aiCompetitors.map(c => {
-        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts);
+        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts,
+          absoluteWeek(state.year ?? 1, state.week ?? 1));
         const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =
