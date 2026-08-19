@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
-import { getAircraftType } from '../data/aircraft.js';
+import { getAircraftType, LEASE_BUYOUT_PREMIUM } from '../data/aircraft.js';
+import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
@@ -14,9 +15,8 @@ import {
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
 import { absoluteWeek } from '../utils/fuel.js';
-import { DEPRECIATION_YEARS } from '../data/overhead.js';
 import { laborEffects } from '../data/labor.js';
-import { dueInfo, checkCost, checkDurationWeeks, isOutOfService, MAX_SCHEDULE_AHEAD_WEEKS, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
+import { airframeNAV, dueInfo, checkCost, checkDurationWeeks, isOutOfService, MAX_SCHEDULE_AHEAD_WEEKS, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
 import InfoTip from './InfoTip.jsx';
 import Callout from './Callout.jsx';
 import { consumeNavFilter } from '../utils/navIntent.js';
@@ -420,6 +420,7 @@ function WifiBadge({ aircraft }) {
 
 function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const { state, dispatch } = useGame();
+  const confirm = useConfirm();
   const { routes } = state;
 
   // Inline rename
@@ -446,6 +447,38 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
       dispatch({ type: 'RENAME_AIRCRAFT', aircraftId: aircraft.id, name });
     }
     setEditingName(false);
+  }
+
+  async function handleBuyout() {
+    // Same call the reducer makes, so the number in this dialog is the number
+    // charged — see models/leaseBuyout.js.
+    const { nav, premium, depositCredit, price } = leaseBuyoutQuote(state, aircraft);
+    if (state.cash < price) {
+      await confirm.alert({
+        title: 'Not enough cash',
+        body: `Buying ${aircraft.name} out of its lease costs ${formatMoney(price)}, but you have ${formatMoney(state.cash)}.`,
+      });
+      return;
+    }
+    const weeksLeft = aircraft.leaseRemainingWeeks ?? 0;
+    const rentLeft  = Math.round((aircraft.weeklyLease ?? 0) * weeksLeft);
+    const body =
+      `${formatMoney(nav)} market value\n`
+      + `+ ${formatMoney(premium)} early-buyout premium\n`
+      + (depositCredit > 0 ? `− ${formatMoney(depositCredit)} your security deposit, credited back\n` : '')
+      + `= ${formatMoney(price)} due now\n\n`
+      + `It becomes an owned aircraft: no more weekly rent, no return date, and you can sell it later. `
+      + `It keeps its routes and its crew.\n\n`
+      + (weeksLeft > 0
+          ? `Left on lease: ${weeksLeft} week${weeksLeft !== 1 ? 's' : ''}, `
+            + `${formatMoney(rentLeft)} of rent still to pay.`
+          : '');
+    const ok = await confirm({
+      title: `Buy out the lease on ${aircraft.name}?`,
+      body,
+      confirmLabel: `Buy out for ${formatMoney(price)}`,
+    });
+    if (ok) dispatch({ type: 'BUY_OUT_LEASE', aircraftId: aircraft.id });
   }
 
   const type = getAircraftType(aircraft.typeId);
@@ -945,6 +978,15 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
             Sell Aircraft
           </button>
         )}
+        {aircraft.ownershipType === 'lease' && (
+          <button
+            className="btn"
+            style={{ background: 'rgba(63,185,80,.1)', color: 'var(--green)', border: '1px solid rgba(63,185,80,.3)' }}
+            onClick={handleBuyout}
+          >
+            Buy Out Lease
+          </button>
+        )}
         <button
           className="btn"
           style={{ background: 'rgba(248,81,73,.1)', color: 'var(--red)', border: '1px solid rgba(248,81,73,.3)' }}
@@ -1332,9 +1374,12 @@ export default function Fleet() {
     const aircraft     = fleet.find(a => a.id === aircraftId);
     const type         = getAircraftType(aircraft?.typeId);
     const activeRoutes = routes.filter(r => r.aircraftId === aircraftId);
-    const ageYears     = (aircraft?.ageWeeks ?? 0) / 52;
-    const remaining    = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
-    const nav          = Math.round((type?.purchasePrice ?? 0) * remaining);
+    // airframeNAV is what SELL_AIRCRAFT actually pays out on. The straight-line
+    // depreciation this used to compute by hand skipped the delivered-age
+    // normalization and the maintenance modifier, so the dialog quoted a
+    // different number from the one the reducer paid — under on the types that
+    // arrive used, over on anything with a check due.
+    const nav          = airframeNAV(aircraft, type, absoluteWeek(state.year, state.week));
     const fee          = Math.round(nav * 0.05);
     const proceeds     = nav - fee;
 
@@ -1535,10 +1580,8 @@ export default function Fleet() {
   }
 
   function sellValue(a) {
-    const type      = getAircraftType(a.typeId);
-    const ageYears  = (a.ageWeeks ?? 0) / 52;
-    const remaining = Math.max(0.1, 1 - ageYears / DEPRECIATION_YEARS);
-    const nav       = Math.round((type?.purchasePrice ?? 0) * remaining);
+    // Same valuation the reducer pays out on — see handleSell.
+    const nav = airframeNAV(a, getAircraftType(a.typeId), absoluteWeek(state.year, state.week));
     return nav - Math.round(nav * 0.05);
   }
 
@@ -1632,6 +1675,14 @@ export default function Fleet() {
   // twenty clicks to avoid twenty route closures.
   const checkedExpiring = checkedAircraft.filter(a => isLeaseExpiring(a));
 
+  // Every leased tail in the selection can be bought out, not just the expiring
+  // ones — but the button only earns its place in the bar when a lease is
+  // actually running out, which is the moment the player is deciding what to do
+  // about it. Quote from the same helper the reducer charges from.
+  const checkedLeased    = checkedAircraft.filter(a => a.ownershipType === 'lease');
+  const bulkBuyoutQuotes = checkedLeased.map(a => ({ a, ...leaseBuyoutQuote(state, a) }));
+  const bulkBuyoutCost   = bulkBuyoutQuotes.reduce((s2, q) => s2 + q.price, 0);
+
   async function handleBulkFitWifi() {
     if (checkedNoWifi.length === 0) return;
     const names = checkedNoWifi.slice(0, 8).map(a => a.name).join(', ')
@@ -1668,6 +1719,52 @@ export default function Fleet() {
       + names;
     if (await confirm({ title: `Extend ${list.length} lease${list.length !== 1 ? 's' : ''} by a year?`, body, confirmLabel: 'Extend leases' })) {
       dispatch({ type: 'EXTEND_LEASES', aircraftIds: list.map(a => a.id), addWeeks: 52 });
+      setCheckedIds([]);
+    }
+  }
+
+  async function handleBulkBuyout() {
+    if (bulkBuyoutQuotes.length === 0) return;
+    const affordable = [];
+    let running = 0;
+    // Cheapest first, so a short player buys out as many as the cash covers
+    // rather than one expensive tail. The reducer applies the same per-aircraft
+    // affordability guard; this is only so the dialog can tell the truth.
+    for (const q of [...bulkBuyoutQuotes].sort((x, y) => x.price - y.price)) {
+      if (running + q.price > state.cash) break;
+      running += q.price;
+      affordable.push(q);
+    }
+    const short = bulkBuyoutQuotes.length - affordable.length;
+    if (affordable.length === 0) {
+      await confirm.alert({
+        title: 'Not enough cash',
+        body: `Buying out the cheapest of the selected leases costs `
+            + `${formatMoney(Math.min(...bulkBuyoutQuotes.map(q => q.price)))}, `
+            + `but you have ${formatMoney(state.cash)}.`,
+      });
+      return;
+    }
+    const names = affordable.slice(0, 8).map(q => `${q.a.name} (${formatMoney(q.price)})`).join(', ')
+                + (affordable.length > 8 ? `, +${affordable.length - 8} more` : '');
+    const rentSaved = affordable.reduce((s2, q) =>
+      s2 + Math.round((q.a.weeklyLease ?? 0) * (q.a.leaseRemainingWeeks ?? 0)), 0);
+    const body =
+      `${formatMoney(running)} due now — market value plus a `
+      + `${Math.round(LEASE_BUYOUT_PREMIUM * 100)}% early-buyout premium, less the deposits already on file.\n\n`
+      + `They become owned aircraft: no more rent, no return date, no routes closing. `
+      + `You stop paying ${formatMoney(rentSaved)} of remaining rent.\n\n`
+      + `${names}`
+      + (short > 0
+          ? `\n\n${short} more selected lease${short !== 1 ? 's' : ''} `
+            + `${short !== 1 ? 'are' : 'is'} more than your remaining cash covers and won't be bought.`
+          : '');
+    if (await confirm({
+      title: `Buy out ${affordable.length} lease${affordable.length !== 1 ? 's' : ''}?`,
+      body,
+      confirmLabel: `Buy out for ${formatMoney(running)}`,
+    })) {
+      dispatch({ type: 'BUY_OUT_LEASES', aircraftIds: affordable.map(q => q.a.id) });
       setCheckedIds([]);
     }
   }
@@ -2103,6 +2200,20 @@ export default function Fleet() {
                 onClick={() => handleBulkExtend(checkedExpiring)}
               >
                 <Glyph e="⏳" /> Extend leases ({checkedExpiring.length})
+              </button>
+            )}
+            {checkedExpiring.length > 0 && checkedLeased.length > 0 && (
+              <button
+                className="btn"
+                style={{
+                  fontSize: 12, padding: '5px 12px',
+                  background: 'rgba(63,185,80,.1)', color: 'var(--green)',
+                  border: '1px solid rgba(63,185,80,.3)', cursor: 'pointer',
+                }}
+                title="Buy the selected leased aircraft outright — they stop paying rent and never go back"
+                onClick={handleBulkBuyout}
+              >
+                <Glyph e="✔" /> Buy out ({checkedLeased.length}) · {formatMoney(bulkBuyoutCost)}
               </button>
             )}
             {checkedNoWifi.length > 0 && (

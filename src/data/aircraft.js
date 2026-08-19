@@ -3206,6 +3206,23 @@ export const AIRCRAFT_TYPES = [
   },
 ];
 
+// ─── Leasing ─────────────────────────────────────────────────────────────────
+
+/**
+ * Weeks of rent a lessor holds as a refundable security deposit when an
+ * aircraft is ordered on lease. Refundable in full — see the deposit handling
+ * in ORDER_AIRCRAFT / CANCEL_ORDER / lease expiry.
+ */
+export const LEASE_DEPOSIT_WEEKS = 12;
+
+/**
+ * What the lessor charges over market value to end a lease early and sell you
+ * the aircraft. They lose the rest of the rent stream, and price the option
+ * accordingly — it is also what makes buying a jet out and immediately
+ * reselling it a guaranteed loss. See models/leaseBuyout.js.
+ */
+export const LEASE_BUYOUT_PREMIUM = 0.10;
+
 export function getAircraftType(id) {
   return AIRCRAFT_TYPES.find(a => a.id === id);
 }

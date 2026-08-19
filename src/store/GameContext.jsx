@@ -15,7 +15,8 @@ import {
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
-import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES } from '../data/aircraft.js';
+import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
+         LEASE_DEPOSIT_WEEKS } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
@@ -63,6 +64,7 @@ import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
 import { buildWeekNews, appendNews, scheduleTrimNews } from '../models/newsLog.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
+import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import {
   tickFuelPrice,
   clampFuelIndex,
@@ -93,6 +95,32 @@ import { initialObjectives, initialObjectivesForState, checkObjectives, getObjec
 // longest period filter (30 years) with headroom. Only lightweight scalar fields
 // are stored per week, so even at the cap this is a small slice of the save.
 const STATS_HISTORY_CAP = 1820;
+
+// ─────────────────────────────────────────────
+// AIRCRAFT STATUS AFTER A ROUTE EDIT
+// ─────────────────────────────────────────────
+// Adding, closing, transferring or reassigning a route re-derives the tail's
+// status from the route table — 'assigned' if it flies something, 'idle' if it
+// doesn't. That derivation is only valid for aircraft that are ABLE to fly.
+//
+// Discord (Marcasia, 2026-08-17): "Removing all flights from a grounded plane
+// seems that it may have removed the technical issue on it." It did. The
+// grounding countdown lives in tickPrep and only runs while
+// `status === 'grounded'`, so writing 'idle' over a broken tail did not park
+// it — it cancelled the AOG outright, and the aircraft could be re-crewed the
+// same week. Transferring a grounded jet's flights onto a spare (the obvious
+// response to a breakdown) cancelled the repair the same way.
+//
+// RETIRE_AIRCRAFT and SELL_AIRCRAFT already carried this guard — "a retirement
+// elsewhere in the fleet must not yank another tail out of its repair bay" —
+// so the invariant was understood; the route actions just never applied it.
+// `extra` still lands either way: a grounded tail that takes a route has still
+// stopped being a reserve, it just hasn't stopped being broken.
+function withRouteStatus(a, next, extra = {}) {
+  return (a.status === 'retired' || isOutOfService(a))
+    ? { ...a, ...extra }
+    : { ...a, ...extra, status: next };
+}
 
 // ─────────────────────────────────────────────
 // ROUTE TRANSFER (Fleet: move every route from one tail to another)
@@ -802,7 +830,7 @@ function reducer(state, action) {
         // rate, on the same amortisation the wingtip surcharge uses.
         const wifiLeaseAdj      = wantsWifi ? wifiLeaseSurcharge() : 0;
         const unitWeeklyLease   = baseWeeklyLease + engineLeaseAdj + wingtipLeaseAdj + wifiLeaseAdj;
-        const leaseDeposit      = action.ownershipType === 'lease' ? unitWeeklyLease * 12 : 0;
+        const leaseDeposit      = action.ownershipType === 'lease' ? unitWeeklyLease * LEASE_DEPOSIT_WEEKS : 0;
 
         // Stop if we can't afford this unit (buy price or lease deposit)
         // Owned aircraft pay the connectivity capex up front; leased ones have
@@ -1227,8 +1255,8 @@ function reducer(state, action) {
         routes:      state.routes.map(move),
         cargoRoutes: (state.cargoRoutes ?? []).map(move),
         fleet: state.fleet.map(a =>
-          a.id === toAircraftId   ? { ...a, status: 'assigned', reserveBase: null } :
-          a.id === fromAircraftId ? { ...a, status: 'idle' }     : a),
+          a.id === toAircraftId   ? withRouteStatus(a, 'assigned', { reserveBase: null }) :
+          a.id === fromAircraftId ? withRouteStatus(a, 'idle')                            : a),
       };
     }
 
@@ -1253,11 +1281,9 @@ function reducer(state, action) {
         fleet: state.fleet.map(a => {
           // Taking a route puts a reserve back into normal service — it is no
           // longer standing by for anyone.
-          if (a.id === toAircraftId) return { ...a, status: 'assigned', reserveBase: null };
+          if (a.id === toAircraftId) return withRouteStatus(a, 'assigned', { reserveBase: null });
           // The donor only goes idle if it gave up its last route.
-          if (a.id === fromId && !isOutOfService(a) && a.status !== 'retired') {
-            return { ...a, status: stillFlying(a.id) ? 'assigned' : 'idle' };
-          }
+          if (a.id === fromId) return withRouteStatus(a, stillFlying(a.id) ? 'assigned' : 'idle');
           return a;
         }),
       };
@@ -1276,11 +1302,13 @@ function reducer(state, action) {
     case 'SELL_AIRCRAFT_BULK':
     case 'RETIRE_AIRCRAFT_BULK':
     case 'SCHEDULE_CHECKS':
+    case 'BUY_OUT_LEASES':
     case 'EXTEND_LEASES': {
       const singleOf = {
         SELL_AIRCRAFT_BULK:   'SELL_AIRCRAFT',
         RETIRE_AIRCRAFT_BULK: 'RETIRE_AIRCRAFT',
         SCHEDULE_CHECKS:      'SCHEDULE_CHECK',
+        BUY_OUT_LEASES:       'BUY_OUT_LEASE',
         EXTEND_LEASES:        'EXTEND_LEASE',
       };
       const single = singleOf[action.type];
@@ -1439,7 +1467,7 @@ function reducer(state, action) {
           : 'active',
       };
       const updatedFleet = state.fleet.map(a =>
-        a.id === action.aircraftId ? { ...a, status: 'assigned', reserveBase: null } : a
+        a.id === action.aircraftId ? withRouteStatus(a, 'assigned', { reserveBase: null }) : a
       );
       // Price and catering are per-route (O&D pair). The first aircraft on a pair sets
       // them; additional aircraft inherit whatever the route already uses.
@@ -1555,7 +1583,7 @@ function reducer(state, action) {
         cateringLevel:   normalizeCateringLevel(action.cateringLevel ?? state.defaultCateringLevel),
       };
       const updatedFleet = state.fleet.map(a =>
-        a.id === action.aircraftId ? { ...a, status: 'assigned', reserveBase: null } : a
+        a.id === action.aircraftId ? withRouteStatus(a, 'assigned', { reserveBase: null }) : a
       );
       return {
         ...state,
@@ -1618,7 +1646,7 @@ function reducer(state, action) {
         // Only idle the aircraft if it has no remaining routes (passenger or cargo)
         const stillActive = updatedRoutes.some(r => r.aircraftId === a.id)
           || (state.cargoRoutes ?? []).some(r => r.aircraftId === a.id);
-        return { ...a, status: stillActive ? 'assigned' : 'idle' };
+        return withRouteStatus(a, stillActive ? 'assigned' : 'idle');
       });
       return { ...state, routes: updatedRoutes, fleet: updatedFleet };
     }
@@ -1713,7 +1741,7 @@ function reducer(state, action) {
         cargo:           true,
       };
       const updatedFleet = state.fleet.map(a =>
-        a.id === action.aircraftId ? { ...a, status: 'assigned', reserveBase: null } : a
+        a.id === action.aircraftId ? withRouteStatus(a, 'assigned', { reserveBase: null }) : a
       );
       return {
         ...state,
@@ -1730,7 +1758,7 @@ function reducer(state, action) {
         if (a.id !== route?.aircraftId) return a;
         const stillActive = updatedCargo.some(r => r.aircraftId === a.id)
           || state.routes.some(r => r.aircraftId === a.id);
-        return { ...a, status: stillActive ? 'assigned' : 'idle' };
+        return withRouteStatus(a, stillActive ? 'assigned' : 'idle');
       });
       return { ...state, cargoRoutes: updatedCargo, fleet: updatedFleet };
     }
@@ -2188,6 +2216,42 @@ function reducer(state, action) {
         fleet: state.fleet.map(a =>
           a.id === action.aircraftId && a.ownershipType === 'lease'
             ? { ...a, leaseRemainingWeeks: a.leaseTermWeeks ?? 104 }
+            : a
+        ),
+      };
+    }
+
+    case 'BUY_OUT_LEASE': {
+      // action: { aircraftId } — purchase a leased aircraft outright and keep it.
+      //
+      // Discord (Lancelotbronner, 2026-08-18): "turning leased aircraft into
+      // aircraft you own (at full cost) — I had a stressful 2 in-game years
+      // replacing end-of-lease with newly built planes as they were expiring."
+      // Renewing and extending were the only ways to keep a leased tail, and
+      // neither ever made it yours.
+      //
+      // Price comes from models/leaseBuyout.js — the same quote the Fleet
+      // dialog shows, built on airframeNAV, the exact valuation SELL_AIRCRAFT
+      // pays out on. See that module for why it is not computed here.
+      const aircraft = state.fleet.find(a => a.id === action.aircraftId);
+      if (!aircraft || aircraft.ownershipType !== 'lease') return state;
+      const buyoutPrice = leaseBuyoutQuote(state, aircraft).price;
+      if (state.cash < buyoutPrice) return state;   // can't afford — no-op
+      return {
+        ...state,
+        cash: state.cash - buyoutPrice,
+        fleet: state.fleet.map(a =>
+          a.id === action.aircraftId
+            ? {
+                ...a,
+                ownershipType:       'owned',
+                weeklyLease:         0,
+                // The deposit is credited into the price above, so it must not
+                // stay on the tail — a refund site would hand it back twice.
+                leaseDeposit:        0,
+                leaseTermWeeks:      undefined,
+                leaseRemainingWeeks: undefined,
+              }
             : a
         ),
       };
@@ -2780,11 +2844,16 @@ function reducer(state, action) {
           const remaining = (a.leaseRemainingWeeks ?? 0) - 1;
           // Warn at 8 and 4 weeks remaining
           if (remaining === 8 || remaining === 4) {
-            const type = getAircraftType(a.typeId);
+            // Name all three ways out, in the order a player would want them.
+            // This toast is where a player goes looking when a lease is running
+            // down, so it is where the buyout has to be mentioned.
+            const buyout = leaseBuyoutQuote(state, a).price;
             leaseWarningToasts.push({
               type:     'warning',
               title:    `⏳ Lease expiring — ${a.name}`,
-              message:  `${remaining} weeks remaining on ${a.name}'s lease. Renew in Fleet or pay early-termination fees to return.`,
+              message:  `${remaining} weeks remaining on ${a.name}'s lease. In Fleet you can extend it, `
+                      + `buy the aircraft outright for ${buyout.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}, or let it go back `
+                      + `(4 weeks' rent redelivery, and its routes close).`,
               duration: 8000,
             });
           }
