@@ -65,6 +65,18 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 22, 2026</p>
+      <h2>Set every cabin's fare before you open the route &mdash; and fly the range your aircraft actually has</h2>
+      <p>Two from the Discord, both about the route planner telling you less than it knew.</p>
+      <ul>
+        <li><strong>All four fares are now set in the route planner, before the route opens.</strong> The planner had a single Ticket Price box; the premium cabins were filled in for you at fixed multiples of it and could only be changed afterwards, on the Routes tab. You now price First, Business, Premium Economy and Economy individually &mdash; only the cabins your chosen layout actually has &mdash; each showing the market reference fare, how far off it you are, and the ceiling. The forecast below updates as you type, so the profit you decide on is the profit at <em>your</em> fares. The Add Route dialog on the Routes tab does the same. Joining a pair you already fly still inherits that pair's fares, because pricing belongs to the route, not the aircraft &mdash; the planner now says so instead of offering a box that would have been ignored.</li>
+        <li><strong>The planner counts the range your aircraft really has.</strong> If you fitted sharklets, or fly a premium-heavy cabin that trades payload for fuel, your aircraft goes further than the catalogue figure &mdash; and the game has always known it: the route would have opened fine. The planner was the one screen still measuring the lane against the brochure, so a jet that could comfortably make the trip simply never appeared in the aircraft list. It appears now, labelled with the reach your modifications actually buy, and the freight planner was fixed the same way. Going the other way, an aircraft is no longer counted as "ready" for a lane it cannot reach.</li>
+        <li><strong>Repricing an open route now previews honestly.</strong> The fare panel on the Routes tab showed projected load, break-even and weekly profit "at these fares" while quietly computing them at the fares the route was already flying &mdash; the numbers did not move however far you dragged a fare. They move now.</li>
+        <li><strong>One small change to a number you may recognise.</strong> The "% vs ref" figure under each cabin used to compare against a different set of reference multiples than the game itself uses, so routes sitting exactly at the default fares showed as well below reference. Every screen now uses the same yardstick. Nothing about what your passengers pay has changed &mdash; only the percentage next to it, which is now the true one.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <p class="date">August 19, 2026</p>
       <h2>Buy your leased aircraft and keep them</h2>
       <p>Leases used to be a one-way street: renew, extend, or watch the aircraft go back and its routes close. Now there is a third option.</p>

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useGame, addRouteBlockReason } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
+import { isOutOfService } from '../data/maintenance.js';
 import {
   baseCityPairDemand, referencePrice, distanceKm,
   formatMoney, formatPercent, weekToGameDate,
@@ -10,6 +11,7 @@ import {
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, stateSensReduction, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
+  effectiveRangeKm,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -31,6 +33,7 @@ import { consumeNavFilter, peekNavFilter, requestNav } from '../utils/navIntent.
 import { navPathFor } from '../navPath.js';
 import { useToast } from './ToastSystem.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import FareEditor, { CLASS_LABELS, CLASS_COLORS, referenceClassPrices } from './FareEditor.jsx';
 
 function weekToMonth(week) {
   return weekToGameDate(week).monthIndex;
@@ -418,7 +421,7 @@ export default function RoutePlanner() {
   const [dest,   setDest]         = useState('');
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [frequency, setFrequency] = useState(7);
-  const [price, setPrice]         = useState(null); // null = auto reference price
+  const [fares, setFares]         = useState({}); // per-cabin overrides; {} = all reference
   const [cateringLevel, setCateringLevel] = useState(normalizeCateringLevel(state.defaultCateringLevel));
   const [season, setSeason] = useState(null); // null = year-round; else { months:[..] }
   // Cabin configuration used for the forecast (defaults to an idle aircraft's real
@@ -445,7 +448,7 @@ export default function RoutePlanner() {
     // back to its own default rather than rendering economics for an impossible
     // route — so an out-of-date intent cannot strand the screen.
     if (nav.typeId) setSelectedTypeId(nav.typeId);
-    setPrice(null);
+    setFares({});
   }, []);
 
   const gameDate = { week: state.week, month: weekToMonth(state.week) };
@@ -470,22 +473,23 @@ export default function RoutePlanner() {
     return { dist, refP, market };
   }, [origin, dest, gameDate.month, ready, eventDemand]);
 
-  const effectivePrice = price ?? routeData?.refP ?? 200;
-  // Fare band. The same 0.4x-2.5x window the old slider spanned, named so the
-  // box, the steppers and the slider cannot disagree about where the ends are.
-  const priceFloor   = routeData ? Math.max(1, Math.round(routeData.refP * 0.4)) : 1;
-  const priceCeiling = routeData ? Math.round(routeData.refP * 2.5) : 100000;
-
-  // The fare box is a DRAFT until it loses focus, so half-typed figures ("4"
-  // on the way to "480") don't re-run the whole forecast at $4 and snap the
-  // slider to the floor under the player's cursor.
-  const [priceDraft, setPriceDraft] = useState(String(effectivePrice));
-  useEffect(() => { setPriceDraft(String(effectivePrice)); }, [effectivePrice]);
-  const commitPriceDraft = () => {
-    const v = parseInt(priceDraft, 10);
-    if (isNaN(v) || v <= 0) { setPriceDraft(String(effectivePrice)); return; }
-    setPrice(Math.min(priceCeiling, Math.max(priceFloor, v)));
-  };
+  // Fares for every cabin: market reference unless the player overrides them in the
+  // fare editor. If the pair is ALREADY flown, its live shared fares apply instead
+  // (a second aircraft inherits the pair's pricing — first aircraft sets it).
+  //
+  // This replaced a single economy box: "i wanted to be able to make all 4 classes
+  // prices in the route planners section, not just the economy price ... i still
+  // request for customization of all 4 class fares before creating the route"
+  // (ASAS, 8/18–19/26). The premium cabins were never unpriced — ADD_ROUTE derived
+  // them from the economy fare through defaultClassPrices — the player simply had
+  // no say in the ratio until after the route was open.
+  const plannerPairKey = ready ? [origin, dest].sort().join('-') : null;
+  const existingFares  = plannerPairKey ? state.routePricing?.[plannerPairKey] : null;
+  const effectiveFares = useMemo(() => {
+    if (!ready) return null;
+    return { ...referenceClassPrices(origin, dest), ...(existingFares ?? fares) };
+  }, [ready, origin, dest, existingFares, fares]);
+  const effectivePrice = effectiveFares?.economy ?? routeData?.refP ?? 200;
 
   // Already operating this pair?
   const alreadyActive = useMemo(() =>
@@ -524,11 +528,51 @@ export default function RoutePlanner() {
       });
   }, [ready, routeData, origin, dest, state.competitors]);
 
+  // Range is a property of the AIRFRAME, not of the catalogue entry. Engine and
+  // wingtip options (sharklets, scimitars, blended winglets) raise `rangeMod` on
+  // the tail you actually bought, and `effectiveRangeKm` is what every other
+  // surface — the Route Finder, the Routes tab, the tag planner, and the reducer's
+  // own ADD_ROUTE guard — measures a lane against. This screen was the last one
+  // still comparing against the stock `type.range`, so a modded jet that the
+  // engine would happily let you deploy was hidden from the picker entirely
+  // ("route planner does not allow me to use routes that my aircraft can handle
+  // if their max range is below the route range BUT the aircraft have
+  // modifications such as engine and sharklet that allow them to have more than
+  // enough range" — ASAS, 8/19/26).
+  //
+  // Per type we quote the LONGEST-LEGGED tail owned, since that is the plane the
+  // route would open on. Types not in the fleet have no mods and no cabin yet, so
+  // they quote the catalogue figure.
+  const reachByType = useMemo(() => {
+    const map = new Map();
+    for (const a of state.fleet ?? []) {
+      // The same fleet filter deployableFleetForRoute applies. A tail in a heavy
+      // check cannot fly this lane, so letting its mods advertise the type would
+      // list an aircraft with nothing behind it: the picker offers the type, counts
+      // "0 ready", and the Open Route button has no airframe to reach for.
+      if (a.status === 'retired' || isOutOfService(a)) continue;
+      const t = getAircraftType(a.typeId);
+      if (!t) continue;
+      // The tail's FULL reach: engine/wingtip rangeMod AND the cabin-payload bonus
+      // its own stored layout earns. Both are real on an airframe you own —
+      // effectiveRangeKm is exactly what ADD_ROUTE measures the lane against — and
+      // the payload bonus is the larger of the two (up to +15% against +4%), so
+      // crediting only the mod still hid premium-cabin jets the engine accepts.
+      const reach = effectiveRangeKm(a, t);
+      if (reach > (map.get(a.typeId) ?? 0)) map.set(a.typeId, reach);
+    }
+    return map;
+  }, [state.fleet]);
+
+  // Reach (km) the picker credits a type with on this route.
+  const reachKmFor = (t) =>
+    t ? (reachByType.get(t.id) ?? effectiveRangeKm({ typeId: t.id }, t)) : 0;
+
   // Aircraft types that can reach this route
   const reachableTypes = useMemo(() => {
     if (!routeData) return [];
-    return AIRCRAFT_TYPES.filter(t => t.range >= routeData.dist);
-  }, [routeData]);
+    return AIRCRAFT_TYPES.filter(t => reachKmFor(t) >= routeData.dist);
+  }, [routeData, reachByType]);
 
   // Hard ceiling on flights/week for this aircraft on this route: one airframe
   // has MAX_WEEKLY_BLOCK_HOURS flying hours a week, so longer sectors fit fewer
@@ -672,13 +716,23 @@ export default function RoutePlanner() {
   const simulation = useMemo(() => {
     if (!routeData || !selectedTypeId) return null;
     const type = getAircraftType(selectedTypeId);
-    if (!type || routeData.dist > type.range) return null;
+    if (!type) return null;
 
-    const simAircraft = { id:'p', typeId: selectedTypeId, ageWeeks: 0, config: effectiveConfig ?? undefined };
-    // Premium cabins earn their multiplier fares (business 2.5×, first 5×, etc.) —
-    // matching defaultClassPrices, which is what ADD_ROUTE assigns when the route is
-    // opened. Without this the forecast would charge every cabin the economy fare.
-    const classPrices = defaultClassPrices(effectivePrice);
+    // Scale the forecast plane's rangeMod so effectiveRangeKm reproduces the reach
+    // the picker quoted. It cannot simply copy the tail's rangeMod: the quoted
+    // figure includes that tail's cabin-payload bonus, while the forecast runs on
+    // whatever layout the player has dialled in here, which may be denser. rangeMod
+    // feeds effectiveRangeKm and nothing else — fuel burn rides on the separate
+    // fuelMod — so this moves the range guard and no part of the economics.
+    const quotedReach = reachKmFor(type);
+    const simAircraft = { id:'p', typeId: selectedTypeId, ageWeeks: 0,
+      rangeMod: type.range > 0 ? quotedReach / type.range : 1.0,
+      config: effectiveConfig ?? undefined };
+    if (routeData.dist > quotedReach) return null;
+    // Every cabin is priced in the fare editor — the forecast charges exactly the
+    // fares the player has set (reference fares until overridden), matching what
+    // ADD_ROUTE will assign when the route is opened.
+    const classPrices = effectiveFares ?? defaultClassPrices(effectivePrice);
 
     // Real operational inputs (morale, fleet utilization, earned satisfaction) so
     // the forecast quality matches what the engine will actually compute.
@@ -767,7 +821,7 @@ export default function RoutePlanner() {
              rivalCount: projection.rivalCount ?? 0,
              pairPassengers: projection.pairPassengers, lanePassengers: projection.lanePassengers,
              laneDemand: projection.laneDemand };
-  }, [routeData, selectedTypeId, frequency, effectivePrice, cateringLevel, effectiveConfig, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest]);
+  }, [routeData, selectedTypeId, frequency, effectiveFares, effectivePrice, cateringLevel, effectiveConfig, competitorsOnRoute, state.hub, origin, dest, gameDate, routeCountAtOrigin, routeCountAtDest, reachByType]);
 
   // Gate + slot position at each endpoint for the planned frequency. The engine
   // enforces both (ADD_ROUTE), so the planner shows them before you click rather
@@ -799,14 +853,13 @@ export default function RoutePlanner() {
       addToast({ type: 'warning', title: "Can't open this route", message: reason });
       return;
     }
-    dispatch({ type: 'ADD_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, ticketPrice: effectivePrice, cateringLevel, season });
+    dispatch({ type: 'ADD_ROUTE', origin, destination: dest, aircraftId, weeklyFrequency: frequency, ticketPrice: effectivePrice, classPrices: effectiveFares ?? undefined, cateringLevel, season });
   }
 
   function handleSwap() {
-    const o = origin; setOrigin(dest); setDest(o); setPrice(null);
+    const o = origin; setOrigin(dest); setDest(o); setFares({});
   }
 
-  const pricePct = routeData ? Math.round((effectivePrice / routeData.refP - 1) * 100) : 0;
   const totalDemand = routeData ? routeData.market.leisureDemand + routeData.market.businessDemand : 0;
 
   // Freight / multi-stop modes render their dedicated planners
@@ -826,7 +879,7 @@ export default function RoutePlanner() {
       {/* ── Route picker ── */}
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-          <AirportPicker label="From" value={origin} onChange={c => { setOrigin(c); setPrice(null); }} exclude={dest} />
+          <AirportPicker label="From" value={origin} onChange={c => { setOrigin(c); setFares({}); }} exclude={dest} />
           <button
             className="btn btn-ghost"
             style={{ padding: '8px 10px', marginBottom: 2, fontSize: 18, flexShrink: 0 }}
@@ -834,7 +887,7 @@ export default function RoutePlanner() {
             disabled={!origin || !dest}
             title="Swap airports"
           >⇄</button>
-          <AirportPicker label="To" value={dest} onChange={c => { setDest(c); setPrice(null); }} exclude={origin} />
+          <AirportPicker label="To" value={dest} onChange={c => { setDest(c); setFares({}); }} exclude={origin} />
         </div>
       </div>
 
@@ -986,8 +1039,9 @@ export default function RoutePlanner() {
 
             {reachableTypes.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                None of your aircraft can reach {origin} → {dest} ({routeData.dist.toLocaleString()} km).
-                Lease a longer-range aircraft from the Market first.
+                Nothing that can reach {origin} → {dest} ({routeData.dist.toLocaleString()} km) is
+                available — not in your fleet, and not in the catalogue. Range modifications on
+                your own airframes are already counted here.
               </div>
             ) : (
               <>
@@ -998,7 +1052,7 @@ export default function RoutePlanner() {
                   <div style={{ flex: '1 1 200px', maxWidth: 320 }}>
                     <div className="form-label" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                       Aircraft type
-                      <InfoTip text="Only aircraft that can reach this route are listed, and the ones you actually own come first — the forecast starts on a plane you can fly today. “N ready” is how many of that type are free to fly this lane right now. Aircraft parked on reserve are counted separately as “on reserve” — you can still deploy one, but it stops standing by. Types under “Not in your fleet” are there to price up an order; you'd have to lease one before the route could open." />
+                      <InfoTip text="Only aircraft that can reach this route are listed, measured on the range your airframes actually have — engine and wingtip modifications count, so a jet whose book range falls short of the lane still appears if a tail you own is modded past it. The ones you actually own come first — the forecast starts on a plane you can fly today. “N ready” is how many of that type are free to fly this lane right now. Aircraft parked on reserve are counted separately as “on reserve” — you can still deploy one, but it stops standing by. Types under “Not in your fleet” are there to price up an order; you'd have to lease one before the route could open." />
                     </div>
                     <select
                       className="form-select"
@@ -1016,9 +1070,14 @@ export default function RoutePlanner() {
                               const ready   = pool.filter(d => !d.reserve).length;
                               const onRes   = pool.filter(d => d.reserve).length;
                               const owned   = ownedTypeIds.has(t.id);
+                              // A type whose CATALOGUE range falls short of the lane is only
+                              // here because a tail you own is modded past it. Say so on the
+                              // row, or the entry reads like a bug to anyone who knows the
+                              // book figure.
+                              const modded  = t.range < routeData.dist;
                               return (
                                 <option key={t.id} value={t.id}>
-                                  {t.name} ({t.seats} seats){ready > 0 ? ` · ${ready} ready` : ''}{onRes > 0 ? ` · ${onRes} on reserve` : ''}{owned && ready === 0 && onRes === 0 ? ' · none free' : ''}{owned ? '' : ' · lease required'}
+                                  {t.name} ({t.seats} seats){modded ? ` · ${Math.round(reachKmFor(t)).toLocaleString()} km with your mods` : ''}{ready > 0 ? ` · ${ready} ready` : ''}{onRes > 0 ? ` · ${onRes} on reserve` : ''}{owned && ready === 0 && onRes === 0 ? ' · none free' : ''}{owned ? '' : ' · lease required'}
                                 </option>
                               );
                             })}
@@ -1048,70 +1107,38 @@ export default function RoutePlanner() {
                     </div>
                   </div>
 
-                  {/* Price
-                      "ticket price needs a better way to select — the slider is
-                      pretty bad cus it jumps over a lot of the values which can
-                      make a difference in net profit" (ASAS, Discord). It did: a
-                      110px track over a $120–$750 band at step=5 could not reach
-                      most fares at all, and the ones between two pixels were
-                      simply unreachable. The box is now the authority — type any
-                      dollar figure, or step it a dollar at a time — and the slider
-                      stays for coarse moves at step 1. */}
-                  <div>
-                    <div className="form-label" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      Ticket price
-                      <InfoTip text="Type an exact fare, nudge it a dollar at a time with −/+, or drag for a coarse move. A dollar either way genuinely moves net profit on a thick route, so the number box — not the slider — is what sets it." />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button
-                        className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 13, lineHeight: 1.2 }}
-                        title="One dollar cheaper"
-                        onClick={() => setPrice(Math.max(priceFloor, effectivePrice - 1))}
-                      >−</button>
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>$</span>
-                      <input
-                        className="form-input"
-                        type="number"
-                        min={priceFloor}
-                        max={priceCeiling}
-                        step="1"
-                        value={priceDraft}
-                        onChange={e => setPriceDraft(e.target.value)}
-                        onBlur={commitPriceDraft}
-                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                        style={{ width: 76, padding: '3px 6px', fontSize: 13, fontWeight: 700 }}
-                        title={`$${priceFloor.toLocaleString()} – $${priceCeiling.toLocaleString()}`}
-                      />
-                      <button
-                        className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 13, lineHeight: 1.2 }}
-                        title="One dollar dearer"
-                        onClick={() => setPrice(Math.min(priceCeiling, effectivePrice + 1))}
-                      >+</button>
-                      <input
-                        type="range"
-                        className="hw-range"
-                        min={priceFloor}
-                        max={priceCeiling}
-                        step="1"
-                        value={effectivePrice}
-                        onChange={e => setPrice(Number(e.target.value))}
-                        draggable={false} onDragStart={e => e.preventDefault()}
-                        style={{ width: 90 }}
-                        aria-label="Ticket price (coarse)"
-                      />
-                      <span style={{ fontSize: 11, minWidth: 52,
-                        color: pricePct > 10 ? 'var(--red)' : pricePct < -10 ? 'var(--green)' : 'var(--text-muted)',
-                      }}>
-                        {pricePct >= 0 ? `+${pricePct}` : pricePct}% vs ref
-                      </span>
-                      {price !== null && (
-                        <button className="btn btn-ghost" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => setPrice(null)}>Reset</button>
+                  {/* Fares — price every cabin here, before the route opens */}
+                  <div style={{ flexBasis: '100%' }}>
+                    <div className="form-label" style={{ marginBottom: 6 }}>
+                      Fares
+                      {existingFares && (
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
+                          — this pair is already flown; fares are shared across it and can be edited on the Routes tab
+                        </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>
-                      reference ${routeData.refP} · range ${priceFloor}–${priceCeiling}
-                    </div>
+                    {existingFares ? (
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-muted)' }}>
+                        {['firstClass', 'businessClass', 'premiumEconomy', 'economy']
+                          .filter(cls => (effectiveConfig?.[cls] ?? 0) > 0)
+                          .map(cls => (
+                            <span key={cls}>
+                              <span style={{ color: CLASS_COLORS[cls], fontWeight: 600 }}>{CLASS_LABELS[cls]}</span> ${existingFares[cls]}
+                            </span>
+                          ))}
+                      </div>
+                    ) : (
+                      <FareEditor
+                        key={`${origin}-${dest}`}
+                        origin={origin}
+                        dest={dest}
+                        config={effectiveConfig ?? { economy: getAircraftType(selectedTypeId)?.seats ?? 0 }}
+                        fares={fares}
+                        onCommit={(cls, value) => setFares(f => ({ ...f, [cls]: value }))}
+                      />
+                    )}
                   </div>
+
 
                   {/* Cabin configuration */}
                   <CabinConfigPanel
@@ -1312,6 +1339,14 @@ export default function RoutePlanner() {
                   const preferred  = preferredD?.aircraft;
                   const anySpare   = pool.some(d => d.hoursOk);   // has hours (network may not reach this lane)
                   const owned      = pool.length;
+                  // Backstop. The picker's reach (reachByType, here) and the pool's
+                  // rangeOk (deployableFleetForRoute, in simulation.js) are the same
+                  // measure taken in two files, so today a listed type always has at
+                  // least one tail that can reach. If they ever drift, the player gets
+                  // a true sentence about range instead of the "flying other networks"
+                  // one below — which is plainly false about a parked plane and points
+                  // at a fix that would not help.
+                  const outOfRange = owned > 0 && pool.every(d => d.rangeOk === false);
                   const lCost      = routeLaunchCost(routeData.dist);
                   const canAfford  = state.cash >= lCost;
                   const blocked    = !!routeRestriction;
@@ -1345,6 +1380,8 @@ export default function RoutePlanner() {
                           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                             {owned === 0
                               ? <>No {simulation.type.name} in your fleet — lease one from the Market first.</>
+                              : outOfRange
+                                ? <>Your {simulation.type.name}{owned > 1 ? 's reach' : ' reaches'} {Math.round(reachKmFor(simulation.type)).toLocaleString()} km as configured — {origin}–{dest} is {routeData.dist.toLocaleString()} km. Fit range-extending wingtips, lighten the cabin, or lease a longer-legged aircraft.</>
                               : anySpare
                                 ? <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} flying other networks and can't reach {origin}–{dest} directly — an aircraft can only add a route that touches an airport it already serves. Lease another, or first route one through {origin} or {dest}.</>
                                 : <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another route. Lease another {simulation.type.name} to open this route.</>}

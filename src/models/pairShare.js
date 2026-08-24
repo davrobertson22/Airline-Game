@@ -52,7 +52,6 @@ import { getAircraftType } from '../data/aircraft.js';
 import {
   configBodies,
   defaultConfig,
-  hydrateRoute,
   routeQualityBreakdown,
   isMultiStop,
   hubSpokeCounts,
@@ -518,13 +517,10 @@ export function projectRouteAddition(state, spec) {
   // make sure the offer builder can find it.
   const fleetPlus = fleet.some((a) => a.id === aircraft.id) ? fleet : [...fleet, aircraft];
 
-  // Price and catering belong to the O&D PAIR, not to the aircraft: ADD_ROUTE
-  // only seeds routePricing/routeCatering when the pair has none, so a fare
-  // typed into the form for a pair the player already flies is discarded by the
-  // reducer. hydrateRoute() is the tick's own resolver — running the preview
-  // through it means the forecast quotes the fare the route will actually fly
-  // at, and the fare the pooled offer above is priced with.
-  const previewRoute = hydrateRoute({
+  // Catering belongs to the O&D PAIR, so a caller that doesn't name one inherits
+  // the pair's. Pricing deliberately does NOT come from hydrateRoute here — see
+  // the draftPricing note below.
+  const previewRoute = {
     id: PREVIEW_ROUTE_ID,
     origin, destination,
     stops: [origin, destination],
@@ -532,10 +528,10 @@ export function projectRouteAddition(state, spec) {
     weeklyFrequency,
     ticketPrice,
     classPrices,
-    cateringLevel,
+    cateringLevel: cateringLevel ?? (state.routeCatering ?? {})[key],
     season,
     hub: state.hub,
-  }, state.routePricing ?? {}, state.routeCatering ?? {});
+  };
 
   // Your OTHER routes on this pair. A route being edited is replaced, not joined —
   // otherwise the edit previews as if it were competing with its own old self.
@@ -550,7 +546,29 @@ export function projectRouteAddition(state, spec) {
     ...(state.routes ?? []).filter((r) => r.id !== replacesRouteId),
     previewRoute,
   ];
-  const stateForOffer = { ...state, fleet: fleetPlus, routes: routesPlus };
+  // Preview the DRAFT fare as the pair's fare.
+  //
+  // Fares belong to the pair, not the route: ADD_ROUTE writes
+  // routePricing[pairKey] and every tail on the lane flies that price, so
+  // repricing one route reprices all of them. buildPlayerPairOffer reads
+  // routePricing first (correctly — that is the single source of truth), and the
+  // preview route used to be run through hydrateRoute() against the SAME map,
+  // which meant a draft fare never reached the pooled offer OR the preview route.
+  // On an existing pair the projection then sliced its demandOverride out of a
+  // pool priced at today's fare, so the fare editor's forecast was a constant:
+  // dragging economy from $250 to $1,258 moved load, revenue and profit by
+  // exactly nothing while the panel captioned it "At these fares".
+  const draftPricing = (classPrices || ticketPrice != null)
+    ? {
+        ...(state.routePricing ?? {}),
+        [key]: {
+          ...(state.routePricing?.[key] ?? {}),
+          ...(ticketPrice != null ? { economy: ticketPrice } : {}),
+          ...(classPrices ?? {}),
+        },
+      }
+    : state.routePricing;
+  const stateForOffer = { ...state, fleet: fleetPlus, routes: routesPlus, routePricing: draftPricing };
 
   // Lane maturity. An established pair is already mature and does NOT re-ramp
   // when you add a tail; only a pair you have never flown starts at week 0.
