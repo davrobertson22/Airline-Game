@@ -12,7 +12,7 @@ import {
   applyScheduleTrimMigration,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
 } from '../utils/simulation.js';
-import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield } from '../utils/market.js';
+import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
@@ -379,6 +379,8 @@ export function addRouteBlockReason(state, action) {
   // Freighters carry no passengers — they fly cargo routes (ADD_CARGO_ROUTE) only.
   if (type.freighter) return `${tail} is a freighter — it flies cargo routes, not passenger routes`;
   if (action.origin === action.destination) return 'Origin and destination are the same airport';
+  if (isSameLocation(getAirport(action.origin), getAirport(action.destination)))
+    return 'Origin and destination are the same location';
 
   const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
   const dist = routeDistanceKm(action.origin, action.destination);
@@ -1675,6 +1677,7 @@ function reducer(state, action) {
       // Cargo routes require a dedicated freighter.
       if (!type.freighter) return state;
       if (action.origin === action.destination) return state;
+      if (isSameLocation(getAirport(action.origin), getAirport(action.destination))) return state;
 
       const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
       const dist = routeDistanceKm(action.origin, action.destination);
