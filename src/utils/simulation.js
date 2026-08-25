@@ -3682,7 +3682,7 @@ export function weeklyTick(state) {
       totalPassengers     += result.passengers ?? 0;
 
       // Hub line-maintenance: routes touching a T2+ hub get discounted maintenance.
-      aircraftMaintFactor[aircraft.id] = tagHcf?.maint ?? 1.0;
+      aircraftMaintFactor[aircraft.id] = Math.min(aircraftMaintFactor[aircraft.id] ?? 1.0, tagHcf?.maint ?? 1.0);
       const { maintenanceCostMultiplier } = laborEffects(labor);
       const weeklyLeaseCost = aircraft.ownershipType === 'owned' ? 0
         : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
@@ -3893,7 +3893,7 @@ export function weeklyTick(state) {
     // handles lease/maint for the overall P&L to avoid double-counting).
     const acType           = getAircraftType(aircraft.typeId);
     // Hub line-maintenance: routes touching a T2+ hub get discounted maintenance.
-    aircraftMaintFactor[aircraft.id] = hcfRoute?.maint ?? 1.0;
+    aircraftMaintFactor[aircraft.id] = Math.min(aircraftMaintFactor[aircraft.id] ?? 1.0, hcfRoute?.maint ?? 1.0);
     totalHubCostSavings += result.hubCostSavings ?? 0;
     const { maintenanceCostMultiplier } = laborEffects(labor);
     const weeklyLeaseCost  = aircraft.ownershipType === 'owned' ? 0
