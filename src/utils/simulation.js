@@ -2354,7 +2354,11 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
  *          keyed by route.id; ONLY routes on shared lanes appear.
  */
 export function cargoLaneAllocations(cargoRoutes = [], fleet = [], demandMultiplier = 1.0, opts = {}) {
-  const { gameDate = null, demandMultFor = null, competitors = [] } = opts;
+  // `groundedIds` — tails that cannot be crewed this week (A7 severe band). They
+  // are excluded exactly like a tail in a heavy check: a freighter nobody can fly
+  // must not claim lane share it will never carry.
+  const { gameDate = null, demandMultFor = null, competitors = [], groundedIds = null } = opts;
+  const groundedSet = groundedIds instanceof Set ? groundedIds : new Set(groundedIds ?? []);
   const alloc  = new Map();
   const groups = new Map();
 
@@ -2387,6 +2391,7 @@ export function cargoLaneAllocations(cargoRoutes = [], fleet = [], demandMultipl
   for (const route of cargoRoutes ?? []) {
     const aircraft = (fleet ?? []).find(a => a.id === route.aircraftId);
     if (!aircraft || isOutOfService(aircraft)) continue;
+    if (groundedSet.has(aircraft.id)) continue;   // nobody to crew it this week
     const type = getAircraftType(aircraft.typeId);
     if (!type?.freighter) continue;
     const o = getAirport(route.origin);
@@ -3026,6 +3031,11 @@ export function weeklyTick(state) {
     awareness = 5,
     encroachments = {},
   } = state;
+
+  // Crew pipeline, severe band: tails with nobody to fly them. Transient for this
+  // week only (see tickPrep) — an unstaffed aircraft earns nothing but still costs
+  // its lease and maintenance, exactly like one stuck in a heavy check.
+  const crewGroundedSet = new Set(state.crewGroundedIds ?? []);
 
   // Encroachment challengers, keyed by O&D pair, injected into the demand model so
   // they split the route's passenger pool with the player.
@@ -3699,6 +3709,7 @@ export function weeklyTick(state) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) continue;
     if (isOutOfService(aircraft)) continue; // grounded or in a heavy check — no revenue this week
+    if (crewGroundedSet.has(aircraft.id)) continue; // nobody to crew it this week
     if (!isRouteActive(route, gameDate.month)) continue; // seasonal route dormant this month
 
     // ── Tag (multi-stop) route: self-contained O&D split via simulateTagRoute ──
@@ -4042,11 +4053,12 @@ export function weeklyTick(state) {
   // lane pooling and the simulator agree about which week this is.
   const freightRoutes = (cargoRoutes ?? []).map(withJitter);
   const cargoAllocations = cargoLaneAllocations(freightRoutes, fleet, awarenessMultiplier,
-    { gameDate, demandMultFor: eventDemandMultFor, competitors });
+    { gameDate, demandMultFor: eventDemandMultFor, competitors, groundedIds: crewGroundedSet });
 
   for (const route of freightRoutes) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft || isOutOfService(aircraft)) continue;
+    if (crewGroundedSet.has(aircraft.id)) continue; // nobody to crew it this week
 
     const result = simulateCargoRoute(route, aircraft, gameDate, labor, fuelMultiplier,
       // Freight is not exempt from the world: a recession, a pandemic scare or a
@@ -4360,6 +4372,7 @@ export function weeklyTick(state) {
     // Crew pipeline (A7): what the week was flown short of, so the UI can warn.
     // Spread only when active, so a classic save's report shape is unchanged.
     ...(labor?.crewShortfall ? { crewShortfall: labor.crewShortfall } : {}),
+    ...(crewGroundedSet.size ? { crewGrounded: [...crewGroundedSet] } : {}),
     poolingAnomalies,
     cashDelta:              Math.round(cashDelta),
     totalRevenue:           Math.round(totalRevenue + totalPartnerRevenue),
