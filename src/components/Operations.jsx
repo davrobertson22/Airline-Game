@@ -20,7 +20,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { dueInfo, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import {
-  calcHQCost, hqBracket, weeklyInsuranceCost,
+  calcHQCost, fleetHQScale, hqBracket, weeklyInsuranceCost,
   awarenessDemandMultiplier, marketingAwarenessGain,
   AWARENESS_PARITY, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
   campaignDemandBoostPct, campaignEquilibriumStrength,
@@ -1016,7 +1016,8 @@ export default function Operations() {
       {/* HQ & Corporate overhead section */}
       {fleet.length > 0 && (() => {
         const hqInfo = hqBracket(fleet.length);
-        const hqCost = calcHQCost(fleet.length);
+        // Narrowbody-equivalents, not airframes — must agree with weeklyTick.
+        const hqCost = calcHQCost(fleetHQScale(fleet, a => getAircraftType(a.typeId)));
         const totalInsurance = fleet.reduce((s, a) => {
           const t = getAircraftType(a.typeId);
           return s + weeklyInsuranceCost(a, t);

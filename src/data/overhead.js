@@ -30,10 +30,82 @@
 //
 // Industry reference: G&A runs $1–3M per aircraft/year for mid-size carriers.
 
-/** Weekly HQ & corporate overhead for a given fleet size. */
-export function calcHQCost(fleetSize) {
-  if (fleetSize <= 0) return 0;
-  return Math.round(38_000 * Math.pow(fleetSize, 0.85));
+/**
+ * Weekly HQ & corporate overhead for a fleet, in NARROWBODY-EQUIVALENTS.
+ *
+ * The argument is deliberately NOT `fleet.length` any more — see fleetHQScale()
+ * below. An all-narrowbody fleet returns exactly its aircraft count, so every
+ * calibration figure in the table above still reads true for it.
+ */
+export function calcHQCost(fleetScale) {
+  if (fleetScale <= 0) return 0;
+  return Math.round(38_000 * Math.pow(fleetScale, 0.85));
+}
+
+// ─── 1a. Corporate overhead scales with the aeroplane ────────────────────────
+//
+// The curve above counted AIRFRAMES, so a Dash 8 carried an A380's head office.
+// That is the same defect crew pay had before CREW_SCALE_BY_CATEGORY (labor.js)
+// and liability insurance had before LIABILITY_INSURANCE_WEEKLY_BY_CATEGORY
+// (below): it is not a rounding error at the bottom of the range. A turboprop's
+// whole weekly revenue is around $49k, and at two airframes the fleet-size curve
+// alone billed $68.5k — more than gross, before fuel, crew or leases. Measured
+// over six live Headwinds worlds, sub-80-seat starts died at 70% against a
+// narrowbody's 38%, and 11 of 13 never recorded a single profitable week.
+//
+// Corporate overhead is not seat-proportional the way cabin crew is — a CEO, a
+// finance team and an AOC exist whatever is parked outside — but it is not flat
+// either: reservations, revenue management and station admin all track the size
+// of what is being sold. So this sits between the two, nearer the pilots scale
+// (0.55 for a turboprop) than the cabin-crew one (0.30).
+//
+// Narrow Body is 1.00 BY CONSTRUCTION, so the game's most common category sees
+// no change at all. This is a re-shape, not a rise.
+export const HQ_SCALE_BY_CATEGORY = {
+  'Turboprop':    0.35,
+  'Regional Jet': 0.55,
+  'Narrow Body':  1.00,
+  'Wide Body':    1.70,
+  'Double Deck':  2.10,
+  'Supersonic':   1.60,
+};
+
+/**
+ * Freighters all share one category, so — exactly as with insurance and crew —
+ * they step by payload instead. Rates sit below the passenger equivalents: no
+ * cabin means no distribution, no revenue management across four fare classes
+ * and no loyalty programme to administer.
+ */
+export const HQ_SCALE_FREIGHTER = [
+  { maxTonnes:  20, scale: 0.40 },
+  { maxTonnes:  45, scale: 0.60 },
+  { maxTonnes:  80, scale: 0.90 },
+  { maxTonnes: 130, scale: 1.30 },
+  { maxTonnes: Infinity, scale: 1.70 },
+];
+
+/**
+ * How many narrowbody-equivalents of head office one airframe costs. An unknown
+ * category falls back to 1.00 — a new aircraft type is charged the common rate
+ * rather than accidentally administering itself for free.
+ */
+export function hqScaleFor(aircraftType) {
+  if (!aircraftType) return 1;
+  if (aircraftType.freighter) {
+    const t = aircraftType.payloadTonnes ?? 0;
+    return HQ_SCALE_FREIGHTER.find(s => t <= s.maxTonnes).scale;
+  }
+  const category = aircraftType.doubleDeck ? 'Double Deck' : aircraftType.category;
+  return HQ_SCALE_BY_CATEGORY[category] ?? 1;
+}
+
+/**
+ * The fleet's total head-office scale, in narrowbody-equivalents. This is what
+ * replaces `fleet.length` in calcHQCost — an all-narrowbody fleet returns
+ * exactly its aircraft count, so nothing moves for it.
+ */
+export function fleetHQScale(fleet, typeOf) {
+  return (fleet ?? []).reduce((s, a) => s + hqScaleFor(typeOf(a)), 0);
 }
 
 /**

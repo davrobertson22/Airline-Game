@@ -11,6 +11,7 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { getAlliance } from '../data/alliances.js';
 import { Glyph } from './Icons.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
+import { TILE_URL, TILE_OPTS } from './basemap.js';
 
 // ── Great-circle path as a single continuous segment ─────────────────────────
 // Keeps longitudes unwrapped (may exceed ±180) so Leaflet draws one smooth arc
@@ -204,12 +205,9 @@ export default function RouteMap() {
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // CartoDB Dark Matter — proper dark game-map feel
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    }).addTo(map);
+    // CartoDB Dark Matter — proper dark game-map feel. URL + options live in
+    // basemap.js because the tile source now carries an API key.
+    L.tileLayer(TILE_URL, TILE_OPTS).addTo(map);
 
     // Click empty map → deselect
     map.on('click', () => setSelectedId(null));

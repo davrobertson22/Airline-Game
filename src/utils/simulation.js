@@ -16,6 +16,7 @@ import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
 import {
   calcHQCost,
+  fleetHQScale,
   weeklyInsuranceCost,
   weeklyLandingFee,
   awarenessDemandMultiplier,
@@ -4260,8 +4261,12 @@ export function weeklyTick(state) {
     totalHubInvestment += tierDef.weeklyInvestment;
   }
 
-  // 7. HQ & corporate overhead — scales with fleet size
-  const totalHQCost = calcHQCost(fleet.length);
+  // 7. HQ & corporate overhead — scales with the size of the fleet AND of the
+  // aeroplanes in it. Counting airframes billed a Dash 8 an A380's head office,
+  // the same defect crew pay and liability insurance both already fixed by
+  // stepping per category. An all-narrowbody fleet returns exactly its aircraft
+  // count, so nothing moves for the common case. See HQ_SCALE_BY_CATEGORY.
+  const totalHQCost = calcHQCost(fleetHQScale(fleet, a => getAircraftType(a.typeId)));
 
   // 8. Insurance — hull (owned aircraft) + liability (all aircraft)
   let totalInsurance = 0;
