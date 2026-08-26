@@ -14,7 +14,7 @@ import {
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
-import { absoluteWeek } from '../utils/fuel.js';
+import { absoluteWeek, effectiveFuelMultiplier } from '../utils/fuel.js';
 import { laborEffects } from '../data/labor.js';
 import { airframeNAV, dueInfo, checkCost, checkDurationWeeks, isOutOfService, MAX_SCHEDULE_AHEAD_WEEKS, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
 import InfoTip from './InfoTip.jsx';
@@ -485,12 +485,20 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
 
   // All routes for this aircraft, with simulation results and block hours
   const gd             = currentGameDate(state);
+  // Hedged fuel multiplier — the same number the weekly tick and Finance use —
+  // so this per-aircraft route economics matches what actually gets billed.
+  // Passing the raw spot index ignored the player's hedges and overstated fuel
+  // cost (and understated profit) by up to ~17% on the page where they inspect
+  // an aircraft right after paying to hedge.
+  const nowAbsWeek     = absoluteWeek(state.year, state.week);
+  const activeHedges   = (state.hedgeContracts ?? []).filter(h => h.expiryAbsWeek > nowAbsWeek);
+  const fuelMult       = effectiveFuelMultiplier(state.fuelPrice?.index ?? 1.0, activeHedges);
   const aircraftRoutes = routes.filter(r => r.aircraftId === aircraft.id);
   const routeResults   = aircraftRoutes.map(r => {
     const result = simulateRoute(
       { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
       aircraft, gd, state.labor ?? null,
-      state.fuelPrice?.index ?? state.fuelMultiplier ?? 1.0, null,
+      fuelMult, null,
       rivalSpecsFor(state, r.origin, r.destination),
       fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
       state.satisfaction ?? null,

@@ -69,11 +69,15 @@ export const PROFIT_HELP = {
 };
 
 /** Persisted so every screen answers with the same number, not just its own. */
-const BASIS_KEY = 'hw_profit_basis_v1';
+const BASIS_KEY = 'tw_profit_basis_v1';
+// Older builds stored this under a Headwinds-namespaced key (a shared-code
+// hangover). Read it once as a fallback so a returning player keeps their
+// choice; writes land on the Tailwinds key from here on.
+const LEGACY_BASIS_KEY = 'hw_profit_basis_v1';
 
 export function loadProfitBasis() {
   try {
-    const v = localStorage.getItem(BASIS_KEY);
+    const v = localStorage.getItem(BASIS_KEY) ?? localStorage.getItem(LEGACY_BASIS_KEY);
     return v === BASIS_CONTRIBUTION ? BASIS_CONTRIBUTION : BASIS_FULL;
   } catch (_) {
     return BASIS_FULL;

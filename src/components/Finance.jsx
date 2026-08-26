@@ -2370,8 +2370,10 @@ function Forecast({ proj }) {
     return fx.globalDemandMult ? m * fx.globalDemandMult : m;
   }, 1.0);
 
-  // Current fuel multiplier (from fuel index + hedging)
-  const fuelMultiplier = state.fuelMultiplier ?? 1.0;
+  // Current fuel multiplier (from fuel index + hedging). Comes off the week
+  // projection — `state.fuelMultiplier` is never written (always 1.0), which
+  // silently ran this whole forecast at spot ×1.0 and ignored the player's hedges.
+  const fuelMultiplier = proj.fuelMultiplier ?? 1.0;
 
   const fcLaborState  = state.labor ?? DEFAULT_LABOR_STATE;
   const fcAvgUtil     = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
