@@ -18,6 +18,7 @@ import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
+import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
@@ -624,7 +625,11 @@ function airlineCode(name) {
 function generateTailNumber(hubCode, airlineName, usedTails = []) {
   const airport = getAirport(hubCode);
   const country = airport?.country ?? 'US';
-  const prefix  = COUNTRY_REG_PREFIX[country] ?? 'N';
+  // A territory flies its sovereign's registry: San Juan is N-, Papeete is F-.
+  // The bare `?? 'N'` fallback quietly made every non-US territory American.
+  const prefix  = COUNTRY_REG_PREFIX[country]
+    ?? COUNTRY_REG_PREFIX[sovereignCountry(country)]
+    ?? 'N';
   const code    = airlineCode(airlineName);
 
   let n = 1;

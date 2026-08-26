@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
 import { getAircraftType, LEASE_BUYOUT_PREMIUM } from '../data/aircraft.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -6,11 +6,11 @@ import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
   maintenanceMultiplier, ageLabel,
-  simulateRoute, weeklyBlockHours, currentGameDate,
+  simulateRoute, simulateCargoRoute, cargoLaneAllocations, weeklyBlockHours, currentGameDate,
   MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
-  stateLoungeFields,
+  stateLoungeFields, coverOutlookByAircraft,
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
@@ -418,7 +418,7 @@ function WifiBadge({ aircraft }) {
   );
 }
 
-function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
+export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const { state, dispatch } = useGame();
   const confirm = useConfirm();
   const { routes } = state;
@@ -493,23 +493,48 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const nowAbsWeek     = absoluteWeek(state.year, state.week);
   const activeHedges   = (state.hedgeContracts ?? []).filter(h => h.expiryAbsWeek > nowAbsWeek);
   const fuelMult       = effectiveFuelMultiplier(state.fuelPrice?.index ?? 1.0, activeHedges);
-  const aircraftRoutes = routes.filter(r => r.aircraftId === aircraft.id);
+  // A freighter's routes live in state.cargoRoutes, never state.routes, so
+  // filtering the passenger table alone told a 767F flying ten freight lanes it
+  // was idle — under a utilisation box on the same card reading "10 routes"
+  // (Discord, Knightmare 2026-08-25). An aircraft's route list is the union of
+  // the two, exactly as the utilisation reading and the weekly tick see it.
+  const cargoRoutes    = state.cargoRoutes ?? [];
+  const evModel        = useMemo(() => buildEventDemandModel(state.activeEvents), [state.activeEvents]);
+  const cargoAlloc     = useMemo(() => cargoLaneAllocations(cargoRoutes, state.fleet ?? [], 1.0, {
+    gameDate: gd, demandMultFor: (o, d) => evModel.multFor(o, d), competitors: state.competitors ?? [],
+  }), [cargoRoutes, state.fleet, state.competitors, evModel, gd.month]);
+  const aircraftRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === aircraft.id);
   const routeResults   = aircraftRoutes.map(r => {
-    const result = simulateRoute(
-      { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
-      aircraft, gd, state.labor ?? null,
-      fuelMult, null,
-      rivalSpecsFor(state, r.origin, r.destination),
-      fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
-      state.satisfaction ?? null,
-      buildEventDemandModel(state.activeEvents).multFor(r.origin, r.destination),
-      state.ancillaries ?? null, state.competitors ?? []);
+    const evMult = evModel.multFor(r.origin, r.destination);
+    // Freight goes through the cargo sim with the same lane-pooling allocation
+    // the tick uses, so these rows agree with the freight table and the tick
+    // instead of claiming the whole uncontested lane.
+    const result = r.cargo
+      ? simulateCargoRoute(r, aircraft, gd, state.labor ?? null, fuelMult, evMult,
+          cargoAlloc.get(r.id) ?? null)
+      : simulateRoute(
+          { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
+          aircraft, gd, state.labor ?? null,
+          fuelMult, null,
+          rivalSpecsFor(state, r.origin, r.destination),
+          fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...cargoRoutes]),
+          state.satisfaction ?? null,
+          evMult,
+          state.ancillaries ?? null, state.competitors ?? []);
     if (!result) return null;
     const bh = type ? weeklyBlockHours(result.distance, r.weeklyFrequency, type) : 0;
     return { route: r, result, blockHrs: bh };
   }).filter(Boolean);
 
   const mAbsWeek = absoluteWeek(state.year, state.week);
+  // The reserve system's answer for THIS tail, from the real pass (see
+  // coverOutlookByAircraft) rather than a second reading of the route table.
+  const coverOutlook = useMemo(() => coverOutlookByAircraft({
+    fleet: state.fleet ?? [], routes: state.routes ?? [], cargoRoutes,
+    hubs: state.hubs ?? {}, absWeek: mAbsWeek,
+    routeRevenues: state.financialHistory?.[state.financialHistory.length - 1]?.routeRevenues ?? {},
+  })[aircraft.id] ?? null,
+  [state.fleet, state.routes, cargoRoutes, state.hubs, mAbsWeek, state.financialHistory, aircraft.id]);
   const mDue     = dueInfo(aircraft, type, mAbsWeek);
   const mCheckOpts = { maintMod: aircraft.maintMod ?? 1, laborMult: laborEffects(state.labor).maintenanceCostMultiplier, hubFactor: aircraftHubMaintFactor(aircraft.id, state.routes, state.cargoRoutes, state.hubs) };
   const ageWks   = aircraft.ageWeeks ?? 0;
@@ -799,10 +824,17 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
                 {[
                   { label: 'Revenue/wk',    value: `+${formatMoney(res.revenue)}`,    color: 'var(--green)' },
                   { label: 'Op Cost/wk',    value: `−${formatMoney(res.totalOpCost)}`, color: 'var(--red)'  },
-                  { label: 'Pax/wk',        value: res.passengers.toLocaleString(),    color: 'var(--text)' },
+                  // Freight sells tonnes at a rate per tonne-km; it has no seats
+                  // and no ticket, so those two cells carry the cargo reading
+                  // instead of printing "undefined" (or throwing on .toLocaleString).
+                  res.cargo
+                    ? { label: 'Tonnes/wk',  value: (res.tonnes ?? 0).toLocaleString(), color: 'var(--text)' }
+                    : { label: 'Pax/wk',     value: (res.passengers ?? 0).toLocaleString(), color: 'var(--text)' },
                   { label: 'Load Factor',   value: formatPercent(res.loadFactor),
                     color: res.loadFactor > .7 ? 'var(--green)' : res.loadFactor > .4 ? 'var(--yellow)' : 'var(--red)' },
-                  { label: 'Ticket',        value: `$${r.ticketPrice}`,               color: 'var(--text)' },
+                  res.cargo
+                    ? { label: 'Yield',      value: `$${(r.yieldPrice ?? 0).toFixed(3)}/t-km`, color: 'var(--text)' }
+                    : { label: 'Ticket',     value: `$${r.ticketPrice}`,               color: 'var(--text)' },
                 ].map(({ label, value, color }) => (
                   <div key={label}>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
@@ -819,7 +851,11 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
           }}>
             Aircraft is idle — assign it to a route to start earning.
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
-              Open the <strong>Route Planner</strong> (or <strong>Routes → + Open Route</strong>), pick two airports, choose this aircraft's type, and hit <strong>Open Route</strong> to deploy it.
+              {type?.freighter ? (
+                <>Open the <strong>Route Planner</strong> in Freight mode (or <strong>Routes → Cargo → + Open Freight Route</strong>), pick two airports and hit <strong>Open Route</strong> to deploy it.</>
+              ) : (
+                <>Open the <strong>Route Planner</strong> (or <strong>Routes → + Open Route</strong>), pick two airports, choose this aircraft's type, and hit <strong>Open Route</strong> to deploy it.</>
+              )}
             </div>
           </div>
         )}
@@ -841,7 +877,12 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
             >
               = {weeklyProfit >= 0 ? '+' : ''}{formatMoney(weeklyProfit)} true profit
             </span>
-            <span>{routeResults.reduce((s, { result }) => s + result.passengers, 0).toLocaleString()} pax/wk</span>
+            {routeResults.some(({ result }) => !result.cargo) && (
+              <span>{routeResults.reduce((s, { result }) => s + (result.passengers ?? 0), 0).toLocaleString()} pax/wk</span>
+            )}
+            {routeResults.some(({ result }) => result.cargo) && (
+              <span>{routeResults.reduce((s, { result }) => s + (result.tonnes ?? 0), 0).toLocaleString()} tonnes/wk</span>
+            )}
           </div>
         )}
       </div>
@@ -947,21 +988,41 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
 
       {/* ── Reserve standby (hub-based covers) ─────────────────────── */}
       {isOutOfService(aircraft) ? (() => {
-        const coveredRoutes = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])].filter(r => r.coverForAircraftId === aircraft.id);
-        const ownRoutes     = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])].filter(r => r.aircraftId === aircraft.id);
-        if (coveredRoutes.length === 0 && ownRoutes.length === 0) return null;
-        const coverNames = [...new Set(coveredRoutes.map(r => state.fleet.find(a => a.id === r.aircraftId)?.name).filter(Boolean))];
+        const ol = coverOutlook;
+        if (!ol) return null;
+        const coverNames = [...new Set([...(state.routes ?? []), ...cargoRoutes]
+          .filter(r => r.coverForAircraftId === aircraft.id)
+          .map(r => state.fleet.find(a => a.id === r.aircraftId)?.name).filter(Boolean))];
         return (
           <div style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}><Glyph e="🛡️" /> Reserve Cover</div>
-            {coveredRoutes.length > 0 ? (
+            {ol.coveredNow > 0 ? (
               <div style={{ fontSize: 13, color: 'var(--accent)' }}>
-                {coveredRoutes.length}/{coveredRoutes.length + ownRoutes.length} route{(coveredRoutes.length + ownRoutes.length) !== 1 ? 's' : ''} covered by {coverNames.join(', ')} while this aircraft is out of service.
-                {ownRoutes.length > 0 && <span style={{ color: 'var(--yellow)' }}> {ownRoutes.length} uncovered — earning nothing.</span>}
+                {ol.coveredNow}/{ol.coveredNow + ol.ownRoutes} route{(ol.coveredNow + ol.ownRoutes) !== 1 ? 's' : ''} covered by {coverNames.join(', ')} while this aircraft is out of service.
+                {ol.ownRoutes > 0 && ol.coversNext > ol.coveredNow && (
+                  <span> The rest are picked up next week.</span>
+                )}
+                {ol.ownRoutes > 0 && ol.coversNext <= ol.coveredNow && (
+                  <span style={{ color: 'var(--yellow)' }}> {ol.ownRoutes} uncovered — earning nothing.</span>
+                )}
+              </div>
+            ) : ol.returning ? (
+              // The downtime countdown runs BEFORE the reserve pass, so a tail on
+              // its last week takes its own routes back next week — no cover is
+              // dispatched, and none is needed.
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Back in service next week — {aircraft.name} takes its {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} back itself, so no reserve is dispatched.
+              </div>
+            ) : ol.coversNext > 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--accent)' }}>
+                {ol.reserves.join(', ')} steps in next week and flies {ol.coversNext} of this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''}. Covers are dispatched by the weekly tick, so they start the week after the breakdown.
               </div>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--yellow)' }}>
-                No reserve is covering this aircraft's {ownRoutes.length} route{ownRoutes.length !== 1 ? 's' : ''} — a same-type reserve stationed at an airport they touch would step in automatically.
+                No reserve will cover this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''}
+                {ol.reason === 'hours-full'
+                  ? ' — the same-type reserve that could take them is already at its block-hour cap.'
+                  : ' — a reserve must be the same type AND stationed at a hub these routes touch.'}
               </div>
             )}
           </div>
@@ -972,7 +1033,7 @@ function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
 
       <div ref={actionsRef} style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap', scrollMarginTop: 70 }}>
         <button className="btn btn-primary" onClick={onConfigure}>Configure Cabin</button>
-        {(aircraftRoutes.length > 0 || (state.cargoRoutes ?? []).some(r => r.aircraftId === aircraft.id)) && (
+        {aircraftRoutes.length > 0 && (
           <button className="btn" onClick={() => setShowTransfer(true)}>
             Transfer Routes
           </button>
@@ -1368,6 +1429,15 @@ export default function Fleet() {
     if (nav.filterChip === 'expiring') { setSortKey('lease'); setSortDir('asc'); }
   }, []);
   const [showOnOrder,   setShowOnOrder]   = useState(false); // collapsible "On Order" panel
+
+  // What the reserve system will do for each broken tail at the NEXT tick —
+  // computed by running the real reserve pass, so the badge on the row agrees
+  // with what the tick is about to do rather than guessing from the route table.
+  const coverOutlook = useMemo(() => coverOutlookByAircraft({
+    fleet: state.fleet ?? [], routes: state.routes ?? [], cargoRoutes: state.cargoRoutes ?? [],
+    hubs: state.hubs ?? {}, absWeek: absoluteWeek(state.year, state.week),
+    routeRevenues: state.financialHistory?.[state.financialHistory.length - 1]?.routeRevenues ?? {},
+  }), [state.fleet, state.routes, state.cargoRoutes, state.hubs, state.year, state.week, state.financialHistory]);
 
   // When a plane is picked from the list, bring its detail panel into view so the
   // player doesn't have to hunt for it below a long roster.
@@ -2443,18 +2513,28 @@ export default function Fleet() {
                         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> covering{aircraft.reserveBase ? ` from ${aircraft.reserveBase}` : ''}</span>
                       )}
                       {isOutOfService(aircraft) && (() => {
-                        const covered = [...routes, ...cargoRoutes].filter(r => r.coverForAircraftId === aircraft.id).length;
-                        const own = assignedRoutes.length;
-                        if (covered === 0) {
-                          // Standby you are paying for that did not turn up is worth
-                          // saying out loud on the row. Silence here reads as "reserves
-                          // don't work" — the reason lives in the aircraft's card.
-                          const anyReserve = own > 0
-                            && (state.fleet ?? []).some(a => isReserve(a) && a.typeId === aircraft.typeId);
-                          if (!anyReserve) return null;
-                          return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--yellow)' }}><Glyph e="🛡️" size={10} /> no cover — {own} route{own !== 1 ? 's' : ''} idle</span>;
+                        const ol = coverOutlook[aircraft.id];
+                        if (!ol) return null;
+                        if (ol.coveredNow > 0) {
+                          return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> {ol.coveredNow}/{ol.coveredNow + ol.ownRoutes} covered</span>;
                         }
-                        return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> {covered}/{covered + own} covered</span>;
+                        // Last week of downtime: the countdown hands it back before
+                        // the reserve pass runs, so it flies its own routes next week.
+                        // Warning about an absent cover here is pure noise.
+                        if (ol.returning) {
+                          return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)' }}>back in service next week</span>;
+                        }
+                        if (ol.coversNext > 0) {
+                          return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> cover starts next week — {ol.reserves.join(', ')}</span>;
+                        }
+                        if (ol.ownRoutes === 0) return null;
+                        // Standby you are paying for that did not turn up is worth
+                        // saying out loud on the row. Silence here reads as "reserves
+                        // don't work" — the reason lives in the aircraft's card.
+                        const anyReserve = (state.fleet ?? []).some(a => isReserve(a) && a.typeId === aircraft.typeId);
+                        if (!anyReserve) return null;
+                        const why = ol.reason === 'hours-full' ? 'reserve out of hours' : 'none in range';
+                        return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--yellow)' }}><Glyph e="🛡️" size={10} /> no cover ({why}) — {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} idle</span>;
                       })()}
                       {aircraft.status === 'maintenance' && (
                         <span className="badge" style={{ background: 'rgba(56,139,253,.15)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,.4)' }}><Glyph e="🔧" /> {aircraft.checkType || 'C'} check {aircraft.checkWeeksLeft > 0 ? `(${aircraft.checkWeeksLeft}w)` : ''}</span>
