@@ -20,7 +20,7 @@ import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AI
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
-         CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate } from '../data/labor.js';
+         CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
          FORCED_REP_HIT, REP_PENALTY_DECAY, REP_PENALTY_MAX,
@@ -2083,7 +2083,9 @@ function reducer(state, action) {
       if (count === 0) return state;
       const cost = crewHireCost(group, count);
       if (cost > state.cash) return state;
-      const current = state.labor ?? DEFAULT_LABOR_STATE;
+      // Seed FIRST: an airline that predates the pipeline has no headcount yet,
+      // and hiring must not be the thing that books it down to zero staff.
+      const current = ensureCrewSeeded(state.labor ?? DEFAULT_LABOR_STATE, state.fleet ?? [], (a) => getAircraftType(a.typeId));
       const g = current[group] ?? { payMultiplier: 1.0, morale: 80 };
       const readyAbsWeek = absoluteWeek(state.year ?? 1, state.week ?? 1) + (CREW_LEAD_WEEKS[group] ?? 1);
       return {
@@ -3113,7 +3115,11 @@ function reducer(state, action) {
       // Morale drifts toward target (based on pay) at 12% per week — but the
       // ceiling is what the money buys MINUS whatever the union is still
       // carrying from talks that went nowhere. Money alone used to be enough.
-      const currentLabor = state.labor ?? DEFAULT_LABOR_STATE;
+      // Crew pipeline: a save that has the flag but no headcount (from before the
+      // pipeline existed) is seeded to its CURRENT fleet here — fully staffed.
+      const currentLabor = state.crewPipeline
+        ? ensureCrewSeeded(state.labor ?? DEFAULT_LABOR_STATE, state.fleet ?? [], (a) => getAircraftType(a.typeId))
+        : (state.labor ?? DEFAULT_LABOR_STATE);
       const grievancePrev = relationsPrev.grievance ?? DEFAULT_LABOR_RELATIONS.grievance;
       const updatedLabor = {};
       // Crew pipeline (A7): the week we are advancing INTO — batches whose
@@ -4187,6 +4193,21 @@ function reconcileState(parsed) {
       return computeMarketCap(ph, parsed.cash ?? 0, parsed.awareness ?? 5).sharePrice;
     })(),
   };
+
+  // Crew pipeline (A7) MIGRATION. A save made before the pipeline existed has no
+  // headcount for anybody. If that save is running the pipeline, seed every group
+  // to exactly what its CURRENT fleet needs, so a long-established airline comes
+  // onto the new system fully staffed rather than waking up with nobody. Growth
+  // from here on needs hiring; nothing already flying is disturbed.
+  // Idempotent — ensureCrewSeeded leaves already-tracked groups untouched.
+  if (reconciled.crewPipeline) {
+    const seededLabor = ensureCrewSeeded(
+      reconciled.labor ?? DEFAULT_LABOR_STATE,
+      reconciled.fleet ?? [],
+      (a) => getAircraftType(a.typeId),
+    );
+    if (seededLabor !== reconciled.labor) reconciled.labor = seededLabor;
+  }
 
   // One-off: trim schedules already flying past the PHYSICAL block-hour cap.
   // Version-stamped inside applyScheduleTrimMigration, so it runs at most once
