@@ -61,6 +61,9 @@ function withNoRolls(fn) {
   try { return fn(); } finally { Math.random = prev; }
 }
 
+import { seedCrewFor } from '../src/data/labor.js';
+import { getAircraftType } from '../src/data/aircraft.js';
+
 const DESTS = ['ORD', 'LAX', 'MIA', 'BOS', 'SFO', 'ATL', 'DEN', 'SEA'];
 
 /** A JFK carrier old enough that heavy checks and mechanical failures happen. */
@@ -81,10 +84,16 @@ function startedAirline({ seed = 12345, ageWeeks = 500, freq = 21, fare = 1.15 }
     routePricing[['JFK', d].sort().join('-')] =
       defaultClassPrices(Math.round(referencePrice('JFK', d) * fare));
   }
+  const fleet = s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: 'owned' }));
   return {
     ...s, routePricing, awareness: 70,
     hubs: { ...(s.hubs ?? {}), JFK: { tier: 2, tierSince: 0 } },
-    fleet: s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: 'owned' })),
+    fleet,
+    // Fully crewed. New games run the crew pipeline, and this suite is about
+    // whether the PROJECTION agrees with the TICK — an airline that never hired
+    // would be parked in both, which is agreement, but agreement on zero: every
+    // assertion below about a route earning something would go vacuous.
+    labor: seedCrewFor(s.labor, fleet, a => getAircraftType(a.typeId)),
   };
 }
 

@@ -233,6 +233,13 @@ function startedAirline({ seed = 12345, ownership = 'owned', ageWeeks = 500, fre
   }
   return {
     ...s, routePricing, awareness: 70,
+    // Classic crew model — AFTER the spread, so it actually wins. This suite is
+    // about whether the weekly P&L CARD reconciles against the engine, not about
+    // staffing: with the crew pipeline on, a fixture that never hires bleeds crew
+    // to attrition over the 160 weeks it simulates, parks aircraft, and never
+    // reaches a taxed week — so the reconciliation assertions below would go
+    // vacuous for a reason that has nothing to do with the P&L card.
+    crewPipeline: false,
     hubs: { ...(s.hubs ?? {}), JFK: { tier: 2, tierSince: 0 } },
     fleet: s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: ownership })),
   };

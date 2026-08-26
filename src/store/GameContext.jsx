@@ -47,7 +47,7 @@ import {
   GRIEVANCE_REFUSE, GRIEVANCE_COUNTER_REJECTED, GRIEVANCE_SETTLED,
   NEGOTIATION_RESPONSE_WEEKS, STRIKE_COOLDOWN_WEEKS,
 } from '../data/laborRelations.js';
-import { LABOR_GROUP_MAP } from '../data/labor.js';
+import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
 import {
   COMPETITOR_AIRLINES,
@@ -681,6 +681,19 @@ function reducer(state, action) {
         phase:             'playing',
         objectives:        action.enableObjectives !== false ? initialObjectives() : [],
         objectivesEnabled: action.enableObjectives !== false,
+        // Crew pipeline (A7) is the model for NEW games: crew are hired and
+        // trained rather than conjured. Existing saves carry no flag and stay on
+        // the classic instant-crew model for their whole life — and if one is
+        // ever brought across, reconcileState seeds it fully staffed for the
+        // fleet it already flies (see ensureCrewSeeded), never with nobody.
+        crewPipeline: true,
+        // TRACKED FROM BIRTH. ensureCrewSeeded only fills groups with no headcount
+        // recorded — that is the migration path for saves older than the pipeline.
+        // A new game must not take it, or an airline that buys its whole fleet
+        // before its first tick would have the lot crewed for free.
+        labor: Object.fromEntries(LABOR_GROUPS.map(g => [g.id, {
+          payMultiplier: 1.0, morale: 80, headcount: 0, pipeline: [],
+        }])),
       };
     }
 
