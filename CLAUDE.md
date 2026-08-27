@@ -37,5 +37,9 @@ Applies to Headwinds too.
 ## Build & test
 
 - Build: `npm run build` (note: fails in Linux sandboxes — node_modules has macOS-native rollup; build runs on the user's machine).
-- Test scripts live in `tools/*-test.mjs` (run with `node`).
+- Test scripts live in `tools/*-test.mjs`. `npm test` runs all of them via `tools/run-tests.mjs`,
+  which discovers them from disk — no hand-maintained chain, so a new suite is picked up the moment
+  it exists. It runs in parallel, reports every failure instead of stopping at the first, and exits
+  non-zero if any failed. `npm run test:list` / `npm run test:serial`; `node tools/run-tests.mjs <substring>`
+  runs a subset. A file that only prints a report carries `@not-a-test` in its header and is skipped.
 - Game data: `src/data/` (aircraft, airports, alliances...). Simulation: `src/models/` and `src/utils/`. `.bak`/`.pre*` files in `src/data/` are manual backups — ignore them.

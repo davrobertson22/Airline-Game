@@ -13,7 +13,10 @@ import {
   formatMoney,
   configRangeMod,
   configSpaceQualityBonus,
+  calcReconfCost,
+  refitWeeks,
 } from '../utils/simulation.js';
+import { isOutOfService } from '../data/maintenance.js';
 
 const QUALITY_LEVELS = { basic: 0, standard: 1, premium: 2, luxury: 3 };
 
@@ -25,29 +28,19 @@ const QUALITY_OPTIONS = [
 ];
 
 /**
- * Calculates the one-time cost to reconfigure a cabin.
- * Charged per seat moved between classes, plus per quality tier change.
+ * The downtime sentence under the refit price. Pulled out of the JSX so the
+ * promise can be tested against refitWeeks() — the function the reducer
+ * actually grounds the tail with. The old copy ("Aircraft is taken out of
+ * service for refitting") was true of nothing: no reducer had ever grounded an
+ * aircraft for a cabin job.
  */
-function calcReconfCost(current, next) {
-  const seatChanges =
-    Math.abs((next.firstClass     ?? 0) - (current.firstClass     ?? 0)) +
-    Math.abs((next.businessClass  ?? 0) - (current.businessClass  ?? 0)) +
-    Math.abs((next.premiumEconomy ?? 0) - (current.premiumEconomy ?? 0));
-
-  const seatQDiff = Math.abs(
-    (QUALITY_LEVELS[next.seatQuality    ?? 'standard'] ?? 1) -
-    (QUALITY_LEVELS[current.seatQuality ?? 'standard'] ?? 1)
-  );
-  const servQDiff = Math.abs(
-    (QUALITY_LEVELS[next.serviceQuality    ?? 'standard'] ?? 1) -
-    (QUALITY_LEVELS[current.serviceQuality ?? 'standard'] ?? 1)
-  );
-
-  const anyChange = seatChanges > 0 || seatQDiff > 0 || servQDiff > 0;
-  if (!anyChange) return 0;
-
-  // $2,500 per seat moved + $30,000 per quality tier changed (both axes)
-  return Math.max(10_000, seatChanges * 2_500 + (seatQDiff + servQDiff) * 30_000);
+export function refitDowntimeNote(weeks, isBulk) {
+  if (!(weeks > 0)) {
+    return `${isBulk ? 'The aircraft keep' : 'The aircraft keeps'} flying — nothing here needs shop time.`;
+  }
+  return `${isBulk ? 'Each aircraft comes' : 'The aircraft comes'} out of service for `
+       + `${weeks} week${weeks === 1 ? '' : 's'} while the cabin is refitted — any routes `
+       + `${isBulk ? 'they fly' : 'it flies'} stop earning until the work is done.`;
 }
 
 export default function FleetConfig({ aircraftId, aircraftIds = null, onClose }) {
@@ -56,10 +49,18 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
   // Bulk mode: aircraftIds is an array of same-type aircraft; the layout chosen
   // here is applied to all of them (each pays its own refit cost).
   const targetIds = aircraftIds ?? (aircraftId ? [aircraftId] : []);
-  const targets   = state.fleet.filter(a => targetIds.includes(a.id));
+  const selected  = state.fleet.filter(a => targetIds.includes(a.id));
+  // A refit needs the hangar. A tail already in a heavy check or grounded by a
+  // failure cannot take a cabin job without cancelling the work it is there
+  // for, so the reducer refuses it — say so here rather than letting the player
+  // press Confirm on aircraft that will silently be left out.
+  const targets   = selected.filter(a => !isOutOfService(a));
+  const inShop    = selected.filter(a => isOutOfService(a));
   const isBulk    = targets.length > 1;
 
-  const aircraft = targets[0];
+  // Falls back to a shop-bound tail so the modal still renders (and explains
+  // itself) when every selected aircraft is out of service.
+  const aircraft = targets[0] ?? selected[0];
   const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
 
   const maxSeats = type?.seats ?? 0;
@@ -116,9 +117,14 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
   const reconfCost = perAircraftCosts.reduce((s, c) => s + c, 0);
   const canAfford  = state.cash >= reconfCost;
   const noChange   = reconfCost === 0;
+  // Shop time, from the same function the reducer grounds the tail with — so
+  // the number promised here is the number the player gets.
+  const downWeeks  = targets.length
+    ? Math.max(...targets.map(a => refitWeeks(getAircraftType(a.typeId), a.config ?? defaultConfig(maxSeats), nextConfig)))
+    : 0;
 
   function handleSave() {
-    if (over || !canAfford) return;
+    if (over || !canAfford || targets.length === 0) return;
     targets.forEach((a, i) => {
       dispatch({
         type:       'CONFIGURE_AIRCRAFT',
@@ -313,6 +319,16 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
           </div>
         </div>
 
+        {inShop.length > 0 && (
+          <div style={{
+            padding: '10px 14px', marginBottom: 12, borderRadius: 8, fontSize: 12,
+            background: 'rgba(248,81,73,.08)', border: '1px solid rgba(248,81,73,.3)', color: 'var(--text-muted)',
+          }}>
+            <Glyph e="🔧" /> {inShop.length} selected aircraft {inShop.length === 1 ? 'is' : 'are'} already out of service and
+            {' '}{inShop.length === 1 ? 'is' : 'are'} not included — refit {inShop.length === 1 ? 'it' : 'them'} once {inShop.length === 1 ? 'it is' : 'they are'} back in service.
+          </div>
+        )}
+
         {/* Reconfiguration cost banner */}
         {!noChange && (
           <div style={{
@@ -329,7 +345,7 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
                   {isBulk && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>across {targets.length} aircraft</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Paid immediately. Aircraft {isBulk ? 'are' : 'is'} taken out of service for refitting.
+                  Paid immediately. {refitDowntimeNote(downWeeks, isBulk)}
                 </div>
               </div>
               {!canAfford && (
@@ -345,7 +361,7 @@ export default function FleetConfig({ aircraftId, aircraftIds = null, onClose })
             className="btn btn-primary"
             style={{ flex: 1, padding: 10 }}
             onClick={handleSave}
-            disabled={over || (!noChange && !canAfford)}
+            disabled={over || targets.length === 0 || (!noChange && !canAfford)}
           >
             {noChange ? 'No Changes' : `Confirm Refit${isBulk ? ` (${targets.length} aircraft)` : ''} · ${formatMoney(reconfCost)}`}
           </button>
