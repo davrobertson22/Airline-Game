@@ -65,6 +65,37 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">August 27, 2026</p>
+      <h2>Cabin refits take the aircraft into the shop &mdash; and checks tell you when they&rsquo;re due</h2>
+      <p>Reported on the Discord: a refit screen making a promise the game never kept, and a maintenance panel answering the wrong question.</p>
+      <ul>
+        <li><strong>A refit is real work now.</strong> The cost banner has always said the aircraft comes out of service for refitting. It never did &mdash; seats moved between classes instantly, mid-schedule, for nothing but the money. Reconfiguring a cabin now sends the aircraft to the shop: one week for most narrowbodies and regionals, two for widebodies and up, plus a week when you&rsquo;re moving a quarter of the seats or more. The screen quotes the exact number of weeks before you commit, and any routes the aircraft flies stop earning until it&rsquo;s back. Churning layouts to chase demand is a decision with a price attached.</li>
+        <li><strong>An aircraft already in the shop can&rsquo;t take a cabin job.</strong> Select a tail that&rsquo;s in a C or D check, or grounded by a failure, and the refit screen says so and leaves it out of the batch instead of quietly charging you for work it can&rsquo;t do.</li>
+        <li><strong>Refitting aircraft say &ldquo;Refitting&rdquo;</strong> on the fleet list and the route tables, not &ldquo;Grounded &mdash; in repair&rdquo;. Nothing is broken; it&rsquo;s in the hangar because you sent it there.</li>
+        <li><strong>Maintenance checks now show time until due, not time flown.</strong> The check panel used to print hours accrued &mdash; the same number under both C and D on a young airframe, which is why it read as total time. It now reads <em>due in ~6w (766h left)</em>, estimated from how hard that particular aircraft is actually flying, so a hard-worked jet shows a nearer date than a spare. Thresholds and check costs are unchanged; the panel just stopped making you do the arithmetic. More on planning downtime in the <a href="/aircraft.html">aircraft guide</a>.</li>
+      </ul>
+    </div>
+    <div class="entry">
+      <p class="date">August 27, 2026</p>
+      <h2>The market&rsquo;s efficiency bar now admits it only measures fuel</h2>
+      <p>Reported on the Discord: two aircraft whose store cards seemed to contradict each other.</p>
+      <ul>
+        <li><strong>&ldquo;Seat efficiency&rdquo; was only ever fuel.</strong> The green bar on every aircraft card scored fuel burn per seat and nothing else &mdash; no maintenance, no crew, no cost of owning the thing &mdash; but it printed a dollar figure under a heading that read like the total cost of a seat. That is how a 767-300ER could sit one point <em>above</em> a 737-800 on the bar while billing three times the maintenance. The bar now says <strong>Fuel per seat</strong>, and the number beside it is labelled as fuel.</li>
+        <li><strong>Cards and the comparison table now show maintenance per seat.</strong> The weekly maintenance figure was already there, but comparing a 351-seat widebody to a 189-seat narrowbody meant doing the division yourself. Every card carries a <strong>Maint/seat</strong> figure next to the weekly bill &mdash; <strong>Maint/tonne</strong> on freighters, which never had a comparison number of their own &mdash; and the table has a sortable column for it. Nothing about what aircraft cost or how they fly has changed; the screen just stopped hiding half the answer. More on picking metal in the <a href="/aircraft.html">aircraft guide</a> and <a href="/route-economics.html">route economics</a>.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 27, 2026</p>
+      <h2>The Add Flights form now counts every hour your aircraft is already flying</h2>
+      <p>Reported on the Discord: a planner that offered flying hours the game then refused.</p>
+      <ul>
+        <li><strong>&ldquo;No spare flying hours&rdquo; on a route the form said would fit.</strong> The utilisation bar in Add Flights was reading the aircraft wrong in two ways. A multi-stop rotation was charged only its end-to-end hop instead of every sector it flies, and a route a standby aircraft is temporarily covering counted as nothing at all &mdash; so the bar could sit in the green at 136 of 140 hours while the aircraft picker on the same screen said 11 hours free, and the route came back refused. Both readings now come from the same place the game itself uses, so the bar, the picker, the flights-per-week ceiling and the answer you get on submit all agree.</li>
+        <li><strong>An aircraft&rsquo;s intermediate stops count as airports it serves.</strong> A jet flying a tag route through a city was told it couldn&rsquo;t start a route there &mdash; &ldquo;aircraft can&rsquo;t teleport&rdquo; &mdash; at an airport it lands at every rotation. It can now, and the aircraft turns up in the picker where it belongs. More on how block hours limit a schedule in <a href="/route-economics.html">route economics</a>.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <p class="date">August 24, 2026</p>
       <h2>Cargo lanes are now contested &mdash; and the fleet gets a rebalance</h2>
       <p>The freight market used to treat every lane as yours alone. It doesn't any more, and a handful of aircraft got the price and stat corrections they were due.</p>
