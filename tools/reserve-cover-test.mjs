@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { gameReducer, freshState, reconcileState } from '../src/store/GameContext.jsx';
 import { getAircraftType } from '../src/data/aircraft.js';
+import { ensureCrewSeeded } from '../src/data/labor.js';
 import * as R from '../src/data/reserve.js';
 import { planCovers, applyReserveCovers, deployableFleetForRoute } from '../src/utils/simulation.js';
 
@@ -30,6 +31,25 @@ function buyJet(s, typeId = TYPE) {
 }
 const find = (s, id) => s.fleet.find(a => a.id === id);
 
+// The crew pipeline (A7) starts a new game with NOBODY hired, and A7.6 grounds
+// every tail the airline cannot crew. This rig predates both: it buys two jets,
+// hires no one, and every assertion below is about reserve coverage rather than
+// staffing. Left alone the whole fleet is crew-grounded, no route flies, and the
+// suite reports "covered route earned revenue" — which reads as a broken reserve
+// system when the reserve worked perfectly and the airline simply had no pilots.
+//
+// So staff the rig to its current fleet through the engine's OWN migration
+// helper — the same path a pre-pipeline save takes — rather than switching
+// crewPipeline off. Every new game runs the pipeline, so a reserve test that
+// opted out would be testing a model no live airline is on.
+// ensureCrewSeeded only fills groups with NO headcount recorded, and START_GAME
+// records a deliberate 0, so the groups are marked untracked first.
+function crewUp(s) {
+  const untracked = Object.fromEntries(
+    Object.entries(s.labor ?? {}).map(([id, g]) => [id, { ...g, headcount: null }]));
+  return { ...s, labor: ensureCrewSeeded(untracked, s.fleet, (a) => getAircraftType(a.typeId)) };
+}
+
 // Standard rig: jet A flying JFK–ORD, jet B stationed as a reserve at JFK.
 function rig() {
   let s = newGame();
@@ -40,7 +60,7 @@ function rig() {
   s = gameReducer(s, { type: 'ADD_ROUTE', aircraftId: a, origin: 'JFK', destination: 'ORD', weeklyFrequency: 7 });
   if (s.routes.length === 0) throw new Error('route did not attach');
   s = gameReducer(s, { type: 'SET_RESERVE', aircraftId: b, baseCode: 'JFK' });
-  return { s, a, b };
+  return { s: crewUp(s), a, b };
 }
 
 t('SET_RESERVE stations an idle tail at an own hub only', () => {

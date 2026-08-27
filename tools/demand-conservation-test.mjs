@@ -39,6 +39,7 @@ import {
 } from '../src/models/demand.js';
 import { getAircraftType, AIRCRAFT_TYPES } from '../src/data/aircraft.js';
 import { checkRouteRestrictions } from '../src/data/airportRestrictions.js';
+import { ensureCrewSeeded } from '../src/data/labor.js';
 import { getAirport } from '../src/data/airports.js';
 
 let passed = 0, failed = 0;
@@ -232,9 +233,23 @@ test('H10: a route at rough parity still lands well below the ceiling', () => {
 
 const tick = () => { const ms = Date.now(); while (Date.now() === ms) { /* next uid */ } };
 
+// The crew pipeline (A7) starts a new game with NOBODY hired, and A7.6 grounds
+// every tail the airline cannot crew. These fixtures build an airline and fly it
+// for one week to count passengers; unstaffed, every tail is grounded, the pair
+// carries 0 pax, and the suite reports the DEMAND POOL as broken when the pool
+// was never consulted. Staff to the current fleet through the engine's own
+// migration helper — the same path a pre-pipeline save takes. ensureCrewSeeded
+// only fills groups with NO headcount recorded and START_GAME records a
+// deliberate 0, so the groups are marked untracked first.
+function crewUp(state) {
+  const untracked = Object.fromEntries(
+    Object.entries(state.labor ?? {}).map(([id, g]) => [id, { ...g, headcount: null }]));
+  return { ...state, labor: ensureCrewSeeded(untracked, state.fleet ?? [], (a) => getAircraftType(a.typeId)) };
+}
+
 function paxOnPair(state, o, d) {
   const key = [o, d].sort().join('-');
-  const next = gameReducer(state, { type: 'ADVANCE_WEEK' });
+  const next = gameReducer(crewUp(state), { type: 'ADVANCE_WEEK' });
   let pax = 0;
   for (const rr of next.lastReport?.routeResults ?? []) {
     const r = (next.routes ?? []).find(x => x.id === rr.routeId);
