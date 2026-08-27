@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { AIRCRAFT_TYPES, getAircraftType } from '../src/data/aircraft.js';
 import {
   calcHQCost, hqScaleFor, fleetHQScale,
-  HQ_SCALE_BY_CATEGORY, HQ_SCALE_FREIGHTER,
+  HQ_SCALE_BY_CATEGORY, HQ_SCALE_FREIGHTER, CATEGORY_MEDIAN_SEATS,
 } from '../src/data/overhead.js';
 import { weeklyTick } from '../src/utils/simulation.js';
 
@@ -32,7 +32,13 @@ function test(name, fn) {
   catch (e) { console.log(`  ✗ ${name}\n      ${(e.stack || e.message).split('\n').slice(0, 3).join('\n      ')}`); failed++; }
 }
 
-const firstOf = (cat) => AIRCRAFT_TYPES.find(t => t.category === cat && !t.freighter && !t.doubleDeck);
+// Pick each category's ANCHOR aircraft — the median seat count the scale table
+// was calibrated against — not merely the first of its category. Since the scale
+// became a seat curve (scaleBySeats), only the anchor still returns the table
+// value exactly; an arbitrary narrowbody no longer sits at 1.00.
+const firstOf = (cat) => AIRCRAFT_TYPES.find(t =>
+      t.category === cat && !t.freighter && !t.doubleDeck && t.seats === CATEGORY_MEDIAN_SEATS[cat])
+   ?? AIRCRAFT_TYPES.find(t => t.category === cat && !t.freighter && !t.doubleDeck);
 const TP = firstOf('Turboprop'), NB = firstOf('Narrow Body'), WB = firstOf('Wide Body');
 for (const [n, t] of Object.entries({ TP, NB, WB })) {
   if (!t) throw new Error(`no catalogue type found for ${n} — fixture is broken`);

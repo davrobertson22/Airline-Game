@@ -62,6 +62,8 @@ export function calcHQCost(fleetScale) {
 // Narrow Body is 1.00 BY CONSTRUCTION, so the game's most common category sees
 // no change at all. This is a re-shape, not a rise.
 export const HQ_SCALE_BY_CATEGORY = {
+  'Air Taxi':     0.11,   // anchor only — an AOC, a desk and a phone
+  'Commuter':     0.20,   // anchor only — see CATEGORY_MEDIAN_SEATS
   'Turboprop':    0.35,
   'Regional Jet': 0.55,
   'Narrow Body':  1.00,
@@ -84,10 +86,78 @@ export const HQ_SCALE_FREIGHTER = [
   { maxTonnes: Infinity, scale: 1.70 },
 ];
 
+// ─── Category tables are ANCHORS on a seat curve, not step functions ─────────
+//
+// Keying a scale off `category` puts a cliff at every boundary, and the game's
+// categories are not evenly spaced in seats. The worst case measured:
+//
+//   757-300   Narrow Body  295 seats   labour $58,000  + HQ $38,000  = $96,000
+//   767-200ER Wide Body    290 seats   labour $105,300 + HQ $59,658  = $164,958
+//
+// Five fewer seats, 72% more fixed cost — which handed the 757-300 the lowest
+// break-even load factor of any aircraft in the game. Across the catalogue that
+// produced four places where MORE seats cost LESS, and 107 pairs sitting within
+// ten seats of each other yet differing by over 15%.
+//
+// A category is a shorthand for size. Where the two disagree, size wins. So the
+// category tables are read as ANCHOR POINTS on a curve through seat count, at
+// the same median seats the per-departure fee table above was calibrated
+// against — every calibrated number still holds exactly at its own anchor, and
+// only aircraft BETWEEN anchors move. The ends CLAMP rather than extrapolate,
+// so an 853-seat A380 keeps paying the double-deck rate it pays today rather
+// than silently repricing the largest airlines in the game.
+// Two of these are not aircraft categories at all. 'Air Taxi' and 'Commuter' are
+// ANCHOR POINTS ONLY — no type in the catalogue carries either as its category,
+// and nothing looks them up directly. They exist because the curve used to stop
+// at 39 seats and CLAMP, so a 9-seat Islander was charged a 39-seater's head
+// office and crew. Measured consequence: every type under about 21 seats was
+// loss-making with every seat sold at maximum legal frequency — not
+// uncompetitive, incapable. That stranded ten aircraft AND the 25 airports under
+// 4,000ft they exist to serve, St Barths (2,119ft) among them.
+export const CATEGORY_MEDIAN_SEATS = {
+  'Air Taxi':       9,
+  'Commuter':      19,
+  'Turboprop':     39,
+  'Regional Jet':  92,
+  'Narrow Body':  186,
+  'Wide Body':    420,
+  'Double Deck':  605,
+};
+
 /**
- * How many narrowbody-equivalents of head office one airframe costs. An unknown
- * category falls back to 1.00 — a new aircraft type is charged the common rate
- * rather than accidentally administering itself for free.
+ * Read a by-category scale table as a piecewise-linear curve through seats.
+ * Shared by HQ overhead here and by crew pay in labor.js, so the two can never
+ * disagree about where a 200-seat aircraft sits.
+ */
+export function scaleBySeats(byCategory, seats) {
+  const n = Number(seats);
+  // No usable seat count means the curve has nothing to read. Return null so the
+  // caller falls back to its category — NOT the smallest anchor, which would
+  // administer and crew an unknown widebody as though it were a 39-seat commuter.
+  // This is how a synthetic type with no `seats` field got turboprop pilots.
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const pts = Object.entries(CATEGORY_MEDIAN_SEATS)
+    .map(([cat, s]) => [s, byCategory?.[cat]])
+    .filter(([, v]) => typeof v === 'number')
+    .sort((a, b) => a[0] - b[0]);
+  if (!pts.length) return null;
+  if (n <= pts[0][0]) return pts[0][1];
+  if (n >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+  for (let i = 1; i < pts.length; i++) {
+    const [s0, v0] = pts[i - 1], [s1, v1] = pts[i];
+    if (n <= s1) return v0 + (v1 - v0) * ((n - s0) / (s1 - s0));
+  }
+  return pts[pts.length - 1][1];
+}
+
+/**
+ * How many narrowbody-equivalents of head office one airframe costs.
+ *
+ * Freighters step by payload — they have no cabin to count. Supersonic keeps a
+ * category override: Concorde is 128 seats of extraordinary complexity, and
+ * interpolating it against a regional jet would under-price it badly. Everything
+ * else reads the table as a seat curve. A missing type falls back to 1.00 — a
+ * new aircraft is charged the common rate rather than administering itself free.
  */
 export function hqScaleFor(aircraftType) {
   if (!aircraftType) return 1;
@@ -95,8 +165,11 @@ export function hqScaleFor(aircraftType) {
     const t = aircraftType.payloadTonnes ?? 0;
     return HQ_SCALE_FREIGHTER.find(s => t <= s.maxTonnes).scale;
   }
-  const category = aircraftType.doubleDeck ? 'Double Deck' : aircraftType.category;
-  return HQ_SCALE_BY_CATEGORY[category] ?? 1;
+  if (aircraftType.category === 'Supersonic') return HQ_SCALE_BY_CATEGORY['Supersonic'];
+  if (aircraftType.doubleDeck) return HQ_SCALE_BY_CATEGORY['Double Deck'];
+  return scaleBySeats(HQ_SCALE_BY_CATEGORY, aircraftType.seats)
+      ?? HQ_SCALE_BY_CATEGORY[aircraftType.category]
+      ?? 1;
 }
 
 /**
