@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useGame } from '../store/GameContext.jsx';
+import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
@@ -120,11 +120,20 @@ const ACCENT = '#e8833a';
 
 // ─── Main cargo planner ─────────────────────────────────────────────────────────
 
-export default function CargoRoutePlanner({ mode, setMode, embedded = false, onOpened }) {
+/**
+ * @param {boolean}  [props.embedded]      rendered inside the Routes screen
+ * @param {string}   [props.initialOrigin] pre-loaded lane — "add a freighter to
+ * @param {string}   [props.initialDest]   this lane" from the freight routes list
+ * @param {function} [props.onOpened]      called once the lane is opened
+ */
+export default function CargoRoutePlanner({ mode, setMode, embedded = false, initialOrigin = '', initialDest = '', onOpened }) {
   const { state, dispatch } = useGame();
 
-  const [origin, setOrigin]   = useState('');
-  const [dest,   setDest]     = useState('');
+  // Prefill is read at mount only; the caller keys the element on the lane, so
+  // picking a different route mounts a fresh planner rather than yanking the
+  // airports out from under a half-finished one.
+  const [origin, setOrigin]   = useState(initialOrigin);
+  const [dest,   setDest]     = useState(initialDest);
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [frequency, setFrequency] = useState(7);
   const [yieldPrice, setYieldPrice] = useState(null); // null = auto reference yield
@@ -292,10 +301,10 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, onO
   // Freighters use gates and slots exactly like passenger flights: a gate is
   // required at both ends, and each weekly departure consumes a slot.
   const gates = state.gates ?? {};
+  // Through the engine's own helper so a passenger rotation calling here is
+  // charged the two movements it makes — the same reading the cargo guard uses.
   const slotsUsedAt = (code) =>
-    (state.routes ?? [])
-      .filter(r => r.origin === code || r.destination === code)
-      .reduce((s, r) => s + (r.weeklyFrequency ?? 0), 0)
+    slotsUsedAtEngine(state.routes ?? [], code)
     + cargoSlotsUsedAt(code, state.cargoRoutes);
   const gateInfo = (code) => {
     const count = gates[code] ?? 0;

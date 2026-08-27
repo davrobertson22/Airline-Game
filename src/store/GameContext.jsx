@@ -4,13 +4,15 @@ import {
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
-  routeStops, routeLegs, routeSegments, routeSegmentKey,
+  routeStops, routeLegs, routeSegments, routeSegmentKey, isMultiStop,
   routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
   MAX_ROUTE_STOPS,
   loyaltyTier, loyaltyEnrollPull, loyaltyPaxBase,
   isRouteActive, routeActiveMonths, aircraftHubMaintFactor, routesCommittedTo,
+  blockHourFit, blockTimeHours,
   applyScheduleTrimMigration,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
+  calcReconfCost, refitWeeks,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
@@ -298,6 +300,72 @@ function settleCoversForRemoval(state, aircraftId) {
   return { routes: settle(state.routes), cargoRoutes: settle(state.cargoRoutes ?? []), fleet };
 }
 
+// Weekly movements one route puts through `code` for each unit of frequency.
+// An endpoint is one movement per cycle; a stop in the MIDDLE of a rotation is
+// an arrival and a departure, so it is two. Every slot check in this file —
+// passenger and freight, guard and reducer — counts through this, which is how
+// a tag route stopped being invisible at the airports it actually touches: the old `r.origin === code || r.destination
+// === code` arithmetic read MCI–JFK–ORY as if JFK were not on it, so the
+// frequency stepper would happily push a rotation through a gate that had no
+// slots left, and a plain JFK route could be opened on top of slots the
+// rotation was already using. ADD_TAG_ROUTE has always counted incidents;
+// this makes the other two agree with it.
+export function slotIncidentsAt(route, code) {
+  return routeLegs(route).reduce(
+    (n, l) => n + (l.from === code ? 1 : 0) + (l.to === code ? 1 : 0), 0);
+}
+
+// Peak weekly slot usage at `code` across `months`, with `freqOf` supplying the
+// frequency to charge each route (so a proposed change can be priced in place).
+export function peakSlotsUsedAt(routes, code, months, freqOf = (r) => r.weeklyFrequency ?? 0) {
+  return Math.max(0, ...months.map(m => (routes ?? [])
+    .filter(r => isRouteActive(r, m))
+    .reduce((s, r) => s + slotIncidentsAt(r, code) * (freqOf(r) ?? 0), 0)));
+}
+
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+// Year-round slot usage at `code` — the freight guards' reading. A cargo lane
+// never goes dormant, so it must fit in the BUSIEST month, which is a peak and
+// not a sum: two counter-seasonal passenger routes that never coexist used to
+// be charged twice over, and the freight guard refused lanes the passenger
+// guard was happily opening at the same airport.
+export function slotsUsedAt(ops, code, freqOf = (r) => r.weeklyFrequency ?? 0) {
+  return peakSlotsUsedAt(ops, code, ALL_MONTHS, freqOf);
+}
+
+// Two different questions about a city pair, deliberately NOT merged.
+//
+// A per-route frequency cap (SNA, LGB) counts DEPARTURES on that pair, so a
+// rotation A–B–C is 6 departures on A–B and 6 on B–C — not 6 on A–C, which it
+// never flies. A perimeter rule asks which MARKETS you serve, so the same
+// rotation is an A–C service and its endpoints are the thing being judged.
+//
+// Each caller passes BOTH counts to checkRouteRestrictions — the leg count as
+// `weeklyFreq` and the market total as `ctx.marketFreq` — and each rule reads
+// the one it governs. Feeding a single union to both charged a rotation's
+// departures to a pair it operates none on (SNA–LAS–PHX at 6 plus a SNA–PHX
+// nonstop at 5 read as 11 against a 10/wk cap, freezing both routes); feeding
+// only the route's own frequency to the market rules let a nonstop and a
+// one-stop each take the full allowance on one shared exemption slot.
+
+/** Weekly departures operated on the LEG `pairKey`, whatever route shape flies
+ *  it. Peak across `months`; `freqOf` prices a proposed change in place. */
+export function peakLegFreqOn(routes, pairKey, months, freqOf = (r) => r.weeklyFrequency ?? 0) {
+  return Math.max(0, ...months.map(m => (routes ?? [])
+    .filter(r => isRouteActive(r, m)
+      && routeLegs(r).some(l => routePairKey(l.from, l.to) === pairKey))
+    .reduce((s, r) => s + (freqOf(r) ?? 0), 0)));
+}
+
+/** Weekly frequency on the O&D MARKET `pairKey` — every route whose own
+ *  endpoints are that pair, a one-stop's through service included. */
+export function peakMarketFreqOn(routes, pairKey, months, freqOf = (r) => r.weeklyFrequency ?? 0) {
+  return Math.max(0, ...months.map(m => (routes ?? [])
+    .filter(r => isRouteActive(r, m) && routePairKey(r.origin, r.destination) === pairKey)
+    .reduce((s, r) => s + (freqOf(r) ?? 0), 0)));
+}
+
 // ─────────────────────────────────────────────
 // FREQUENCY CHANGE GUARD (Routes: change one route's weekly frequency)
 // ─────────────────────────────────────────────
@@ -317,18 +385,47 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
   if (!type) return null; // no aircraft/type → nothing to enforce
 
-  const dist   = routeDistanceKm(route.origin, route.destination);
   const months = routeActiveMonths(route);
   const freqOf = (r) => (r.id === route.id ? target : r.weeklyFrequency);
 
   // Regulatory (perimeter rules, per-pair frequency caps): peak proposed weekly
   // frequency on this city-pair across the route's active months.
-  const pairKey = [route.origin, route.destination].sort().join('-');
-  const pairRoutes = state.routes.filter(r => [r.origin, r.destination].sort().join('-') === pairKey);
-  const peakPairFreq = Math.max(0, ...months.map(m =>
-    pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + freqOf(r), 0)));
-  if (checkRouteRestrictions(route.origin, route.destination, dist, peakPairFreq, freighterBodyClass(type),
-        { routes: state.routes, excludeKey: pairKey, aircraftType: type })) return 'Regulatory frequency cap on this route';
+  //
+  // A multi-stop rotation is not one city-pair — it is a chain of legs, each
+  // with its own regulations, and MCI–JFK–ORY was previously judged on MCI–ORY
+  // alone. Every leg is checked, and the frequency already flying that leg
+  // counts whatever route shape it arrives on.
+  const ownKey = routePairKey(route.origin, route.destination);
+  // Every leg the route actually operates, judged on departures. excludeKey
+  // stays the ROUTE's endpoint key: the perimeter rule counts routes by their
+  // endpoints, so keying the exclusion on the leg made a rotation count itself
+  // against its own exemption slot and refuse itself for ever.
+  for (const l of routeLegs(route)) {
+    const pk = routePairKey(l.from, l.to);
+    const hit = checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to),
+      peakLegFreqOn(state.routes, pk, months, freqOf), freighterBodyClass(type),
+      { routes: state.routes, excludeKey: ownKey, aircraftType: type,
+        marketFreq: peakMarketFreqOn(state.routes, pk, months, freqOf) });
+    // The rule writes a full sentence naming itself and what to do about it.
+    // Replacing it with "Regulatory frequency cap" sent players hunting for a
+    // frequency cap on a route that is banned outright at any frequency.
+    if (hit) {
+      const why = hit.reason ?? 'Regulatory frequency cap on this route';
+      // Which leg, on a rotation — the rule's sentence names the airport but not
+      // which of three or four sectors the player has to change.
+      return isMultiStop(route) ? `${l.from}–${l.to}: ${why}` : why;
+    }
+  }
+  // The route's own O&D market, for every shape, on its OWN frequency. A
+  // perimeter rule governs where the service GOES: judging a rotation on its
+  // legs alone would have made a one-stop the way to fly a capped market at any
+  // frequency you liked.
+  const odHit = checkRouteRestrictions(route.origin, route.destination,
+    routeDistanceKm(route.origin, route.destination),
+    target, freighterBodyClass(type),
+    { routes: state.routes, excludeKey: ownKey, aircraftType: type,
+      marketFreq: peakMarketFreqOn(state.routes, ownKey, months, freqOf) });
+  if (odHit) return odHit.reason ?? 'Regulatory frequency cap on this route';
 
   // Block-hours on this aircraft, per-month peak, with this route at the new freq.
   // Counts the tail's WHOLE committed schedule (passenger + cargo, including any
@@ -349,13 +446,21 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
     }
   }
 
-  // Gate slots at each endpoint, per-month peak.
+  // Gate slots at EVERY stop, per-month peak. Interior stops of a rotation see
+  // two movements a cycle, so the stepper is refused at the airport in the
+  // middle long before the endpoints notice anything.
+  //
+  // Freight counts here because a freighter occupies a gate exactly like a jet,
+  // and the freight guards have always counted passenger flights — the traffic
+  // being one-way was arbitrary, and it let the two sides of the same airline
+  // book the same slot twice.
   const gates = state.gates ?? {};
-  const peakSlotsAt = (code) => Math.max(0, ...months.map(m => state.routes
-    .filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
-    .reduce((s, r) => s + freqOf(r), 0)));
-  if (peakSlotsAt(route.origin)      > (gates[route.origin]      ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.origin}`;
-  if (peakSlotsAt(route.destination) > (gates[route.destination] ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.destination}`;
+  const allOpsHere = [...state.routes, ...(state.cargoRoutes ?? [])];
+  for (const code of routeStops(route)) {
+    if (peakSlotsUsedAt(allOpsHere, code, months, freqOf) > (gates[code] ?? 0) * SLOTS_PER_GATE) {
+      return `No free gate slots at ${code}`;
+    }
+  }
 
   return null;
 }
@@ -401,24 +506,37 @@ export function addRouteBlockReason(state, action) {
   }
 
   // ── Regulatory (perimeter rules, per-pair frequency caps, aircraft size) ───
-  const pairKey = [action.origin, action.destination].sort().join('-');
-  const pairRoutes = state.routes.filter(r => [r.origin, r.destination].sort().join('-') === pairKey);
-  const peakPairFreq = Math.max(0, ...newMonths.map(m =>
-    pairRoutes.filter(r => isRouteActive(r, m)).reduce((s, r) => s + r.weeklyFrequency, 0)));
-  if (checkRouteRestrictions(action.origin, action.destination, dist, peakPairFreq + weeklyFrequency,
-        freighterBodyClass(type), { routes: state.routes, excludeKey: pairKey, aircraftType: type })) {
-    return `Regulation blocks this route at ${weeklyFrequency} flights/wk`;
-  }
+  const pairKey = routePairKey(action.origin, action.destination);
+  // Leg-counted, not endpoint-counted: a rotation stopping through this pair is
+  // flying it too. Counting only routes whose ENDPOINTS matched let a capped
+  // leg be flown at twice its limit — the rotation up to the cap, then a
+  // nonstop on top of it, each blind to the other.
+  // Departures on the leg, then this service's own frequency in its market —
+  // one check per kind of count. The leg half is what stops a nonstop being
+  // stacked on top of a rotation that already fills the pair's cap.
+  // Departures on the leg for the caps that count departures; the O&D market
+  // total for the rules that govern a market. One call, both numbers.
+  const regHit = checkRouteRestrictions(action.origin, action.destination, dist,
+    peakLegFreqOn(state.routes, pairKey, newMonths) + weeklyFrequency,
+    freighterBodyClass(type),
+    { routes: state.routes, excludeKey: pairKey, aircraftType: type,
+      marketFreq: peakMarketFreqOn(state.routes, pairKey, newMonths) + weeklyFrequency });
+  if (regHit) return regHit.reason ?? `Regulation blocks this route at ${weeklyFrequency} flights/wk`;
 
   // ── Block-hours on this airframe, per-month peak across its routes ─────────
+  // blockHourFit is the shared reading: the Add Flights form calls it too, so a
+  // bar that says "fits" cannot be met by a refusal here.
   const acRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? []);
-  const newBlockHrs = weeklyBlockHours(dist, weeklyFrequency, type);
-  const peakBlockHrs = Math.max(0, ...newMonths.map(m =>
-    newBlockHrs + acRoutes
-      .filter(r => isRouteActive(r, m))
-      .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0)));
-  if (peakBlockHrs > MAX_WEEKLY_BLOCK_HOURS) {
-    return `${tail} has no spare flying hours — this would need ${Math.round(peakBlockHrs)}h/wk against a ${MAX_WEEKLY_BLOCK_HOURS}h limit`;
+  const fit = blockHourFit({
+    aircraftId: action.aircraftId, type,
+    routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
+    months: newMonths,
+    hoursPerFlight: blockTimeHours(dist, type) * 2,
+    weeklyFrequency,
+    capHours: MAX_WEEKLY_BLOCK_HOURS,
+  });
+  if (!fit.fits) {
+    return `${tail} has no spare flying hours — this would need ${Math.round(fit.totalHours)}h/wk against a ${MAX_WEEKLY_BLOCK_HOURS}h limit`;
   }
 
   // ── Network connectivity: a plane that already flies can only extend its ───
@@ -436,12 +554,12 @@ export function addRouteBlockReason(state, action) {
   if (!(gates[action.destination] > 0)) return `You don't have a gate at ${action.destination} — lease one to fly there`;
 
   // ── Slots (each freq unit = 1 departure/wk at each endpoint), per-month peak ─
-  const peakSlotsAt = (code) => Math.max(0, ...newMonths.map(m => state.routes
-    .filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
-    .reduce((s, r) => s + r.weeklyFrequency, 0)));
+  // Across passenger AND freight: a freighter holds a gate like anything else,
+  // and the cargo guard has always counted passenger flights.
+  const allOpsHere = [...state.routes, ...(state.cargoRoutes ?? [])];
   for (const code of [action.origin, action.destination]) {
     const cap  = gates[code] * SLOTS_PER_GATE;
-    const used = peakSlotsAt(code);
+    const used = peakSlotsUsedAt(allOpsHere, code, newMonths);
     if (used + weeklyFrequency > cap) {
       return `Not enough gate slots at ${code} — ${used}/${cap} in use and this route needs ${weeklyFrequency} more`;
     }
@@ -499,11 +617,12 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
   // Gate slots at each endpoint, counted across passenger + cargo ops.
   const gates  = state.gates ?? {};
   const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
-  const slotsAt = (code) => allOps
-    .filter(r => r.id !== route.id && (r.origin === code || r.destination === code))
-    .reduce((s, r) => s + r.weeklyFrequency, 0);
-  if (slotsAt(route.origin)      + target > (gates[route.origin]      ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.origin}`;
-  if (slotsAt(route.destination) + target > (gates[route.destination] ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.destination}`;
+  // slotsUsedAt charges a passenger rotation the two movements it makes at a
+  // stop in the middle, so the freighter and the passenger guard read the same
+  // airport the same way.
+  const others = allOps.filter(r => r.id !== route.id);
+  if (slotsUsedAt(others, route.origin)      + target > (gates[route.origin]      ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.origin}`;
+  if (slotsUsedAt(others, route.destination) + target > (gates[route.destination] ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.destination}`;
 
   return null;
 }
@@ -1363,13 +1482,40 @@ function reducer(state, action) {
 
     case 'CONFIGURE_AIRCRAFT': {
       // action: { aircraftId, config, reconfCost }
-      const cost = action.reconfCost ?? 0;
+      // A refit is shop work: the cabin is stripped and refitted with the tail
+      // out of service, which is what the modal has always promised and what
+      // nothing here used to do. Downtime is priced by refitWeeks() from the
+      // size of the change and the airframe; the cost is re-derived here from
+      // the SAME function the modal quotes, so the two cannot drift.
+      const target = state.fleet.find(a => a.id === action.aircraftId);
+      if (!target || !action.config || typeof action.config !== 'object') return state;
+      // Already in a heavy check or grounded by a failure: taking the hangar
+      // slot for a cabin job would cancel the check (or wipe the AOG clock) and
+      // hand the player back an airframe that never had the work done.
+      if (isOutOfService(target)) {
+        return { ...state, error: `${target.name ?? 'That aircraft'} is out of service — it cannot start a cabin refit until it is back.` };
+      }
+      const cfgType    = getAircraftType(target.typeId);
+      const cfgCurrent = target.config ?? defaultConfig(cfgType?.seats ?? 100);
+      const cost       = calcReconfCost(cfgCurrent, action.config);
+      if (cost > state.cash) {
+        return { ...state, error: `Not enough cash for that refit (${formatMoney(cost)}).` };
+      }
+      const refitDown = refitWeeks(cfgType, cfgCurrent, action.config);
       return {
         ...state,
         cash:  state.cash - cost,
-        fleet: state.fleet.map(a =>
-          a.id === action.aircraftId ? { ...a, config: action.config } : a
-        ),
+        fleet: state.fleet.map(a => (
+          a.id === action.aircraftId
+            ? {
+                ...a,
+                config: action.config,
+                ...(refitDown > 0
+                  ? { status: 'grounded', groundedWeeksLeft: refitDown, groundedReason: 'refit' }
+                  : {}),
+              }
+            : a
+        )),
       };
     }
 
@@ -1552,14 +1698,27 @@ function reducer(state, action) {
       if (routeMaxLegKm(proto) > effectiveRangeKm(aircraft, type)) return state;
 
       // ── Regulatory restrictions: evaluate EACH leg independently ──
+      const ownKey = routePairKey(proto.origin, proto.destination);
       const legPairFreq = (pk) => state.routes.reduce((s, r) =>
         routeLegs(r).some(rl => routePairKey(rl.from, rl.to) === pk) ? s + (r.weeklyFrequency ?? 0) : s, 0);
       for (const l of legs) {
         const pk = routePairKey(l.from, l.to);
         if (checkRouteRestrictions(l.from, l.to, routeDistanceKm(l.from, l.to),
               legPairFreq(pk) + weeklyFrequency, freighterBodyClass(type),
-              { routes: state.routes, excludeKey: pk, aircraftType: type })) return state;
+              { routes: state.routes, excludeKey: ownKey, aircraftType: type,
+                marketFreq: peakMarketFreqOn(state.routes, pk, ALL_MONTHS) })) return state;
       }
+      // ── And the market the rotation SELLS ──
+      // Legs alone made a one-stop the way around a market rule: DCA–LAX is
+      // beyond DCA's perimeter, DCA–ORD and ORD–LAX are both inside it, so
+      // DCA–ORD–LAX opened at any frequency and the frequency stepper then
+      // refused to move it — an airline parked in a state its own guard called
+      // illegal.
+      if (checkRouteRestrictions(proto.origin, proto.destination,
+            routeDistanceKm(proto.origin, proto.destination),
+            weeklyFrequency, freighterBodyClass(type),
+            { routes: state.routes, excludeKey: ownKey, aircraftType: type,
+              marketFreq: peakMarketFreqOn(state.routes, ownKey, ALL_MONTHS) + weeklyFrequency })) return state;
 
       // ── Block hours: cumulative across this aircraft's COMMITTED routes,
       //    legs-aware (and including any a reserve is covering for it) ──
@@ -1576,10 +1735,8 @@ function reducer(state, action) {
 
       // ── Gates + slots at EVERY stop (interior stops see two departures/cycle) ──
       const gates = state.gates ?? {};
-      const incidentCount = (r, code) =>
-        routeLegs(r).reduce((n, l) => n + (l.from === code ? 1 : 0) + (l.to === code ? 1 : 0), 0);
-      const slotsUsedAt = (code) =>
-        state.routes.reduce((s, r) => s + incidentCount(r, code) * (r.weeklyFrequency ?? 0), 0);
+      const tagAllOps = [...state.routes, ...(state.cargoRoutes ?? [])];
+      const slotsAtStop = (code) => slotsUsedAt(tagAllOps, code);
       const addIncident = {};
       for (const l of legs) {
         addIncident[l.from] = (addIncident[l.from] ?? 0) + 1;
@@ -1587,7 +1744,7 @@ function reducer(state, action) {
       }
       for (const code of stops) {
         if (!(gates[code] > 0)) return state;   // no gate at this stop
-        if (slotsUsedAt(code) + addIncident[code] * weeklyFrequency > gates[code] * SLOTS_PER_GATE) return state;
+        if (slotsAtStop(code) + addIncident[code] * weeklyFrequency > gates[code] * SLOTS_PER_GATE) return state;
       }
 
       // ── Launch cost (priced on total ground distance covered) ──
@@ -1732,11 +1889,8 @@ function reducer(state, action) {
       const gates = state.gates ?? {};
       if (!(gates[action.origin] > 0))      return state;
       if (!(gates[action.destination] > 0)) return state;
-      const slotsAt = (code) => allOps
-        .filter(r => r.origin === code || r.destination === code)
-        .reduce((s, r) => s + r.weeklyFrequency, 0);
-      if (slotsAt(action.origin)      + weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
-      if (slotsAt(action.destination) + weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
+      if (slotsUsedAt(allOps, action.origin)      + weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
+      if (slotsUsedAt(allOps, action.destination) + weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
 
       // Consolidate onto an existing identical cargo route for this freighter.
       const existingRoute = (state.cargoRoutes ?? []).find(r =>
@@ -1815,11 +1969,9 @@ function reducer(state, action) {
 
         const gates = state.gates ?? {};
         const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
-        const slotsAt = (code) => allOps
-          .filter(r => r.id !== targetRoute.id && (r.origin === code || r.destination === code))
-          .reduce((s, r) => s + r.weeklyFrequency, 0);
-        if (slotsAt(targetRoute.origin)      + newFreq > (gates[targetRoute.origin]      ?? 0) * SLOTS_PER_GATE) return state;
-        if (slotsAt(targetRoute.destination) + newFreq > (gates[targetRoute.destination] ?? 0) * SLOTS_PER_GATE) return state;
+        const otherOps = allOps.filter(r => r.id !== targetRoute.id);
+        if (slotsUsedAt(otherOps, targetRoute.origin)      + newFreq > (gates[targetRoute.origin]      ?? 0) * SLOTS_PER_GATE) return state;
+        if (slotsUsedAt(otherOps, targetRoute.destination) + newFreq > (gates[targetRoute.destination] ?? 0) * SLOTS_PER_GATE) return state;
       }
 
       return {
@@ -2909,7 +3061,7 @@ function reducer(state, action) {
         aged = accrueMaintenance(aged, isOutOfService(a) ? 0 : (maintHoursById.get(a.id) ?? 0), curAbsWeek);
         if (failedIds.has(a.id)) {
           const failure = newFailures.find(f => f.aircraftId === a.id);
-          return { ...aged, status: 'grounded', groundedWeeksLeft: failure.weeksGrounded };
+          return { ...aged, status: 'grounded', groundedWeeksLeft: failure.weeksGrounded, groundedReason: 'failure' };
         }
         // Tick lease countdown for leased aircraft
         if (a.ownershipType === 'lease' && (a.leaseRemainingWeeks ?? 0) > 0) {

@@ -5,7 +5,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import {
   simulateRoute, simulateCargoRoute, cargoLaneAllocations, formatMoney, currentGameDate,
   fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
-  stateLoungeFields,
+  stateLoungeFields, routeStops, isMultiStop,
 } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { getAlliance } from '../data/alliances.js';
@@ -32,6 +32,48 @@ function segmentsForRoute(lat1, lon1, lat2, lon2, n = 80) {
   }
 
   return [norm];
+}
+
+// ── Great-circle path through a CHAIN of airports ────────────────────────────
+// A multi-stop rotation is not one arc — MCI–JFK–ORY bends at JFK, and drawing
+// MCI→ORY instead puts the line hundreds of km from the airport the aeroplane
+// actually lands at. Legs are concatenated into ONE polyline, with longitudes
+// unwrapped ACROSS the joins as well as within each leg, so a chain that crosses
+// the antimeridian stays a single continuous line instead of snapping back
+// across the whole world at a stop.
+//
+// `points` is [[lat, lon], ...] in visiting order (2 or more).
+export function segmentsForChain(points, n = 80) {
+  const pts = (points ?? []).filter(p => Array.isArray(p) && p.length >= 2);
+  if (pts.length < 2) return [pts];
+
+  const chain = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [lat1, lon1] = pts[i];
+    const [lat2, lon2] = pts[i + 1];
+    let startLon = lon1;
+    if (chain.length) {
+      const prev = chain[chain.length - 1][1];
+      while (startLon - prev >  180) startLon -= 360;
+      while (prev - startLon >  180) startLon += 360;
+    }
+    const shift = startLon - lon1;
+    const [leg] = segmentsForRoute(lat1, lon1, lat2, lon2, n);
+    for (let j = chain.length ? 1 : 0; j < leg.length; j++) {
+      chain.push([leg[j][0], leg[j][1] + shift]);
+    }
+  }
+  return [chain];
+}
+
+/** A rotation's identity: its stop chain, direction-normalised so A→B→C and the
+ *  same rotation entered as C→B→A are one line on the map rather than two
+ *  overlapping ones. Exported for the map's tests. */
+export function chainKey(chain = []) {
+  const codes = chain.map(a => (typeof a === 'string' ? a : a?.code)).filter(Boolean);
+  const fwd = codes.join('>');
+  const rev = [...codes].reverse().join('>');
+  return fwd <= rev ? fwd : rev;
 }
 
 // ── Great-circle interpolation ────────────────────────────────────────────────
@@ -85,6 +127,11 @@ function loadLeaflet() {
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const PROFIT_COLOR    = '#2ee6a0';  // bright teal-green
+// Multi-stop rotations. Purple is already how the Routes page marks them (the
+// tag card's left border, the THROUGH fare chips), so the map borrows it rather
+// than inventing a third convention: profit still reads from the tooltip, but
+// "this line bends" has to be visible at a glance.
+export const TAG_COLOR = '#a371f7';  // purple for multi-stop (tag) routes
 const LOSS_COLOR      = '#ff5d6c';  // bright coral-red
 const HUB_COLOR       = '#ffcf4d';  // gold
 const SPOKE_COLOR     = '#4da6ff';  // sky blue
@@ -175,7 +222,11 @@ export function hubMarkerSize(tier) {
 export function mapAirportCodes(hubCodes = [], ...routeDataSets) {
   const codes = new Set(hubCodes.filter(Boolean));
   for (const set of routeDataSets) {
-    for (const d of set ?? []) { codes.add(d.origin.code); codes.add(d.dest.code); }
+    for (const d of set ?? []) {
+      // Every stop, not just the endpoints — a rotation's intermediate airports
+      // need their marker (and their place in the viewport) too.
+      for (const a of (d.chain?.length >= 2 ? d.chain : [d.origin, d.dest])) codes.add(a.code);
+    }
   }
   return [...codes];
 }
@@ -323,7 +374,12 @@ export default function RouteMap() {
             aircraft, gd, state.labor ?? null, proj.fuelMultiplier,
             null, rivalSpecsFor(state, r.origin, r.destination), avgUtil, state.satisfaction ?? null,
             evDemand.multFor(r.origin, r.destination), state.ancillaries ?? null, state.competitors ?? []));
-      return { r, origin, dest, result };
+      // The airports this route actually touches, in visiting order. For a
+      // single-leg route that is [origin, dest]; for a rotation it is every
+      // stop, which is what the line has to bend through and what the airport
+      // filter has to match on.
+      const chain = routeStops(r).map(getAirport).filter(Boolean);
+      return { r, origin, dest, result, chain, multi: isMultiStop(r) && chain.length > 2 };
     }).filter(Boolean);
   }, [routes, cargoRoutes, fleet, rrById, proj, gd, state.labor, state.satisfaction, state.activeEvents]);
 
@@ -342,7 +398,7 @@ export default function RouteMap() {
       const result = !aircraft ? null
         : (cargoRrById[r.id] ?? simulateCargoRoute(r, aircraft, gd, state.labor ?? null,
             proj.fuelMultiplier, 1.0, alloc?.get(r.id) ?? null));
-      return { r, origin, dest, result };
+      return { r, origin, dest, result, chain: [origin, dest], multi: false };
     }).filter(Boolean);
   }, [cargoRoutes, fleet, cargoRrById, proj, gd, state.labor]);
 
@@ -361,7 +417,7 @@ export default function RouteMap() {
 
   const airportOptions = useMemo(() => {
     const codes = new Set([
-      ...routeData.flatMap(d => [d.origin.code, d.dest.code]),
+      ...routeData.flatMap(d => d.chain.map(a => a.code)),
       ...cargoRouteData.flatMap(d => [d.origin.code, d.dest.code]),
     ]);
     return [...codes].map(getAirport).filter(Boolean)
@@ -373,7 +429,9 @@ export default function RouteMap() {
       const a = fleet.find(x => x.id === d.r.aircraftId);
       if (!a || a.typeId !== acTypeFilter) return false;
     }
-    if (airportFilter !== 'all' && d.origin.code !== airportFilter && d.dest.code !== airportFilter) return false;
+    // A rotation touching the filtered airport in the MIDDLE is still touching
+    // it — filtering on the endpoints alone hid MCI–JFK–ORY from "Airport: JFK".
+    if (airportFilter !== 'all' && !(d.chain ?? [d.origin, d.dest]).some(a => a.code === airportFilter)) return false;
     return true;
   }, [acTypeFilter, airportFilter, fleet]);
 
@@ -391,11 +449,16 @@ export default function RouteMap() {
   const routeGroups = useMemo(() => {
     const map = new Map();
     for (const d of filteredRouteData) {
-      const key = [d.origin.code, d.dest.code].sort().join('~');
+      // A rotation is keyed on its whole chain, not its endpoints. Sharing the
+      // pair key with a plain MCI–ORY service merged two different products
+      // into one line and one row — and drew the rotation as a direct flight it
+      // does not operate.
+      const key = d.multi ? `tag:${chainKey(d.chain)}` : [d.origin.code, d.dest.code].sort().join('~');
       let g = map.get(key);
       if (!g) {
         g = {
           key, origin: d.origin, dest: d.dest, members: [],
+          chain: d.chain, multi: d.multi,
           profit: 0, revenue: 0, passengers: 0, seats: 0, distance: 0,
         };
         map.set(key, g);
@@ -669,19 +732,30 @@ export default function RouteMap() {
     // One line per city pair — all aircraft on the pair are aggregated into the group.
     for (const g of routeGroups) {
       const { origin, dest } = g;
+      const chain    = g.chain?.length >= 2 ? g.chain : [origin, dest];
       const profit   = g.hasResult ? g.profit : 0;
-      const color    = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
-      const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
+      // Profit colour still carries the money; a rotation is purple because the
+      // shape of the line is the thing you cannot read any other way (and purple
+      // is what the Routes page already calls multi-stop).
+      const profitColor = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
+      const color    = g.multi ? TAG_COLOR : profitColor;
+      const segments = g.multi
+        ? segmentsForChain(chain.map(a => [a.lat, a.lon]))
+        : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
 
       const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
       const pax     = g.hasResult ? Math.round(g.passengers).toLocaleString() : '—';
-      const profStr = g.hasResult ? `<span style="color:${color}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
+      const profStr = g.hasResult ? `<span style="color:${profitColor}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
       const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
       const acText  = `${g.aircraftCount} aircraft`;
+      const titleHtml = chain.map(a => a.code).join(' <span class="map-tip-arrow">→</span> ');
+      const subHtml = g.multi
+        ? `${chain.length - 1} legs · ${origin.city} → ${dest.city} · ${acText}`
+        : `${origin.city} → ${dest.city} · ${acText}`;
       const tipHtml = `
         <div class="map-tip">
-          <div class="map-tip-title">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
-          <div class="map-tip-sub">${origin.city} → ${dest.city} · ${acText}</div>
+          <div class="map-tip-title">${titleHtml}</div>
+          <div class="map-tip-sub">${subHtml}</div>
           <div class="map-tip-stats">
             <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
             <div><span class="map-tip-lbl">Pax/wk</span><span class="map-tip-val">${pax}</span></div>
@@ -826,10 +900,10 @@ export default function RouteMap() {
     if (!focusChanged || !map || !window.L) return;
     const g = routeGroups.find(x => x.key === selectedId);
     if (!g) { flownToRef.current = null; return; }
-    const bounds = window.L.latLngBounds([
-      [g.origin.lat, g.origin.lon],
-      [g.dest.lat, g.dest.lon],
-    ]);
+    // Frame the WHOLE rotation — flying to the endpoints of MCI–JFK–ORY can
+    // leave the stop in the middle off-screen.
+    const bounds = window.L.latLngBounds(
+      (g.chain?.length >= 2 ? g.chain : [g.origin, g.dest]).map(a => [a.lat, a.lon]));
     map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
   }, [selectedId, routeGroups, applyStyles]);
 
@@ -859,7 +933,7 @@ export default function RouteMap() {
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
               {routeGroups.length} route{routeGroups.length !== 1 ? 's' : ''} · {airportSet.length} airports{filtersActive && <span style={{ color: 'var(--accent)' }}> · filtered</span>}
               {selectedData && (
-                <span style={{ color: 'var(--accent)' }}> · focused {selectedData.origin.code}→{selectedData.dest.code}</span>
+                <span style={{ color: 'var(--accent)' }}> · focused {(selectedData.chain ?? [selectedData.origin, selectedData.dest]).map(a => a.code).join('→')}</span>
               )}
             </span>
           </div>
@@ -915,6 +989,12 @@ export default function RouteMap() {
               <span style={{ width: 18, height: 2, background: LOSS_COLOR, display: 'inline-block', borderRadius: 1 }} />
               Loss
             </span>
+            {routeGroups.some(g => g.multi) && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="A multi-stop rotation, drawn through every stop it serves">
+                <span style={{ width: 18, height: 2, background: TAG_COLOR, display: 'inline-block', borderRadius: 1 }} />
+                Multi-stop
+              </span>
+            )}
             <span
               style={{ display: 'flex', alignItems: 'center', gap: 5 }}
               title="Gold pins mark every station you've designated — focus cities, hubs and gateways alike"
@@ -1066,12 +1146,18 @@ export default function RouteMap() {
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: profit >= 0 ? 'var(--green)' : 'var(--red)' }} />
                   </td>
                   <td>
-                    <strong>{g.origin.code} → {g.dest.code}</strong>
+                    <strong style={g.multi ? { color: TAG_COLOR } : undefined}>
+                      {(g.chain ?? [g.origin, g.dest]).map(a => a.code).join(' → ')}
+                    </strong>
                     {g.aircraftCount > 1 && (
                       <span className="ac-badge">{g.aircraftCount}×</span>
                     )}
                   </td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{g.origin.city} → {g.dest.city}</td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                    {g.multi
+                      ? `${g.origin.city} → ${g.dest.city} · ${(g.chain?.length ?? 2) - 1} legs`
+                      : `${g.origin.city} → ${g.dest.city}`}
+                  </td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                     {g.hasResult ? `${g.distance.toLocaleString()} km` : '—'}
                   </td>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useGame, addRouteBlockReason } from '../store/GameContext.jsx';
+import { useGame, addRouteBlockReason, peakSlotsUsedAt } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
@@ -830,16 +830,19 @@ export default function RoutePlanner() {
     if (!ready) return null;
     const gates = state.gates ?? {};
     const months = routeActiveMonths({ origin, destination: dest, season });
-    const usedAt = (code) => Math.max(0, ...months.map(m => (state.routes ?? [])
-      .filter(r => (r.origin === code || r.destination === code) && isRouteActive(r, m))
-      .reduce((s, r) => s + r.weeklyFrequency, 0)));
+    // Counted the way the guard counts it — peakSlotsUsedAt charges a rotation
+    // two movements at the airport it stops at, so a hub with tag routes through
+    // it reads the same here as it does in addRouteBlockReason. Endpoint-only
+    // arithmetic here quoted free slots the engine would then refuse.
+    const allOps = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])];
+    const usedAt = (code) => peakSlotsUsedAt(allOps, code, months);
     return [origin, dest].map(code => {
       const owned = gates[code] ?? 0;
       const cap   = owned * SLOTS_PER_GATE;
       const used  = usedAt(code);
       return { code, hasGate: owned > 0, cap, used, slotsOk: used + frequency <= cap };
     });
-  }, [ready, origin, dest, frequency, season, state.gates, state.routes]);
+  }, [ready, origin, dest, frequency, season, state.gates, state.routes, state.cargoRoutes]);
 
   // Ask the engine's own guard whether this exact route would be accepted. null =
   // yes; otherwise a player-facing sentence naming the blocker.

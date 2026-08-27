@@ -66,6 +66,31 @@
 
     <div class="entry">
       <p class="date">August 27, 2026</p>
+      <h2>Multi-stop routes bend on the map &mdash; and can finally take more flights and more aircraft</h2>
+      <p>Reported on the Discord: a rotation drawn as a straight line to somewhere it doesn&rsquo;t fly, and a full multi-stop route with nowhere to grow.</p>
+      <ul>
+        <li><strong>The map draws every stop.</strong> A rotation like MCI&ndash;JFK&ndash;ORY used to appear as a single arc from Kansas City to Paris, passing hundreds of kilometres from the airport it actually lands at. The line now bends through each stop in order and is drawn in the same purple the routes page uses for multi-stop, so you can tell a rotation from a direct service at a glance. Hovering names the whole chain and its leg count.</li>
+        <li><strong>A rotation is its own route on the map.</strong> If you fly both MCI&ndash;JFK&ndash;ORY and a plain MCI&ndash;ORY, they used to be merged into one line and one row with their numbers added together. They are two products and now read as two.</li>
+        <li><strong>Filtering the map by an airport finds rotations that stop there</strong>, not just the ones that begin or end there.</li>
+        <li><strong>Multi-stop routes have a flights-per-week stepper</strong>, the same one single-leg routes have. When it refuses, it names the airport that ran out of slots &mdash; including the one in the middle, which is usually the one that&rsquo;s full.</li>
+        <li><strong>&ldquo;+ Add Aircraft&rdquo; puts a second aircraft on a rotation</strong> without rebuilding it. The stops are locked, and the fares it starts from are the ones that rotation already sells, so your two tails don&rsquo;t undercut each other. See the <a href="/route-economics.html">route economics guide</a> for what a second aircraft does to a shared market.</li>
+        <li><strong>Freight lanes get the same treatment.</strong> Flights and yield were already editable on the routes page; &ldquo;+ Add Freighter&rdquo; now opens the freight planner on that lane, so a freighter that has run out of block hours isn&rsquo;t the end of the lane.</li>
+        <li><strong>Slot arithmetic counts the stops in the middle.</strong> A rotation calling at an airport uses two movements there per cycle &mdash; an arrival and a departure. The gate-slot checks now count them everywhere, so a busy connecting airport can no longer be quietly oversold. Passenger and freight also count against each other now: a freighter occupies a gate exactly like a jet, and the two halves of your airline were previously able to book the same slot twice.</li>
+        <li><strong>Regulations follow the aeroplane.</strong> A one-stop used to be a way around a rule: the legs of a rotation were checked, the market it actually sells was not, so a service into a restricted airport could be flown at any frequency by adding a stop. Each leg is now judged on the departures it operates, and the route on the market it sells &mdash; and where an airport gives a limited number of exemptions, a nonstop and a one-stop on the same city pair share one. More on the rules in the <a href="/route-economics.html">route economics guide</a>.</li>
+        <li><strong>A refused route now tells you which rule refused it</strong>, in the regulator&rsquo;s own words, and on a rotation it names the leg.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 27, 2026</p>
+      <h2>Find any airport in the world from the Airports tab</h2>
+      <ul>
+        <li><strong>A search box at the top of Airports now reaches every airport in the game.</strong> The old one only searched the region you had opened, so looking up Honolulu meant knowing it was filed under Oceania first &mdash; or going to the route finder to see its numbers. Type a code, a city, an airport name or a country and click through to the full airport page: gates, slots, who else flies there, runway and connectivity.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">August 27, 2026</p>
       <h2>Every hub you build now wears a gold pin on the network map</h2>
       <p>Reported on the Discord: a map showing four hubs as ordinary spokes.</p>
       <ul>

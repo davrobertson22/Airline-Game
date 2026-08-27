@@ -4,6 +4,7 @@ import { useConfirm } from './ConfirmModal.jsx';
 import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
+import { groundedTitle } from '../data/maintenance.js';
 import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { useToast } from './ToastSystem.jsx';
@@ -36,10 +37,14 @@ export function PassengerBadge() {
  * roomier cards (default on phones). Table rows expand to reveal the same
  * frequency / yield / close-route controls the cards show inline.
  *
- * @param {string}  airportFilter  'all' | airport code — only routes touching this airport
- * @param {boolean} hideViewToggle suppress the Table/Cards switch (when the parent owns it)
+ * @param {string}   airportFilter  'all' | airport code — only routes touching this airport
+ * @param {boolean}  hideViewToggle suppress the Table/Cards switch (when the parent owns it)
+ * @param {function} [onAddFreighter] (origin, destination) — the parent opens its
+ *                   freight planner on that lane. Without it the "+ Add Freighter"
+ *                   control is not rendered, so an embedder that has no planner to
+ *                   open never shows a button that does nothing.
  */
-export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle = false }) {
+export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle = false, onAddFreighter }) {
   const { state, dispatch } = useGame();
   const confirm = useConfirm();
   const addToast = useToast();
@@ -115,7 +120,7 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
     }
   }
 
-  const controls = { adjFreq, adjYield, close, state };
+  const controls = { adjFreq, adjYield, close, state, onAddFreighter };
 
   const totalRev    = rows.reduce((s, r) => s + (r.sim?.revenue ?? 0), 0);
   const totalProfit = rows.reduce((s, r) => s + (r.sim?.profit ?? 0), 0);
@@ -299,7 +304,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
           {aircraft?.status === 'grounded' && (
             <span
               style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(248,81,73,0.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.3)', textTransform: 'uppercase' }}
-              title="In repair, automatically resumes this route when fixed"
+              title={groundedTitle(aircraft)}
             >
               <Glyph e="🔧" /> {aircraft.groundedWeeksLeft}w
             </span>
@@ -349,7 +354,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
 // ─── Shared controls (used by both the expanded table row and the card view) ────
 
 function CargoRouteControls({ route, sim, controls }) {
-  const { adjFreq, adjYield, close, state } = controls;
+  const { adjFreq, adjYield, close, state, onAddFreighter } = controls;
   const perKg = (route.yieldPrice * (sim?.distance ?? 0) / 1000);
   const upBlock = cargoFrequencyChangeBlockReason(state, route.id, route.weeklyFrequency + 1);
 
@@ -379,7 +384,19 @@ function CargoRouteControls({ route, sim, controls }) {
         <button className="btn btn-ghost" style={{ padding: '2px 9px' }} onClick={() => adjYield(route, +0.02)}>+</button>
         <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>≈ ${perKg.toFixed(2)}/kg</span>
       </div>
-      <button className="btn btn-ghost" style={{ marginLeft: 'auto', color: 'var(--red)', fontSize: 12 }} onClick={() => close(route)}>Close route</button>
+      {/* One freighter is one freighter. The only way to put a second one on a
+          lane you already fly used to be the planner on the other side of the
+          page — the frequency stepper caps out at this airframe's block hours,
+          and then the lane is simply full (Knightmare, Discord 2026-08-26). */}
+      {onAddFreighter && (
+        <button
+          className="btn btn-ghost"
+          style={{ marginLeft: 'auto', fontSize: 12, color: ACCENT }}
+          title={`Open the freight planner on ${route.origin} → ${route.destination}`}
+          onClick={() => onAddFreighter(route.origin, route.destination)}
+        >+ Add Freighter</button>
+      )}
+      <button className="btn btn-ghost" style={{ marginLeft: onAddFreighter ? 0 : 'auto', color: 'var(--red)', fontSize: 12 }} onClick={() => close(route)}>Close route</button>
     </div>
   );
 }
@@ -412,7 +429,7 @@ function CargoRouteCard({ route, aircraft, type, sim, pooled, controls }) {
                 background: 'rgba(248,81,73,0.15)', color: 'var(--red)',
                 border: '1px solid rgba(248,81,73,0.3)',
                 textTransform: 'uppercase', letterSpacing: '.04em',
-              }} title="In repair, automatically resumes this route when fixed">
+              }} title={groundedTitle(aircraft)}>
                 <Glyph e="🔧" /> {aircraft.groundedWeeksLeft}w
               </span>
             )}
