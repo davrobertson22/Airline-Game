@@ -12,17 +12,20 @@
 // still read the founding string, so every hub built after founding was
 // invisible as a hub and, if it had no routes yet, absent from the map.
 //
-// This suite drives the exported helpers the map uses to decide what to pin.
+// Helpers are driven directly, and the REAL component is SSR-rendered on a
+// four-hub save — a helper can pass on its own while the component that should
+// call it quietly doesn't.
 //
 //   node --import ./tools/_register-loader.mjs tools/route-map-hubs-test.mjs
 
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
 
-// Minimal browser shims — importing the component pulls the game store, which
-// reads localStorage at module scope.
+// Minimal browser shims for SSR (effects don't run; init reads localStorage).
 const store = new Map();
 globalThis.window = globalThis.window ?? {};
-globalThis.localStorage = globalThis.localStorage ?? {
+globalThis.localStorage = {
   getItem: (k) => (store.has(k) ? store.get(k) : null),
   setItem: (k, v) => store.set(k, String(v)),
   removeItem: (k) => store.delete(k),
@@ -31,7 +34,10 @@ globalThis.localStorage = globalThis.localStorage ?? {
 
 const { mapHubs, mapAirportCodes, hubMarkerSize } =
   await import('../src/components/RouteMap.jsx');
+const RouteMap = (await import('../src/components/RouteMap.jsx')).default;
 const { HUB_TIERS } = await import('../src/models/demand.js');
+const { GameProvider, freshState } = await import('../src/store/GameContext.jsx');
+const { AIRCRAFT_TYPES } = await import('../src/data/aircraft.js');
 
 let failures = 0;
 const check = (name, fn) => {
@@ -40,19 +46,18 @@ const check = (name, fn) => {
 };
 
 const rd = (o, d) => ({ origin: { code: o }, dest: { code: d } });
+const chain = (...codes) => ({ chain: codes.map(code => ({ code })) });
 
-console.log('\nNetwork map — hub pins\n');
+console.log('\n── 1. Which stations count as hubs ──────────────────────');
 
-// ── The reported network ─────────────────────────────────────────────────────
 check('every designated station pins, not just the founding hub', () => {
-  const state = {
+  const hubs = mapHubs({
     hub: 'DFW',
     hubs: {
       DFW: { tier: 2 }, MCI: { tier: 1 }, SLC: { tier: 1 },
       HNL: { tier: 0 }, SJU: { tier: 0 },
     },
-  };
-  const hubs = mapHubs(state);
+  });
   for (const code of ['DFW', 'MCI', 'SLC', 'HNL', 'SJU']) {
     assert.ok(hubs[code], `${code} should be pinned as a hub`);
   }
@@ -76,11 +81,9 @@ check('the pin names its tier', () => {
 });
 
 check('a spoke the player has NOT designated stays a spoke', () => {
-  const hubs = mapHubs({ hub: 'DFW', hubs: { DFW: { tier: 1 } } });
-  assert.equal(hubs.LAX, undefined);
+  assert.equal(mapHubs({ hub: 'DFW', hubs: { DFW: { tier: 1 } } }).LAX, undefined);
 });
 
-// ── Save-shape edge cases ────────────────────────────────────────────────────
 check('legacy save with no hubs map falls back to the founding hub', () => {
   const hubs = mapHubs({ hub: 'ORD' });
   assert.deepEqual(Object.keys(hubs), ['ORD']);
@@ -108,25 +111,30 @@ check('no airline yet — no hub, no hubs, no crash', () => {
   assert.deepEqual(mapHubs(), {});
 });
 
-// ── What the map draws ───────────────────────────────────────────────────────
+console.log('\n── 2. Which airports the map pins ───────────────────────');
+
 check('a hub with no routes yet still appears on the map', () => {
-  const codes = mapAirportCodes(['DFW', 'MCI'], [rd('DFW', 'LAX')], []);
+  const codes = mapAirportCodes(['DFW', 'MCI'], [chain('DFW', 'LAX')], []);
   assert.ok(codes.includes('MCI'), 'a freshly built hub should be visible');
   assert.deepEqual([...codes].sort(), ['DFW', 'LAX', 'MCI']);
 });
 
+check('every stop of a rotation is pinned, not just its endpoints', () => {
+  const codes = mapAirportCodes([], [chain('MCI', 'JFK', 'ORY')], []);
+  assert.ok(codes.includes('JFK'), 'the aeroplane lands at JFK every rotation');
+  assert.equal(codes.length, 3);
+});
+
 check('cargo-only airports are pinned as well', () => {
-  const codes = mapAirportCodes(['DFW'], [], [rd('DFW', 'ANC')]);
-  assert.ok(codes.includes('ANC'));
+  assert.ok(mapAirportCodes(['DFW'], [], [rd('DFW', 'ANC')]).includes('ANC'));
 });
 
 check('an airport is pinned once, however many routes touch it', () => {
-  const codes = mapAirportCodes(['DFW'], [rd('DFW', 'LAX'), rd('LAX', 'DFW')], []);
+  const codes = mapAirportCodes(['DFW'], [chain('DFW', 'LAX'), chain('LAX', 'DFW')], []);
   assert.equal(codes.filter(c => c === 'LAX').length, 1);
   assert.equal(codes.filter(c => c === 'DFW').length, 1);
 });
 
-// ── Pin geometry ─────────────────────────────────────────────────────────────
 check('pins grow with tier, and the ring always clears the core', () => {
   const sizes = [0, 1, 2, 3].map(hubMarkerSize);
   for (let i = 1; i < sizes.length; i++) {
@@ -136,6 +144,47 @@ check('pins grow with tier, and the ring always clears the core', () => {
   // The tier-1 hub keeps the size the map has always drawn.
   assert.equal(sizes[1].core, 11);
   assert.equal(sizes[1].ring, 14);
+});
+
+console.log('\n── 3. The component itself reads the hub map ────────────');
+
+// Knightmare's shape: a founding hub plus three stations designated later, one
+// of them (SJU) with no route flown from it yet.
+const jet = AIRCRAFT_TYPES.filter(t => !t.freighter && t.seats >= 140).sort((a, b) => b.range - a.range)[0];
+const save = {
+  ...freshState(),
+  phase: 'playing', week: 20, year: 2, hub: 'DFW', cash: 20_000_000,
+  scheduleTrimVersion: 1,
+  hubs: {
+    DFW: { tier: 2, tierSince: 0 }, MCI: { tier: 1, tierSince: 40 },
+    SLC: { tier: 1, tierSince: 44 }, SJU: { tier: 0, tierSince: 60 },
+  },
+  gates: { DFW: 16, MCI: 10, SLC: 10, SJU: 5, LAX: 6 },
+  fleet: [{
+    id: 'ac0', typeId: jet.id, name: 'Test 0', tailNumber: 'N0TEST',
+    status: 'assigned', ageWeeks: 52, ownershipType: 'owned',
+    config: { economy: jet.seats },
+  }],
+  routes: [{
+    id: 'r0', origin: 'DFW', destination: 'LAX', stops: ['DFW', 'LAX'],
+    aircraftId: 'ac0', weeklyFrequency: 14, weeksOpen: 40, hub: 'DFW',
+    cateringLevel: 'full',
+  }],
+};
+store.set('bbae_save_v2', JSON.stringify(save));
+
+const html = renderToString(React.createElement(GameProvider, null,
+  React.createElement(RouteMap))).replaceAll('<!-- -->', '');
+
+check('the map header counts hub-only airports', () => {
+  const m = html.match(/(\d+) airports/);
+  assert.ok(m, 'header prints an airport count');
+  // DFW + LAX from the one route, plus MCI, SLC and SJU with no routes yet.
+  assert.equal(Number(m[1]), 5, `expected 5 airports, header says ${m[1]}`);
+});
+
+check('the legend goes plural once more than one station is designated', () => {
+  assert.ok(/>Hubs</.test(html), 'legend should read "Hubs" on a four-hub network');
 });
 
 console.log(failures === 0
