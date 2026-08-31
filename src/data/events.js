@@ -247,6 +247,7 @@ export const EVENT_TEMPLATES = [
   },
   {
     id: 'tech_outage',
+    fromYear: 1995,   // era worlds: industry-wide IT outages need an industry-wide IT
     type: 'disruption',
     name: 'Industry-Wide IT Outage',
     icon: '💻',
@@ -291,6 +292,7 @@ export const EVENT_TEMPLATES = [
   },
   {
     id: 'pandemic_scare',
+    fromYear: 1990,   // era worlds: framed as a modern public-health scare (SARS-like)
     type: 'disruption',
     name: 'Pandemic Scare',
     icon: '😷',
@@ -403,6 +405,7 @@ export const EVENT_TEMPLATES = [
   },
   {
     id: 'mega_conference',
+    fromYear: 1980,   // era worlds: the giant convention circuit is a modern phenomenon
     type: 'demand',
     name: 'Major Trade Conference',
     icon: '🤝',
@@ -599,14 +602,18 @@ export function eventsConflict(idA, idB) {
  * Won't add a second instance of an already-active event type, and won't add
  * an event that logically contradicts a currently-active or newly-rolled one.
  */
-export function rollEvents(activeEvents = []) {
+export function rollEvents(activeEvents = [], opts = {}) {
   const MAX_ACTIVE_EVENTS = 2;
+  // Era worlds (phase 5): templates carrying fromYear stay off the dice until
+  // their concept exists. Classic callers pass no calendarYear — unchanged.
+  const calYear = Number.isInteger(opts.calendarYear) ? opts.calendarYear : null;
   const activeTypes = new Set(activeEvents.map(e => e.templateId));
   const newEvents = [];
 
   for (const tmpl of EVENT_TEMPLATES) {
     if (activeEvents.length + newEvents.length >= MAX_ACTIVE_EVENTS) break; // cap reached
     if (activeTypes.has(tmpl.id)) continue;          // already active
+    if (calYear != null && tmpl.fromYear != null && calYear < tmpl.fromYear) continue; // not in this era yet
     if (Math.random() > tmpl.probability * EVENT_FREQUENCY) continue;  // didn't trigger
 
     // Skip events that contradict something already active or just rolled.

@@ -60,6 +60,18 @@ function groupedByCountry(filter = '') {
     }));
 }
 
+// Era mode: an optional real-calendar start. '' = classic (timeless, whole
+// catalogue). A year pins Y1 to that January and the game walks the century —
+// aircraft arrive when they really entered service, demand and fuel follow
+// their historical curves (see src/data/era.js).
+const ERA_PRESETS = [
+  { year: 1950, title: 'Piston age',       blurb: 'DC-3s and Constellations. Five types on the market; the jets are eight years out.' },
+  { year: 1958, title: 'Dawn of the jets', blurb: 'The 707 and DC-8 arrive this year. Bet on them, or milk the propliners a little longer.' },
+  { year: 1970, title: 'Jumbo',            blurb: 'The 747 enters service. Wide-bodies change the economics of every long route.' },
+  { year: 1978, title: 'Deregulation',     blurb: 'Fares fall, fuel spikes, the 737 and A300 are young. The classic hard start.' },
+  { year: 2000, title: 'Modern',           blurb: 'A320s and 777s, cheap fuel, everything but the neos and Dreamliners.' },
+];
+
 export default function SetupScreen() {
   const { dispatch } = useGame();
   const [airlineName,       setAirlineName]       = useState('');
@@ -70,6 +82,8 @@ export default function SetupScreen() {
   const [customLogo,        setCustomLogo]        = useState(null);   // data URL or null
   const [logoError,         setLogoError]         = useState('');
   const [enableObjectives,  setEnableObjectives]  = useState(true);
+  const [eraSel,            setEraSel]            = useState('');       // '' | preset year (string) | 'custom'
+  const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
   const fileInputRef = useRef(null);
   const isMobile = useIsMobile();
@@ -93,10 +107,14 @@ export default function SetupScreen() {
 
   const STEPS = ['Brand', 'Home hub', 'Launch'];
   const canContinue = step !== 1 || airlineName.trim().length > 0;
+  const eraYearRaw  = eraSel === '' ? null : eraSel === 'custom' ? Number(eraCustom) : Number(eraSel);
+  const startYear   = Number.isInteger(eraYearRaw) && eraYearRaw >= 1930 && eraYearRaw <= 2100 ? eraYearRaw : null;
+  const eraInvalid  = eraSel === 'custom' && startYear == null;
 
   function handleStart(e) {
     e.preventDefault();
     if (!airlineName.trim()) { setStep(1); return; }
+    if (eraInvalid) return;
     dispatch({
       type:             'START_GAME',
       airlineName:      airlineName.trim(),
@@ -107,6 +125,7 @@ export default function SetupScreen() {
       logoColor:        accentColor,
       customLogo:       usingCustom ? customLogo : null,
       enableObjectives,
+      startYear,
     });
   }
 
@@ -526,6 +545,46 @@ export default function SetupScreen() {
                 </div>
               </div>
             </button>
+          </div>
+
+          {/* ── Era (real-calendar start) ── */}
+          <div className="form-group">
+            <label className="form-label"><Glyph e="🕰" /> Era</label>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
+              {[{ year: '', title: 'Classic', blurb: 'Timeless. The whole catalogue from day one, modern demand and fuel.' },
+                ...ERA_PRESETS.map(p => ({ ...p, year: String(p.year) })),
+                { year: 'custom', title: 'Custom year', blurb: 'Pick any start between 1930 and 2100.' }].map(opt => {
+                const active = eraSel === opt.year;
+                return (
+                  <button key={opt.year || 'classic'} type="button" onClick={() => setEraSel(opt.year)}
+                    style={{
+                      display: 'block', textAlign: 'left', padding: '10px 12px',
+                      background: 'var(--surface2)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius)', cursor: 'pointer',
+                    }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                      {opt.year && opt.year !== 'custom' ? `${opt.year} · ` : ''}{opt.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{opt.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {eraSel === 'custom' && (
+              <input type="number" min={1930} max={2100} value={eraCustom}
+                onChange={e => setEraCustom(e.target.value)}
+                style={{ marginTop: 8, width: 140 }} aria-label="Custom start year" />
+            )}
+            {eraSel !== '' && (
+              <div style={{ fontSize: 11, color: eraInvalid ? 'var(--danger, #e5484d)' : 'var(--text-muted)', marginTop: 8 }}>
+                {eraInvalid
+                  ? 'Enter a start year between 1930 and 2100.'
+                  : `Your calendar starts in January ${startYear}. Aircraft become available the year they really entered service, `
+                    + 'demand and fuel follow their historical curves, and prices stay in today\'s dollars. '
+                    + (startYear < 1990 ? 'Codeshares, alliances, Wi-Fi and ancillaries unlock as they were invented.' : 'Every route tool works from day one.')}
+              </div>
+            )}
           </div>
 
           {/* ── How to play ── */}

@@ -52,6 +52,7 @@ import { completeCheck } from '../data/maintenance.js';
 import { crewShortfall, unstaffedCrewScale, unstaffedAircraftIds } from '../data/labor.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { rollEvents, tickEvents } from '../data/events.js';
+import { ERA_FUEL_MIN_INDEX } from '../data/era.js';
 import { tickBaseConstruction } from '../data/mroBase.js';
 import { tickLoungeConstruction } from '../data/lounges.js';
 import { routeLaunchCost } from '../data/overhead.js';
@@ -101,7 +102,10 @@ export function prepareWeek(state, {
     allEvents       = injectedEvents;
   } else {
     ({ updated: survivingEvents, expired: expiredEvents } = tickEvents(state.activeEvents ?? []));
-    newEvents = rollNewEvents ? rollEvents(survivingEvents, { multiplayer: isMultiplayer }) : [];
+    newEvents = rollNewEvents ? rollEvents(survivingEvents, {
+      multiplayer: isMultiplayer,
+      calendarYear: state.startYear != null ? state.startYear + (state.year ?? 1) - 1 : null,
+    }) : [];
     allEvents = [...survivingEvents, ...newEvents];
   }
 
@@ -126,7 +130,7 @@ export function prepareWeek(state, {
     && typeof worldFuelIndex === 'number' && Number.isFinite(worldFuelIndex))
     ? worldFuelIndex : null;
   const baseFuelIndex    = injectedFuel ?? state.fuelPrice?.index ?? 1.0;
-  const currentFuelIndex = fuelMult === 1 ? baseFuelIndex : clampFuelIndex(baseFuelIndex * fuelMult);
+  const currentFuelIndex = fuelMult === 1 ? baseFuelIndex : clampFuelIndex(baseFuelIndex * fuelMult, state.startYear != null ? ERA_FUEL_MIN_INDEX : undefined);
 
   const curAbsWeek   = absoluteWeek(state.year, state.week);
   const allHedges    = state.hedgeContracts ?? [];

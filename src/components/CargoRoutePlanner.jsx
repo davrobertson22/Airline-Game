@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
-import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
+import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
-import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS, maxFrequency, currentGameDate, effectiveRangeKm } from '../utils/simulation.js';
+import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS, maxFrequency, currentGameDate, effectiveRangeKm, calendarYear } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
@@ -228,8 +228,8 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
   // Freighter types that can reach this route
   const reachableTypes = useMemo(() => {
     if (!routeData) return [];
-    return AIRCRAFT_TYPES.filter(t => t.freighter && reachKmFor(t) >= routeData.dist);
-  }, [routeData, reachByType]);
+    return AIRCRAFT_TYPES.filter(t => t.freighter && aircraftOrderable(t, calendarYear(state)) && reachKmFor(t) >= routeData.dist);
+  }, [routeData, reachByType, state.startYear, state.year]);
 
   useMemo(() => {
     if (reachableTypes.length && !reachableTypes.find(t => t.id === selectedTypeId)) {

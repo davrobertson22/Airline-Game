@@ -29,11 +29,11 @@
  * needed — they capture min(adjustedDemand, capacity).
  */
 
-import { baseCityPairDemand, referencePrice, routeDistance, pairDemandGrowth } from '../utils/market.js';
+import { baseCityPairDemand, referencePrice, routeDistance, pairDemandGrowth, getEraCalendarYear } from '../utils/market.js';
 import { pairAppeal } from '../data/metros.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
-import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
+import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm, aircraftAvailability, aircraftOrderable } from '../data/aircraft.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -2111,7 +2111,13 @@ function blockTimeOneWay(distKm) { return distKm / 820 + 0.5; }
  */
 export function pickCompetitorAircraftType(distKm, tier) {
   const target  = TIER_SEAT_TARGET[tier] ?? 200;
-  const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm);
+  // AI carriers shop the same market as the player. Era games: only types in
+  // service and still on the market this calendar year (a 1950 rival flies
+  // DC-6Bs, not A350s). Classic: the 2026 market — lines 30+ years closed have
+  // no airworthy frames (aircraft.js AIRFRAME_MARKET_LIFETIME_YEARS).
+  const eraYear = getEraCalendarYear();
+  const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm
+    && (eraYear != null ? aircraftOrderable(t, eraYear) : aircraftAvailability(t, 2026) !== 'expired'));
   if (capable.length === 0) return null;
 
   // Score each capable aircraft: seat misfit vs the tier's preferred size, plus a

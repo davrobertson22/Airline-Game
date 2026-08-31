@@ -52,6 +52,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Aérospatiale/BAC',
     category: 'Supersonic',
     eis: 1976,
+    oop: 1979,   // year the production line closed (era worlds: second-hand only after this)
     seats: 128,
     range: 7_250,
     runwayFt: 10800,
@@ -91,6 +92,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Narrow Body',
     eis: 2003,
+    oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 132,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_700,
@@ -110,6 +112,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Narrow Body',
     eis: 1996,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 156,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_900,
@@ -175,6 +178,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Narrow Body',
     eis: 1988,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 186,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 6_150,
@@ -223,6 +227,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Narrow Body',
     eis: 1994,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 220,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_930,
@@ -294,6 +299,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1986,
+    oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 280,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 9_600,
@@ -312,6 +318,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1988,
+    oop: 2003,   // year the production line closed (era worlds: second-hand only after this)
     seats: 361,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 7_700,
@@ -330,6 +337,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1998,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 406,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_400,
@@ -355,6 +363,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1993,
+    oop: 2008,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_500,
@@ -373,6 +382,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1994,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_750,
@@ -415,6 +425,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 2002,
+    oop: 2011,   // year the production line closed (era worlds: second-hand only after this)
     seats: 475,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 14_600,
@@ -484,6 +495,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Double Deck',
     eis: 2007,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 853,
     range: 15_200,
     runwayFt: 9800,
@@ -509,6 +521,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus/CASA',
     category: 'Turboprop',
     eis: 1998,
+    oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 51,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 4_355,
@@ -529,6 +542,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Aircraft Industries',
     category: 'Turboprop',
     eis: 1971,
+    oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_380,
@@ -549,6 +563,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Antonov',
     category: 'Regional Jet',
     eis: 2009,
+    oop: 2018,   // year the production line closed (era worlds: second-hand only after this)
     seats: 89,
     range: 5_100,
     runwayFt: 6200,
@@ -604,6 +619,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Beechcraft',
     category: 'Turboprop',
     eis: 1991,
+    oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_776,
@@ -624,6 +640,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1971,
+    oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 136,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_800,
@@ -642,6 +659,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1999,
+    oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 134,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_645,
@@ -660,6 +678,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1972,
+    oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 4_820,
@@ -678,6 +697,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1990,
+    oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 140,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_200,
@@ -696,6 +716,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1984,
+    oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_400,
@@ -714,6 +735,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1998,
+    oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_370,
@@ -732,6 +754,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1988,
+    oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_800,
@@ -750,6 +773,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1962,
+    oop: 1978,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 10_650,
@@ -785,6 +809,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1998,
+    oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_765,
@@ -823,6 +848,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 2007,
+    oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 220,
     deliveredAgeWeeks: 312,   // arrives 6y old - NG line, out of production since 2019
     bandEis: 1998,            // band with the 737NG cohort it was built alongside, not its own 2007 EIS
@@ -876,6 +902,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1983,
+    oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     seats: 239,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 7_222,
@@ -901,6 +928,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1999,
+    oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     seats: 295,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_295,
@@ -926,6 +954,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 1984,
+    oop: 1994,   // year the production line closed (era worlds: second-hand only after this)
     seats: 290,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 12_200,
@@ -951,6 +980,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 1988,
+    oop: 2014,   // year the production line closed (era worlds: second-hand only after this)
     seats: 351,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_090,
@@ -977,6 +1007,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 2000,
+    oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 375,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 10_415,
@@ -1018,6 +1049,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 1997,
+    oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_080,
@@ -1059,6 +1091,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1971,
+    oop: 1991,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 12_700,
@@ -1077,6 +1110,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 2006,
+    oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
     range: 15_843,
     runwayFt: 9800,
@@ -1117,6 +1151,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1976,
+    oop: 1982,   // year the production line closed (era worlds: second-hand only after this)
     seats: 400,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 15_400,
@@ -1135,6 +1170,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Wide Body',
     eis: 2004,
+    oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_650,
@@ -1153,6 +1189,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1989,
+    oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_445,
@@ -1171,6 +1208,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1991,
+    oop: 1995,   // year the production line closed (era worlds: second-hand only after this)
     seats: 660,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_700,
@@ -1223,6 +1261,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 2012,
+    oop: 2017,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
     range: 14_816,
     runwayFt: 9800,
@@ -1242,6 +1281,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
     eis: 1996,
+    oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_048,
@@ -1260,6 +1300,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
     eis: 2001,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 78,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_716,
@@ -1278,6 +1319,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
     eis: 2003,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 90,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_876,
@@ -1296,6 +1338,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Bombardier',
     category: 'Regional Jet',
     eis: 2010,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 104,
     range: 3_004,
     runwayFt: 6200,
@@ -1315,6 +1358,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'British Aerospace',
     category: 'Regional Jet',
     eis: 1993,
+    oop: 2001,   // year the production line closed (era worlds: second-hand only after this)
     seats: 112,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_300,
@@ -1333,6 +1377,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'British Aerospace',
     category: 'Regional Jet',
     eis: 1983,
+    oop: 1993,   // year the production line closed (era worlds: second-hand only after this)
     seats: 112,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_650,
@@ -1353,6 +1398,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Britten-Norman',
     category: 'Turboprop',
     eis: 1967,
+    oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 9,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 774,
@@ -1428,6 +1474,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
     eis: 1989,
+    oop: 2009,   // year the production line closed (era worlds: second-hand only after this)
     seats: 56,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_558,
@@ -1446,6 +1493,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
     eis: 2000,
+    oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 90,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_040,
@@ -1466,6 +1514,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Regional Jet',
     eis: 1999,
+    oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 37,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_241,
@@ -1484,6 +1533,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Regional Jet',
     eis: 1996,
+    oop: 2011,   // year the production line closed (era worlds: second-hand only after this)
     seats: 50,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_870,
@@ -1502,6 +1552,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Regional Jet',
     eis: 2004,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 80,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_735,
@@ -1554,6 +1605,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Regional Jet',
     eis: 2005,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 114,
     range: 4_537,
     runwayFt: 5700,
@@ -1591,6 +1643,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Regional Jet',
     eis: 2006,
+    oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 124,
     range: 4_260,
     runwayFt: 5900,
@@ -1633,6 +1686,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Fokker',
     category: 'Regional Jet',
     eis: 1994,
+    oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 85,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_410,
@@ -1651,6 +1705,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Fokker',
     category: 'Regional Jet',
     eis: 1988,
+    oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 122,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_170,
@@ -1671,6 +1726,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Ilyushin',
     category: 'Wide Body',
     eis: 1993,
+    oop: 2014,   // year the production line closed (era worlds: second-hand only after this)
     seats: 300,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_500,
@@ -1710,6 +1766,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Lockheed',
     category: 'Wide Body',
     eis: 1972,
+    oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 400,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_670,
@@ -1730,6 +1787,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
     eis: 1975,
+    oop: 1981,   // year the production line closed (era worlds: second-hand only after this)
     seats: 139,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_100,
@@ -1748,6 +1806,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
     eis: 1995,
+    oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 172,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_800,
@@ -1766,6 +1825,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Narrow Body',
     eis: 1980,
+    oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 172,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_635,
@@ -1784,6 +1844,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Wide Body',
     eis: 1972,
+    oop: 1989,   // year the production line closed (era worlds: second-hand only after this)
     seats: 380,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_700,
@@ -1802,6 +1863,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Wide Body',
     eis: 1990,
+    oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 410,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 12_455,
@@ -1860,6 +1922,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Saab',
     category: 'Turboprop',
     eis: 1989,
+    oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 37,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_560,
@@ -1878,6 +1941,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Saab',
     category: 'Turboprop',
     eis: 1994,
+    oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 58,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_868,
@@ -1898,6 +1962,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Short Brothers',
     category: 'Turboprop',
     eis: 1982,
+    oop: 1991,   // year the production line closed (era worlds: second-hand only after this)
     seats: 39,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_178,
@@ -1918,6 +1983,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Sukhoi',
     category: 'Regional Jet',
     eis: 2011,
+    oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 108,
     range: 4_578,
     runwayFt: 5900,
@@ -1937,6 +2003,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Tupolev',
     category: 'Narrow Body',
     eis: 1996,
+    oop: 2017,   // year the production line closed (era worlds: second-hand only after this)
     seats: 210,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_500,
@@ -2043,6 +2110,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Freighter',
     eis: 2010,
+    oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     freighter: true,
     seats: 0,
     payloadTonnes: 70,
@@ -2083,6 +2151,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1993,
+    oop: 2009,   // year the production line closed (era worlds: second-hand only after this)
     freighter: true,
     seats: 0,
     payloadTonnes: 112,
@@ -2104,6 +2173,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Antonov',
     category: 'Freighter',
     eis: 1986,
+    oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     freighter: true,
     seats: 0,
     payloadTonnes: 120,
@@ -2125,6 +2195,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 2011,
+    oop: 2023,   // year the production line closed (era worlds: second-hand only after this)
     freighter: true,
     seats: 0,
     payloadTonnes: 137,
@@ -2145,6 +2216,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Antonov',
     category: 'Freighter',
     eis: 1988,
+    oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     freighter: true,
     seats: 0,
     payloadTonnes: 250,
@@ -2171,6 +2243,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Douglas',
     category: 'Turboprop',
     eis: 1936,
+    oop: 1946,   // year the production line closed (era worlds: second-hand only after this)
     seats: 32,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
@@ -2189,6 +2262,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Douglas',
     category: 'Narrow Body',
     eis: 1967,
+    oop: 1972,   // year the production line closed (era worlds: second-hand only after this)
     seats: 259,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 11_000,
@@ -2207,6 +2281,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Sud Aviation',
     category: 'Narrow Body',
     eis: 1959,
+    oop: 1972,   // year the production line closed (era worlds: second-hand only after this)
     seats: 140,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_300,
@@ -2225,6 +2300,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Hawker Siddeley',
     category: 'Narrow Body',
     eis: 1971,
+    oop: 1975,   // year the production line closed (era worlds: second-hand only after this)
     seats: 180,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2243,6 +2319,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Vickers',
     category: 'Narrow Body',
     eis: 1964,
+    oop: 1970,   // year the production line closed (era worlds: second-hand only after this)
     seats: 151,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_400,
@@ -2261,6 +2338,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Convair',
     category: 'Narrow Body',
     eis: 1962,
+    oop: 1963,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_100,
@@ -2279,6 +2357,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Tupolev',
     category: 'Narrow Body',
     eis: 1984,
+    oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 180,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_200,
@@ -2297,6 +2376,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Tupolev',
     category: 'Regional Jet',
     eis: 1967,
+    oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 96,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_000,
@@ -2315,6 +2395,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Ilyushin',
     category: 'Narrow Body',
     eis: 1974,
+    oop: 1995,   // year the production line closed (era worlds: second-hand only after this)
     seats: 186,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 10_000,
@@ -2333,6 +2414,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Ilyushin',
     category: 'Wide Body',
     eis: 1980,
+    oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 350,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_000,
@@ -2351,6 +2433,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Yakovlev',
     category: 'Narrow Body',
     eis: 1980,
+    oop: 2003,   // year the production line closed (era worlds: second-hand only after this)
     seats: 120,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_000,
@@ -2369,6 +2452,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Yakovlev',
     category: 'Regional Jet',
     eis: 1968,
+    oop: 1981,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_800,
@@ -2387,6 +2471,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Fokker',
     category: 'Turboprop',
     eis: 1958,
+    oop: 1987,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
@@ -2405,6 +2490,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Fokker',
     category: 'Regional Jet',
     eis: 1969,
+    oop: 1987,   // year the production line closed (era worlds: second-hand only after this)
     seats: 85,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2423,6 +2509,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Narrow Body',
     eis: 1961,
+    oop: 1967,   // year the production line closed (era worlds: second-hand only after this)
     seats: 165,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_700,
@@ -2441,6 +2528,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1970,
+    oop: 1976,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_800,
@@ -2459,6 +2547,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Double Deck',
     eis: 1983,
+    oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 11_700,
@@ -2477,6 +2566,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1975,
+    oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 345,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_400,
@@ -2495,6 +2585,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Wide Body',
     eis: 1983,
+    oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 280,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 6_800,
@@ -2513,6 +2604,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Lockheed',
     category: 'Turboprop',
     eis: 1959,
+    oop: 1961,   // year the production line closed (era worlds: second-hand only after this)
     seats: 104,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_500,
@@ -2531,6 +2623,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'BAC',
     category: 'Narrow Body',
     eis: 1968,
+    oop: 1982,   // year the production line closed (era worlds: second-hand only after this)
     seats: 119,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
@@ -2549,6 +2642,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Convair',
     category: 'Turboprop',
     eis: 1960,
+    oop: 1966,   // year the production line closed (era worlds: second-hand only after this)
     seats: 56,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_900,
@@ -2652,6 +2746,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Dornier',
     category: 'Turboprop',
     eis: 1993,
+    oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 33,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_850,
@@ -2670,6 +2765,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Dornier',
     category: 'Regional Jet',
     eis: 1999,
+    oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 34,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_665,
@@ -2688,6 +2784,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Dornier',
     category: 'Turboprop',
     eis: 1982,
+    oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_110,
@@ -2706,6 +2803,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Turboprop',
     eis: 1985,
+    oop: 2001,   // year the production line closed (era worlds: second-hand only after this)
     seats: 30,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_750,
@@ -2724,6 +2822,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'British Aerospace',
     category: 'Turboprop',
     eis: 1982,
+    oop: 1993,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_260,
@@ -2742,6 +2841,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'British Aerospace',
     category: 'Turboprop',
     eis: 1992,
+    oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 29,
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_433,
@@ -2760,6 +2860,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Saab',
     category: 'Turboprop',
     eis: 1984,
+    oop: 1989,   // year the production line closed (era worlds: second-hand only after this)
     seats: 34,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_430,
@@ -2778,6 +2879,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
     eis: 1984,
+    oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_890,
@@ -2796,6 +2898,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
     eis: 1995,
+    oop: 2009,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_084,
@@ -2814,6 +2917,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'De Havilland Canada',
     category: 'Turboprop',
     eis: 1978,
+    oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 54,
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_300,
@@ -2832,6 +2936,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Xian',
     category: 'Turboprop',
     eis: 2000,
+    oop: 2016,   // year the production line closed (era worlds: second-hand only after this)
     seats: 60,
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_600,
@@ -2850,6 +2955,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Xian',
     category: 'Turboprop',
     eis: 2008,
+    oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 60,
     range: 1_600,
     runwayFt: 4300,
@@ -2884,6 +2990,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Antonov',
     category: 'Turboprop',
     eis: 1962,
+    oop: 1979,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
@@ -2902,6 +3009,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Embraer',
     category: 'Turboprop',
     eis: 1973,
+    oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 21,
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
@@ -2960,6 +3068,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1987,
+    oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 5_800,
     runwayFt: 6200,
@@ -2981,6 +3090,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Freighter',
     eis: 1991,
+    oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 7_300,
     runwayFt: 10200,
@@ -3002,6 +3112,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Airbus',
     category: 'Freighter',
     eis: 1994,
+    oop: 2007,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 7_400,
     runwayFt: 7700,
@@ -3023,6 +3134,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'McDonnell Douglas',
     category: 'Freighter',
     eis: 1980,
+    oop: 1989,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 5_900,
     runwayFt: 9800,
@@ -3044,6 +3156,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1993,
+    oop: 2010,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 3_500,
     runwayFt: 6400,
@@ -3065,6 +3178,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1991,
+    oop: 2008,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 3_400,
     runwayFt: 5900,
@@ -3086,6 +3200,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1983,
+    oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 3_500,
     runwayFt: 6800,
@@ -3107,6 +3222,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Douglas',
     category: 'Freighter',
     eis: 1982,
+    oop: 1986,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 7_400,
     runwayFt: 9000,
@@ -3170,6 +3286,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Boeing',
     category: 'Freighter',
     eis: 1990,
+    oop: 2008,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 6_000,
     runwayFt: 8200,
@@ -3191,6 +3308,7 @@ export const AIRCRAFT_TYPES = [
     manufacturer: 'Antonov',
     category: 'Freighter',
     eis: 1959,
+    oop: 1973,   // year the production line closed (era worlds: second-hand only after this)
     seats: 0,
     range: 3_600,
     runwayFt: 5900,
@@ -3205,6 +3323,459 @@ export const AIRCRAFT_TYPES = [
     deliveredAgeWeeks: 832,   // arrives 16y old — a used conversion, not a new build
     description: "Soviet turboprop freighter, rugged and utterly basic. Almost free to buy, near-worthless to sell, and delivered with ~16 years already on the clock.",
     image: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Antonov_An-12BK%2C_Russia_-_Air_Force_AN1879625.jpg',
+  },
+
+  // ── PROPLINER ERA (era worlds phase 4, ERA_MODE_PLAN.md §7) ─────────────────
+  // The pre-1960 catalogue: pistons, first turboprops and first jets, so a
+  // 1950-start era world opens as the propliner era rather than a one-type
+  // curiosity. Priced in constant 2026 dollars BY THEIR ECONOMICS, not their
+  // period sticker — the era lives in the cost data: honest per-seat fuel,
+  // flight-engineer-and-navigator crew costs, radial-engine maintenance ratios
+  // (0.4-0.6% of hull value per week vs ~0.2% for a modern turboprop) and
+  // 350-640 km/h cruise speeds that cap how much revenue a frame can fly in a
+  // week. Category 'Turboprop' for the props (the DC-3's precedent — 30-min
+  // turnarounds, small-aircraft insurance) with per-type cruiseKmh overrides;
+  // the first jets are 'Narrow Body' (the Caravelle's precedent). Images via
+  // Commons Special:FilePath redirects (resolved by exact filename).
+  {
+    id: 'dc4',
+    name: 'Douglas DC-4',
+    manufacturer: 'Douglas',
+    category: 'Turboprop',
+    eis: 1946,
+    oop: 1947,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 44,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 4_000,
+    runwayFt: 4500,
+    weeklyLease:      4_900,
+    purchasePrice: 1900000,
+    fuelBurnPer100km: 118,
+    crewCostPerKm: 1.05,
+    baseMaintenancePerWk: 9_000,
+    cruiseKmh: 365,
+    description: 'War-surplus workhorse. Cheap, slow and unpressurised — the airframe that built the postwar route map.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Douglas_DC-4_Pan_Am.jpg?width=960',
+  },
+  {
+    id: 'l749',
+    name: 'Lockheed L-749 Constellation',
+    manufacturer: 'Lockheed',
+    category: 'Turboprop',
+    eis: 1947,
+    oop: 1951,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 62,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 4_690,
+    runwayFt: 5500,
+    weeklyLease:      8_000,
+    purchasePrice: 3100000,
+    fuelBurnPer100km: 168,
+    crewCostPerKm: 1.35,
+    baseMaintenancePerWk: 16_000,
+    cruiseKmh: 480,
+    description: 'The triple-tailed thoroughbred. Pressurised comfort and real range, paid for in Wright radial overhauls.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Lockheed_L-749_Constellation,_Trans_World_Airlines_(TWA)_N91210_(4426389692).jpg?width=960',
+  },
+  {
+    id: 'cv240',
+    name: 'Convair CV-240',
+    manufacturer: 'Convair',
+    category: 'Turboprop',
+    eis: 1948,
+    oop: 1954,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 40,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 1_930,
+    runwayFt: 4500,
+    weeklyLease:      4_900,
+    purchasePrice: 1900000,
+    fuelBurnPer100km: 95,
+    crewCostPerKm: 1,
+    baseMaintenancePerWk: 7_500,
+    cruiseKmh: 435,
+    description: 'The postwar DC-3 replacement: pressurised, faster, and built for the short-haul grind.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Convair_CV-240,_American_Airlines_JP7312361.jpg?width=960',
+  },
+  {
+    id: 'b377',
+    name: 'Boeing 377 Stratocruiser',
+    manufacturer: 'Boeing',
+    category: 'Turboprop',
+    eis: 1949,
+    oop: 1950,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 100,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 6_760,
+    runwayFt: 6500,
+    weeklyLease:      13_500,
+    purchasePrice: 5200000,
+    fuelBurnPer100km: 300,
+    crewCostPerKm: 1.7,
+    baseMaintenancePerWk: 30_000,
+    cruiseKmh: 480,
+    doubleDeck: true,
+    description: 'Double-deck luxury with a lower-deck lounge. Glamorous, unreliable, and ruinous to maintain.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Pan_American_Airways_Boeing_377_Stratocruiser_over_San_Francisco-Oakland_Bay_Bridge_(4669579569).jpg?width=960',
+  },
+  {
+    id: 'dc6b',
+    name: 'Douglas DC-6B',
+    manufacturer: 'Douglas',
+    category: 'Turboprop',
+    eis: 1951,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 68,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 4_835,
+    runwayFt: 5200,
+    weeklyLease:      9_900,
+    purchasePrice: 3800000,
+    fuelBurnPer100km: 155,
+    crewCostPerKm: 1.35,
+    baseMaintenancePerWk: 15_000,
+    cruiseKmh: 500,
+    description: 'The piston airliner that actually made money. Dependable R-2800s and honest economics.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Douglas_DC-6B,_Red_Bull_(The_Flying_Bulls)_AN1936407.jpg?width=960',
+  },
+  {
+    id: 'm404',
+    name: 'Martin 4-0-4',
+    manufacturer: 'Martin',
+    category: 'Turboprop',
+    eis: 1951,
+    oop: 1953,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 40,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 1_738,
+    runwayFt: 4300,
+    weeklyLease:      4_700,
+    purchasePrice: 1800000,
+    fuelBurnPer100km: 92,
+    crewCostPerKm: 1,
+    baseMaintenancePerWk: 7_500,
+    cruiseKmh: 450,
+    description: 'Pressurised local-service twin. A solid regional workhorse for the trunk-feeder routes.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Martin_4-0-4,_Piedmont_Airlines_JP6984859.jpg?width=960',
+  },
+  {
+    id: 'comet1',
+    name: 'de Havilland Comet 1',
+    manufacturer: 'de Havilland',
+    category: 'Narrow Body',
+    eis: 1952,
+    oop: 1954,   // year the production line closed (era worlds: second-hand only after this)
+    withdrawnYear: 1955,   // certificate pulled after the 1954 groundings - no used market ever
+    seats: 44,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_410,
+    runwayFt: 6500,
+    weeklyLease:      16_900,
+    purchasePrice: 6500000,
+    fuelBurnPer100km: 420,
+    crewCostPerKm: 1.44,
+    baseMaintenancePerWk: 30_000,
+    cruiseKmh: 725,
+    description: 'The first jet airliner. Twice the speed of anything else in the sky — history will decide the rest.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/De_Havilland_Comet_1_BOAC_Heathrow_G-ALYX_1953.jpg?width=960',
+  },
+  {
+    id: 'viscount700',
+    name: 'Vickers Viscount 700',
+    manufacturer: 'Vickers',
+    category: 'Turboprop',
+    eis: 1953,
+    oop: 1959,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 53,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_830,
+    runwayFt: 4800,
+    weeklyLease:      9_300,
+    purchasePrice: 3600000,
+    fuelBurnPer100km: 120,
+    crewCostPerKm: 1.17,
+    baseMaintenancePerWk: 10_500,
+    cruiseKmh: 520,
+    description: 'The first turboprop airliner. Quiet, smooth and fast — passengers cross the cabin to look at the props.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/N7429_Vickers_745D_Viscount_United_Airlines_(10995863693).jpg?width=960',
+  },
+  {
+    id: 'il14',
+    name: 'Ilyushin Il-14',
+    manufacturer: 'Ilyushin',
+    category: 'Turboprop',
+    eis: 1954,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 32,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 1_500,
+    runwayFt: 3300,
+    weeklyLease:      3_600,
+    purchasePrice: 1400000,
+    fuelBurnPer100km: 88,
+    crewCostPerKm: 0.95,
+    baseMaintenancePerWk: 6_500,
+    cruiseKmh: 350,
+    description: 'Rugged Soviet twin for short sectors and rough strips. Simple, slow, nearly unbreakable.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Aeroflot_Ilyushin_Il-14_at_Arlanda,_November_1970.jpg?width=960',
+  },
+  {
+    id: 'l1049g',
+    name: 'Lockheed L-1049G Super Constellation',
+    manufacturer: 'Lockheed',
+    category: 'Turboprop',
+    eis: 1955,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 95,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 5_840,
+    runwayFt: 6000,
+    weeklyLease:      13_800,
+    purchasePrice: 5300000,
+    fuelBurnPer100km: 205,
+    crewCostPerKm: 1.55,
+    baseMaintenancePerWk: 24_000,
+    cruiseKmh: 490,
+    description: 'The definitive Connie. Transatlantic range and tip tanks — the flagship of the piston era.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Lockheed_L-1049G_Super_Constellation,_Lufthansa_AN0158905.jpg?width=960',
+  },
+  {
+    id: 'cv440',
+    name: 'Convair CV-440 Metropolitan',
+    manufacturer: 'Convair',
+    category: 'Turboprop',
+    eis: 1956,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 52,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_100,
+    runwayFt: 4600,
+    weeklyLease:      6_800,
+    purchasePrice: 2600000,
+    fuelBurnPer100km: 105,
+    crewCostPerKm: 1.08,
+    baseMaintenancePerWk: 8_500,
+    cruiseKmh: 465,
+    description: 'The refined Convair-liner: better soundproofing, weather radar, tighter economics.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Convair_CV-440_Metropolitan_on_the_ground_in_Zurich-Kloten.jpg?width=960',
+  },
+  {
+    id: 'dc7c',
+    name: 'Douglas DC-7C Seven Seas',
+    manufacturer: 'Douglas',
+    category: 'Turboprop',
+    eis: 1956,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 105,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 7_410,
+    runwayFt: 6300,
+    weeklyLease:      15_800,
+    purchasePrice: 6100000,
+    fuelBurnPer100km: 225,
+    crewCostPerKm: 1.65,
+    baseMaintenancePerWk: 28_000,
+    cruiseKmh: 520,
+    description: 'The first airliner to cross the Atlantic nonstop both ways — on turbo-compound engines the shops learn to dread.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Douglas_DC-7C_Seven_Seas,_Northwest_Airlines_JP7675846.jpg?width=960',
+  },
+  {
+    id: 'tu104',
+    name: 'Tupolev Tu-104',
+    manufacturer: 'Tupolev',
+    category: 'Narrow Body',
+    eis: 1956,
+    oop: 1960,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 100,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_650,
+    runwayFt: 8200,
+    weeklyLease:      15_600,
+    purchasePrice: 6000000,
+    fuelBurnPer100km: 585,
+    crewCostPerKm: 1.6,
+    baseMaintenancePerWk: 34_000,
+    cruiseKmh: 750,
+    description: 'The second jet airliner in service, and for two years the only one flying. Thirsty, fast, and it shows.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Tupolev_Tu-104,_Aeroflot_AN1206344.jpg?width=960',
+  },
+  {
+    id: 'britannia',
+    name: 'Bristol Britannia 310',
+    manufacturer: 'Bristol',
+    category: 'Turboprop',
+    eis: 1957,
+    oop: 1960,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 139,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 7_100,
+    runwayFt: 6700,
+    weeklyLease:      19_700,
+    purchasePrice: 7600000,
+    fuelBurnPer100km: 260,
+    crewCostPerKm: 1.6,
+    baseMaintenancePerWk: 22_000,
+    cruiseKmh: 575,
+    description: 'The Whispering Giant. Superb long-range turboprop that arrived two years before the jets made it obsolete.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Bristol_175_Britannia_312_G-AOVT_BOAC_Ringway_04.08.62_edited-3.jpg?width=960',
+  },
+  {
+    id: 'l1649',
+    name: 'Lockheed L-1649A Starliner',
+    manufacturer: 'Lockheed',
+    category: 'Turboprop',
+    eis: 1957,
+    oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 92,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 9_000,
+    runwayFt: 6600,
+    weeklyLease:      14_800,
+    purchasePrice: 5700000,
+    fuelBurnPer100km: 215,
+    crewCostPerKm: 1.6,
+    baseMaintenancePerWk: 26_000,
+    cruiseKmh: 490,
+    description: 'The last and greatest piston airliner. Nonstop anywhere — and obsolete on delivery.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Lockheed_L1649A_Starliner_D-ALAN_LH_RWY_05.08.61_edited-2.jpg?width=960',
+  },
+  {
+    id: 'viscount800',
+    name: 'Vickers Viscount 800',
+    manufacturer: 'Vickers',
+    category: 'Turboprop',
+    eis: 1957,
+    oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 75,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_780,
+    runwayFt: 5000,
+    weeklyLease:      11_900,
+    purchasePrice: 4600000,
+    fuelBurnPer100km: 138,
+    crewCostPerKm: 1.26,
+    baseMaintenancePerWk: 12_500,
+    cruiseKmh: 530,
+    description: 'The stretched Viscount. More seats on the same sweet Dart turboprops.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/G-AOJF_V.800_Viscount_BEA_LPL_(5646894889).jpg?width=960',
+  },
+  {
+    id: 'b707120',
+    name: 'Boeing 707-120',
+    manufacturer: 'Boeing',
+    category: 'Narrow Body',
+    eis: 1958,
+    oop: 1963,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 174,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 5_600,
+    runwayFt: 8500,
+    weeklyLease:      27_300,
+    purchasePrice: 10500000,
+    fuelBurnPer100km: 890,
+    crewCostPerKm: 1.9,
+    baseMaintenancePerWk: 62_000,
+    description: 'The one that changes everything. Domestic-range first model of the jet that shrinks the world.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Boeing_707-121B,_Pan_Am_JP6867315.jpg?width=960',
+  },
+  {
+    id: 'comet4',
+    name: 'de Havilland Comet 4',
+    manufacturer: 'de Havilland',
+    category: 'Narrow Body',
+    eis: 1958,
+    oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 81,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 5_190,
+    runwayFt: 6900,
+    weeklyLease:      19_200,
+    purchasePrice: 7400000,
+    fuelBurnPer100km: 480,
+    crewCostPerKm: 1.5,
+    baseMaintenancePerWk: 36_000,
+    cruiseKmh: 810,
+    description: 'The Comet redeemed — first jet across the Atlantic, weeks ahead of the 707.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/G-APDB_De_Havilland_DH-106_Comet_4_(11649581314).jpg?width=960',
+  },
+  {
+    id: 'il18',
+    name: 'Ilyushin Il-18',
+    manufacturer: 'Ilyushin',
+    category: 'Turboprop',
+    eis: 1959,
+    oop: 1978,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 110,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 6_500,
+    runwayFt: 5600,
+    weeklyLease:      12_500,
+    purchasePrice: 4800000,
+    fuelBurnPer100km: 210,
+    crewCostPerKm: 1.45,
+    baseMaintenancePerWk: 15_500,
+    cruiseKmh: 625,
+    description: 'Soviet turboprop workhorse. Cheap seats, long legs, and a production run that outlasts the jets chasing it.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Ilyushin_Il-18V,_Aeroflot_AN1583771.jpg?width=960',
+  },
+  {
+    id: 'dc830',
+    name: 'Douglas DC-8-30',
+    manufacturer: 'Douglas',
+    category: 'Narrow Body',
+    eis: 1960,
+    oop: 1967,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 177,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 8_300,
+    runwayFt: 9500,
+    weeklyLease:      29_300,
+    purchasePrice: 11300000,
+    fuelBurnPer100km: 940,
+    crewCostPerKm: 1.95,
+    baseMaintenancePerWk: 66_000,
+    description: 'Douglas answers the 707 with intercontinental range from day one.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/N809PA_Douglas_DC-8-32_Pan_American_World_Airways_MAN_21JUL68.jpg?width=960',
+  },
+  {
+    id: 'vanguard',
+    name: 'Vickers Vanguard',
+    manufacturer: 'Vickers',
+    category: 'Turboprop',
+    eis: 1961,
+    oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 139,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 2_945,
+    runwayFt: 6000,
+    weeklyLease:      15_800,
+    purchasePrice: 6100000,
+    fuelBurnPer100km: 215,
+    crewCostPerKm: 1.5,
+    baseMaintenancePerWk: 17_500,
+    cruiseKmh: 640,
+    description: 'Huge, cheap seat-mile costs — and nobody wants a turboprop the year the jets arrive. A bargain for those who look.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Vickers_953_Vanguard,_BEA_-_British_European_Airways_AN1811349.jpg?width=960',
+  },
+  {
+    id: 'hs748',
+    name: 'Hawker Siddeley 748',
+    manufacturer: 'Hawker Siddeley',
+    category: 'Turboprop',
+    eis: 1962,
+    oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
+    seats: 48,
+    deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
+    range: 1_700,
+    runwayFt: 3500,
+    weeklyLease:      8_300,
+    purchasePrice: 3200000,
+    fuelBurnPer100km: 105,
+    crewCostPerKm: 1.1,
+    baseMaintenancePerWk: 8_000,
+    cruiseKmh: 452,
+    description: 'The DC-3 replacement that stuck. Rough-field regional twin with a 26-year production run.',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Hawker_Siddeley_HS-748_Srs2A-270,_Lynx_Express_(Emerald_Airways)_AN0742001.jpg?width=960',
   },
 ];
 
@@ -3224,6 +3795,66 @@ export const LEASE_DEPOSIT_WEEKS = 12;
  * reselling it a guaranteed loss. See models/leaseBuyout.js.
  */
 export const LEASE_BUYOUT_PREMIUM = 0.10;
+
+// ── Era availability (ERA_MODE_PLAN.md §3.2) ─────────────────────────────────
+// A type's market state at a calendar year. calYear == null (classic world)
+// short-circuits to 'available' — the parity invariant.
+//   'future' — eis not reached: not orderable at all, new or used.
+//   'new'    — in production: orders deliver factory-fresh.
+//   'used'   — line closed: still orderable, but frames arrive already old
+//              (see eraDeliveredAgeWeeks) at the same discount the classic
+//              catalogue prices in.
+//   'expired'— the line closed more than AIRFRAME_MARKET_LIFETIME_YEARS ago:
+//              no airworthy frames remain on the market. Not orderable, not
+//              leasable. Owned frames keep flying (and keep aging into the
+//              quadratic maintenance curve) — the limit is the MARKET's, not a
+//              forced retirement. This is the phase-3 guard that stops a 2040
+//              era world buying DC-3s forever (ERA_MODE_PLAN.md §6).
+export const AIRFRAME_MARKET_LIFETIME_YEARS = 30;
+
+export function aircraftAvailability(type, calYear = null) {
+  if (calYear == null) return 'available';
+  if ((type?.eis ?? 0) > calYear) return 'future';
+  // withdrawnYear: the type's certificate of airworthiness was pulled — no
+  // market at any price from that year on (the Comet 1's 1954 grounding).
+  if (type?.withdrawnYear != null && calYear >= type.withdrawnYear) return 'expired';
+  if (type?.oop != null && calYear > type.oop) {
+    return calYear > type.oop + AIRFRAME_MARKET_LIFETIME_YEARS ? 'expired' : 'used';
+  }
+  return 'new';
+}
+
+/** Can this type be acquired at all (bought or leased) at this calendar year? */
+export function aircraftOrderable(type, calYear = null) {
+  const a = aircraftAvailability(type, calYear);
+  return a === 'available' || a === 'new' || a === 'used';
+}
+
+/**
+ * Delivered age (weeks) for a frame of this type acquired in calendar year
+ * `calYear`. Generalises the frozen-2026 deliveredAgeWeeks table:
+ *   - classic world (calYear null): exactly the published table — parity.
+ *   - freighter conversion lines still running (freighter, banded, no oop):
+ *     the published age always — a fresh conversion is an old airframe.
+ *   - in production: 0 (delivered new).
+ *   - out of production, banded: linear from 0 at oop to the published band at
+ *     2026, extrapolating on the same slope after, capped at 832w (16y — the
+ *     quadratic maintenance curve's tolerable ceiling).
+ *   - out of production, band-0 at 2026 (line closed 2005+): 0 through 2026,
+ *     then aging toward the youngest band (312w) over 20 years.
+ */
+export function eraDeliveredAgeWeeks(type, calYear = null) {
+  const published = type?.deliveredAgeWeeks ?? 0;
+  if (calYear == null) return published;
+  if (type?.freighter && published > 0 && type?.oop == null) return published;
+  if (type?.oop == null || calYear <= type.oop) return 0;
+  if (published > 0) {
+    const span = Math.max(1, 2026 - type.oop);
+    return Math.max(0, Math.min(832, Math.round(published * (calYear - type.oop) / span)));
+  }
+  if (calYear <= 2026) return 0;
+  return Math.min(832, Math.round((calYear - 2026) * (312 / 20)));
+}
 
 export function getAircraftType(id) {
   return AIRCRAFT_TYPES.find(a => a.id === id);

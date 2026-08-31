@@ -2868,7 +2868,7 @@ function StatChart({ points, series, height = 150, yFrom0 = true, format = fmtIn
           <text key={i} x={Math.max(PADL + 10, Math.min(W - PADR - 10, toX(i)))} y={H - 5}
             fontSize="10" fill="var(--text-muted)"
             textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
-            {wideLabels ? `Y${points[i].year}` : (points[i].label || `Y${points[i].year}`)}
+            {wideLabels ? (points[i].label ? points[i].label.split(' ').pop() : `Y${points[i].year}`) : (points[i].label || `Y${points[i].year}`)}
           </text>
         ))}
       </svg>
@@ -3004,6 +3004,20 @@ function Statistics() {
           </div>
         ))}
       </div>
+
+      {/* ── Era history: one point per completed year ── */}
+      {(state.statsHistoryYearly?.length ?? 0) > 1 && (
+        <div className="card">
+          <div className="card-title">Era history · full years</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+            One point per completed year — the whole era, beyond the weekly series&#39; retention window.
+          </div>
+          <StatChart points={state.statsHistoryYearly} height={130} yFrom0={false} format={(v) => money(v)} series={[
+            { key: 'revenue', label: 'Revenue / yr', color: STAT_COLORS.organic },
+            { key: 'profit',  label: 'Profit / yr',  color: STAT_COLORS.connecting },
+          ]} />
+        </div>
+      )}
 
       {/* ── Passengers (stacked) ── */}
       <div className="card">
@@ -3812,7 +3826,7 @@ function FuelHedging() {
               // lock above or below today's index is a good deal.
               ['Expected average over term', `${expectedAvg.toFixed(3)}×`],
               ['Locked price', `${lockedPreview.toFixed(3)}× (${Math.round((selOpt?.premium ?? 0) * 100)}% premium for certainty)`],
-              ['Expires', `W${Math.min(52, state.week + (selOpt?.weeks ?? 0))}, ${state.year + (state.week + (selOpt?.weeks ?? 0) > 52 ? 1 : 0)}`],
+              ['Expires', `W${Math.min(52, state.week + (selOpt?.weeks ?? 0))}, ${(state.startYear != null ? state.startYear - 1 : 0) + state.year + (state.week + (selOpt?.weeks ?? 0) > 52 ? 1 : 0)}`],
             ].map(([k, v]) => (
               <>
                 <span key={k + '_k'} style={{ color: 'var(--muted)' }}>{k}</span>

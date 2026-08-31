@@ -3,6 +3,8 @@ import { useConfirm } from './ConfirmModal.jsx';
 import { useGame } from '../store/GameContext.jsx';
 import {
   AIRCRAFT_TYPES,
+  aircraftAvailability,
+  eraDeliveredAgeWeeks,
   AIRCRAFT_CATEGORIES,
   getAircraftType,
   buyDiscount,
@@ -11,7 +13,7 @@ import {
   seatEfficiency,
   fuelCostPerKm,
 } from '../data/aircraft.js';
-import { formatMoney, weekToGameDate, maintenanceMultiplier } from '../utils/simulation.js';
+import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
@@ -28,15 +30,18 @@ import { Glyph } from './Icons.jsx';
 // the card appears to show. Always quote the bill the player will actually pay.
 
 /** Weekly maintenance a fresh delivery of this type will actually bill, in $. */
-function deliveredMaint(type) {
+// Era games: the age a frame arrives at depends on the calendar (a 737-400
+// is new in 1990 and 20 years old in 2010) — eraDeliveredAgeWeeks reproduces
+// the published band at 2026 and is the published band when calYear is null.
+function deliveredMaint(type, calYear = null) {
   return Math.round(
-    (type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(type?.deliveredAgeWeeks ?? 0)
+    (type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(eraDeliveredAgeWeeks(type, calYear))
   );
 }
 
 /** Whole years old this type arrives at, or 0 for anything still in production. */
-function deliveredAgeYears(type) {
-  return Math.round((type?.deliveredAgeWeeks ?? 0) / 52);
+function deliveredAgeYears(type, calYear = null) {
+  return Math.round(eraDeliveredAgeWeeks(type, calYear) / 52);
 }
 
 // Category accent colors
@@ -494,7 +499,7 @@ const TABLE_COLS = [
   { key: null,       label: '',             align: 'right' },
 ];
 
-function MarketTable({ rows, sort, setSort, onCheckout }) {
+function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
   const sorted = [...rows].sort((a, b) => {
     const { key, dir } = sort;
     const av = a[key], bv = b[key];
@@ -565,8 +570,10 @@ function MarketTable({ rows, sort, setSort, onCheckout }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button
                     className="btn btn-primary"
-                    style={{ fontSize: 11, padding: '4px 10px', marginRight: 6 }}
-                    onClick={() => onCheckout({ typeId: t.id, mode: 'lease' })}
+                    style={{ fontSize: 11, padding: '4px 10px', marginRight: 6, opacity: r.eraBlock ? 0.4 : 1, cursor: r.eraBlock ? 'not-allowed' : 'pointer' }}
+                    disabled={!!r.eraBlock}
+                    title={r.eraBlock || undefined}
+                    onClick={() => !r.eraBlock && onCheckout({ typeId: t.id, mode: 'lease' })}
                   >
                     Lease
                   </button>
@@ -580,9 +587,10 @@ function MarketTable({ rows, sort, setSort, onCheckout }) {
                       cursor: r.canAffordBuy ? 'pointer' : 'not-allowed',
                     }}
                     disabled={!r.canAffordBuy}
+                    title={r.eraBlock || undefined}
                     onClick={() => r.canAffordBuy && onCheckout({ typeId: t.id, mode: 'buy' })}
                   >
-                    Buy
+                    {r.eraBlock ? (r.type.eis > (calYearRef ?? 0) ? `In service ${r.type.eis}` : 'Unavailable') : 'Buy'}
                   </button>
                 </td>
               </tr>
@@ -660,6 +668,18 @@ export default function Marketplace() {
 
   const categories = ['All', ...AIRCRAFT_CATEGORIES];
 
+  // Era game (src/data/era.js): types are locked until their entry into
+  // service and vanish once no airworthy frames remain. Mirrors the reducer's
+  // orderDenial() so a disabled button and a rejected action always agree.
+  // Null in classic games.
+  const calYear = calendarYear(state);
+  const eraLockReason = (type) => {
+    if (calYear == null) return null;
+    if ((type?.eis ?? 0) > calYear) return `Enters service ${type.eis}`;
+    if (aircraftAvailability(type, calYear) === 'expired') return `No airworthy frames left — line closed ${type.oop}`;
+    return null;
+  };
+
   const mfrsInCategory = ['All', ...[...new Set(
     (activeCategory === 'All' ? AIRCRAFT_TYPES : AIRCRAFT_TYPES.filter(t => t.category === activeCategory))
       .map(t => t.manufacturer)
@@ -669,6 +689,9 @@ export default function Marketplace() {
 
   const q = query.trim().toLowerCase();
   const filtered = AIRCRAFT_TYPES.filter(t =>
+    // Era: show what flies now plus what's announced for the next three years
+    // (locked rows), hide types whose last frames have left the market.
+    (calYear == null || ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
     (activeCategory === 'All' || t.category === activeCategory) &&
     (safeMfr        === 'All' || t.manufacturer === safeMfr) &&
     (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q))
@@ -852,20 +875,21 @@ export default function Marketplace() {
               : type.fuelBurnPer100km / (type.seats || 1),
             eff:      effScore,
             effColor: effScore >= 70 ? 'var(--green)' : effScore >= 40 ? 'var(--yellow)' : 'var(--red)',
-            age:      deliveredAgeYears(type),
-            maint:    deliveredMaint(type),
-            maintPer: deliveredMaint(type) / (type.freighter ? (type.payloadTonnes || 1) : (type.seats || 1)),
+            age:      deliveredAgeYears(type, calYear),
+            maint:    deliveredMaint(type, calYear),
+            maintPer: deliveredMaint(type, calYear) / (type.freighter ? (type.payloadTonnes || 1) : (type.seats || 1)),
             lease:    type.weeklyLease,
             buy:      buyPrice,
             discPct:  0,
             delivery: Math.max(nowAbs + lead, maxExisting + lead) - nowAbs,
             owned:    alreadyOwned,
             onOrder,
-            canAffordBuy: cash >= buyPrice,
+            canAffordBuy: cash >= buyPrice && !eraLockReason(type),
+            eraBlock: eraLockReason(type),
             catColor: CAT_COLORS[type.category] || '#93a4ba',
           };
         });
-        return <MarketTable rows={rows} sort={sort} setSort={setSort} onCheckout={setCheckout} />;
+        return <MarketTable rows={rows} sort={sort} setSort={setSort} onCheckout={setCheckout} calYearRef={calYear} />;
       })()}
 
       {/* Aircraft grid */}
@@ -890,7 +914,8 @@ export default function Marketplace() {
           const discPct       = Math.round(discount * 100);
           const effScore      = efficiencyScore(type) ?? 0;
           const effRaw        = (seatEfficiency(type) ?? 0).toFixed(2);
-          const canAffordBuy  = cash >= buyPrice;
+          const eraLock       = eraLockReason(type);
+          const canAffordBuy  = cash >= buyPrice && !eraLock;
           const effColor      = effScore >= 70 ? 'var(--green)' : effScore >= 40 ? 'var(--yellow)' : 'var(--red)';
 
           // Delivery note
@@ -972,12 +997,12 @@ export default function Marketplace() {
                   </div>
                   <div className="aircraft-stat-pill">
                     <span className="aircraft-stat-pill-label">Maint/wk</span>
-                    <span className="aircraft-stat-pill-value">{formatMoney(deliveredMaint(type))}</span>
+                    <span className="aircraft-stat-pill-value">{formatMoney(deliveredMaint(type, calYear))}</span>
                   </div>
                   <div className="aircraft-stat-pill" title="Weekly maintenance as delivered, spread across capacity. The fuel bar below does not include it.">
                     <span className="aircraft-stat-pill-label">{type.freighter ? 'Maint/tonne' : 'Maint/seat'}</span>
                     <span className="aircraft-stat-pill-value">
-                      {formatMoney(deliveredMaint(type) / (type.freighter ? (type.payloadTonnes || 1) : (type.seats || 1)))}
+                      {formatMoney(deliveredMaint(type, calYear) / (type.freighter ? (type.payloadTonnes || 1) : (type.seats || 1)))}
                     </span>
                   </div>
                 </div>
@@ -1020,12 +1045,12 @@ export default function Marketplace() {
                   <Glyph e="📅" /> Delivery in <strong>{nextDeliveryWeeks} week{nextDeliveryWeeks !== 1 ? 's' : ''}</strong>
                   {onOrder > 0 && ` (${onOrder} already queued)`}
                 </div>
-                {deliveredAgeYears(type) > 0 && (
+                {deliveredAgeYears(type, calYear) > 0 && (
                   <div style={{ marginTop: 4, fontSize: 11, color: 'var(--yellow)' }}>
                     <Glyph e="🕐" /> Out of production — arrives{' '}
-                    <strong>{`${deliveredAgeYears(type)} years old`}</strong>
+                    <strong>{`${deliveredAgeYears(type, calYear)} years old`}</strong>
                     {`, so maintenance already bills at `}
-                    {`${(deliveredMaint(type) / (type.baseMaintenancePerWk || 1)).toFixed(2)}x base `}
+                    {`${(deliveredMaint(type, calYear) / (type.baseMaintenancePerWk || 1)).toFixed(2)}x base `}
                     {`and climbs faster from here.`}
                   </div>
                 )}
@@ -1050,9 +1075,12 @@ export default function Marketplace() {
                     </div>
                     <button
                       className="btn btn-primary aircraft-lease-btn"
-                      onClick={() => setCheckout({ typeId: type.id, mode: 'lease' })}
+                      style={eraLock ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                      disabled={!!eraLock}
+                      title={eraLock || undefined}
+                      onClick={() => !eraLock && setCheckout({ typeId: type.id, mode: 'lease' })}
                     >
-                      Lease →
+                      {eraLock ? <><Glyph e="🔒" /> {eraLock}</> : 'Lease →'}
                     </button>
                   </div>
 
@@ -1089,9 +1117,10 @@ export default function Marketplace() {
                         cursor: canAffordBuy ? 'pointer' : 'not-allowed',
                       }}
                       disabled={!canAffordBuy}
+                      title={eraLock || undefined}
                       onClick={() => canAffordBuy && setCheckout({ typeId: type.id, mode: 'buy' })}
                     >
-                      {canAffordBuy ? 'Buy →' : 'Can\'t afford'}
+                      {eraLock ? (type.eis > calYear ? `In service ${type.eis}` : 'Unavailable') : canAffordBuy ? 'Buy →' : 'Can\'t afford'}
                     </button>
                   </div>
 

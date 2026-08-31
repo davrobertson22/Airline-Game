@@ -11,7 +11,7 @@
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAircraftType } from '../data/aircraft.js';
-import { formatMoney } from '../utils/simulation.js';
+import { formatMoney, yearLabel } from '../utils/simulation.js';
 import { NewsIcon } from './Icons.jsx';
 
 const CATEGORIES = [
@@ -256,7 +256,7 @@ export default function News() {
                 color: 'var(--text-dim, #8a94a6)',
                 borderBottom: '1px solid var(--border, rgba(255,255,255,0.10))',
               }}>
-                Year {it.year} · Week {it.week}
+                {yearLabel(state, it.year)} · Week {it.week}
               </div>
             )}
             <div style={{

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useGame, addRouteBlockReason, peakSlotsUsedAt } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
-import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
+import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
 import {
   baseCityPairDemand, referencePrice, distanceKm,
@@ -11,7 +11,7 @@ import {
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
   buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, stateSensReduction, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
-  effectiveRangeKm,
+  effectiveRangeKm, calendarYear,
 } from '../utils/simulation.js';
 import { laborEffects } from '../data/labor.js';
 import {
@@ -571,8 +571,8 @@ export default function RoutePlanner() {
   // Aircraft types that can reach this route
   const reachableTypes = useMemo(() => {
     if (!routeData) return [];
-    return AIRCRAFT_TYPES.filter(t => reachKmFor(t) >= routeData.dist);
-  }, [routeData, reachByType]);
+    return AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, calendarYear(state)) && reachKmFor(t) >= routeData.dist);
+  }, [routeData, reachByType, state.startYear, state.year]);
 
   // Hard ceiling on flights/week for this aircraft on this route: one airframe
   // has MAX_WEEKLY_BLOCK_HOURS flying hours a week, so longer sectors fit fewer

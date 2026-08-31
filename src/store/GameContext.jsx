@@ -12,13 +12,14 @@ import {
   blockHourFit, blockTimeHours,
   applyScheduleTrimMigration,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
-  calcReconfCost, refitWeeks,
+  calcReconfCost, refitWeeks, calendarYear, shortYearLabel,
 } from '../utils/simulation.js';
-import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation } from '../utils/market.js';
+import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
+         setFareIndex, setEraStartYear, setEraCalendarYear } from '../utils/market.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
-         LEASE_DEPOSIT_WEEKS } from '../data/aircraft.js';
+         LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
@@ -76,6 +77,7 @@ import {
   hedgeLockedPrice,
   absoluteWeek,
   HEDGE_DURATIONS,
+  FUEL_BASE_INDEX,
 } from '../utils/fuel.js';
 import {
   getAlliance,
@@ -89,10 +91,12 @@ import {
 } from '../data/credit.js';
 import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
          marketingAwarenessGain, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
-         campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor } from '../data/overhead.js';
+         campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor, setEraCostScale } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import { normalizeAncillaries, defaultAncillaries, ANCILLARY_MAP } from '../data/ancillaries.js';
-import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective } from '../data/objectives.js';
+import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective, objectiveDesc } from '../data/objectives.js';
+import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxScale, eraCapitalScale } from '../data/era.js';
+import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
 // retain. 1820 weeks = 35 game years — comfortably covers the Statistics page's
@@ -779,15 +783,140 @@ function nextAircraftNumber(typeId, fleet = [], pendingOrders = []) {
   return max + 1;
 }
 
+// ── Era mode (ERA_MODE_PLAN.md, Tailwinds port) ──────────────────────────────
+// A game started with `startYear` walks the real calendar: 1950 → 2050. The
+// year stays a 1-based ordinal everywhere in state; calendarYear(state) maps
+// it. Every branch below is dead when startYear is null, so classic games are
+// byte-identical to before the port.
+
+// §3.2: a type that hasn't entered service yet cannot be ordered at all — bought
+// or leased. Null in classic games and for anything already flying; the UI
+// renders the message on the locked row.
+export function orderDenial(state, typeId) {
+  const cy = calendarYear(state);
+  if (cy == null) return null;
+  const type = getAircraftType(typeId);
+  if (!type) return null;
+  const avail = aircraftAvailability(type, cy);
+  if (avail === 'future') {
+    return {
+      code: 'not_yet_flying', typeId: type.id, eis: type.eis,
+      message: `The ${type.name} hasn't flown yet — it enters service in ${type.eis}.`,
+    };
+  }
+  if (avail === 'expired') {
+    return {
+      code: 'no_airworthy_frames', typeId: type.id, oop: type.oop,
+      message: `No airworthy ${type.name} frames remain on the market — the line closed in ${type.oop}.`,
+    };
+  }
+  return null;
+}
+
+// Phase 5: actions on features that don't exist yet are refused with the same
+// message the UI shows. Null in classic games.
+export function eraFeatureDenial(state, feature) {
+  if (featureLive(feature, calendarYear(state))) return null;
+  return { code: 'not_yet_invented', feature, message: ERA_FEATURE_MESSAGE[feature] };
+}
+
+function refuseEraFeature(state, feature) {
+  const denial = eraFeatureDenial(state, feature);
+  if (!denial) return null;
+  return {
+    ...state,
+    error: denial.message,
+    pendingToasts: [...(state.pendingToasts ?? []), {
+      type: 'warning', title: '🕰 Not in this era yet', message: denial.message, duration: 8000,
+    }],
+  };
+}
+
+// ── The Comet 1 grounding ────────────────────────────────────────────────────
+// April 1954: after the second unexplained crash, the Comet 1's certificate of
+// airworthiness is withdrawn worldwide. An era game that reaches calendar week
+// 15 of 1954 holding Comet 1s has them grounded permanently — frames removed
+// (RETIRE_AIRCRAFT's mechanics), routes released, and the hull insurer pays out
+// 80% of purchase value on owned frames (leased frames go back to the lessor at
+// no penalty). Scripted, once per timeline: it reads as history, not punishment.
+// aircraft.js's withdrawnYear: 1955 keeps the type off the market afterwards.
+export const COMET_GROUNDING = { calendarYear: 1954, week: 15, typeId: 'comet1', hullPayoutFrac: 0.8 };
+
+function applyCometGrounding(state) {
+  const comets = (state.fleet ?? []).filter(a => a.typeId === COMET_GROUNDING.typeId);
+  if (comets.length === 0) return { ...state, cometGrounded: true };
+  let working = state;
+  for (const a of comets) {
+    const settled = settleCoversForRemoval(working, a.id);
+    working = { ...working, ...settled };
+  }
+  const cometIds = new Set(comets.map(a => a.id));
+  const type     = getAircraftType(COMET_GROUNDING.typeId);
+  const payout   = comets
+    .filter(a => a.ownershipType !== 'lease')
+    .length * Math.round((type?.purchasePrice ?? 0) * COMET_GROUNDING.hullPayoutFrac);
+  const routes      = (working.routes ?? []).filter(r => !cometIds.has(r.aircraftId));
+  const cargoRoutes = (working.cargoRoutes ?? []).filter(r => !cometIds.has(r.aircraftId));
+  const keptIds     = new Set([...routes, ...cargoRoutes].map(r => r.aircraftId));
+  const fleet       = (working.fleet ?? [])
+    .filter(a => !cometIds.has(a.id))
+    .map(a => (a.status === 'retired' || keptIds.has(a.id)) ? a
+      : { ...a, status: a.status === 'assigned' ? 'idle' : a.status });
+  const msg = comets.length === 1
+    ? 'Your Comet 1 has been grounded permanently.'
+    : `Your ${comets.length} Comet 1s have been grounded permanently.`;
+  return {
+    ...working,
+    fleet, routes, cargoRoutes,
+    cash: (working.cash ?? 0) + payout,
+    cometGrounded: true,
+    pendingToasts: [...(working.pendingToasts ?? []), {
+      type: 'warning',
+      title: '🛑 The Comet is grounded',
+      message: `${msg} After the second unexplained crash, the type's certificate of airworthiness `
+        + `has been withdrawn worldwide.${payout > 0 ? ` Hull insurance pays out ${payout.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.` : ''} `
+        + 'The jet age will have to wait for the Comet 4 — or the 707.',
+      duration: 15000,
+    }],
+  };
+}
+
+// Module-scoped era state for the market/overhead/AI modules. Set on EVERY
+// action, from state, before the switch: the reducer is synchronous, so
+// nothing can interleave. In a classic game each setter receives its identity
+// value (index 1, year null) and the modules behave exactly as before.
+function setEraModuleState(startYear, calYear) {
+  setFareIndex(eraFareIndex(calYear) ?? 1);
+  setEraStartYear(startYear ?? null);
+  setEraCalendarYear(calYear);
+  setEraCostScale(eraCapitalScale(calYear) ?? 1);
+}
+
 function reducer(state, action) {
+  setEraModuleState(state?.startYear ?? null, calendarYear(state));
   switch (action.type) {
 
     case 'START_GAME': {
       // Startup capital: $15M of founders' EQUITY (see STARTING_CASH in freshState).
       // It is not a loan — there is no debt to service at launch, giving new airlines
       // breathing room to reach profitability. Players can borrow from the bank later.
+      // Era game: startYear pins year 1 to a real calendar year. The module
+      // state is set from it BEFORE freshState() so the competitor sample that
+      // freshState() builds already picks era-appropriate aircraft; the
+      // starting cash scales with the era's capital scale (§4) — a 1950 airline
+      // is a smaller business in constant dollars, and so is its seed money.
+      const _startYear = Number.isInteger(action.startYear) && action.startYear >= 1900 && action.startYear <= 2100
+        ? action.startYear : null;
+      setEraModuleState(_startYear, _startYear);
+      const _startCash = _startYear != null
+        ? Math.round(STARTING_CASH * (eraCapitalScale(_startYear) ?? 1) / 100_000) * 100_000
+        : STARTING_CASH;
       return {
         ...freshState(),
+        startYear:   _startYear,
+        cash:        _startCash,
+        marketCap:   _startCash * 1.5,
+        sharePrice:  _startCash * 1.5 / TOTAL_SHARES,
         airlineName: action.airlineName,
         logoId:      action.logoId    ?? 'horizon',
         logoColor:   action.logoColor ?? '#f5a623',
@@ -817,6 +946,7 @@ function reducer(state, action) {
     }
 
     case 'LEASE_AIRCRAFT': {
+      if (orderDenial(state, action.typeId)) return state;   // era gate (§3.2)
       const type       = getAircraftType(action.typeId);
       const count      = nextAircraftNumber(action.typeId, state.fleet, state.pendingOrders);
       const name       = action.name ?? `${type?.name ?? action.typeId} #${count}`;
@@ -836,7 +966,7 @@ function reducer(state, action) {
         name,
         tailNumber,
         status:             'idle',
-        ageWeeks:           type?.deliveredAgeWeeks ?? 0,
+        ageWeeks:           eraDeliveredAgeWeeks(type, calendarYear(state)),
         config:             defaultConfig(type?.seats ?? 100),
         ownershipType:      'lease',
         // Lock the rate at signing. Without this the tail carried no weeklyLease
@@ -860,6 +990,7 @@ function reducer(state, action) {
     case 'BUY_AIRCRAFT': {
       const type         = getAircraftType(action.typeId);
       if (!type) return state;
+      if (orderDenial(state, action.typeId)) return state;   // era gate (§3.2)
       // Instant single-unit buy — no bulk-order discount (that requires a
       // multi-unit ORDER_AIRCRAFT). Price at the single-frame tier.
       const price        = effectivePurchasePrice(type, 1);
@@ -874,7 +1005,7 @@ function reducer(state, action) {
         name,
         tailNumber,
         status:        'idle',
-        ageWeeks:      type?.deliveredAgeWeeks ?? 0,
+        ageWeeks:      eraDeliveredAgeWeeks(type, calendarYear(state)),
         config:        defaultConfig(type.seats),
         ownershipType: 'owned',
       };
@@ -895,6 +1026,9 @@ function reducer(state, action) {
     case 'ORDER_AIRCRAFT': {
       const type = getAircraftType(action.typeId);
       if (!type) return state;
+      // Era gate: not yet in service = not orderable, buy or lease. The UI
+      // shows the same denial; this is the authoritative check.
+      if (orderDenial(state, action.typeId)) return state;
 
       const DELIVERY_LEAD = { 'Wide Body': 4, 'Narrow Body': 3, 'Regional Jet': 2, 'Turboprop': 1 };
       const lead     = DELIVERY_LEAD[type.category] ?? 2;
@@ -1225,6 +1359,7 @@ function reducer(state, action) {
     // canRetrofitWifi() — the same function the UI shows the player, so the
     // number on the button is the number the reducer takes.
     case 'INSTALL_WIFI': {
+      { const refused = refuseEraFeature(state, 'wifi'); if (refused) return refused; }
       const ids = [...new Set((action.aircraftIds ?? (action.aircraftId ? [action.aircraftId] : [])).filter(Boolean))];
       if (ids.length === 0) return state;
       const targets = (state.fleet ?? []).filter(a => ids.includes(a.id));
@@ -1271,6 +1406,7 @@ function reducer(state, action) {
 
     // ─── Airport lounges ─────────────────────────────────────────────────────
     case 'BUILD_LOUNGE': {
+      { const refused = refuseEraFeature(state, 'lounges'); if (refused) return refused; }
       const code    = action.code;
       const lounges = state.lounges ?? {};
       const check   = canBuildLounge(code, { lounges, gates: state.gates ?? {}, cash: state.cash });
@@ -2214,6 +2350,7 @@ function reducer(state, action) {
     // applies this change on top — so partial edits never leave a half-built policy.
     // action: { id, offered?, price? }
     case 'SET_ANCILLARY': {
+      { const refused = refuseEraFeature(state, 'ancillaries'); if (refused) return refused; }
       const product = ANCILLARY_MAP[action.id];
       if (!product) return state;
       const base = state.ancillaries ? { ...state.ancillaries } : defaultAncillaries();
@@ -2231,6 +2368,7 @@ function reducer(state, action) {
     // Activate (seed the recommended baseline), reset, or deactivate the whole
     // ancillary policy. action: { active: boolean } or { ancillaries: {...} }
     case 'SET_ANCILLARIES': {
+      { const refused = refuseEraFeature(state, 'ancillaries'); if (refused) return refused; }
       if (action.ancillaries !== undefined) {
         return { ...state, ancillaries: normalizeAncillaries(action.ancillaries) };
       }
@@ -2514,6 +2652,7 @@ function reducer(state, action) {
     // ─── Alliance & codeshare actions ───────────────────────────────────────
 
     case 'JOIN_ALLIANCE': {
+      { const refused = refuseEraFeature(state, 'globalAlliances'); if (refused) return refused; }
       // action: { allianceId }
       const alliance = getAlliance(action.allianceId);
       if (!alliance) return state;
@@ -2535,6 +2674,7 @@ function reducer(state, action) {
     }
 
     case 'SIGN_CODESHARE': {
+      { const refused = refuseEraFeature(state, 'codeshares'); if (refused) return refused; }
       // action: { competitorId }
       const activeAgreements = state.codeshareAgreements ?? [];
       // No cap on the number of codeshare agreements.
@@ -2733,6 +2873,13 @@ function reducer(state, action) {
       return { ...state, victoryAcknowledged: true };
 
     case 'ADVANCE_WEEK': { try {
+      // Era games: the Comet 1 grounding fires as a pre-tick transform on the
+      // scripted week, then the tick proceeds on the transformed state.
+      if (state.startYear != null && !state.cometGrounded
+          && calendarYear(state) === COMET_GROUNDING.calendarYear
+          && state.week === COMET_GROUNDING.week) {
+        return reducer(applyCometGrounding(state), action);
+      }
       // ── Deterministic pre-tick prep (utils/tickPrep.js) ────────────────────
       // Events aged and expired, the fuel shock folded into the index so hedges
       // cover it, grounding and heavy-check countdowns run down, reserve covers
@@ -2761,7 +2908,11 @@ function reducer(state, action) {
 
       // Tick market price for NEXT week. Stays here rather than in prepareWeek:
       // it is a random draw, and a projection must neither predict it nor burn it.
-      const nextFuelIndex    = tickFuelPrice(baseFuelIndex);
+      // Era games: the walk reverts toward the scripted decade mean (§3.4) with
+      // the era floor, instead of the classic long-run equilibrium.
+      const _fuelCy          = calendarYear(state);
+      const nextFuelIndex    = _fuelCy == null ? tickFuelPrice(baseFuelIndex)
+        : tickFuelPrice(baseFuelIndex, undefined, eraFuelMean(_fuelCy) ?? FUEL_BASE_INDEX, ERA_FUEL_MIN_INDEX);
 
       // Age + mechanical tick must run BEFORE weeklyTick so that aircraft recovering
       // from grounding this week can actually fly and earn revenue.
@@ -2994,6 +3145,11 @@ function reducer(state, action) {
       // NOTE: leaseWarningToasts is populated inside the agedFleet.map() below,
       // so it must be pushed in AFTER that loop (not spread here at construction time).
       const newToasts = [
+        // Era games: a toast queued immediately before this tick (the Comet
+        // grounding fires pre-tick and recurses into ADVANCE_WEEK) must
+        // survive it — this array REPLACES pendingToasts in the return.
+        // Classic games keep the replace semantics byte-identical.
+        ...(state.startYear != null ? (state.pendingToasts ?? []) : []),
         ...newEvents.map(ev => ({
           type: ev.type === 'fuel' || ev.type === 'disruption' || ev.type === 'economy'
             ? (ev.effects?.fuelMult > 1 || ev.effects?.globalDemandMult < 1 || ev.effects?.regionDemandMult < 1
@@ -3648,7 +3804,7 @@ function reducer(state, action) {
       }
 
       const historyEntry = {
-        label:       (() => { const d = weekToGameDate(state.week); return `${d.monthName} W${d.weekInMonth} Y${state.year}`; })(),
+        label:       (() => { const d = weekToGameDate(state.week); return `${d.monthName} W${d.weekInMonth} ${shortYearLabel(state)}`; })(),
         week:        state.week,
         year:        state.year,
         cash:        newCash,
@@ -3776,10 +3932,44 @@ function reducer(state, action) {
           prevMarketCap: state.marketCap ?? null,
         });
 
+      // Era games: one compact row per COMPLETED game year, so the sweep of a
+      // century survives the weekly series' cap. Era-gated so classic saves are
+      // byte-identical.
+      let newStatsYearly = state.statsHistoryYearly;
+      if (state.startYear != null && newWeek === 1 && newYear === state.year + 1) {
+        const yrRows = newHistory.filter(h => h.year === state.year);
+        const ysum = (k) => Math.round(yrRows.reduce((sum, h) => sum + (h[k] ?? 0), 0));
+        newStatsYearly = [...(state.statsHistoryYearly ?? []), {
+          year:         state.year,                              // ordinal, like every stored week
+          calendarYear: state.startYear + state.year - 1,
+          label:        String(state.startYear + state.year - 1),
+          revenue:      ysum('revenue'),
+          profit:       ysum('profit'),
+          passengers:   ysum('passengers'),
+          cargoRevenue: ysum('cargoRevenue'),
+          cash:         newCash,
+          marketCap:    newMarketCap,
+          fleet:        agedFleet.filter(a => a.status !== 'retired').length,
+          routes:       state.routes.length,
+          fuelIndex:    currentFuelIndex,
+        }].slice(-150);
+      }
+
       // ── Board objectives check ───────────────────────────────────────────────
       const objectivesEnabled = state.objectivesEnabled ?? true;
 
+      // Era games: objective thresholds and rewards scale with the era (§4).
+      // Classic games pass no scalers — identity.
+      const _objCy  = calendarYear(state);
+      const _objRev = eraRevenueScale(_objCy);
+      const _objPax = eraPaxScale(_objCy);
+      const _objCap = eraCapitalScale(_objCy) ?? 1;
+
       const objectiveSnap = {
+        ...(_objRev != null ? {
+          M: (x) => Math.max(1_000, Math.round(x * _objRev / 1_000) * 1_000),
+          P: (x) => Math.max(100,   Math.round(x * _objPax / 100)   * 100),
+        } : {}),
         routes:           state.routes,   // current routes (weeksOpen not yet incremented — fine for checks)
         fleet:            agedFleet,      // fleet after aging tick, before deliveries
         gates:            state.gates ?? {},
@@ -3810,7 +4000,8 @@ function reducer(state, action) {
         updatedObjectives = currentObjectives.map(obj => {
           if (!newlyCompleted.includes(obj.id)) return obj;
           const tmpl = getObjective(obj.id);
-          objectiveCashBonus += tmpl?.reward ?? 0;
+          const scaledReward = Math.round((tmpl?.reward ?? 0) * _objCap);
+          objectiveCashBonus += scaledReward;
           completedObjectiveRows.push({
             id: obj.id, title: tmpl?.title ?? obj.id,
             reward: tmpl?.reward ?? 0, desc: tmpl?.desc ?? null, icon: tmpl?.icon ?? '🏅',
@@ -3818,7 +4009,7 @@ function reducer(state, action) {
           newToasts.push({
             type:     'success',
             title:    `🏅 Objective Complete — ${tmpl?.title ?? obj.id}`,
-            message:  `${tmpl?.desc ?? ''} · Board reward: +${(tmpl?.reward ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}`,
+            message:  `${objectiveDesc(tmpl, objectiveSnap.M, objectiveSnap.P)} · Board reward: +${scaledReward.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}`,
             icon:     tmpl?.icon ?? '🏅',
             duration: 9000,
           });
@@ -3851,7 +4042,7 @@ function reducer(state, action) {
           name:          order.name,
           tailNumber,
           status:        'idle',
-          ageWeeks:      ordType?.deliveredAgeWeeks ?? 0,
+          ageWeeks:      eraDeliveredAgeWeeks(ordType, calendarYear(state)),
           config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
           ownershipType: order.ownershipType,
           weeklyLease:        order.weeklyLease ?? 0,
@@ -3962,6 +4153,7 @@ function reducer(state, action) {
         pendingOrders:     remainingOrders,
         financialHistory:  newHistory,
         statsHistory:      newStats,
+        ...(newStatsYearly !== state.statsHistoryYearly ? { statsHistoryYearly: newStatsYearly } : {}),
         lastReport:        { ...report, cashDelta: preTaxProfit - corporateTax,
           // Effective revenue includes the world-event demand adjustment that the
           // headline net already reflects; "all-in" cost folds loan payments,

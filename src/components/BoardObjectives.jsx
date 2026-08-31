@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { OBJECTIVE_TEMPLATES } from '../data/objectives.js';
-import { formatMoney } from '../utils/simulation.js';
+import { OBJECTIVE_TEMPLATES, objectiveDesc } from '../data/objectives.js';
+import { formatMoney, calendarYear } from '../utils/simulation.js';
+import { eraRevenueScale, eraPaxScale, eraCapitalScale } from '../data/era.js';
 import { Glyph } from './Icons.jsx';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -26,9 +27,23 @@ export default function BoardObjectives() {
   if (!state.objectivesEnabled || objectives.length === 0) return null;
 
   // Merge template data with completion state
+  // Era game: thresholds and rewards scale with the calendar (src/data/era.js §4),
+  // so the card shows the number the reducer actually checks and pays.
+  const cy = calendarYear(state);
+  const revScale = eraRevenueScale(cy);
+  const paxScale = eraPaxScale(cy);
+  const capScale = eraCapitalScale(cy) ?? 1;
+  const Mfn = revScale != null ? (x) => Math.max(1_000, Math.round(x * revScale / 1_000) * 1_000) : null;
+  const Pfn = revScale != null ? (x) => Math.max(100,   Math.round(x * paxScale / 100)   * 100) : null;
+
   const merged = OBJECTIVE_TEMPLATES.map(tmpl => {
     const stateObj = objectives.find(o => o.id === tmpl.id) ?? { completed: false };
-    return { ...tmpl, ...stateObj };
+    return {
+      ...tmpl,
+      desc:   objectiveDesc(tmpl, Mfn, Pfn),
+      reward: Math.round((tmpl.reward ?? 0) * capScale),
+      ...stateObj,
+    };
   });
 
   const strategic = merged.filter(o => o.phase === 'strategic');

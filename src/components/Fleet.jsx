@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
+import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
 import { getAircraftType, LEASE_BUYOUT_PREMIUM } from '../data/aircraft.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -396,6 +398,10 @@ function WifiBadge({ aircraft }) {
   const confirm = useConfirm();
   const fitted  = isWifiEquipped(aircraft);
   const quote   = canRetrofitWifi([aircraft], state.cash);
+
+  // Era game: before airborne internet exists there is nothing to fit —
+  // no button, no quality penalty story to tell.
+  if (!fitted && !featureLive('wifi', eraCalendarYear(state))) return null;
 
   if (fitted) {
     return (
@@ -1785,6 +1791,7 @@ export default function Fleet() {
 
   async function handleBulkFitWifi() {
     if (checkedNoWifi.length === 0) return;
+    if (!featureLive('wifi', eraCalendarYear(state))) return;
     const names = checkedNoWifi.slice(0, 8).map(a => a.name).join(', ')
                 + (checkedNoWifi.length > 8 ? `, +${checkedNoWifi.length - 8} more` : '');
     const already = checkedAircraft.length - checkedNoWifi.length;
@@ -2316,7 +2323,7 @@ export default function Fleet() {
                 <Glyph e="✔" /> Buy out ({checkedLeased.length}) · {formatMoney(bulkBuyoutCost)}
               </button>
             )}
-            {checkedNoWifi.length > 0 && (
+            {checkedNoWifi.length > 0 && featureLive('wifi', eraCalendarYear(state)) && (
               <button
                 className="btn"
                 style={{

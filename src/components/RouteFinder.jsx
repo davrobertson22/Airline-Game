@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
-import { AIRCRAFT_TYPES, getAircraftType } from '../data/aircraft.js';
-import { weekToGameDate, effectiveRangeKm, formatMoney } from '../utils/simulation.js';
+import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
+import { weekToGameDate, effectiveRangeKm, formatMoney, calendarYear } from '../utils/simulation.js';
 import { buildRouteMarket } from '../models/demand.js';
 import {
   findCandidates, scoreCandidates, sortCandidates, SORTS, DEFAULT_SCORE_LIMIT,
@@ -87,8 +87,8 @@ export default function RouteFinder({ onPick, standalone = false }) {
     : 0;
 
   const catalogueTypes = useMemo(
-    () => AIRCRAFT_TYPES.filter(t => !t.freighter && !fleetTypes.some(f => f.type.id === t.id)),
-    [fleetTypes]
+    () => AIRCRAFT_TYPES.filter(t => !t.freighter && aircraftOrderable(t, calendarYear(state)) && !fleetTypes.some(f => f.type.id === t.id)),
+    [fleetTypes, state.startYear, state.year]
   );
 
   function resetPaging() { setLimit(PAGE_SIZE); }

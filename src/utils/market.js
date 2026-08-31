@@ -11,6 +11,7 @@
  */
 
 import { getAirport, getAirportScores, getAirportCargoScore } from '../data/airports.js';
+import { eraDemandGrowthFactor } from '../data/era.js';
 import {
   METROS,
   metroOf,
@@ -227,6 +228,9 @@ export const DEMAND_GROWTH_CAP = 3.0;
  * @returns {number} 1 … DEMAND_GROWTH_CAP
  */
 export function pairDemandGrowth(originCode, destCode, absWeek) {
+  // Era game: growth IS the era curve — the historical traffic index relative
+  // to today. It REPLACES the classic compounding (never stacks).
+  if (_eraStartYear != null) return eraDemandGrowthFactor(_eraStartYear, absWeek);
   if (absWeek == null || !(absWeek > 1)) return 1;
   const o = getAirport(metroPrimary(originCode));
   const d = getAirport(metroPrimary(destCode));
@@ -662,6 +666,26 @@ export function routeDistance(originCode, destCode) {
  * Market reference price for a route ($ one-way, economy).
  * Players can price above or below this — demand adjusts via elasticity.
  */
+// ── World fare index + era epoch (module-scoped) ──────────────────────────────
+// referencePrice()/cargoReferenceYield() are pure (origin, dest) functions
+// called from ~a dozen sites with no state in scope, so the era fare ladder
+// and the era epoch live here and the reducer sets them from state on EVERY
+// action (see GameContext.jsx reducer entry). 1 / null = classic game.
+let _fareIndex = 1;
+export function setFareIndex(v) {
+  const n = Number(v);
+  _fareIndex = (Number.isFinite(n) && n > 0.25 && n <= 2) ? n : 1;
+}
+export function getFareIndex() { return _fareIndex; }
+
+let _eraStartYear = null;
+let _eraCalendarYear = null;
+export function setEraStartYear(v) { _eraStartYear = Number.isInteger(v) ? v : null; }
+export function getEraStartYear() { return _eraStartYear; }
+/** The era game's CURRENT calendar year (null = classic) — for the AI fleet picker. */
+export function setEraCalendarYear(v) { _eraCalendarYear = Number.isInteger(v) ? v : null; }
+export function getEraCalendarYear() { return _eraCalendarYear; }
+
 export function referencePrice(originCode, destCode) {
   const o = getAirport(originCode);
   const d = getAirport(destCode);
@@ -671,7 +695,7 @@ export function referencePrice(originCode, destCode) {
   // sustained profitability harder (was −8%, −5%, originally +10%). Part of the
   // load-factor rebalance — lower yields mean revenue no longer swamps cost at
   // low load, so a typical route must fill ~65% to break even.
-  return Math.round((80 + dist * 0.09) * 0.87);
+  return Math.round((80 + dist * 0.09) * 0.87 * _fareIndex);
 }
 
 // ─── Market capitalisation ─────────────────────────────────────────────────────
@@ -998,7 +1022,7 @@ export const CARGO_YIELD_FLOOR = 0.40;     // long-haul floor
 export function cargoReferenceYield(originCode, destCode) {
   const dist = routeDistance(originCode, destCode);
   const raw  = CARGO_YIELD_BASE - CARGO_YIELD_SLOPE * dist;
-  return Math.round(Math.max(CARGO_YIELD_FLOOR, Math.min(CARGO_YIELD_CAP, raw)) * 1000) / 1000;
+  return Math.round(Math.max(CARGO_YIELD_FLOOR, Math.min(CARGO_YIELD_CAP, raw)) * _fareIndex * 1000) / 1000;
 }
 
 /** Convenience: reference revenue per tonne ($, one-way) on a route. */

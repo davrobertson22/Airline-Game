@@ -1,4 +1,6 @@
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
+import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, routeQualityBreakdown } from '../utils/simulation.js';
@@ -245,7 +247,10 @@ function AllianceCard({
   });
 
   const canAfford    = state.cash >= alliance.initiationFee;
-  const canJoin      = eligible && canAfford && !hasAnyMembership;
+  // Era game: global alliances don't exist before 1997 (Star). The reducer
+  // refuses too; this keeps the button honest.
+  const eraLocked    = !featureLive('globalAlliances', eraCalendarYear(state));
+  const canJoin      = eligible && canAfford && !hasAnyMembership && !eraLocked;
 
   function handleJoin() {
     if (!canJoin) return;
@@ -541,11 +546,13 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
                 </div>
 
                 <button
-                  className={`btn ${worthwhile ? 'btn-primary' : ''}`}
+                  className={`btn ${worthwhile && featureLive('codeshares', eraCalendarYear(state)) ? 'btn-primary' : ''}`}
                   style={{ fontSize: 12, padding: '6px 14px' }}
+                  disabled={!featureLive('codeshares', eraCalendarYear(state))}
+                  title={featureLive('codeshares', eraCalendarYear(state)) ? undefined : ERA_FEATURE_MESSAGE.codeshares}
                   onClick={() => dispatch({ type: 'SIGN_CODESHARE', competitorId: comp.id })}
                 >
-                  Sign
+                  {featureLive('codeshares', eraCalendarYear(state)) ? 'Sign' : '🕰 Not yet'}
                 </button>
               </div>
             );

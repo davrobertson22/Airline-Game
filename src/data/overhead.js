@@ -37,9 +37,20 @@
  * below. An all-narrowbody fleet returns exactly its aircraft count, so every
  * calibration figure in the table above still reads true for it.
  */
+// ── Era cost scale (ERA_MODE_PLAN.md §4) ─────────────────────────────────────
+// Module-scoped: these helpers are called from many sites (tick, reducer
+// guards, UI previews) that carry no world context. The reducer sets it from
+// state on EVERY action; 1 (classic) leaves every number byte-identical.
+// Scales the FIXED-dollar floors a small-revenue era airline cannot outgrow.
+let _eraCostScale = 1;
+export function setEraCostScale(v) {
+  _eraCostScale = Number.isFinite(v) && v > 0 && v <= 1 ? v : 1;
+}
+export function getEraCostScale() { return _eraCostScale; }
+
 export function calcHQCost(fleetScale) {
   if (fleetScale <= 0) return 0;
-  return Math.round(38_000 * Math.pow(fleetScale, 0.85));
+  return Math.round(38_000 * Math.pow(fleetScale, 0.85) * _eraCostScale);
 }
 
 // ─── 1a. Corporate overhead scales with the aeroplane ────────────────────────
@@ -279,10 +290,10 @@ export const LIABILITY_INSURANCE_WEEKLY_FREIGHTER = [
 export function liabilityInsuranceWeekly(aircraftType) {
   if (aircraftType?.freighter) {
     const t = aircraftType.payloadTonnes ?? 0;
-    return LIABILITY_INSURANCE_WEEKLY_FREIGHTER.find(s => t <= s.maxTonnes).weekly;
+    return Math.round(LIABILITY_INSURANCE_WEEKLY_FREIGHTER.find(s => t <= s.maxTonnes).weekly * _eraCostScale);
   }
-  return LIABILITY_INSURANCE_WEEKLY_BY_CATEGORY[aircraftType?.category]
-    ?? LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT;
+  return Math.round((LIABILITY_INSURANCE_WEEKLY_BY_CATEGORY[aircraftType?.category]
+    ?? LIABILITY_INSURANCE_WEEKLY_PER_AIRCRAFT) * _eraCostScale);
 }
 
 /**
@@ -570,7 +581,7 @@ export function awarenessDemandMultiplier(awareness) {
  */
 export function marketingAwarenessGain(weeklySpend, weeklyRevenue) {
   if (weeklySpend <= 0) return 0;
-  const scale = Math.max((weeklyRevenue || 0) * MARKETING_GAIN_SCALE, 40_000);
+  const scale = Math.max((weeklyRevenue || 0) * MARKETING_GAIN_SCALE, 40_000 * _eraCostScale);
   return MARKETING_MAX_GAIN * (1 - Math.exp(-weeklySpend / scale));
 }
 
@@ -596,7 +607,7 @@ export const CAMPAIGN_COST_PER_M  = 30_000;  // $/wk per million metro pop for ~
  */
 export function campaignStrengthGain(weeklySpend, airportPopM) {
   if (weeklySpend <= 0) return 0;
-  const scale = Math.max(airportPopM ?? 1, 0.2) * CAMPAIGN_COST_PER_M;
+  const scale = Math.max(airportPopM ?? 1, 0.2) * CAMPAIGN_COST_PER_M * _eraCostScale;
   return CAMPAIGN_MAX_GAIN * (1 - Math.exp(-weeklySpend / scale));
 }
 
@@ -683,5 +694,5 @@ export function competitorPressureDrag(competitorSpend, playerSpend, airportPopM
  * @param {number} distKm  – great-circle distance of the route
  */
 export function routeLaunchCost(distKm) {
-  return Math.round(40_000 + distKm * 22);
+  return Math.round((40_000 + distKm * 22) * _eraCostScale);
 }

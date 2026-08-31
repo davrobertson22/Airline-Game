@@ -1391,9 +1391,36 @@ export function weekToGameDate(week) {
 /**
  * Format game state as "Week N Mon Year Y".
  */
+/**
+ * Era games (state.startYear set): the real calendar year this ordinal game
+ * year maps to. Classic games: null. state.year itself stays a 1-based ordinal
+ * everywhere (absoluteWeek and every scheduled-week field depend on it), so
+ * this is the ONLY translation point.
+ */
+export function calendarYear(state) {
+  const s = state?.startYear;
+  if (!Number.isInteger(s)) return null;
+  return s + ((state?.year ?? 1) - 1);
+}
+
+/** "1952" in an era game, "Year 3" in a classic one. */
+export function yearLabel(state, year = state?.year ?? 1) {
+  const s = state?.startYear;
+  return Number.isInteger(s) ? String(s + (year - 1)) : `Year ${year}`;
+}
+
+/** "1952" in an era game, "Y3" in a classic one. */
+export function shortYearLabel(state, year = state?.year ?? 1) {
+  const s = state?.startYear;
+  return Number.isInteger(s) ? String(s + (year - 1)) : `Y${year}`;
+}
+
 export function formatGameDate(state) {
   const { monthName, weekInMonth } = weekToGameDate(state.week);
-  return `Week ${weekInMonth} ${monthName} Year ${state.year}`;
+  const cy = calendarYear(state);
+  return cy == null
+    ? `Week ${weekInMonth} ${monthName} Year ${state.year}`
+    : `Week ${weekInMonth} ${monthName} ${cy}`;
 }
 
 /**
