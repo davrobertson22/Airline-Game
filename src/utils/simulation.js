@@ -27,6 +27,7 @@ import {
   weeklyGroundHandlingCost,
   weeklyLoungeCost,
   DISTRIBUTION_COST_PCT,
+  getEraCostScale,
 } from '../data/overhead.js';
 import { routeCatering, cateringQualityBonus, normalizeCateringLevel } from '../data/catering.js';
 import { routeAncillaries, ancillaryQualityBonus } from '../data/ancillaries.js';
@@ -4357,7 +4358,8 @@ export function weeklyTick(state) {
       const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) ? complexityMult : 1.0;
       // Narrowbody-EQUIVALENTS, not airframes: see CREW_SCALE_BY_CATEGORY.
       const crewScale = fleetCrewScale(group.id, fleet, a => getAircraftType(a.typeId));
-      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * crewScale * famMult);
+      // Era games: real wages scale with the era (constant dollars) — see era.js.
+      totalLaborCosts += Math.round(group.baseWeeklyPerAircraft * payMult * crewScale * famMult * getEraCostScale());
     }
   }
 
@@ -4418,7 +4420,7 @@ export function weeklyTick(state) {
   let totalHubInvestment = 0;
   for (const [, hubData] of Object.entries(hubs)) {
     const tierDef = HUB_TIERS[hubData.tier] ?? HUB_TIERS[1];
-    totalHubInvestment += tierDef.weeklyInvestment;
+    totalHubInvestment += Math.round(tierDef.weeklyInvestment * getEraCostScale());   // era-scaled (1 in classic)
   }
 
   // 7. HQ & corporate overhead — scales with the size of the fleet AND of the

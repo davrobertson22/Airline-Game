@@ -4,11 +4,13 @@
 // constant dollars, not a modern one with 1950 demand. Classic: identity.
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
-import { eraRevenueScale, eraPaxScale, eraCapitalScale } from '../src/data/era.js';
+import { eraRevenueScale, eraPaxScale, eraCapitalScale, eraOverheadScale } from '../src/data/era.js';
 import { routeLaunchCost, setEraCostScale, getEraCostScale, liabilityInsuranceWeekly } from '../src/data/overhead.js';
 import { OBJECTIVE_TEMPLATES, objectiveDesc } from '../src/data/objectives.js';
 import { gameReducer, freshState } from '../src/store/GameContext.jsx';
 import { getAircraftType } from '../src/data/aircraft.js';
+import { gateMonthlyFee, totalGateMonthlyFee, getAirport } from '../src/data/airports.js';
+import { weeklyFamilyBaseCost } from '../src/data/families.js';
 
 test('the era money scales: null in classic, ramping through the century', () => {
   assert.equal(eraRevenueScale(null), null);
@@ -28,6 +30,15 @@ test('cost floors scale through the module knob and reset cleanly', () => {
     setEraCostScale(0.289);
     assert.equal(routeLaunchCost(1000), Math.round(62_000 * 0.289));
     assert.equal(liabilityInsuranceWeekly(getAircraftType('dc3')), Math.round(6_000 * 0.289));
+    // Fixed overheads too (found in the 1950 playtest: a 62-seat Constellation
+    // cannot carry $150K/wk of modern-dollar gate rent, wages and MRO contracts).
+    const jfk = getAirport('JFK');
+    assert.equal(gateMonthlyFee(jfk, 1), Math.round(gateMonthlyFee(jfk, 1) / 0.289 * 0.289));
+    assert.ok(totalGateMonthlyFee(jfk, 2) < 0.3 * (() => { setEraCostScale(1); const v = totalGateMonthlyFee(jfk, 2); setEraCostScale(0.289); return v; })());
+    const fleet = [{ id: 'a', typeId: 'dc3', status: 'idle' }];
+    setEraCostScale(1); const famClassic = weeklyFamilyBaseCost(fleet);
+    setEraCostScale(0.289);
+    assert.ok(famClassic > 0 && Math.abs(weeklyFamilyBaseCost(fleet) - famClassic * 0.289) < 1, 'family MRO base scales');
   } finally {
     setEraCostScale(1);
   }
@@ -37,7 +48,9 @@ test('cost floors scale through the module knob and reset cleanly', () => {
 test('the reducer sets the cost scale from state on every action', () => {
   const era = { ...freshState(), phase: 'playing', startYear: 1950, year: 1, week: 1, competitors: [] };
   gameReducer(era, { type: 'NOOP_UNKNOWN_ACTION' });
-  assert.ok(Math.abs(getEraCostScale() - eraCapitalScale(1950)) < 1e-9);
+  assert.ok(Math.abs(getEraCostScale() - eraOverheadScale(1950)) < 1e-9, 'overheads run at the OVERHEAD scale (sqrt of capital)');
+  assert.ok(Math.abs(eraOverheadScale(1950) - 0.537) < 0.01, `1950 overhead scale ${eraOverheadScale(1950)}`);
+  assert.equal(eraOverheadScale(null), null);
   gameReducer({ ...freshState(), phase: 'playing', competitors: [] }, { type: 'NOOP_UNKNOWN_ACTION' });
   assert.equal(getEraCostScale(), 1, 'a classic action resets it — saves cannot leak into each other');
 });

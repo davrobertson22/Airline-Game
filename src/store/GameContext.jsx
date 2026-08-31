@@ -95,7 +95,7 @@ import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
 import { normalizeCateringLevel } from '../data/catering.js';
 import { normalizeAncillaries, defaultAncillaries, ANCILLARY_MAP } from '../data/ancillaries.js';
 import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective, objectiveDesc } from '../data/objectives.js';
-import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxScale, eraCapitalScale } from '../data/era.js';
+import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxScale, eraCapitalScale, eraSeedCapital, eraOverheadScale } from '../data/era.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
@@ -889,7 +889,7 @@ function setEraModuleState(startYear, calYear) {
   setFareIndex(eraFareIndex(calYear) ?? 1);
   setEraStartYear(startYear ?? null);
   setEraCalendarYear(calYear);
-  setEraCostScale(eraCapitalScale(calYear) ?? 1);
+  setEraCostScale(eraOverheadScale(calYear) ?? 1);
 }
 
 function reducer(state, action) {
@@ -908,12 +908,14 @@ function reducer(state, action) {
       const _startYear = Number.isInteger(action.startYear) && action.startYear >= 1900 && action.startYear <= 2100
         ? action.startYear : null;
       setEraModuleState(_startYear, _startYear);
-      const _startCash = _startYear != null
-        ? Math.round(STARTING_CASH * (eraCapitalScale(_startYear) ?? 1) / 100_000) * 100_000
-        : STARTING_CASH;
+      const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
       return {
         ...freshState(),
         startYear:   _startYear,
+        // Era: the fuel walk opens at the decade's scripted mean (0.43 in 1950),
+        // not the modern 1.0 it would otherwise take years to drift down from.
+        ...(_startYear != null && eraFuelMean(_startYear) != null
+          ? { fuelPrice: { index: eraFuelMean(_startYear), history: [] } } : {}),
         cash:        _startCash,
         marketCap:   _startCash * 1.5,
         sharePrice:  _startCash * 1.5 / TOTAL_SHARES,

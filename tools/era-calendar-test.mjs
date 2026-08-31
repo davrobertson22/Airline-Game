@@ -36,9 +36,11 @@ test('START_GAME: startYear is optional, validated, and scales the seed capital'
   const era = gameReducer(undefined, { type: 'START_GAME', airlineName: 'A', hub: 'JFK', startYear: 1950 });
   assert.equal(era.startYear, 1950);
   assert.equal(era.year, 1, 'ordinal year untouched');
-  assert.ok(era.cash > 4_000_000 && era.cash < 4_700_000, `1950 capital ${era.cash}`);
+  assert.equal(era.cash, 4_000_000, `1950 capital ${era.cash} — $4.34M floored to a whole million`);
+  assert.ok(era.fuelPrice.index > 0.3 && era.fuelPrice.index < 0.6, `1950 opens on the fifties' fuel price, got ${era.fuelPrice.index}`);
+  assert.equal(classic.fuelPrice.index, 1.0, 'classic opens at the long-run equilibrium');
   const c1978 = gameReducer(undefined, { type: 'START_GAME', airlineName: 'A', hub: 'JFK', startYear: 1978 }).cash;
-  assert.ok(c1978 > 8_800_000 && c1978 < 9_800_000, `1978 capital ${c1978}`);
+  assert.equal(c1978, 9_000_000, `1978 capital ${c1978}`);
   for (const bad of [1850, 2200, 1950.5, '1950']) {
     const s = gameReducer(undefined, { type: 'START_GAME', airlineName: 'A', hub: 'JFK', startYear: bad });
     assert.equal(s.startYear, null, `startYear ${JSON.stringify(bad)} reads as classic`);
