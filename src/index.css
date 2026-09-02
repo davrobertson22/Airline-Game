@@ -553,7 +553,11 @@ tr:hover td { background: rgba(62,166,255,.05); }
 /* --- Setup screen --- */
 .setup-screen {
   display: flex;
-  align-items: center;
+  /* flex-start + margin:auto on the card, not align-items:center: a centred
+     flex child that is taller than the viewport has its top clipped above the
+     scroll origin and cannot be scrolled to. The setup card overflows on the
+     Launch step, which hid the era picker. */
+  align-items: flex-start;
   justify-content: center;
   min-height: 100vh;
   background:
@@ -562,6 +566,7 @@ tr:hover td { background: rgba(62,166,255,.05); }
 }
 
 .setup-card {
+  margin: auto;   /* centres when it fits, stays fully reachable when it doesn't */
   background: linear-gradient(180deg, var(--surface), var(--bg-elev));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

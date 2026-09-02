@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import { STARTING_CAPITAL } from '../data/credit.js';
@@ -88,6 +88,17 @@ export default function SetupScreen() {
   const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
   const fileInputRef = useRef(null);
+  const cardRef = useRef(null);
+
+  // Each step renders in place, so the window keeps the scroll offset from the
+  // step before it. Step 2's airport list is tall, so people arrive at step 3
+  // already scrolled to the bottom of the card — looking straight at
+  // "Launch Airline", with Game Options and the era picker off the top of the
+  // screen. They launch without ever seeing the step. Put them back at the top.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    cardRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [step]);
   const isMobile = useIsMobile();
   const logoSize = isMobile ? 44 : 52;
 
@@ -148,7 +159,7 @@ export default function SetupScreen() {
 
   return (
     <div className="setup-screen">
-      <div className="setup-card" style={{ maxWidth: 600 }}>
+      <div className="setup-card" ref={cardRef} style={{ maxWidth: 600 }}>
         <div className="setup-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img
             src="/tailwinds-mark-color.png"
