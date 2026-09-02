@@ -62,6 +62,16 @@ test('marketplace in 1950 shows the propliners and locks the 707', () => {
   assert.match(html1959, /Enters service 196\d|In service 196\d/, 'the DC-8/Convair 880 generation shows as locked, not absent');
 });
 
+test('a type previewed ahead of its entry into service wears a badge on the card and the C-47 is on sale', () => {
+  store.set('market_layout', 'cards');
+  const html = render(Marketplace, base({ startYear: 1950 }));
+  assert.match(html, /Not yet in service · 1953/, 'the Viscount card in 1950 does not say it is not yet in service');
+  assert.match(html, /C-47 Skytrain/);
+  assert.doesNotMatch(html.slice(html.indexOf('Convair CV-240'), html.indexOf('Convair CV-240') + 6000), /16 years old/,
+    'the CV-240 is in production in 1950 and must not quote its 2026 second-hand age');
+  store.delete('market_layout');
+});
+
 test('marketplace in a classic game is the full catalogue with no locks', () => {
   const html = render(Marketplace, base());
   assert.match(html, /A320neo/);

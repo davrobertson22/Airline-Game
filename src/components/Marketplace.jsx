@@ -540,6 +540,7 @@ function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {t.name}
+                        {r.eraBlock && <span className="market-chip market-chip-yellow" title={r.eraBlock}>{r.eraBlock}</span>}
                         {r.owned > 0 && <span className="market-chip market-chip-blue">{r.owned} in fleet</span>}
                         {r.onOrder > 0 && <span className="market-chip market-chip-yellow">{r.onOrder} ordered</span>}
                       </div>
@@ -939,6 +940,15 @@ export default function Marketplace() {
                   >
                     {CAT_LABELS[type.category] || type.category}
                   </span>
+                  {eraLock && (
+                    <span className="badge" title={eraLock} style={{
+                      marginLeft: 6,
+                      background: 'rgba(210,153,34,0.2)', color: 'var(--yellow)',
+                      border: '1px solid rgba(210,153,34,0.4)',
+                    }}>
+                      <Glyph e="🔒" /> {type.eis > calYear ? `Not yet in service · ${type.eis}` : 'No frames left'}
+                    </span>
+                  )}
                   {alreadyOwned > 0 && (
                     <span className="badge badge-blue" style={{ marginLeft: 6 }}>{alreadyOwned} in fleet</span>
                   )}
