@@ -20,7 +20,7 @@ import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
-         eraPurchasePrice, eraWeeklyLease, setEraPriceYear } from '../data/aircraft.js';
+         eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
@@ -800,18 +800,29 @@ function nextAircraftNumber(typeId, fleet = [], pendingOrders = []) {
 // §3.2: a type that hasn't entered service yet cannot be ordered at all — bought
 // or leased. Null in classic games and for anything already flying; the UI
 // renders the message on the locked row.
+// Vintage metal on the 2026 market is buy-only — no lessor exists for a line
+// closed 50 years (aircraft.js isVintage). Null in era games and for anything
+// younger; the Marketplace renders the message on the lease button.
+export function leaseDenial(state, typeId) {
+  const type = getAircraftType(typeId);
+  if (!type || calendarYear(state) != null || !isVintage(type)) return null;
+  return {
+    code: 'vintage', typeId: type.id, oop: type.oop,
+    message: `No lessor stocks the ${type.name} — the line closed in ${type.oop}. Vintage metal is bought outright.`,
+  };
+}
+
 export function orderDenial(state, typeId) {
   const cy = calendarYear(state);
   const type = getAircraftType(typeId);
   if (!type) return null;
   if (cy == null) {
-    // Classic world: the era-only propliners are not on the 2026 market at all
-    // (see aircraftOrderable) — refused here so a hand-crafted decision cannot
-    // lease the cheapest seats in the catalogue past the hidden store card.
-    if (type.eraOnly) {
+    // Classic game: the catalogue is timeless (see aircraftOrderable); only a
+    // type whose certificate was pulled is refused.
+    if (type.withdrawnYear != null) {
       return {
-        code: 'era_only', typeId: type.id, oop: type.oop,
-        message: `The ${type.name} is not on the market — no airworthy frames remain in service today.`,
+        code: 'withdrawn', typeId: type.id, withdrawnYear: type.withdrawnYear,
+        message: `The ${type.name} was grounded in ${type.withdrawnYear} — no airworthy frames remain.`,
       };
     }
     return null;
@@ -970,6 +981,7 @@ function reducer(state, action) {
 
     case 'LEASE_AIRCRAFT': {
       if (orderDenial(state, action.typeId)) return state;   // era gate (§3.2)
+      if (leaseDenial(state, action.typeId)) return state;   // vintage: buy-only
       const type       = getAircraftType(action.typeId);
       const count      = nextAircraftNumber(action.typeId, state.fleet, state.pendingOrders);
       const name       = action.name ?? `${type?.name ?? action.typeId} #${count}`;
@@ -1052,6 +1064,7 @@ function reducer(state, action) {
       // Era gate: not yet in service = not orderable, buy or lease. The UI
       // shows the same denial; this is the authoritative check.
       if (orderDenial(state, action.typeId)) return state;
+      if (action.ownershipType === 'lease' && leaseDenial(state, action.typeId)) return state;   // vintage: buy-only
 
       const DELIVERY_LEAD = { 'Wide Body': 4, 'Narrow Body': 3, 'Regional Jet': 2, 'Turboprop': 1 };
       const lead     = DELIVERY_LEAD[type.category] ?? 2;

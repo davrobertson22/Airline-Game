@@ -5,6 +5,7 @@ import {
   AIRCRAFT_TYPES,
   aircraftAvailability,
   eraDeliveredAgeWeeks,
+  isVintage,
   AIRCRAFT_CATEGORIES,
   getAircraftType,
   buyDiscount,
@@ -572,10 +573,10 @@ function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button
                     className="btn btn-primary"
-                    style={{ fontSize: 11, padding: '4px 10px', marginRight: 6, opacity: r.eraBlock ? 0.4 : 1, cursor: r.eraBlock ? 'not-allowed' : 'pointer' }}
-                    disabled={!!r.eraBlock}
-                    title={r.eraBlock || undefined}
-                    onClick={() => !r.eraBlock && onCheckout({ typeId: t.id, mode: 'lease' })}
+                    style={{ fontSize: 11, padding: '4px 10px', marginRight: 6, opacity: r.leaseBlock ? 0.4 : 1, cursor: r.leaseBlock ? 'not-allowed' : 'pointer' }}
+                    disabled={!!r.leaseBlock}
+                    title={r.leaseBlock || undefined}
+                    onClick={() => !r.leaseBlock && onCheckout({ typeId: t.id, mode: 'lease' })}
                   >
                     Lease
                   </button>
@@ -681,6 +682,10 @@ export default function Marketplace() {
     if (aircraftAvailability(type, calYear) === 'expired') return `No airworthy frames left — line closed ${type.oop}`;
     return null;
   };
+  // Lease button only: vintage metal in a classic game is buy-only (mirrors
+  // the reducer's leaseDenial()).
+  const leaseLockReason = (type) =>
+    eraLockReason(type) ?? ((calYear == null && isVintage(type)) ? `No lessor stocks it \u2014 line closed ${type.oop}. Buy it outright` : null);
 
   const mfrsInCategory = ['All', ...[...new Set(
     (activeCategory === 'All' ? AIRCRAFT_TYPES : AIRCRAFT_TYPES.filter(t => t.category === activeCategory))
@@ -693,7 +698,7 @@ export default function Marketplace() {
   const filtered = AIRCRAFT_TYPES.filter(t =>
     // Era: show what flies now plus what's announced for the next three years
     // (locked rows), hide types whose last frames have left the market.
-    (calYear == null ? !t.eraOnly : ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
+    (calYear == null ? t.withdrawnYear == null : ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
     (activeCategory === 'All' || t.category === activeCategory) &&
     (safeMfr        === 'All' || t.manufacturer === safeMfr) &&
     (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q))
@@ -888,6 +893,7 @@ export default function Marketplace() {
             onOrder,
             canAffordBuy: cash >= buyPrice && !eraLockReason(type),
             eraBlock: eraLockReason(type),
+            leaseBlock: leaseLockReason(type),
             catColor: CAT_COLORS[type.category] || '#93a4ba',
           };
         });
@@ -917,6 +923,7 @@ export default function Marketplace() {
           const effScore      = efficiencyScore(type) ?? 0;
           const effRaw        = (seatEfficiency(type) ?? 0).toFixed(2);
           const eraLock       = eraLockReason(type);
+          const leaseLock     = leaseLockReason(type);
           const canAffordBuy  = cash >= buyPrice && !eraLock;
           const effColor      = effScore >= 70 ? 'var(--green)' : effScore >= 40 ? 'var(--yellow)' : 'var(--red)';
 
@@ -1058,7 +1065,7 @@ export default function Marketplace() {
                 </div>
                 {deliveredAgeYears(type, calYear) > 0 && (
                   <div style={{ marginTop: 4, fontSize: 11, color: 'var(--yellow)' }}>
-                    <Glyph e="🕐" /> Out of production — arrives{' '}
+                    <Glyph e="🕐" /> {calYear == null && isVintage(type) ? `Vintage — line closed ${type.oop}, the youngest frame left arrives` : 'Out of production — arrives'}{' '}
                     <strong>{`${deliveredAgeYears(type, calYear)} years old`}</strong>
                     {`, so maintenance already bills at `}
                     {`${(deliveredMaint(type, calYear) / (type.baseMaintenancePerWk || 1)).toFixed(2)}x base `}
@@ -1086,12 +1093,12 @@ export default function Marketplace() {
                     </div>
                     <button
                       className="btn btn-primary aircraft-lease-btn"
-                      style={eraLock ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-                      disabled={!!eraLock}
-                      title={eraLock || undefined}
-                      onClick={() => !eraLock && setCheckout({ typeId: type.id, mode: 'lease' })}
+                      style={leaseLock ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                      disabled={!!leaseLock}
+                      title={leaseLock || undefined}
+                      onClick={() => !leaseLock && setCheckout({ typeId: type.id, mode: 'lease' })}
                     >
-                      {eraLock ? <><Glyph e="🔒" /> {eraLock}</> : 'Lease →'}
+                      {leaseLock ? <><Glyph e="🔒" /> {leaseLock}</> : 'Lease →'}
                     </button>
                   </div>
 
