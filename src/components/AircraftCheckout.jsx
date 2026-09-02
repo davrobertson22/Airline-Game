@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { getAircraftType, effectivePurchasePrice, orderDiscount } from '../data/aircraft.js';
+import { getAircraftType, effectivePurchasePrice, eraWeeklyLease, orderDiscount } from '../data/aircraft.js';
 import {
   formatMoney,
   CLASS_FARE_MULTIPLIERS,
@@ -8,8 +8,7 @@ import {
   SEAT_QUALITY_COST_PER_ROUTE,
   SERVICE_QUALITY_COST_PER_ROUTE,
   weekToGameDate,
-  configRangeMod,
-} from '../utils/simulation.js';
+  configRangeMod, calendarYear } from '../utils/simulation.js';
 import {
   wifiInstallCost, wifiRetrofitCost, wifiLeaseSurcharge, WIFI_WEEKLY_OPEX,
 } from '../data/wifi.js';
@@ -300,7 +299,8 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const alreadyOwned    = fleetCountNow + pendingCountNow;
   const discount        = mode === 'buy' ? orderDiscount(quantity) : 0;
   const discPct         = Math.round(discount * 100);
-  const baseUnitPrice   = effectivePurchasePrice(type, mode === 'buy' ? quantity : 1);
+  const calYear         = calendarYear(state);   // era new-build premium while the line is open (null = classic)
+  const baseUnitPrice   = effectivePurchasePrice(type, mode === 'buy' ? quantity : 1, calYear);
   const enginePriceAdj  = Math.round(baseUnitPrice * (enginePriceMod - 1));
   const unitBuyPrice    = Math.round(baseUnitPrice * enginePriceMod) + wingtipCost;
   const totalBuyPrice   = unitBuyPrice * quantity;
@@ -312,7 +312,7 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const totalWifiFee    = unitWifiFee * quantity;
   const buyTotalDue     = totalBuyPrice + totalWifiFee;
 
-  const baseWeeklyLease  = type.weeklyLease;
+  const baseWeeklyLease  = eraWeeklyLease(type, calYear);
   const engineLeaseAdj   = Math.round(baseWeeklyLease * (enginePriceMod - 1));
   const wingtipLeaseAdj  = (hasWingtips && wingtipDef) ? Math.round((wingtipDef.cost ?? 0) / 200) : 0;
   const wifiLeaseAdj     = hasWifi ? wifiLeaseSurcharge() : 0;

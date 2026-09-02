@@ -19,7 +19,8 @@ import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, ca
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
-         LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks } from '../data/aircraft.js';
+         LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
+         eraPurchasePrice, eraWeeklyLease, setEraPriceYear } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
@@ -854,7 +855,7 @@ function applyCometGrounding(state) {
   const type     = getAircraftType(COMET_GROUNDING.typeId);
   const payout   = comets
     .filter(a => a.ownershipType !== 'lease')
-    .length * Math.round((type?.purchasePrice ?? 0) * COMET_GROUNDING.hullPayoutFrac);
+    .length * Math.round(eraPurchasePrice(type) * COMET_GROUNDING.hullPayoutFrac);
   const routes      = (working.routes ?? []).filter(r => !cometIds.has(r.aircraftId));
   const cargoRoutes = (working.cargoRoutes ?? []).filter(r => !cometIds.has(r.aircraftId));
   const keptIds     = new Set([...routes, ...cargoRoutes].map(r => r.aircraftId));
@@ -890,6 +891,7 @@ function setEraModuleState(startYear, calYear) {
   setEraStartYear(startYear ?? null);
   setEraCalendarYear(calYear);
   setEraCostScale(eraOverheadScale(calYear) ?? 1);
+  setEraPriceYear(calYear);   // era new-build pricing (ERA_MODE_PLAN.md §6); null → catalogue prices
 }
 
 function reducer(state, action) {
@@ -978,7 +980,7 @@ function reducer(state, action) {
         // do stamp the rate (a real lease fixes rent for its term; only a renewal
         // reprices). Same value as the fallback it replaces, so no existing save
         // changes behaviour on the week this ships.
-        weeklyLease:        Math.round(type?.weeklyLease ?? 0),
+        weeklyLease:        eraWeeklyLease(type),
         leaseTermWeeks,
         leaseRemainingWeeks: leaseTermWeeks,
         // This path charges no deposit, so the tail must say so explicitly. An
@@ -1070,7 +1072,7 @@ function reducer(state, action) {
       let orderQty  = quantity;
       let orderDisc = 0;
       if (action.ownershipType === 'owned') {
-        const unitCostAt = (disc) => Math.round(Math.round(type.purchasePrice * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost;
+        const unitCostAt = (disc) => Math.round(Math.round(eraPurchasePrice(type) * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost;
         while (orderQty > 0) {
           orderDisc = orderDiscount(orderQty);
           if (cashBalance >= unitCostAt(orderDisc) * orderQty) break;
@@ -1092,14 +1094,14 @@ function reducer(state, action) {
 
         // Price: uniform bulk-order discount (orderDisc) applied to every frame.
         const unitBasePrice  = action.ownershipType === 'owned'
-          ? Math.round(type.purchasePrice * (1 - orderDisc))
+          ? Math.round(eraPurchasePrice(type) * (1 - orderDisc))
           : 0;
         const unitTotalPrice = action.ownershipType === 'owned'
           ? Math.round(unitBasePrice * enginePriceMod) + wingtipCost
           : 0;
 
         // Lease: 3-month (12-week) upfront deposit required at order time
-        const baseWeeklyLease   = type.weeklyLease ?? 0;
+        const baseWeeklyLease   = eraWeeklyLease(type);   // era new-build premium while the line is open (× 1 in classic)
         const engineLeaseAdj    = Math.round(baseWeeklyLease * (enginePriceMod - 1));
         const wingtipLeaseAdj   = (action.hasWingtips && wingtipDef) ? Math.round((wingtipDef.cost ?? 0) / 200) : 0;
         // A lessor recovers a factory-fitted connectivity package through the
@@ -1497,7 +1499,7 @@ function reducer(state, action) {
       const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
       const remaining     = valueRemaining(aircraft?.ageWeeks, type);
       const sellAbsWeek   = absoluteWeek(state.year, state.week);
-      const nav           = Math.round((type?.purchasePrice ?? 0) * remaining * maintNavMultiplier(aircraft, sellAbsWeek));
+      const nav           = Math.round(eraPurchasePrice(type) * remaining * maintNavMultiplier(aircraft, sellAbsWeek));
       const fee           = Math.round(nav * 0.05);
       const proceeds      = nav - fee;
       const settled       = settleCoversForRemoval(state, action.aircraftId);
@@ -4638,6 +4640,11 @@ export function GameProvider({ children }) {
     } catch (_) { /* ignore */ }
     return freshState();
   });
+  // Module-level era state (fare ladder, cost scale, price year) is set by the
+  // reducer on every ACTION — but useReducer's lazy initialiser never runs the
+  // reducer, so a reloaded era save rendered the Marketplace on classic prices
+  // until the first click. Idempotent; the reducer re-sets the same values.
+  setEraModuleState(state?.startYear ?? null, calendarYear(state));
 
   // Latched so the warning fires on the transition, not on every state change —
   // a broken autosave would otherwise queue a toast on every click.

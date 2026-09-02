@@ -9,6 +9,7 @@ import {
   getAircraftType,
   buyDiscount,
   effectivePurchasePrice,
+  eraWeeklyLease,
   efficiencyScore,
   seatEfficiency,
   fuelCostPerKm,
@@ -560,7 +561,7 @@ function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
                 </td>
                 <td style={{ textAlign: 'right' }}>{formatMoney(r.maint)}</td>
                 <td style={{ textAlign: 'right' }}>{formatMoney(r.maintPer)}</td>
-                <td style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 600 }}>{formatMoney(t.weeklyLease)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 600 }}>{formatMoney(r.lease)}</td>
                 <td style={{ textAlign: 'right' }}>
                   <span style={{ color: r.canAffordBuy ? 'var(--green)' : 'var(--text-dim)', fontWeight: 600 }}>
                     {formatMoney(r.buy)}
@@ -859,7 +860,7 @@ export default function Marketplace() {
           const lead          = DELIVERY_LEAD[type.category] ?? 2;
           const alreadyOwned  = ownedCounts[type.id] || 0;
           const onOrder       = pendingCounts[type.id] || 0;
-          const buyPrice      = effectivePurchasePrice(type, 1);
+          const buyPrice      = effectivePurchasePrice(type, 1, calYear);   // era new-build premium while the line is open
           const effScore      = efficiencyScore(type) ?? 0;
           const pendingOfType = pendingOrders.filter(o => o.typeId === type.id);
           const maxExisting   = pendingOfType.length > 0
@@ -879,7 +880,7 @@ export default function Marketplace() {
             age:      deliveredAgeYears(type, calYear),
             maint:    deliveredMaint(type, calYear),
             maintPer: deliveredMaint(type, calYear) / (type.freighter ? (type.payloadTonnes || 1) : (type.seats || 1)),
-            lease:    type.weeklyLease,
+            lease:    eraWeeklyLease(type, calYear),
             buy:      buyPrice,
             discPct:  0,
             delivery: Math.max(nowAbs + lead, maxExisting + lead) - nowAbs,
@@ -903,7 +904,7 @@ export default function Marketplace() {
           // (which includes every lease currently on the books) plus this one's
           // rent. A profitable airline has no runway problem — Infinity, same as
           // the Dashboard's own "weeks of cash".
-          const newWeeklyTotal = weeklyNetBurn + type.weeklyLease;
+          const newWeeklyTotal = weeklyNetBurn + eraWeeklyLease(type, calYear);
           const weeksOfCash    = newWeeklyTotal > 0 ? Math.floor(cash / newWeeklyTotal) : Infinity;
           const catColor       = CAT_COLORS[type.category] || '#93a4ba';
           const cashWarning    = isFinite(weeksOfCash) && weeksOfCash < 4;
@@ -911,7 +912,7 @@ export default function Marketplace() {
           const alreadyOwned  = ownedCounts[type.id] || 0;
           const onOrder       = pendingCounts[type.id] || 0;
           const discount      = 0;
-          const buyPrice      = effectivePurchasePrice(type, 1);
+          const buyPrice      = effectivePurchasePrice(type, 1, calYear);   // era new-build premium while the line is open
           const discPct       = Math.round(discount * 100);
           const effScore      = efficiencyScore(type) ?? 0;
           const effRaw        = (seatEfficiency(type) ?? 0).toFixed(2);
@@ -1073,7 +1074,7 @@ export default function Marketplace() {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                         <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
-                          {formatMoney(type.weeklyLease)}
+                          {formatMoney(eraWeeklyLease(type, calYear))}
                         </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/wk</span>
                       </div>

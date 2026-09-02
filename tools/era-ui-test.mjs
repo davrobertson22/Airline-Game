@@ -25,6 +25,8 @@ const Marketplace     = (await import('../src/components/Marketplace.jsx')).defa
 const SetupScreen     = (await import('../src/components/SetupScreen.jsx')).default;
 const BoardObjectives = (await import('../src/components/BoardObjectives.jsx')).default;
 const Ancillaries     = (await import('../src/components/Ancillaries.jsx')).default;
+const { AIRCRAFT_TYPES, eraPurchasePrice } = await import('../src/data/aircraft.js');
+const { formatMoney } = await import('../src/utils/simulation.js');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -69,6 +71,10 @@ test('a type previewed ahead of its entry into service wears a badge on the card
   assert.match(html, /C-47 Skytrain/);
   assert.doesNotMatch(html.slice(html.indexOf('Convair CV-240'), html.indexOf('Convair CV-240') + 6000), /16 years old/,
     'the CV-240 is in production in 1950 and must not quote its 2026 second-hand age');
+  const cvCard = html.slice(html.indexOf('Convair CV-240'), html.indexOf('Convair CV-240') + 6000);
+  const cv = AIRCRAFT_TYPES.find(t => t.id === 'cv240');
+  assert.match(cvCard, new RegExp(formatMoney(eraPurchasePrice(cv, 1950)).replace(/[$.]/g, '\\$&')),
+    'the CV-240 card in 1950 does not quote the era new-build price');
   store.delete('market_layout');
 });
 
