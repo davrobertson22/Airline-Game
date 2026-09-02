@@ -636,7 +636,13 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
 // STATE SHAPE
 // ─────────────────────────────────────────────
 
-const STARTING_CASH = 15_000_000;
+// Founders' equity for a classic (2026) start. Was $15M from the July 2026
+// rebalance until Sept 2026, when it came back down to the $10M the site
+// always advertised. The figure an existing save actually started on lives in
+// state.paidInCapital (LEGACY_STARTING_CASH for saves made before the field
+// existed) so old balance sheets keep reconciling.
+const STARTING_CASH = 10_000_000;
+const LEGACY_STARTING_CASH = 15_000_000;
 
 function freshState() {
   return {
@@ -647,6 +653,7 @@ function freshState() {
     hub: '',
     homeCountry: '',  // ISO country code of starting hub — hubs restricted to this country
     cash: STARTING_CASH,
+    paidInCapital: STARTING_CASH,  // founders' equity this airline started on (era games: scaled)
     activeEvents:  [],    // currently active random events
     showDebrief:   false, // show weekly debrief modal
     pendingToasts: [],    // toast configs waiting to be shown
@@ -910,7 +917,7 @@ function reducer(state, action) {
   switch (action.type) {
 
     case 'START_GAME': {
-      // Startup capital: $15M of founders' EQUITY (see STARTING_CASH in freshState).
+      // Startup capital: $10M of founders' EQUITY (see STARTING_CASH in freshState).
       // It is not a loan — there is no debt to service at launch, giving new airlines
       // breathing room to reach profitability. Players can borrow from the bank later.
       // Era game: startYear pins year 1 to a real calendar year. The module
@@ -930,6 +937,7 @@ function reducer(state, action) {
         ...(_startYear != null && eraFuelMean(_startYear) != null
           ? { fuelPrice: { index: eraFuelMean(_startYear), history: [] } } : {}),
         cash:        _startCash,
+        paidInCapital: _startCash,
         marketCap:   _startCash * 1.5,
         sharePrice:  _startCash * 1.5 / TOTAL_SHARES,
         airlineName: action.airlineName,
@@ -4562,6 +4570,11 @@ function reconcileState(parsed) {
     consecutiveNegativeWeeks: parsed.consecutiveNegativeWeeks ?? 0,
     bankruptcyReason:         parsed.bankruptcyReason         ?? null,
     cabinTemplates:           parsed.cabinTemplates           ?? [],
+    // Paid-in capital: saves made before the field existed all started on the
+    // $15M-era figure (era-scaled for era saves), so the balance sheet's
+    // retained earnings and the cash-flow reconciliation stay honest.
+    paidInCapital:            parsed.paidInCapital
+      ?? eraSeedCapital(LEGACY_STARTING_CASH, parsed.startYear ?? null),
     // Market cap — compute on load if missing (old saves)
     marketCap:   parsed.marketCap   ?? (() => {
       const ph = (parsed.financialHistory ?? []).slice(-12).map(h => h.profit);
