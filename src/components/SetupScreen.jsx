@@ -113,6 +113,12 @@ export default function SetupScreen() {
 
   function handleStart(e) {
     e.preventDefault();
+    // A submit can reach us from any step — Enter in a text field, a mobile
+    // keyboard's Go key, a password manager autofilling. Without this guard it
+    // launched the game there and then, skipping the Launch step entirely, so
+    // the player never saw the era picker and got a classic game at the default
+    // hub. Treat a stray submit as "next step", never as "launch".
+    if (step < 3) { if (canContinue) setStep(s => s + 1); return; }
     if (!airlineName.trim()) { setStep(1); return; }
     if (eraInvalid) return;
     dispatch({
