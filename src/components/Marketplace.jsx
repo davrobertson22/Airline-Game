@@ -693,7 +693,7 @@ export default function Marketplace() {
   const filtered = AIRCRAFT_TYPES.filter(t =>
     // Era: show what flies now plus what's announced for the next three years
     // (locked rows), hide types whose last frames have left the market.
-    (calYear == null || ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
+    (calYear == null ? !t.eraOnly : ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
     (activeCategory === 'All' || t.category === activeCategory) &&
     (safeMfr        === 'All' || t.manufacturer === safeMfr) &&
     (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q))

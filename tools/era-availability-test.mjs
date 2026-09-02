@@ -80,6 +80,28 @@ test('aircraftAvailability walks future → new → used → expired; classic sh
   assert.equal(aircraftAvailability(t, 2003), 'expired');
 });
 
+test('the era-only propliners are off the classic market — store, lessor and reducer agree', () => {
+  // Discord 2026-09-01/02: the August propliner block leaked into 2026 worlds as
+  // the cheapest lease per seat on the books (Vanguard $912/seat-wk vs Q400
+  // $1,328; C-47 $103). Classic keeps the June historic block (737-200, L-1011,
+  // DC-3 …) — only the 22 pre-1960 additions and the C-47 carry eraOnly.
+  const eraOnly = AIRCRAFT_TYPES.filter(t => t.eraOnly);
+  assert.equal(eraOnly.length, 23, eraOnly.map(t => t.id).join(','));
+  for (const t of eraOnly) assert.equal(aircraftOrderable(t, null), false, `${t.id} orderable in classic`);
+  assert.equal(aircraftOrderable(getAircraftType('dc3'), null), true, 'the DC-3 has been in classic since June');
+  assert.equal(aircraftOrderable(getAircraftType('b737200'), null), true, 'the June historic block stays');
+  for (const t of eraOnly) assert.equal(aircraftOrderable(t, 1962), aircraftAvailability(t, 1962) !== 'future' && aircraftAvailability(t, 1962) !== 'expired', `${t.id} era path unchanged`);
+  const classic = { ...freshState(), phase: 'playing', cash: 500_000_000, year: 1, week: 1 };
+  assert.equal(orderDenial(classic, 'c47')?.code, 'era_only');
+  assert.equal(orderDenial(classic, 'dc3'), null);
+  for (const action of [{ type: 'LEASE_AIRCRAFT', typeId: 'cv240' }, { type: 'BUY_AIRCRAFT', typeId: 'cv240' },
+                        { type: 'ORDER_AIRCRAFT', typeId: 'cv240', quantity: 1, ownershipType: 'lease' }]) {
+    const after = gameReducer(classic, action);
+    assert.equal((after.fleet ?? []).length, 0, `${action.type}: nothing may land in classic`);
+    assert.equal((after.pendingOrders ?? []).length, 0, `${action.type}: nothing may be ordered in classic`);
+  }
+});
+
 test('every era opens with a real fleet — the propliner catalogue is in', () => {
   const at = (y) => AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, y)).length;
   assert.equal(at(1950), 6, 'C-47, DC-3, DC-4, L-749, CV-240, Stratocruiser');
@@ -87,7 +109,7 @@ test('every era opens with a real fleet — the propliner catalogue is in', () =
   assert.ok(at(1958) >= 18, `1958 (jet age dawn) should field 18+, got ${at(1958)}`);
   assert.ok(at(1978) >= 48, `1978 should field 48+ types, got ${at(1978)}`);
   assert.ok(at(2000) >= 95, `2000 should field 95+ orderable types, got ${at(2000)}`);
-  assert.equal(AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, null)).length, AIRCRAFT_TYPES.length, 'classic: everything');
+  assert.equal(AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, null)).length, AIRCRAFT_TYPES.length - 23, 'classic: everything except the 23 era-only propliners');
 });
 
 // ── Reducer enforcement ──────────────────────────────────────────────────────

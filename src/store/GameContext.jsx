@@ -795,9 +795,20 @@ function nextAircraftNumber(typeId, fleet = [], pendingOrders = []) {
 // renders the message on the locked row.
 export function orderDenial(state, typeId) {
   const cy = calendarYear(state);
-  if (cy == null) return null;
   const type = getAircraftType(typeId);
   if (!type) return null;
+  if (cy == null) {
+    // Classic world: the era-only propliners are not on the 2026 market at all
+    // (see aircraftOrderable) — refused here so a hand-crafted decision cannot
+    // lease the cheapest seats in the catalogue past the hidden store card.
+    if (type.eraOnly) {
+      return {
+        code: 'era_only', typeId: type.id, oop: type.oop,
+        message: `The ${type.name} is not on the market — no airworthy frames remain in service today.`,
+      };
+    }
+    return null;
+  }
   const avail = aircraftAvailability(type, cy);
   if (avail === 'future') {
     return {
