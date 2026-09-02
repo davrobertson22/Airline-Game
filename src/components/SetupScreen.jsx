@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
+import { STARTING_CAPITAL } from '../data/credit.js';
+import { eraSeedCapital } from '../data/era.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
 import { fileToLogoDataURL } from '../utils/logoImage.js';
@@ -111,6 +113,12 @@ export default function SetupScreen() {
   const startYear   = Number.isInteger(eraYearRaw) && eraYearRaw >= 1930 && eraYearRaw <= 2100 ? eraYearRaw : null;
   const eraInvalid  = eraSel === 'custom' && startYear == null;
 
+  // Founders' equity shown in the subtitle. Reads the live constant (never a
+  // hardcoded figure) and follows the era picker, since an era start is seeded
+  // on the era-scaled amount rather than the modern one.
+  const seedCapital      = eraSeedCapital(STARTING_CAPITAL, eraInvalid ? null : startYear);
+  const seedCapitalLabel = `$${seedCapital.toLocaleString('en-US')}`;
+
   function handleStart(e) {
     e.preventDefault();
     // A submit can reach us from any step — Enter in a text field, a mobile
@@ -153,7 +161,7 @@ export default function SetupScreen() {
         </div>
         <div className="setup-subtitle">
           Build the world's greatest airline from scratch.
-          You're starting with $15,000,000 in equity to get started — use it wisely.
+          You're starting with {seedCapitalLabel} in equity to get started — use it wisely.
         </div>
 
         {/* ── Step indicator ── */}
