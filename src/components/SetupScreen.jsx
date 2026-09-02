@@ -640,8 +640,18 @@ export default function SetupScreen() {
                 ← Back
               </button>
             )}
+            {/* Distinct keys, and NO type="submit" on the launch button.
+                Chromium decides a click's default action AFTER the handlers
+                run: React flushed setStep(3) synchronously, reused this very
+                DOM node for the next step's button and flipped its type to
+                "submit" — so the click that advanced Home hub -> Launch then
+                submitted the form and started the game, and the player never
+                saw the era picker. WebKit doesn't do this, which is why it only
+                showed up in Chrome. Keys stop the node being reused; the
+                onClick handler removes form submission from the path. */}
             {step < 3 ? (
               <button
+                key="wizard-continue"
                 type="button"
                 className="btn btn-primary"
                 style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: canContinue ? 1 : 0.5, cursor: canContinue ? 'pointer' : 'not-allowed' }}
@@ -652,9 +662,11 @@ export default function SetupScreen() {
               </button>
             ) : (
               <button
-                type="submit"
+                key="wizard-launch"
+                type="button"
                 className="btn btn-primary"
                 style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700 }}
+                onClick={handleStart}
               >
                 Launch Airline →
               </button>
