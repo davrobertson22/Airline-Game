@@ -78,6 +78,23 @@ test('a type previewed ahead of its entry into service wears a badge on the card
   store.delete('market_layout');
 });
 
+test('the 1950 market carries a freighter, the North Star, and a cruise-speed spec', () => {
+  // Discord 2026-09-03 (CorporalSimmons). Two holes this closes: before the
+  // C-46 the earliest freighter in the catalogue was the 1959 An-12, so cargo
+  // did not exist in a 1950 world; and cruise speed drove block time while
+  // appearing on no screen at all.
+  store.set('market_layout', 'cards');
+  const html = render(Marketplace, base({ startYear: 1950 }));
+  assert.match(html, /C-46 Commando/, 'the 1950 market has no freighter at all without it');
+  assert.match(html, /Canadair North Star/);
+  assert.match(html, /Cruise/, 'the market card carries no cruise-speed pill');
+  assert.match(html, /365 km\/h/, 'the DC-4 card does not quote its cruise speed');
+  assert.match(html, /Not yet in service · 1951/, 'the 1049 is a year out and shows on the card as a preview');
+  const in1951 = render(Marketplace, base({ startYear: 1951 }));
+  assert.match(in1951, /Lockheed L-1049 Super Constellation/);
+  store.delete('market_layout');
+});
+
 test('marketplace in a classic game is the full catalogue with no locks', () => {
   const html = render(Marketplace, base());
   assert.match(html, /A320neo/);

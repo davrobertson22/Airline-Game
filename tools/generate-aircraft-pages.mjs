@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { AIRCRAFT_TYPES } from '../src/data/aircraft.js';
 import { fuelCostPerKm } from '../src/utils/fuel.js';
+import { cruiseSpeedKmh } from '../src/utils/simulation.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'public');
@@ -255,6 +256,7 @@ function statsTable(group, isFreight) {
         <td><a href="#${t.id}">${esc(t.name)}</a></td>
         <td>${isFreight ? `${t.payloadTonnes} t` : fmtInt(t.seats)}</td>
         <td>${fmtInt(t.range)} km</td>
+        <td>${fmtInt(cruiseSpeedKmh(t))} km/h</td>
         <td>${fmtMoney(t.weeklyLease)}</td>
         <td>${fmtMoney(t.purchasePrice)}</td>
         <td>${t.fuelBurnPer100km.toFixed(0)} L</td>
@@ -265,7 +267,7 @@ function statsTable(group, isFreight) {
     })
     .join('\n');
   return `    <div class="tablewrap"><table class="stats">
-      <thead><tr><th>Aircraft</th><th>${isFreight ? 'Payload' : 'Seats'}</th><th>Range</th><th>Lease/wk</th><th>Price</th><th>Fuel/100km</th><th>Fuel/${isFreight ? 'tonne' : 'seat'}-km</th><th>Fuel rank</th><th>Lease/${isFreight ? 'tonne' : 'seat'}</th></tr></thead>
+      <thead><tr><th>Aircraft</th><th>${isFreight ? 'Payload' : 'Seats'}</th><th>Range</th><th>Cruise</th><th>Lease/wk</th><th>Price</th><th>Fuel/100km</th><th>Fuel/${isFreight ? 'tonne' : 'seat'}-km</th><th>Fuel rank</th><th>Lease/${isFreight ? 'tonne' : 'seat'}</th></tr></thead>
       <tbody>
 ${rows}
       </tbody>
@@ -304,7 +306,7 @@ for (const page of PAGES) {
     statsTable(group, isFreight),
     picksFor(page.file),
     `<h2>Every type in the category</h2>`,
-    `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, lease, price and fuel; these add the runway each type needs and its weekly maintenance bill.</p>`,
+    `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, cruise speed, lease, price and fuel; these add the runway each type needs and its weekly maintenance bill.</p>`,
     group.map((t) => aircraftCard(t, isFreight)).join('\n'),
   ].join('\n');
 

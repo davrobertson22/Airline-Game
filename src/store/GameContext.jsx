@@ -24,7 +24,8 @@ import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AI
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
-         CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire } from '../data/labor.js';
+         CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
+         absorbCrewFor } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
          FORCED_REP_HIT, REP_PENALTY_DECAY, REP_PENALTY_MAX,
@@ -2895,6 +2896,10 @@ function reducer(state, action) {
         routePricing:        acquiredPricing,
         routeCatering:       acquiredCatering,
         fleet:               finalFleet,
+        // You bought their people too — see absorbCrewFor. Inherited crew are
+        // available the week the deal closes; a shortfall you were already
+        // carrying comes through the deal unchanged.
+        labor:               absorbCrewFor(state.labor, state.fleet, finalFleet, (a) => getAircraftType(a.typeId)),
         gates:               newGates,
         competitors:         remainingCompetitors,
         codeshareAgreements: cleanedCodeshares,
