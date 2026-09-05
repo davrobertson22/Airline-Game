@@ -67,7 +67,12 @@ function makeState(over = {}) {
     phase: 'playing', week: 30, year: 1, hub: 'YYZ', cash: 10_000_000,
     awareness: 5,
     // Shrink the pool so nobody is capacity-capped and share differences show.
-    worldDemandMult: 0.05,
+    // Shrink the pool so nobody sells out. Headwinds does this with
+    // worldDemandMult; Tailwinds has no such knob — its only demand multiplier
+    // is the world-event model — so the same 0.05 rides in as an active event.
+    // Without it JFK–YYZ is oversubscribed 3.7x, every carrier is full, and the
+    // share shown is (correctly) capacity share, which awareness cannot move.
+    activeEvents: [{ id: 'fixture-shrink', effects: { globalDemandMult: 0.05 } }],
     fleet, routes, cargoRoutes: [],
     competitors: [{
       id: 'continentalx', name: 'Continental Express', homeHub: 'JFK',
