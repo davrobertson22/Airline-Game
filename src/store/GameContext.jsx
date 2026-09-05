@@ -20,7 +20,8 @@ import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
-         eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage } from '../data/aircraft.js';
+         eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
+         canFitWifi } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
@@ -1088,7 +1089,19 @@ function reducer(state, action) {
       // Onboard connectivity, fitted on the production line. Cheaper than the
       // retrofit (see data/wifi.js), which is the entire reason this is a
       // decision at order time rather than something you get round to later.
-      const wantsWifi       = action.hasWifi === true;
+      // ...on an airframe that can carry it. A line that closed in 1950 cannot
+      // line-fit an antenna in 2026 (Discord 2026-09-03): the option is hidden
+      // on the order form, and dropped here too so a stale client cannot buy
+      // connectivity the aircraft will never have.
+      // Two gates, and the order path had neither. The WORLD has to have
+      // onboard internet in it (INSTALL_WIFI checked this; ORDER_AIRCRAFT did
+      // not, so a 1950 world would line-fit a brand-new DC-6), and the
+      // AIRFRAME has to be able to carry it. Refusing quietly rather than
+      // rejecting the whole order: the player asked for an aeroplane, and the
+      // option is already hidden on the form that dispatches this.
+      const wantsWifi       = action.hasWifi === true
+                            && canFitWifi(type)
+                            && featureLive('wifi', calendarYear(state));
       const wifiFitCost     = wantsWifi ? wifiInstallCost() : 0;
       const fuelMod  = Math.round(engineFuelMod  * wingtipFuelMod  * 10000) / 10000;
       const rangeMod = Math.round(                  wingtipRangeMod * 10000) / 10000;
@@ -1402,6 +1415,9 @@ function reducer(state, action) {
       const targets = (state.fleet ?? []).filter(a => ids.includes(a.id));
       if (targets.length === 0) return state;
 
+      // Unfittable airframes are filtered inside canRetrofitWifi, so `capex`
+      // and `eligible` here already exclude them and the refusal message
+      // explains why rather than quoting a price for the impossible.
       const check = canRetrofitWifi(targets, state.cash);
       if (!check.ok) {
         return {
@@ -4099,7 +4115,11 @@ function reducer(state, action) {
           engineId:      order.engineId  ?? null,
           engineLabel:   order.engineLabel ?? null,
           hasWingtips:   order.hasWingtips ?? false,
-          hasWifi:       order.hasWifi ?? false,
+          // An order placed BEFORE the airframe gate existed can still be
+          // carrying hasWifi on a Constellation. Gate it at delivery too, or a
+          // pre-change order arrives fitted and pays WIFI_WEEKLY_OPEX forever
+          // on a tail the fleet page says can never be fitted.
+          hasWifi:       (order.hasWifi ?? false) && canFitWifi(ordType),
         });
         newToasts.push({
           type:     'success',
