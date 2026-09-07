@@ -60,7 +60,7 @@ import {
   allianceMembers,
   partnerInterlineRevenue,
 } from '../data/alliances.js';
-import { runNetworkTick, trimOwnMetalEntries } from '../models/network.js';
+import { runNetworkTick, trimOwnMetalEntries, rivalIndexFor, rivalOneStopOffersFor } from '../models/network.js';
 import { competitorMarketingSpend } from '../models/competitorAI.js';
 import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import { buildEncroachmentOffer } from '../models/encroachment.js';
@@ -1487,7 +1487,7 @@ export function defaultConfig(totalSeats) {
  * @param {object[]|null} specs         encroachment specs on this pair
  * @param {object}        market        from buildRouteMarket
  */
-export function rivalOffersFor(competitors, specs, market) {
+export function rivalOffersFor(competitors, specs, market, rivalIndex = null) {
   const key = [market.origin, market.destination].sort().join('-');
   const serving = new Set();
   const offers = [];
@@ -1503,6 +1503,9 @@ export function rivalOffersFor(competitors, specs, market) {
     const offer = buildEncroachmentOffer(spec, market);
     if (offer) offers.push(offer);
   }
+  // Rival one-stops over THEIR hubs (HUB_CONNECTIVITY_PLAN.md Phase 1b). The
+  // index is null when state.rivalItineraries is off — the old world, exactly.
+  if (rivalIndex) offers.push(...rivalOneStopOffersFor(rivalIndex, market));
   return offers;
 }
 
@@ -1533,7 +1536,7 @@ export function rivalSpecsFor(state, origin, destination) {
  *                                           empties seats instead of skimming revenue.
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null, competitors = null) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null, competitors = null, rivalIndex = null) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -1663,7 +1666,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // A caller that passes nothing gets an empty bank rather than a silently
     // empty constant, so a missed call site reads as "no rivals supplied"
     // instead of masquerading as "no rivals exist".
-    const competitorOffers = rivalOffersFor(competitors, encroachmentSpecs, market);
+    const competitorOffers = rivalOffersFor(competitors, encroachmentSpecs, market, rivalIndex);
     competitorOffersCount = competitorOffers.length;
     const allOffers = [playerOffer, ...competitorOffers];
     const shareResults = computeMarketShare(market, allOffers);
@@ -2102,7 +2105,7 @@ export function pairConnectivityBonus(spokeCounts, hubCodes, origin, destination
  * @param {object} [gameDate={month:6}]
  * @returns {object|null}   null if an aircraft/airport is invalid or a leg exceeds range
  */
-export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null, competitors = null, segmentDemandFor = null) {
+export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null, competitors = null, segmentDemandFor = null, rivalIndex = null) {
   const type  = getAircraftType(aircraft.typeId);
   if (!type) return null;
   const stops = routeStops(route);
@@ -2181,7 +2184,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     // pay out its whole pool twice.
     const segKey = [seg.from, seg.to].sort().join('-');
     const pooledSlice = segmentDemandFor ? segmentDemandFor(segKey) : null;
-    const competitorOffers = pooledSlice ? [] : rivalOffersFor(competitors, null, market);
+    const competitorOffers = pooledSlice ? [] : rivalOffersFor(competitors, null, market, rivalIndex);
     const res = pooledSlice
       ? { leisurePax: pooledSlice.ecoDemand ?? 0, businessPax: pooledSlice.bizDemand ?? 0 }
       : computeMarketShare(market, [offer, ...competitorOffers])[0];
@@ -3334,6 +3337,9 @@ export function weeklyTick(state) {
   const allianceMembership  = state.allianceMembership  ?? null;
   const codeshareAgreements = state.codeshareAgreements ?? [];
   const competitors         = state.competitors         ?? [];
+  // Rival one-stop itineraries (HUB_CONNECTIVITY_PLAN.md Phase 1b): one index
+  // per tick, null unless rival itineraries are on.
+  const rivalIndex          = rivalIndexFor(state);
 
   // Build set of airports the player serves (for interline adjacency).
   // Only routes operating this month count — a dormant route serves no one.
@@ -3396,11 +3402,30 @@ export function weeklyTick(state) {
     routeCountByAirport,
     slotsByAirport,
     demandMultFor: eventDemandMultFor,   // world-event shocks hit itinerary O&Ds too
+    rivalIndex,
   });
   const {
-    cannibalizationMap, partnerODRevenue, partnerHealthDecay,
+    cannibalizationMap, partnerODRevenue: partnerODRaw, partnerHealthDecay,
     hubContestMap, ownMetalOD,
   } = networkTick;
+
+  // Partner-fed passengers (alliance / codeshare / joint venture) occupy real
+  // seats on the player's leg of the itinerary. Index each O&D entry by
+  // that leg's route key; the route loop below scales it with the leg's seat
+  // headroom exactly as it scales own-metal and gateway feed, and the scaled
+  // figures are what the report and the cash delta carry. Before this the
+  // partner feed rode above the seat count — free revenue on a full aircraft.
+  const partnerLegFeed = {};   // routeKey → { pax, revenue, entries[] }
+  for (const e of partnerODRaw?.entries ?? []) {
+    if (!e.origin || !e.dest || !e.hub) continue;
+    const legKey = e.partnerLeg === 'leg2'
+      ? [e.origin, e.hub].sort().join('-')     // player flies origin→hub
+      : [e.hub, e.dest].sort().join('-');      // player flies hub→dest
+    const f = partnerLegFeed[legKey] ?? (partnerLegFeed[legKey] = { pax: 0, revenue: 0, entries: [] });
+    f.pax += e.pax; f.revenue += e.playerRevenue; f.entries.push(e);
+  }
+  const partnerScaled = { totalRevenue: 0, totalPax: 0, entries: [] };
+  const partnerScaledKeys = new Set();
 
   // Contest factors for the external connecting pool, keyed by airport.
   const contestFactors = {};
@@ -3813,7 +3838,7 @@ export function weeklyTick(state) {
           : buildRouteMarket(ka, kb, gameDate, laneMarket.maturityFactor,
               eventDemandMultFor(ka, kb));
         laneRivalOffers.push(...rivalOffersFor(
-          (competitors ?? []).filter(c => c?.routes?.[k]), encroachByPair(k), kMarket));
+          (competitors ?? []).filter(c => c?.routes?.[k]), encroachByPair(k), kMarket, rivalIndex));
       }
 
       // ONE share fight for the whole lane: every member pair the player serves
@@ -3867,6 +3892,24 @@ export function weeklyTick(state) {
   }
   // ── End pre-pass ─────────────────────────────────────────────────────────────
 
+  // Leg feed is a PAIR figure (own-metal byRouteKey, partner legs) but this
+  // loop runs per TAIL. Two tails on one pair used to each be credited the
+  // whole pair's itinerary feed — 34 connecting pax on the market, 68 on the
+  // books. Each tail takes its share of the pair's seats.
+  const pairSeatsOneWay = {};
+  for (const r0 of routes) {
+    if (isMultiStop(r0) || !isRouteActive(r0, gameDate.month)) continue;
+    const ac0 = fleet.find(a => a.id === r0.aircraftId);
+    if (!ac0 || isOutOfService(ac0) || crewGroundedSet.has(ac0.id)) continue;
+    const k0 = [r0.origin, r0.destination].sort().join('-');
+    pairSeatsOneWay[k0] = (pairSeatsOneWay[k0] ?? 0) + configBodies(ac0.config ?? {}) * (r0.weeklyFrequency ?? 7);
+  }
+  const legFeedShare = (route, seatsOneWay) => {
+    const k = [route.origin, route.destination].sort().join('-');
+    const total = pairSeatsOneWay[k] ?? 0;
+    return total > 0 ? Math.min(1, (seatsOneWay ?? 0) / total) : 1;
+  };
+
   for (const route of routes) {
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     if (!aircraft) continue;
@@ -3917,7 +3960,7 @@ export function weeklyTick(state) {
         ...(tagHcf ? { hubCostFactors: tagHcf } : {}),
       };
       const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries, competitors,
-        (segKey) => tagSegmentDemand.get(`${route.id}|${segKey}`) ?? null);
+        (segKey) => tagSegmentDemand.get(`${route.id}|${segKey}`) ?? null, rivalIndex);
       if (!result) continue;
 
       const cateringRev    = result.cateringRevenue ?? 0;
@@ -4019,7 +4062,7 @@ export function weeklyTick(state) {
     const rkRoute = [route.origin, route.destination].sort().join('-');
     const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
       demandAllocations.get(route.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
-      eventDemandMultFor(route.origin, route.destination), ancillaries, competitors);
+      eventDemandMultFor(route.origin, route.destination), ancillaries, competitors, rivalIndex);
     if (!result) continue;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
@@ -4055,14 +4098,17 @@ export function weeklyTick(state) {
 
     // Own-metal itinerary feed on this leg (competition/congestion-adjusted upstream).
     const ownMetalLeg = ownMetalOD?.byRouteKey?.[routeKey] ?? null;
-    let   itinPax     = ownMetalLeg?.pax     ?? 0;
-    let   itinRevenue = ownMetalLeg?.revenue ?? 0;
+    const feedShare   = legFeedShare(route, result.configuredSeatsOneWay);
+    let   itinPax     = Math.round((ownMetalLeg?.pax     ?? 0) * feedShare);
+    let   itinRevenue = Math.round((ownMetalLeg?.revenue ?? 0) * feedShare);
 
     // Capacity coupling: connecting passengers occupy real seats. Cap combined
     // connecting pax by the seats left after direct passengers board (5% ops buffer).
     const seatHeadroom = Math.max(0,
       Math.round((result.configuredSeatsOneWay ?? 0) * 0.95) - (result.passengers ?? 0));
-    const wantPax  = extPax + itinPax;
+    const partnerLeg   = partnerLegFeed[routeKey] ?? null;
+    const partnerPaxRaw = Math.round((partnerLeg?.pax ?? 0) * feedShare);
+    const wantPax  = extPax + itinPax + partnerPaxRaw;
     const capScale = wantPax > seatHeadroom && wantPax > 0 ? seatHeadroom / wantPax : 1;
     if (capScale < 1) {
       extPax      = Math.round(extPax      * capScale);
@@ -4070,6 +4116,20 @@ export function weeklyTick(state) {
       itinPax     = Math.round(itinPax     * capScale);
       itinRevenue = Math.round(itinRevenue * capScale);
     }
+    // Partner feed on this leg, seated. A leg can carry several O&D entries;
+    // each is scaled by the same factor and re-emitted for the report.
+    let partnerPax = 0, partnerRevenue = 0;
+    if (partnerLeg) {
+      partnerScaledKeys.add(routeKey);
+      for (const e of partnerLeg.entries) {
+        const pax = Math.round(e.pax * feedShare * capScale);
+        const rev = Math.round(e.playerRevenue * feedShare * capScale);
+        partnerPax += pax; partnerRevenue += rev;
+        partnerScaled.entries.push({ ...e, pax, playerRevenue: rev, capacityScale: +capScale.toFixed(3) });
+      }
+      partnerScaled.totalPax += partnerPax; partnerScaled.totalRevenue += partnerRevenue;
+    }
+
 
     const connecting = {
       totalPax:         extPax + itinPax,
@@ -4078,6 +4138,8 @@ export function weeklyTick(state) {
       externalRevenue:  extRevenue,
       itineraryPax:     itinPax,
       itineraryRevenue: itinRevenue,
+      partnerPax,                                   // partner / interline feed seated on this leg
+      partnerRevenue,                               // the player's prorated share of it
       feeds:            ownMetalLeg?.feeds ?? [],   // top O&D markets feeding this leg
       origin:           connectingRaw.origin,
       destination:      connectingRaw.destination,
@@ -4463,6 +4525,12 @@ export function weeklyTick(state) {
   // O&D-based partner revenue (replaces the old flat per-adjacent-route model).
   // Computed by network.js: for each mixed-leg connection (player leg + partner leg),
   // the player earns a mileage-prorated share of the itinerary fare.
+  // Partner feed whose player leg was not simulated this week (grounded,
+  // covered, inactive season) has no seats: it is dropped, not carried free.
+  for (const e of partnerODRaw?.entries ?? []) {
+    if (!e.origin || !e.dest || !e.hub) { partnerScaled.entries.push(e); partnerScaled.totalPax += e.pax; partnerScaled.totalRevenue += e.playerRevenue; }
+  }
+  const partnerODRevenue = partnerScaled;
   const totalAllianceRevenue  = 0;   // now folded into partnerODRevenue
   const totalCodeshareRevenue = partnerODRevenue.totalRevenue;
   const totalPartnerRevenue   = partnerODRevenue.totalRevenue;

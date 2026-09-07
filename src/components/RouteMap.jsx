@@ -13,6 +13,7 @@ import { HUB_TIERS } from '../models/demand.js';
 import { Glyph } from './Icons.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { TILE_URL, TILE_OPTS } from './basemap.js';
+import { rivalIndexFor } from '../models/network.js';
 
 // ── Great-circle path as a single continuous segment ─────────────────────────
 // Keeps longitudes unwrapped (may exceed ±180) so Leaflet draws one smooth arc
@@ -373,7 +374,7 @@ export default function RouteMap() {
             { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
             aircraft, gd, state.labor ?? null, proj.fuelMultiplier,
             null, rivalSpecsFor(state, r.origin, r.destination), avgUtil, state.satisfaction ?? null,
-            evDemand.multFor(r.origin, r.destination), state.ancillaries ?? null, state.competitors ?? []));
+            evDemand.multFor(r.origin, r.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)));
       // The airports this route actually touches, in visiting order. For a
       // single-leg route that is [origin, dest]; for a rotation it is every
       // stop, which is what the line has to bend through and what the airport

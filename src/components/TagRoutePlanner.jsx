@@ -19,6 +19,7 @@ import AirportSelect from './AirportSelect.jsx';
 import { Glyph } from './Icons.jsx';
 import { isReserve } from '../data/reserve.js';
 import ReserveNotice, { reserveOptionTag } from './ReserveNotice.jsx';
+import { rivalIndexFor } from '../models/network.js';
 
 // ─── Region-grouped airport <select> (only airports with a gate) ───────────────
 
@@ -145,7 +146,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
     return simulateTagRoute(
       { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
       aircraft, gd, state.labor ?? null, 1.0, avgUtil, state.satisfaction ?? null,
-      null, state.ancillaries ?? null, state.competitors ?? []);
+      null, state.ancillaries ?? null, state.competitors ?? [], null, rivalIndexFor(state));
   }, [route, aircraft, inRange, gd.month, state.labor]); // eslint-disable-line
 
   // ── Validation: the ENGINE's reading, not a second one computed here ──

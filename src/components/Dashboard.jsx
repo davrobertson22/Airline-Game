@@ -22,6 +22,7 @@ import {
   BASIS_CONTRIBUTION, BASIS_FULL, loadProfitBasis, saveProfitBasis,
 } from '../utils/routeEconomics.js';
 import { AlertIcon, DotIcon, TrendDownIcon, PackageIcon } from './Icons.jsx';
+import { rivalIndexFor } from '../models/network.js';
 
 export default function Dashboard() {
   const { state } = useGame();
@@ -68,7 +69,7 @@ export default function Dashboard() {
             { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
             aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
             rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
-            1.0, state.ancillaries ?? null, state.competitors ?? []));
+            1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)));
       return { route, result };
     });
   }, [routes, fleet, proj, gd, state.labor]);

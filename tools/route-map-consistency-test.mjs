@@ -143,6 +143,10 @@ const save = {
     ),
   }));
 }
+// The provider hydrates a save through reconcileState, which turns rival
+// one-stop itineraries on for every Tailwinds game; the projection below runs
+// on the raw save, so give it the same flag or the two model different worlds.
+save.rivalItineraries = true;
 store.set('bbae_save_v2', JSON.stringify(save));
 
 const render = (el) => renderToString(React.createElement(GameProvider, null, el));

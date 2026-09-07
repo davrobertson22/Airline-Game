@@ -971,6 +971,10 @@ function reducer(state, action) {
         // ever brought across, reconcileState seeds it fully staffed for the
         // fleet it already flies (see ensureCrewSeeded), never with nobody.
         crewPipeline: true,
+        // Rival one-stop itineraries (HUB_CONNECTIVITY_PLAN.md Phase 1b): every
+        // airline in the world sells connections over its hubs, not just you.
+        // Always on in Tailwinds — new games here, old saves in reconcileState.
+        rivalItineraries: true,
         // TRACKED FROM BIRTH. ensureCrewSeeded only fills groups with no headcount
         // recorded — that is the migration path for saves older than the pipeline.
         // A new game must not take it, or an airline that buys its whole fleet
@@ -4623,6 +4627,11 @@ function reconcileState(parsed) {
       return computeMarketCap(ph, parsed.cash ?? 0, parsed.awareness ?? 5).sharePrice;
     })(),
   };
+
+  // Rival one-stop itineraries are the model for every Tailwinds game, old
+  // saves included — there is no world flag to hide behind here, and the
+  // devlog told the player. An explicit `false` in a save is respected.
+  if (reconciled.rivalItineraries == null) reconciled.rivalItineraries = true;
 
   // Crew pipeline (A7) MIGRATION. A save made before the pipeline existed has no
   // headcount for anybody. If that save is running the pipeline, seed every group

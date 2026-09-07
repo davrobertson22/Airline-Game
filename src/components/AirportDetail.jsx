@@ -11,6 +11,7 @@ import {
   AIRPORT_GATEWAY_SCORES, HUB_TIERS,
 } from '../models/demand.js';
 import { getAirportRestrictions } from '../data/airportRestrictions.js';
+import { rivalIndexFor, rivalOneStopOffersFor } from '../models/network.js';
 import { Glyph } from './Icons.jsx';
 import { useConfirm } from './ConfirmModal.jsx';
 import {
@@ -235,6 +236,20 @@ export default function AirportDetail({ code, onBack }) {
     }
     return map;
   }, [code, state.competitors]);
+  // Rival one-stops from this airport (HUB_CONNECTIVITY_PLAN.md Phase 1b):
+  // "Rhine Air via FRA" beside the nonstop carriers, per destination.
+  const viaNamesFor = useMemo(() => {
+    const idx = rivalIndexFor(state);
+    const cache = {};
+    return (dest) => {
+      if (!idx) return [];
+      if (!cache[dest]) {
+        cache[dest] = rivalOneStopOffersFor(idx, { origin: code, destination: dest })
+          .map(o => `${o.via.name} via ${o.via.hub}`);
+      }
+      return cache[dest];
+    };
+  }, [code, state]);
 
   // Do I serve each pair?
   // Every market I sell out of this airport — routeSegments, not routeLegs, so
@@ -606,10 +621,20 @@ export default function AirportDetail({ code, onBack }) {
                         }
                       </td>
                       <td style={{ padding: '7px 12px' }}>
-                        {comps.length > 0
-                          ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{comps.map(c => c.name).join(', ')}</span>
-                          : <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>—</span>
-                        }
+                        {(() => {
+                          const via = viaNamesFor(pair.code);
+                          if (comps.length === 0 && via.length === 0) return <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>—</span>;
+                          return (
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              {comps.map(c => c.name).join(', ')}
+                              {via.length > 0 && (
+                                <span style={{ color: 'var(--purple)' }} title="Rivals selling this pair as a one-stop over their hub">
+                                  {comps.length > 0 ? ', ' : ''}{via.join(', ')}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: '7px 12px', minWidth: 100 }}>
                         <div style={{ height: 5, background: 'var(--surface3)', borderRadius: 3, overflow: 'hidden' }}>

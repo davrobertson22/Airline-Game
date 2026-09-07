@@ -37,7 +37,9 @@ gates.JFK = 24; gates.ORD = 14;
 let st = gameReducer(freshState(), { type: 'START_GAME', airlineName: 'Probe', hub: 'JFK', enableObjectives: false });
 st = { ...st, cash: 500_000_000, fleet, routes, routePricing, gates,
   hubs: { JFK: { tier: 2, tierSince: 0 }, ORD: { tier: 1, tierSince: 0 } },
-  newWorldRestrictions: true };
+  newWorldRestrictions: true,
+  // TW: on by default (freshState); RIVAL_ITIN=0 turns rival one-stops off for a before/after.
+  rivalItineraries: process.env.RIVAL_ITIN !== '0' };
 // TW: the crew pipeline is on by default and an unstaffed tail is grounded —
 // seed a crew for the fleet, as the era playbot does.
 st = { ...st, labor: seedCrewFor(st.labor ?? DEFAULT_LABOR_STATE, st.fleet, (a) => getAircraftType(a.typeId)) };

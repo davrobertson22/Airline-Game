@@ -27,6 +27,7 @@ import { useConfirm } from './ConfirmModal.jsx';
 import FleetConfig from './FleetConfig.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { canRetrofitWifi, isWifiEquipped, WIFI_WEEKLY_OPEX, canFitWifiTo, wifiAirframeReason } from '../data/wifi.js';
+import { rivalIndexFor } from '../models/network.js';
 
 const CAT_COLORS = {
   'Turboprop':    '#ffb43d',
@@ -564,7 +565,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
           fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...cargoRoutes]),
           state.satisfaction ?? null,
           evMult,
-          state.ancillaries ?? null, state.competitors ?? []);
+          state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
     if (!result) return null;
     const bh = type ? weeklyBlockHours(result.distance, r.weeklyFrequency, type) : 0;
     return { route: r, result, blockHrs: bh };

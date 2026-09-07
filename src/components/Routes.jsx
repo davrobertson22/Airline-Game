@@ -40,6 +40,7 @@ import {
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo, blockHourFit,
   stateLoungeFields,
 } from '../utils/simulation.js';
+import { rivalIndexFor } from '../models/network.js';
 
 const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -260,7 +261,7 @@ export default function Routes() {
       { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
       aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null, evMult,
-      state.ancillaries ?? null, state.competitors ?? []);
+      state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
   };
 
   // Each route's share of its aircraft's weekly lease + maintenance. The engine
@@ -1120,7 +1121,7 @@ function TagRouteCard({ route, onClose, onAddAircraft, siblingCount = 1 }) {
     aircraft, gd, state.labor ?? null, 1.0,
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null, buildEventDemandModel(state.activeEvents).multFor,
-    state.ancillaries ?? null, state.competitors ?? []) : null;
+    state.ancillaries ?? null, state.competitors ?? [], null, rivalIndexFor(state)) : null;
   const landingFee = type ? routeLandingFee(route, type, route.weeklyFrequency) : 0;
   const profit   = sim ? sim.profit - landingFee : 0;
 

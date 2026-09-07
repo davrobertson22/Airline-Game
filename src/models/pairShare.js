@@ -46,6 +46,7 @@ import {
   routeMaturityFactor,
   HUB_TIERS,
 } from './demand.js';
+import { rivalIndexFor } from './network.js';
 import { memberPairKeysOf } from '../utils/market.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -216,6 +217,7 @@ export function buildRivalPairOffers(state, market) {
     state.competitors ?? [],
     rivalSpecsFor(state, market.origin, market.destination),
     market,
+    rivalIndexFor(state),   // rival one-stops over their hubs — same index as the tick
   );
 }
 
@@ -638,6 +640,7 @@ export function projectRouteAddition(state, spec) {
       // no AI carriers on it — i.e. exactly the monopoly the old bare call assumed.
       state.ancillaries ?? null,
       state.competitors ?? [],
+      rivalIndexFor(state),
     );
     if (!result) return { result, share };
     // Landing fees are charged per departure by weeklyTick and are NOT inside

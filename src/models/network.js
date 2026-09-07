@@ -40,7 +40,9 @@ import {
   BUSINESS_PRICE_MULTIPLIER,
   HUB_TIERS,
   hubCongestionFactor,
+  TIER_SEAT_TARGET,
 } from './demand.js';
+import { getAircraftType } from '../data/aircraft.js';
 import { allianceMembers } from '../data/alliances.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -476,6 +478,11 @@ export function buildAllConnections(playerRoutes, competitors, partnershipMap) {
   // Expand tag flights into their legs so every airport they touch (including
   // intermediate stops) is a real network node that can form/feed connections.
   const legRoutes        = expandRoutesToLegs(playerRoutes);
+  // Feed onto the player's legs comes from PARTNERS only — alliance, codeshare,
+  // joint venture — at their real partnership tier. A stranger's passengers do
+  // not through-connect onto you; the residual self-connect and unmodeled-world
+  // traffic is the gateway pool (demand.js connectingAtEndpoint). Decided
+  // 2026-09-05 (HUB_CONNECTIVITY_PLAN.md Phase 2): feed is what agreements buy.
   const partnerRoutes    = buildPartnerRoutes(competitors, Object.fromEntries(partnershipMap));
   const playerRouteKeys  = new Set(legRoutes.map(r => [r.origin, r.destination].sort().join('-')));
   const adjacencyIndex   = buildAdjacencyIndex(legRoutes, partnerRoutes);
@@ -590,14 +597,16 @@ function buildOutsideOptionOffer(market) {
  * @returns {AirlineOffer}
  */
 function buildPlayerConnectionOffer(conn, market) {
-  const penalty   = CONNECTION_PENALTY[conn.partnershipType] ?? CONNECTION_PENALTY.interline;
+  const penalty   = connectionPenaltyFor(
+    CONNECTION_PENALTY[conn.partnershipType] ?? CONNECTION_PENALTY.interline,
+    connectionTimeRatio(conn.legOneOrigin, conn.hub, conn.legTwoDest));
   const minFreq   = Math.min(conn.leg1Freq, conn.leg2Freq);
   // Seats this O&D can realistically claim on the thinner leg, over the week.
   const econSeats = Math.max(
     1,
     Math.round(minFreq * ASSUMED_SEATS_PER_FLIGHT * CONNECTING_SEAT_FRACTION),
   );
-  const economyPrice = conn.totalPrice;
+  const economyPrice = throughFare(conn.totalPrice, conn.legOneOrigin, conn.legTwoDest);
   return {
     airlineId:         '__player_conn__',
     origin:            market.origin,
@@ -636,6 +645,7 @@ export function computePartnerODRevenue(connections, options = {}) {
     gameDate = { month: 6 },
     competitorRouteIndex = null,
     demandMultFor = null,   // (origin, dest) → world-event demand multiplier
+    rivalIndex = null,      // rival one-stop itineraries (null = off)
   } = options;
 
   const entries = [];
@@ -705,6 +715,7 @@ export function computePartnerODRevenue(connections, options = {}) {
       const offer = buildCompetitorOffer(competitor, market);
       if (offer) offers.push(offer);
     }
+    if (rivalIndex) offers.push(...rivalOneStopOffersFor(rivalIndex, market));
     offers.push(buildOutsideOptionOffer(market));
 
     // Score the whole market once; sum the player's routings.
@@ -723,6 +734,7 @@ export function computePartnerODRevenue(connections, options = {}) {
       totalPax     += pax;
       entries.push({
         odKey,
+        origin, dest,                       // direction — the tick seats feed on the player leg
         hub:               meta.hub,
         partnerLeg:        meta.partnerLeg,
         pax,
@@ -923,6 +935,250 @@ export function buildHubContestMap(competitors = [], routeCountByAirport = {}, h
   return map;
 }
 
+// ─── Itinerary quality (HUB_CONNECTIVITY_PLAN.md Phase 3) ────────────────────
+//
+// What a stop costs the traveller, and what a connection sells for. Both
+// apply to EVERY connecting offer — own-metal, partner-fed and rival one-stop —
+// so no carrier's connection is scored by a different rule.
+
+/** The trip-time ratio the per-tier connection penalties were calibrated for: a
+ *  typical long-haul stop (JFK–AMS via FRA ≈ 1.37). */
+export const CONNECTION_TIME_BASE = 1.35;
+/** Hours a connection adds at the hub: minimum connect time plus the second leg's taxi and climb. */
+export const CONNECT_TIME_HOURS = 1.5;
+/** Clamp on the penalty scaling — an on-the-way stop earns a small discount, a doubling stop pays up to 2.5×. */
+export const CONNECTION_TIME_FACTOR_MIN = 0.8;
+export const CONNECTION_TIME_FACTOR_MAX = 2.5;
+/** A connection sells at no more than this × the nonstop reference fare (decision 2, Phase 3). */
+export const THROUGH_FARE_INDEX = 1.0;
+
+const APPROX_CRUISE_KMH = 800, APPROX_LEG_OVERHEAD_H = 0.5;
+/** Fleet-independent block time for pricing a stop — not the scheduling model. */
+export function approxBlockHours(km) {
+  return (km || 0) / APPROX_CRUISE_KMH + APPROX_LEG_OVERHEAD_H;
+}
+
+/**
+ * (block A→H + connect time + block H→C) ÷ block A→C. Circuity lives inside
+ * this: a longer path is a longer trip. MIA–ATL via MCO ≈ 2.2 (the stop doubles
+ * a 90-minute sector); JFK–AMS via FRA ≈ 1.4.
+ */
+export function connectionTimeRatio(origin, hub, dest) {
+  const direct = routeDistance(origin, dest);
+  if (!(direct > 0)) return CONNECTION_TIME_BASE;
+  const via = approxBlockHours(routeDistance(origin, hub)) + CONNECT_TIME_HOURS + approxBlockHours(routeDistance(hub, dest));
+  return via / approxBlockHours(direct);
+}
+
+/** The tier / partnership penalty scaled by how much of the traveller's time the stop costs. */
+export function connectionPenaltyFor(basePenalty, timeRatio) {
+  const f = Math.min(CONNECTION_TIME_FACTOR_MAX, Math.max(CONNECTION_TIME_FACTOR_MIN, timeRatio / CONNECTION_TIME_BASE));
+  return basePenalty * f;
+}
+
+/**
+ * A connection is priced against the NONSTOP market, not additively: the sum
+ * of two leg fares on a triangle is structurally above the through reference,
+ * and real carriers do not sell it that way. Never above the sum of legs.
+ */
+export function throughFare(sumOfLegs, origin, dest) {
+  const ref = referencePrice(origin, dest);
+  if (!(ref > 0)) return sumOfLegs;
+  return Math.min(sumOfLegs, Math.round(ref * THROUGH_FARE_INDEX));
+}
+
+// ─── Rival one-stop itineraries (HUB_CONNECTIVITY_PLAN.md Phase 1b) ─────────
+//
+// Until this, the only airline in the game that sold a connection was the
+// player. Rival hubs were three fudges (a connectivity bump on their nonstops,
+// a contest factor on the player's external pool, a bump to the outside option
+// in the player's connecting markets). Now a rival with a declared hub H flying
+// A–H and H–C puts a real A→H→C offer into the A–C market — the player's
+// nonstop market, their own-metal markets and their partner markets — through
+// the same logit that books everyone else. Gated on state.rivalItineraries.
+
+/** Routings longer than this × the nonstop distance are not sold (DOH between JFK and CDG). */
+export const MAX_CIRCUITY = 1.5;
+
+/** The prefix every rival one-stop offer id carries; the UI attributes share by it. */
+export const RIVAL_CONN_PREFIX = '__rival_conn__';
+
+/**
+ * A rival airport's hub tier from its spoke count, on the PLAYER's own
+ * `HUB_TIERS[t].routesRequired` thresholds (4 / 20 / 50) — null below tier 1.
+ * The rule you live under is the rule they live under.
+ */
+export function rivalHubTierForSpokes(spokes) {
+  let tier = null;
+  for (const t of [1, 2, 3]) {
+    if (spokes >= (HUB_TIERS[t]?.routesRequired ?? Infinity)) tier = t;
+  }
+  return tier;
+}
+
+/**
+ * Index every rival's declared hubs and the legs radiating from them.
+ *
+ *   Map<competitorId, {
+ *     rival,
+ *     legs:   Map<hub, Map<spoke, routeConfig>>,   // every hub the rival declares
+ *     tierAt: Map<hub, tier>,                      // only hubs that qualify
+ *   }>
+ *
+ * Declared hubs only (decision 1): an AI carrier's `homeHub` and earned
+ * `secondaryHub`; a human rival's designated `hubs` map when the rival view
+ * carries one (Phase 5), else its `homeHub`. A human hub keeps its real
+ * designated tier (a focus city is a tier-0 connection point, as it is for you);
+ * an AI hub is tiered by spoke count. Built once per tick; ~0.2 ms for a full
+ * AI bank.
+ */
+export function buildRivalHubIndex(competitors = []) {
+  const idx = new Map();
+  for (const c of competitors ?? []) {
+    if (!c?.id || !c.routes) continue;
+    const declared = c.hubs && typeof c.hubs === 'object'
+      ? Object.keys(c.hubs)
+      : [c.homeHub, c.secondaryHub].filter(Boolean);
+    if (declared.length === 0) continue;
+    const hubSet = new Set(declared);
+    const legs = new Map();
+    for (const [key, cfg] of Object.entries(c.routes)) {
+      if (!cfg) continue;
+      const [a, b] = key.split('-');
+      for (const h of [a, b]) {
+        if (!hubSet.has(h)) continue;
+        const spoke = h === a ? b : a;
+        if (!legs.has(h)) legs.set(h, new Map());
+        // Leg fare resolved ONCE here, not per market lookup: a 75-carrier
+        // world asks for ~1,500 O&Ds a tick and referencePrice is the cost.
+        legs.get(h).set(spoke, { ...cfg, legPrice: rivalLegPrice(cfg, h, spoke) });
+      }
+    }
+    const tierAt = new Map();
+    for (const [h, m] of legs) {
+      const designated = c.hubs?.[h]?.tier;
+      const tier = designated != null ? designated : rivalHubTierForSpokes(m.size);
+      if (tier != null && m.size >= 2) tierAt.set(h, tier);
+    }
+    idx.set(c.id, { rival: c, legs, tierAt });
+  }
+  // Second key: spoke → the (rival, hub) pairs that fly it. A market lookup then
+  // walks only the hubs its ORIGIN is a spoke of, not every hub in the world.
+  const bySpoke = new Map();
+  for (const entry of idx.values()) {
+    for (const [h] of entry.tierAt) {
+      for (const spoke of entry.legs.get(h).keys()) {
+        if (!bySpoke.has(spoke)) bySpoke.set(spoke, []);
+        bySpoke.get(spoke).push({ entry, hub: h });
+      }
+    }
+  }
+  idx.bySpoke = bySpoke;
+  return idx;
+}
+
+// One index per competitors array per tick / render. The array's identity is
+// stable within a tick and changes on every new state, which is exactly the
+// cache lifetime we want.
+const RIVAL_INDEX_CACHE = new WeakMap();
+
+/**
+ * The rival hub index for this state, or null when rival itineraries are off
+ * (`state.rivalItineraries !== true`). Every call site that can put a rival
+ * offer into a market takes this; null means "the old world".
+ */
+export function rivalIndexFor(state) {
+  if (!state || state.rivalItineraries !== true) return null;
+  const comps = state.competitors;
+  if (!Array.isArray(comps) || comps.length === 0) return null;
+  let idx = RIVAL_INDEX_CACHE.get(comps);
+  if (!idx) { idx = buildRivalHubIndex(comps); RIVAL_INDEX_CACHE.set(comps, idx); }
+  return idx;
+}
+
+/** Seats per flight a rival leg carries, from whatever its config publishes. */
+function rivalLegSeats(rival, cfg) {
+  if (cfg.seatsPerWeek != null && cfg.frequency > 0) return Math.round(cfg.seatsPerWeek / cfg.frequency);
+  if (cfg.seats != null) return cfg.seats;
+  const t = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
+  return t?.seats ?? TIER_SEAT_TARGET[rival.tier] ?? 180;
+}
+
+/** A rival leg's economy fare: the published fare for a human, ref × multiplier for an AI. */
+function rivalLegPrice(cfg, a, b) {
+  if (cfg.economyFare != null) return Math.max(1, Math.round(cfg.economyFare));
+  return Math.round(referencePrice(a, b) * (cfg.priceMultiplier ?? 1));
+}
+
+/**
+ * The rival one-stop offer for one routing — §3.3 of the plan. Mirrors the
+ * player's own `__own_conn__` offer line for line: sum-of-legs fare (decision 2;
+ * through-fares are Phase 3), the thinner leg's frequency, the tier's
+ * connecting seat fraction of the thinner leg's seats, the rival's own quality
+ * plus half the tier bonus, and the tier's connection penalty as the
+ * connectivity term. `via` carries what the UI needs to name the routing.
+ */
+export function buildRivalConnectionOffer(rival, hub, tier, legIn, legOut, market, circuity) {
+  const tierDef = HUB_TIERS[tier] ?? HUB_TIERS[1];
+  const pIn  = legIn.legPrice  ?? rivalLegPrice(legIn,  market.origin, hub);
+  const pOut = legOut.legPrice ?? rivalLegPrice(legOut, hub, market.destination);
+  const economyPrice = throughFare(pIn + pOut, market.origin, market.destination);
+  const timeRatio = connectionTimeRatio(market.origin, hub, market.destination);
+  const freq = Math.min(legIn.frequency ?? 0, legOut.frequency ?? 0);
+  if (!(freq > 0)) return null;
+  const seatFraction = ({ 0: 0.10, 1: 0.15, 2: 0.18, 3: 0.22 })[tier] ?? CONNECTING_SEAT_FRACTION;
+  const thinnerSeats = Math.min(
+    (legIn.frequency ?? 0)  * rivalLegSeats(rival, legIn),
+    (legOut.frequency ?? 0) * rivalLegSeats(rival, legOut));
+  const econSeats = Math.max(1, Math.round(thinnerSeats * seatFraction));
+  const bizSeats  = Math.max(1, Math.round(econSeats * 0.13));
+  return {
+    airlineId:         `${RIVAL_CONN_PREFIX}${rival.id}__${hub}`,
+    origin:            market.origin,
+    destination:       market.destination,
+    economyPrice,
+    businessPrice:     Math.round(economyPrice * BUSINESS_PRICE_MULTIPLIER),
+    weeklyFrequency:   freq,
+    seatsPerFlight:    ASSUMED_SEATS_PER_FLIGHT,
+    economySeats:      econSeats,
+    businessSeats:     bizSeats,
+    totalSeats:        econSeats + bizSeats,
+    qualityScore:      (rival.baseQualityScore ?? 60) + Math.round((tierDef.qualityBonus ?? 0) / 2) + (rival.allianceId ? 3 : 0),
+    connectivityBonus: -connectionPenaltyFor(tierDef.connPenalty ?? CONNECTION_PENALTY.ownMetal, timeRatio),
+    via: { competitorId: rival.id, name: rival.name, hub, tier, circuity, timeRatio, legInPrice: pIn, legOutPrice: pOut },
+  };
+}
+
+/**
+ * Every rival one-stop routing sold in this market. For each rival, for each
+ * qualifying hub H not at either end: it must fly both A–H and H–C, must NOT fly
+ * A–C nonstop (its nonstop already speaks for it), and the routing must not
+ * exceed MAX_CIRCUITY. ~140 set probes per market against a full AI bank.
+ */
+export function rivalOneStopOffersFor(rivalIndex, market) {
+  if (!rivalIndex || rivalIndex.size === 0) return [];
+  const A = market.origin, C = market.destination;
+  const key = [A, C].sort().join('-');
+  const direct = routeDistance(A, C) || 0;
+  const out = [];
+  for (const { entry, hub: h } of (rivalIndex.bySpoke?.get(A) ?? [])) {
+    const { rival, legs, tierAt } = entry;
+    if (h === A || h === C) continue;
+    if (rival.routes?.[key]) continue;                // their nonstop speaks
+    const m = legs.get(h);
+    const legIn = m.get(A), legOut = m.get(C);
+    if (!legIn || !legOut) continue;
+    const tier = tierAt.get(h);
+    const circuity = direct > 0
+      ? ((routeDistance(A, h) || 0) + (routeDistance(h, C) || 0)) / direct
+      : Infinity;
+    if (!(circuity <= MAX_CIRCUITY)) continue;
+    const offer = buildRivalConnectionOffer(rival, h, tier, legIn, legOut, market, circuity);
+    if (offer) out.push(offer);
+  }
+  return out;
+}
+
 // ─── Own-metal itinerary revenue ─────────────────────────────────────────────
 
 /** Max own-metal O&D markets scored per hub per tick (perf guard; sorted by demand). */
@@ -1104,6 +1360,7 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
     slotsByAirport = {},
     gates = {},
     demandMultFor = null,   // (origin, dest) → world-event demand multiplier
+    rivalIndex = null,      // rival one-stop itineraries (null = off)
   } = options;
 
   const byRouteKey = {};
@@ -1151,6 +1408,7 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
     // One offer per routing (per hub), all competing in the same market.
     const offers = [];
     const meta   = new Map();
+    const economyPriceOf = new Map();
     let i = 0;
     // Contest raises the outside option once per market: use the strongest
     // rival presence among the hubs involved.
@@ -1159,7 +1417,8 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
     for (const conn of conns) {
       const tier    = hubs[conn.hub].tier;
       const tierDef = HUB_TIERS[tier] ?? HUB_TIERS[1];
-      const penalty = tierDef.connPenalty ?? CONNECTION_PENALTY.ownMetal;
+      const penalty = connectionPenaltyFor(tierDef.connPenalty ?? CONNECTION_PENALTY.ownMetal,
+        connectionTimeRatio(conn.legOneOrigin, conn.hub, conn.legTwoDest));
 
       const minFreq = Math.min(conn.leg1Freq, conn.leg2Freq);
       // Better transfer products reserve more of each leg's inventory for
@@ -1167,7 +1426,7 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
       // tiers differentiated even in capacity-capped markets.
       const seatFraction = ({ 0: 0.10, 1: 0.15, 2: 0.18, 3: 0.22 })[tier] ?? CONNECTING_SEAT_FRACTION;
       const econSeats = Math.max(1, Math.round(minFreq * ASSUMED_SEATS_PER_FLIGHT * seatFraction));
-      const economyPrice = conn.totalPrice;
+      const economyPrice = throughFare(conn.totalPrice, conn.legOneOrigin, conn.legTwoDest);
 
       const offer = {
         airlineId:         `__own_conn__${i++}`,
@@ -1184,6 +1443,7 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
       };
       offers.push(offer);
       meta.set(offer.airlineId, { conn, tier });
+      economyPriceOf.set(offer.airlineId, economyPrice);
 
       maxCompWeight = Math.max(maxCompWeight, contestMap[conn.hub]?.compWeight ?? 0);
     }
@@ -1195,8 +1455,12 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
       const compOffer = buildCompetitorOffer(competitor, market);
       if (compOffer) offers.push(compOffer);
     }
+    // Rival one-stops over THEIR hubs. Without rival itineraries the outside
+    // option is bumped at contested hubs to stand in for the rival connections
+    // it cannot see; with them, those are real offers and the bump would count twice.
+    if (rivalIndex) offers.push(...rivalOneStopOffersFor(rivalIndex, market));
     const outside = buildOutsideOptionOffer(market);
-    outside.connectivityBonus += 0.15 * Math.log1p(maxCompWeight / 10);
+    if (!rivalIndex) outside.connectivityBonus += 0.15 * Math.log1p(maxCompWeight / 10);
     offers.push(outside);
 
     const results = computeMarketShare(market, offers);
@@ -1242,7 +1506,7 @@ export function computeOwnMetalODRevenue(connections, options = {}) {
 
       totalRevenue += revenue;
       totalPax     += pax;
-      entries.push({ od, hub: conn.hub, pax, revenue, share: +(r.leisureShare ?? 0).toFixed(4) });
+      entries.push({ od, hub: conn.hub, pax, revenue, fare: economyPriceOf.get(r.airlineId) ?? null, share: +(r.leisureShare ?? 0).toFixed(4) });
     }
   }
 
@@ -1291,6 +1555,7 @@ export function runNetworkTick(state) {
     routeCountByAirport  = {},   // player routes per airport (contest / hub feed)
     slotsByAirport       = {},   // player weekly departures per airport (congestion)
     demandMultFor        = null, // (origin, dest) → world-event demand multiplier
+    rivalIndex           = null, // rival one-stop itineraries (rivalIndexFor(state); null = off)
   } = state;
 
   const partnershipMap = buildPartnershipMap(
@@ -1311,6 +1576,7 @@ export function runNetworkTick(state) {
     gameDate,
     competitorRouteIndex,
     demandMultFor,
+    rivalIndex,
   });
   const partnerHealthDecay = computePartnerHealthDecay(connections, partnershipMap);
 
@@ -1330,6 +1596,7 @@ export function runNetworkTick(state) {
     slotsByAirport,
     gates,
     demandMultFor,
+    rivalIndex,
   });
 
   return {

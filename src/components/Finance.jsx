@@ -44,6 +44,7 @@ import {
   outstandingBalance, collateralValue, unencumberedOwnedFleet,
 } from '../data/credit.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { rivalIndexFor } from '../models/network.js';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class FinanceErrorBoundary extends Component {
@@ -371,7 +372,7 @@ function PLStatement({ proj }) {
       { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
       aircraft, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtilization, state.satisfaction ?? null,
-      evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? []);
+      evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
     if (!result) return null;
     const bookedRevenue = proj.revById[route.id] ?? result.revenue;
     return { route, aircraft, result, bookedRevenue };
@@ -2220,7 +2221,7 @@ function UnitEconomics({ proj }) {
       { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
       a, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
-      evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? []);
+      evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
     if (!raw) return null;
     const result = { ...raw, revenue: proj.revById[route.id] ?? raw.revenue };
     const ue = calcUnitEconomics(route, type, result, ueFixedByRoute[route.id] ?? 0);
@@ -2385,7 +2386,7 @@ function Forecast({ proj }) {
       { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
       a, gd, fcLaborState, fuelMultiplier, null,
       rivalSpecsFor(state, r.origin, r.destination), fcAvgUtil, state.satisfaction ?? null,
-      1.0, state.ancillaries ?? null, state.competitors ?? []) : null;
+      1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)) : null;
   }).filter(Boolean);
 
   // ── Canonical current-week baseline (same engine the other tabs use) ───────
