@@ -12,7 +12,7 @@ import {
   AIRPORT_GATEWAY_SCORES, HUB_TIERS,
 } from '../models/demand.js';
 import { getAirportRestrictions } from '../data/airportRestrictions.js';
-import { rivalIndexFor, rivalOneStopOffersFor } from '../models/network.js';
+import { rivalIndexFor, rivalOneStopOffersFor, rivalsOn } from '../models/network.js';
 import { Glyph } from './Icons.jsx';
 import { useConfirm } from './ConfirmModal.jsx';
 import {
@@ -243,7 +243,7 @@ export default function AirportDetail({ code, onBack }) {
     const idx = rivalIndexFor(state);
     const cache = {};
     return (dest) => {
-      if (!idx) return [];
+      if (!rivalsOn(idx)) return [];
       if (!cache[dest]) {
         cache[dest] = rivalOneStopOffersFor(idx, { origin: code, destination: dest })
           .map(o => `${o.via.name} via ${o.via.hub}`);

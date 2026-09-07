@@ -697,6 +697,11 @@ function freshState() {
     hedgeContracts: [],                       // active fuel hedge contracts
     loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
     phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
+    // The hub-connectivity package (HUB_CONNECTIVITY_PLAN.md) is always on in
+    // Tailwinds — from the very first state, so every preview built on a
+    // fresh state scores by the same rules the tick will (an unset flag is
+    // the pre-package "legacy" ruleset the Headwinds beta worlds keep).
+    rivalItineraries: true,
     competitors: sampleAndInitializeCompetitors(25),
     encroachments: {},           // { [pairKey]: entrant } — AI carriers contesting player routes
     allianceMembership:   null,  // { allianceId, joinedWeek, weeklyFee } | null

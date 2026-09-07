@@ -46,7 +46,7 @@ import {
   routeMaturityFactor,
   HUB_TIERS,
 } from './demand.js';
-import { rivalIndexFor } from './network.js';
+import { rivalIndexFor, isLegacy } from './network.js';
 import { memberPairKeysOf } from '../utils/market.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -358,7 +358,8 @@ export function pairMarketShare(state, origin, destination, opts = {}) {
              lanePooled: false, laneRivalCount: 0, siblingPairs: [] };
   }
 
-  const results = computeMarketShare(market, offers);
+  // Same rules as the tick: an OFF world previews with the old allocation.
+  const results = computeMarketShare(market, offers, { legacy: isLegacy(rivalIndexFor(state)) });
   const playerResult = playerOffer ? (results[0] ?? null) : null;
   const totalPax = results.reduce((s, r) => s + (r.totalPax ?? 0), 0);
   // Everything YOUR airline carries in the lane — this pair plus your sibling

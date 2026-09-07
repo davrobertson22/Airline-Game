@@ -60,7 +60,7 @@ import {
   allianceMembers,
   partnerInterlineRevenue,
 } from '../data/alliances.js';
-import { runNetworkTick, trimOwnMetalEntries, rivalIndexFor, rivalOneStopOffersFor } from '../models/network.js';
+import { runNetworkTick, trimOwnMetalEntries, rivalIndexFor, rivalOneStopOffersFor, rivalsOn, isLegacy } from '../models/network.js';
 import { competitorMarketingSpend } from '../models/competitorAI.js';
 import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import { buildEncroachmentOffer } from '../models/encroachment.js';
@@ -1487,7 +1487,7 @@ export function defaultConfig(totalSeats) {
  * @param {object[]|null} specs         encroachment specs on this pair
  * @param {object}        market        from buildRouteMarket
  */
-export function rivalOffersFor(competitors, specs, market, rivalIndex = null) {
+export function rivalOffersFor(competitors, specs, market, rivalIndex = undefined) {
   const key = [market.origin, market.destination].sort().join('-');
   const serving = new Set();
   const offers = [];
@@ -1504,8 +1504,8 @@ export function rivalOffersFor(competitors, specs, market, rivalIndex = null) {
     if (offer) offers.push(offer);
   }
   // Rival one-stops over THEIR hubs (HUB_CONNECTIVITY_PLAN.md Phase 1b). The
-  // index is null when state.rivalItineraries is off — the old world, exactly.
-  if (rivalIndex) offers.push(...rivalOneStopOffersFor(rivalIndex, market));
+  // index is RIVALS_OFF when state.rivalItineraries is off — the old world.
+  if (rivalsOn(rivalIndex)) offers.push(...rivalOneStopOffersFor(rivalIndex, market));
   return offers;
 }
 
@@ -1536,7 +1536,7 @@ export function rivalSpecsFor(state, origin, destination) {
  *                                           empties seats instead of skimming revenue.
  * @returns {object|null}
  */
-export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null, competitors = null, rivalIndex = null) {
+export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandOverride = null, encroachmentSpecs = [], avgUtilization = null, satisfaction = null, eventDemandMult = 1.0, ancillaries = null, competitors = null, rivalIndex = undefined) {
   const origin = getAirport(route.origin);
   const dest   = getAirport(route.destination);
   const type   = getAircraftType(aircraft.typeId);
@@ -1669,7 +1669,7 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     const competitorOffers = rivalOffersFor(competitors, encroachmentSpecs, market, rivalIndex);
     competitorOffersCount = competitorOffers.length;
     const allOffers = [playerOffer, ...competitorOffers];
-    const shareResults = computeMarketShare(market, allOffers);
+    const shareResults = computeMarketShare(market, allOffers, { legacy: isLegacy(rivalIndex) });
     [demandResult] = shareResults; // player is always first
   }
 
@@ -2105,7 +2105,7 @@ export function pairConnectivityBonus(spokeCounts, hubCodes, origin, destination
  * @param {object} [gameDate={month:6}]
  * @returns {object|null}   null if an aircraft/airport is invalid or a leg exceeds range
  */
-export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null, competitors = null, segmentDemandFor = null, rivalIndex = null) {
+export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, avgUtilization = null, satisfaction = null, demandMultFor = null, ancillaries = null, competitors = null, segmentDemandFor = null, rivalIndex = undefined) {
   const type  = getAircraftType(aircraft.typeId);
   if (!type) return null;
   const stops = routeStops(route);
@@ -2187,7 +2187,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     const competitorOffers = pooledSlice ? [] : rivalOffersFor(competitors, null, market, rivalIndex);
     const res = pooledSlice
       ? { leisurePax: pooledSlice.ecoDemand ?? 0, businessPax: pooledSlice.bizDemand ?? 0 }
-      : computeMarketShare(market, [offer, ...competitorOffers])[0];
+      : computeMarketShare(market, [offer, ...competitorOffers], { legacy: isLegacy(rivalIndex) })[0];
     const legIdxs = [];
     for (let k = seg.fromIdx; k < seg.toIdx; k++) legIdxs.push(k);
     return {
@@ -3340,6 +3340,11 @@ export function weeklyTick(state) {
   // Rival one-stop itineraries (HUB_CONNECTIVITY_PLAN.md Phase 1b): one index
   // per tick, null unless rival itineraries are on.
   const rivalIndex          = rivalIndexFor(state);
+  // The whole hub-connectivity package hangs off one switch (network.js
+  // hubPackageOn). An OFF world — the existing betas — must tick exactly as
+  // before the package: no feed seating, no per-tail feed share, no partner
+  // fields on the report. tools/golden-master/beta-world.mjs locks that.
+  const legacy              = isLegacy(rivalIndex);
 
   // Build set of airports the player serves (for interline adjacency).
   // Only routes operating this month count — a dormant route serves no one.
@@ -3844,7 +3849,7 @@ export function weeklyTick(state) {
       // ONE share fight for the whole lane: every member pair the player serves
       // plus every rival on every member pair, softmaxed together.
       const laneResults = computeMarketShare(
-        laneMarket, [...subs.map(s => s.offer), ...laneRivalOffers]);
+        laneMarket, [...subs.map(s => s.offer), ...laneRivalOffers], { legacy });
 
       for (let si = 0; si < subs.length; si++) {
         const { group, totalEcoSeats, totalBizSeats } = subs[si];
@@ -4098,7 +4103,7 @@ export function weeklyTick(state) {
 
     // Own-metal itinerary feed on this leg (competition/congestion-adjusted upstream).
     const ownMetalLeg = ownMetalOD?.byRouteKey?.[routeKey] ?? null;
-    const feedShare   = legFeedShare(route, result.configuredSeatsOneWay);
+    const feedShare   = legacy ? 1 : legFeedShare(route, result.configuredSeatsOneWay);
     let   itinPax     = Math.round((ownMetalLeg?.pax     ?? 0) * feedShare);
     let   itinRevenue = Math.round((ownMetalLeg?.revenue ?? 0) * feedShare);
 
@@ -4106,7 +4111,7 @@ export function weeklyTick(state) {
     // connecting pax by the seats left after direct passengers board (5% ops buffer).
     const seatHeadroom = Math.max(0,
       Math.round((result.configuredSeatsOneWay ?? 0) * 0.95) - (result.passengers ?? 0));
-    const partnerLeg   = partnerLegFeed[routeKey] ?? null;
+    const partnerLeg   = legacy ? null : (partnerLegFeed[routeKey] ?? null);
     const partnerPaxRaw = Math.round((partnerLeg?.pax ?? 0) * feedShare);
     const wantPax  = extPax + itinPax + partnerPaxRaw;
     const capScale = wantPax > seatHeadroom && wantPax > 0 ? seatHeadroom / wantPax : 1;
@@ -4138,8 +4143,7 @@ export function weeklyTick(state) {
       externalRevenue:  extRevenue,
       itineraryPax:     itinPax,
       itineraryRevenue: itinRevenue,
-      partnerPax,                                   // partner / interline feed seated on this leg
-      partnerRevenue,                               // the player's prorated share of it
+      ...(legacy ? {} : { partnerPax, partnerRevenue }),   // partner feed seated on this leg / the player's prorated share
       feeds:            ownMetalLeg?.feeds ?? [],   // top O&D markets feeding this leg
       origin:           connectingRaw.origin,
       destination:      connectingRaw.destination,
@@ -4530,7 +4534,7 @@ export function weeklyTick(state) {
   for (const e of partnerODRaw?.entries ?? []) {
     if (!e.origin || !e.dest || !e.hub) { partnerScaled.entries.push(e); partnerScaled.totalPax += e.pax; partnerScaled.totalRevenue += e.playerRevenue; }
   }
-  const partnerODRevenue = partnerScaled;
+  const partnerODRevenue = legacy ? partnerODRaw : partnerScaled;
   const totalAllianceRevenue  = 0;   // now folded into partnerODRevenue
   const totalCodeshareRevenue = partnerODRevenue.totalRevenue;
   const totalPartnerRevenue   = partnerODRevenue.totalRevenue;

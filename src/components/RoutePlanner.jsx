@@ -19,6 +19,7 @@ import {
   buildCompetitorOffer, computeQualityScore, cabinQualityPoints,
   computeConnectingDemand, AIRPORT_GATEWAY_SCORES,
 } from '../models/demand.js';
+import { rivalIndexFor, isLegacy } from '../models/network.js';
 import { projectRouteAddition, playerCampaignBoost } from '../models/pairShare.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
@@ -812,7 +813,7 @@ export default function RoutePlanner() {
     };
     const competitorOffers = competitorsOnRoute.map(c => c.offer).filter(Boolean);
     const allOffers  = [playerOffer, ...competitorOffers];
-    const shareResults = computeMarketShare(routeData.market, allOffers);
+    const shareResults = computeMarketShare(routeData.market, allOffers, { legacy: isLegacy(rivalIndexFor(state)) });
     const playerShare  = shareResults.find(s => s.airlineId === 'player');
 
     return { result, resultLaunch, type, netProfit, totalRevenue, connecting, playerOffer, shareResults, playerShare,
