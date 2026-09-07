@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { requestDepartureBoard } from './Departures.jsx';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
@@ -547,6 +548,15 @@ export default function AirportDetail({ code, onBack }) {
               {airlinePresence.length} {airlinePresence.length === 1 ? 'carrier' : 'carriers'}
             </span>
           </div>
+          {/* The board itself lives under Operations, where it has room for an
+              airport picker and a day selector; this opens it on this airport. */}
+          {airlinePresence.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <button className="btn-small" onClick={() => requestDepartureBoard(code)}>
+                🛫 Departure board for {code}
+              </button>
+            </div>
+          )}
           {airlinePresence.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No airline data available.</div>
           ) : (

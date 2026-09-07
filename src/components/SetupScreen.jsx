@@ -5,7 +5,7 @@ import { STARTING_CAPITAL } from '../data/credit.js';
 import { eraSeedCapital } from '../data/era.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
-import { fileToLogoDataURL } from '../utils/logoImage.js';
+import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
 import useIsMobile from '../hooks/useIsMobile.js';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
@@ -321,6 +321,9 @@ export default function SetupScreen() {
               })}
             </div>
 
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              {LOGO_UPLOAD_HINT}
+            </div>
             {logoError && (
               <div style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>
                 {logoError}
