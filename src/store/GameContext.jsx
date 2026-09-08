@@ -66,6 +66,7 @@ import {
   HUB_TIER_COUNT,
   FOCUS_MIN_GATES,
   hubUpgradeChecklist,
+  healAnachronisticCompetitorFleets,
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote } from '../models/competitorAI.js';
@@ -3722,8 +3723,14 @@ function reducer(state, action) {
       if (newWeek > 52) { newWeek = 1; newYear++; }
 
       // Advance competitor networks (graceful fallback for old saves missing competitors)
-      const currentCompetitors = state.competitors
-        ?? sampleAndInitializeCompetitors(25);
+      // Era worlds: retire any AI metal that predates its own entry into
+      // service before the AI acts on it. Saved 1962 worlds are already flying
+      // A321neos (Discord 2026-09-08) — the picker fix stops new ones, this
+      // clears the ones already on the books. No-op in classic worlds.
+      const currentCompetitors = healAnachronisticCompetitorFleets(
+        state.competitors ?? sampleAndInitializeCompetitors(25),
+        calendarYear(state),
+      );
       const weekNumber = (state.year - 1) * 52 + state.week;
 
       // Adaptive competitor AI: expansion, cuts, capacity responses, pricing
