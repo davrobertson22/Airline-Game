@@ -1,8 +1,45 @@
 # Save storage — moving Tailwinds off the 5 MB localStorage wall
 
-Status: **plan, not built.** Written 2026-08-27 after a player (Nick) reported
-autosave had stopped because browser storage was full, and deleting save slots
-only bought him a little time.
+Status: **Phases 1 + 2 BUILT 2026-09-08.** Phases 3 and 4 are still open.
+
+Written 2026-08-27 after a player (Nick) reported autosave had stopped because
+browser storage was full, and deleting save slots only bought him a little time.
+Built on 2026-09-08 after a second player (Bazooka) hit the same wall from the
+other side: a 1978-start save in 1991, 279 routes, 160 aircraft, one slot used
+and two empty, and "Slot 2 was not saved. Your browser's storage for this game
+is full. Delete another save slot to make room" — advice he had no way to take.
+
+**What shipped:** `src/store/saveStore.js` (the whole of §4), the hydrate phase
+and debounced autosave in `GameContext.jsx` (§5a, §5c, §5e), the async slot list
+in `SaveLoadModal.jsx` (§5d), the breadcrumb in `index.html` (§5b), migration
+with verified readback (§6 Phase 2), and — pulled forward from Phase 3 — the
+storage-usage line in the Save/Load modal, because the failure it explains
+turned out to be one this document's arithmetic did not predict (see the
+correction below). Covered by `tools/save-store-test.mjs` (23 cases, injected
+backends) and `tools/save-store-browser-check.mjs` (21 cases, real Chromium and
+real IndexedDB — the manual pass §11 asks for, automated).
+
+**Not built:** `navigator.storage.persist()` (rest of Phase 3), and export /
+import (Phase 4) — still the only mitigation that survives our own mistakes,
+and still recommended regardless.
+
+> ### Correction to §1, measured 2026-09-08
+>
+> The arithmetic below assumes a flat 5 MiB counted in UTF-16, i.e. ~2.6M
+> characters. Measured in real Chromium
+> (`tools/save-store-browser-check.mjs`), localStorage actually refuses at
+> **~5.18M characters** — roughly double. And a real 13-year, 279-route save
+> measured through the reducer (`tools/_probe-real-save-size.mjs`) is **815 KB
+> / 835K characters**, not the 615 KB floor extrapolated here.
+>
+> So four copies of a save that size come to 3.3M characters and **do fit**.
+> The ceiling is real, and a larger airline does hit it — the browser check
+> reproduces the exact reported shape, localStorage taking the autosave and one
+> slot and then refusing the next — but it is further out than this document
+> claimed, which means Bazooka's save was bigger than the reconstruction, or
+> his browser was giving the origin less room than a desktop Chromium does.
+> That was not resolved remotely, and it is why the usage readout was pulled
+> forward: the next report of this comes with a number attached.
 
 ---
 

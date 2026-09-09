@@ -18,7 +18,13 @@
       (function () {
         try {
           var wantPlay = /[?&]play(=|&|$)/.test(location.search) || location.hash === '#play';
-          if (wantPlay && localStorage.getItem('bbae_save_v2')) {
+          // Saves live in IndexedDB, which this blocking pre-paint script can
+          // never read. `bbae_has_save` is a few bytes that saveStore.js writes
+          // to localStorage on every successful autosave purely so this check
+          // still works. `bbae_save_v2` stays in the test as well, for a browser
+          // that has not been migrated yet and for one where IndexedDB is
+          // blocked and localStorage is still the real store.
+          if (wantPlay && (localStorage.getItem('bbae_has_save') || localStorage.getItem('bbae_save_v2'))) {
             document.documentElement.setAttribute('data-skip-landing', '1');
           }
         } catch (e) { /* show landing on any error */ }

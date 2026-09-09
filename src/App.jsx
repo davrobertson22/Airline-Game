@@ -176,7 +176,7 @@ function AppInner() {
   // `remote` is set only by Headwinds' RemoteGameProvider (multiplayer): the
   // server owns time and persistence there, so solo-only chrome (Next Week,
   // Save/Load, New Game) is hidden. Always falsy in the solo game.
-  const { state, dispatch, remote } = useGame();
+  const { state, dispatch, remote, hydrated } = useGame();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openGroup, setOpenGroup] = useState(null);
   const [menuPos, setMenuPos] = useState(null);
@@ -293,6 +293,15 @@ function AppInner() {
     window.addEventListener('hw:navigate', onNavigate);
     return () => window.removeEventListener('hw:navigate', onNavigate);
   }, []);
+
+  // Saves live in IndexedDB, which cannot be read synchronously, so the first
+  // render happens on a fresh state that is about to be replaced. Painting it
+  // would flash the setup screen at every returning player on every reload.
+  // Cheap to hold: index.html keeps #root hidden behind the landing page until
+  // "Play Free Now" is clicked, so for most visits nothing is on screen yet
+  // anyway. `hydrated` is false server-side, where no effect runs — nothing
+  // server-renders App.
+  if (!hydrated) return null;
 
   if (state.phase === 'setup') return <SetupScreen />;
 

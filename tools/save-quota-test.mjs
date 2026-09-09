@@ -20,12 +20,12 @@
 
 import assert from 'node:assert/strict';
 
+// Cases are queued and run at the end: slot writes go through the save store,
+// whose API is async, and the sequence of sections has to stay readable.
 let passed = 0, failed = 0;
-function test(name, fn) {
-  try { fn(); console.log(`  ✓ ${name}`); passed++; }
-  catch (e) { console.log(`  ✗ ${name}\n      ${(e.stack || e.message).split('\n').slice(0, 4).join('\n      ')}`); failed++; }
-}
-function section(t) { console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 62 - t.length))}`); }
+const queue = [];
+function test(name, fn) { queue.push([name, fn]); }
+function section(t) { queue.push([t, null]); }
 
 // A localStorage stand-in that can be told to be full, and that can fail the
 // three different ways real browsers report a full store.
@@ -52,8 +52,19 @@ function makeStorage() {
 globalThis.localStorage = makeStorage();
 globalThis.window = { localStorage: globalThis.localStorage };
 
-const { persistAutosave, gameReducer, freshState } = await import('../src/store/GameContext.jsx');
+const { gameReducer, freshState } = await import('../src/store/GameContext.jsx');
 const { writeSlot } = await import('../src/components/SaveLoadModal.jsx');
+const { openSaveStore, localStorageBackend } = await import('../src/store/saveStore.js');
+
+// Saving goes through the save store now — GameContext's own persistAutosave is
+// gone, because a second implementation of "write the save and be honest about
+// failing" is a second place for the next bug to hide. These cases are still
+// about exactly what they always were, so they keep their assertions and put a
+// store on top of the fake localStorage instead of calling a writer directly.
+// tools/save-store-test.mjs covers the store's own logic (dual read, migration);
+// tools/save-store-browser-check.mjs covers the real IndexedDB adapter.
+const storeOn = (st) => openSaveStore({ backends: { local: localStorageBackend(st) }, localStorage: st, migrate: false });
+const autosave = async (st, s = state) => (await storeOn(st)).write('autosave', (await import('../src/store/saveStore.js')).makeRecord('autosave', s));
 
 const state = { ...freshState(), airlineName: 'Quota Air', cash: 1_000_000 };
 
@@ -62,47 +73,48 @@ console.log('\nSave-quota honesty\n');
 // ── 1. The autosave ──────────────────────────────────────────────────────────
 section('1. The autosave reports its own failure');
 
-test('a healthy store saves and says so', () => {
+test('a healthy store saves and says so', async () => {
   const st = makeStorage();
-  const r = persistAutosave(state, st);
+  const r = await autosave(st);
   assert.equal(r.ok, true, 'a working store did not report success');
   // Read back whatever key it chose rather than hardcoding one — the point of
   // this assertion is that SOMETHING was persisted, not which key it used.
-  assert.equal(st._size(), 1, 'nothing was actually written');
+  assert.equal(st._size(), 2, 'nothing was actually written (save + breadcrumb)');
 });
 
-test('a full store returns a failure instead of swallowing it', () => {
+test('a full store returns a failure instead of swallowing it', async () => {
   const st = makeStorage(); st.mode = 'quota';
-  const r = persistAutosave(state, st);
+  const r = await autosave(st);
   assert.equal(r.ok, false, 'the quota error was swallowed — this is the bug');
   assert.equal(r.reason, 'quota');
 });
 
-test('the message names the problem and what to do about it', () => {
+test('the message names the problem and what is at stake', async () => {
   const st = makeStorage(); st.mode = 'quota';
-  const { message } = persistAutosave(state, st);
+  const { message } = await autosave(st);
   assert.ok(/full/i.test(message), `message does not say the store is full: ${message}`);
-  assert.ok(/slot/i.test(message), `message does not tell the player how to free space: ${message}`);
   assert.ok(/refresh|lost/i.test(message), `message does not warn what is at stake: ${message}`);
 });
 
-test('every way a browser reports a full store is recognised as quota', () => {
+test('every way a browser reports a full store is recognised as quota', async () => {
   for (const mode of ['quota', 'quota-code', 'quota-firefox']) {
     const st = makeStorage(); st.mode = mode;
-    assert.equal(persistAutosave(state, st).reason, 'quota', `${mode} was not read as a quota failure`);
+    assert.equal((await autosave(st)).reason, 'quota', `${mode} was not read as a quota failure`);
   }
 });
 
-test('a non-quota failure is still reported, just not blamed on space', () => {
+test('a non-quota failure is still reported, just not blamed on space', async () => {
   const st = makeStorage(); st.mode = 'other';
-  const r = persistAutosave(state, st);
+  const r = await autosave(st);
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'error');
   assert.ok(!/full/i.test(r.message), 'a SecurityError should not be described as a full store');
 });
 
-test('no storage at all is reported, not crashed on', () => {
-  const r = persistAutosave(state, null);
+test('no storage at all is reported, not crashed on', async () => {
+  const store = await openSaveStore({ indexedDB: null, localStorage: null, backends: {}, migrate: false });
+  const { makeRecord } = await import('../src/store/saveStore.js');
+  const r = await store.write('autosave', makeRecord('autosave', state));
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'unavailable');
 });
@@ -133,41 +145,56 @@ test('PUSH_TOAST appends rather than replacing what the tick queued', () => {
 // ── 3. The manual save ───────────────────────────────────────────────────────
 section('3. A manual save says when it did not happen');
 
-test('a healthy store writes the slot and reports success', () => {
+test('a healthy store writes the slot and reports success', async () => {
   const st = makeStorage();
-  const r = writeSlot(0, state, st);
+  const r = await writeSlot(0, state, await storeOn(st));
   assert.equal(r.ok, true);
   const raw = st.getItem('bbae_slot_0');
   assert.ok(raw, 'the slot was not written');
   assert.equal(JSON.parse(raw).airlineName, 'Quota Air');
 });
 
-test('a full store returns a failure instead of throwing out of the click', () => {
-  const st = makeStorage(); st.mode = 'quota';
+test('a full store returns a failure instead of throwing out of the click', async () => {
+  const st = makeStorage();
+  const store = await storeOn(st);
+  st.mode = 'quota';
   let threw = null;
   let r;
-  try { r = writeSlot(1, state, st); } catch (e) { threw = e; }
+  try { r = await writeSlot(1, state, store); } catch (e) { threw = e; }
   assert.equal(threw, null, 'writeSlot threw — an uncaught throw in a click handler is exactly the silent failure');
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'quota');
 });
 
-test('the manual-save message tells the player the slot is unchanged', () => {
-  const st = makeStorage(); st.mode = 'quota';
-  const { message } = writeSlot(1, state, st);
+test('the quota message no longer tells a player with empty slots to delete one', async () => {
+  // What the 2026-09-08 report actually looked like: slots 1 and 2 empty, and
+  // the banner on the failed write said "Delete another save slot to make room."
+  // There was nothing to delete. The message has to allow for that.
+  const st = makeStorage();
+  const store = await storeOn(st);
+  st.mode = 'quota';
+  const { message } = await writeSlot(1, state, store);
   assert.ok(/full/i.test(message), `message does not say the store is full: ${message}`);
-  assert.ok(/slot/i.test(message), `message does not mention freeing a slot: ${message}`);
+  assert.ok(/already empty/i.test(message),
+    `message still assumes there is a slot to delete: ${message}`);
 });
 
-test('a failed slot write leaves the existing slot alone', () => {
+test('a failed slot write leaves the existing slot alone', async () => {
   const st = makeStorage();
-  writeSlot(2, { ...state, airlineName: 'Original' }, st);
+  const store = await storeOn(st);
+  await writeSlot(2, { ...state, airlineName: 'Original' }, store);
   st.mode = 'quota';
-  const r = writeSlot(2, { ...state, airlineName: 'Replacement' }, st);
+  const r = await writeSlot(2, { ...state, airlineName: 'Replacement' }, store);
   assert.equal(r.ok, false);
   assert.equal(JSON.parse(st.getItem('bbae_slot_2')).airlineName, 'Original',
     'a failed save damaged the slot it failed to overwrite');
 });
+
+for (const [name, fn] of queue) {
+  if (fn === null) { console.log(`\n── ${name} ${'─'.repeat(Math.max(0, 62 - name.length))}`); continue; }
+  try { await fn(); console.log(`  ✓ ${name}`); passed++; }
+  catch (e) { console.log(`  ✗ ${name}\n      ${(e.stack || e.message).split('\n').slice(0, 4).join('\n      ')}`); failed++; }
+}
 
 console.log(`\n${failed === 0 ? '✅' : '❌'}  ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);
