@@ -494,6 +494,32 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
     setEditingName(false);
   }
 
+  async function handleExtendLease() {
+    // Discord (ASAS, 2026-09-09): "i cant renew lease" — then, after being shown
+    // where it was, "omg you have to click the small button". The only renew
+    // affordance in the game was a 10px ghost button on the fleet ROW, and it
+    // only appeared inside the last eight weeks. The card the player opens to
+    // manage the aircraft offered Buy Out Lease and Return Aircraft — two ways
+    // to end the lease, none to keep it — and did not even say when it expired.
+    const weeksLeft = leaseRemainingWeeks(aircraft) ?? 0;
+    const rate      = aircraft.weeklyLease ?? type?.weeklyLease ?? 0;
+    const body =
+      `Adds 52 weeks at ${formatMoney(rate)}/wk, the rate this lease was signed at. `
+      + `Free, and no remaining time is lost.\n\n`
+      + `${weeksLeft} week${weeksLeft !== 1 ? 's' : ''} left today, `
+      + `${weeksLeft + 52} after extending.`
+      + (aircraftRoutes.length > 0
+          ? `\n\nLeft to expire, ${aircraft.name} goes back and its `
+            + `${aircraftRoutes.length} route${aircraftRoutes.length !== 1 ? 's' : ''} close.`
+          : '');
+    const ok = await confirm({
+      title: `Extend the lease on ${aircraft.name} by a year?`,
+      body,
+      confirmLabel: 'Extend lease',
+    });
+    if (ok) dispatch({ type: 'EXTEND_LEASE', aircraftId: aircraft.id, addWeeks: 52 });
+  }
+
   async function handleBuyout() {
     // Same call the reducer makes, so the number in this dialog is the number
     // charged — see models/leaseBuyout.js.
@@ -586,7 +612,8 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   const ageYrs   = ageWks / 52;
   const maintMlt = maintenanceMultiplier(ageWks);
   const weeklyMaint = Math.round((type?.baseMaintenancePerWk ?? 0) * maintMlt);
-  const weeklyLease = aircraft.ownershipType === 'owned' ? 0 : (type?.weeklyLease ?? 0);
+  const weeklyLease = aircraft.ownershipType === 'owned' ? 0 : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
+  const detailLeaseLeft = leaseRemainingWeeks(aircraft);
   const ageColor    = ageYrs < 5 ? 'var(--green)' : ageYrs < 12 ? 'var(--yellow)' : 'var(--red)';
 
   // Aggregate across all routes
@@ -809,9 +836,21 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
           {aircraft.ownershipType === 'owned' ? (
             <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--green)', marginTop: 4 }}>Owned</div>
           ) : (
-            <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--red)', marginTop: 4 }}>
-              −{formatMoney(weeklyLease)}
-            </div>
+            <>
+              <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--red)', marginTop: 4 }}>
+                −{formatMoney(weeklyLease)}
+              </div>
+              {detailLeaseLeft !== null && (
+                <div style={{
+                  fontSize: 10, fontWeight: 600, marginTop: 4,
+                  color: detailLeaseLeft <= 4 ? 'var(--red)'
+                       : detailLeaseLeft <= LEASE_EXPIRY_WARN_WEEKS ? 'var(--yellow)'
+                       : 'var(--text-dim)',
+                }}>
+                  {detailLeaseLeft}w left on lease
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -1095,6 +1134,16 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
         {aircraft.ownershipType === 'lease' && (
           <button
             className="btn"
+            style={{ background: 'rgba(56,139,253,.1)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,.3)' }}
+            onClick={handleExtendLease}
+            title="Add a year to this lease at the rate it was signed at — free, and no remaining time is lost"
+          >
+            Extend Lease +1yr
+          </button>
+        )}
+        {aircraft.ownershipType === 'lease' && (
+          <button
+            className="btn"
             style={{ background: 'rgba(63,185,80,.1)', color: 'var(--green)', border: '1px solid rgba(63,185,80,.3)' }}
             onClick={handleBuyout}
           >
@@ -1169,7 +1218,7 @@ function FleetByType({ fleet, routes, cargoRoutes = [] }) {
 
         // Total weekly fixed costs
         const totalFixed = aircraft.reduce((s, a) => {
-          const lease = a.ownershipType === 'owned' ? 0 : (type?.weeklyLease ?? 0);
+          const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? type?.weeklyLease ?? 0);
           const maint = Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
           return s + lease + maint;
         }, 0);
@@ -1340,7 +1389,7 @@ function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
         // Total weekly fixed
         const totalFixed = catFleet.reduce((s, a) => {
           const t = getAircraftType(a.typeId);
-          const lease = a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0);
+          const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? t?.weeklyLease ?? 0);
           const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
           return s + lease + maint;
         }, 0);
@@ -1525,7 +1574,7 @@ export default function Fleet() {
     const activeRoutes = routes.filter(r => r.aircraftId === aircraftId);
     const weeksLeft    = aircraft?.leaseRemainingWeeks ?? 0;
     const penalty      = (aircraft?.ownershipType === 'lease' && weeksLeft > 0)
-      ? Math.round((type?.weeklyLease ?? 0) * weeksLeft * 0.5)
+      ? Math.round((aircraft?.weeklyLease ?? type?.weeklyLease ?? 0) * weeksLeft * 0.5)
       : 0;
 
     const routeNote = activeRoutes.length > 0
@@ -1579,7 +1628,7 @@ export default function Fleet() {
 
   const weeklyLeaseTotal = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
-    return s + (a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0));
+    return s + (a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? t?.weeklyLease ?? 0));
   }, 0);
   const weeklyMaintTotal = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
@@ -1654,7 +1703,7 @@ export default function Fleet() {
       }
       case 'fixed': {
         const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
-        const lease = a.ownershipType === 'owned' ? 0 : (t?.weeklyLease ?? 0);
+        const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? t?.weeklyLease ?? 0);
         return lease + maint;
       }
       case 'status': {
@@ -1736,7 +1785,7 @@ export default function Fleet() {
       const type      = getAircraftType(a.typeId);
       const weeksLeft = a.leaseRemainingWeeks ?? 0;
       if (a.ownershipType === 'lease' && weeksLeft > 0) {
-        totalPenalty += Math.round((type?.weeklyLease ?? 0) * weeksLeft * 0.5);
+        totalPenalty += Math.round((a.weeklyLease ?? type?.weeklyLease ?? 0) * weeksLeft * 0.5);
       }
       routeCount += routes.filter(r => r.aircraftId === a.id).length
                   + cargoRoutes.filter(r => r.aircraftId === a.id).length;
@@ -2468,7 +2517,7 @@ export default function Fleet() {
               const ageWks = aircraft.ageWeeks ?? 0;
               const maintM = maintenanceMultiplier(ageWks);
               const maint  = Math.round((type?.baseMaintenancePerWk ?? 0) * maintM);
-              const lease  = aircraft.ownershipType === 'owned' ? 0 : (type?.weeklyLease ?? 0);
+              const lease  = aircraft.ownershipType === 'owned' ? 0 : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
               const ageYrs = ageWks / 52;
               const ageColor = ageYrs < 5 ? 'var(--green)' : ageYrs < 12 ? 'var(--yellow)' : 'var(--red)';
 
@@ -2620,13 +2669,18 @@ export default function Fleet() {
                           }}>
                             {leaseUrgent && <><Glyph e="⚠" size={10} /> </>}{leaseRemaining}w lease
                           </span>
-                          {leaseRemaining <= 8 && (
+                          {leaseRemaining <= LEASE_EXPIRY_WARN_WEEKS && (
                             <button
-                              className="btn btn-ghost"
-                              style={{ fontSize: 10, padding: '1px 6px', color: 'var(--accent)' }}
-                              onClick={e => { e.stopPropagation(); dispatch({ type: 'RENEW_LEASE', aircraftId: aircraft.id }); }}
+                              className="btn"
+                              style={{
+                                fontSize: 11, fontWeight: 600, padding: '3px 10px', lineHeight: 1.2,
+                                color: 'var(--accent)', background: 'rgba(56,139,253,.12)',
+                                border: '1px solid rgba(56,139,253,.4)',
+                              }}
+                              title="Add a year at the rate this lease was signed at — free, and no remaining time is lost"
+                              onClick={e => { e.stopPropagation(); dispatch({ type: 'EXTEND_LEASE', aircraftId: aircraft.id, addWeeks: 52 }); }}
                             >
-                              Renew
+                              Extend +1yr
                             </button>
                           )}
                         </div>

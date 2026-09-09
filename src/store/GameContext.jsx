@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
@@ -23,6 +23,7 @@ import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AI
          eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
          canFitWifi } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
+import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
          CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
@@ -2644,12 +2645,17 @@ function reducer(state, action) {
     }
 
     case 'RENEW_LEASE': {
-      // action: { aircraftId } — reset lease countdown to full term (same rate)
+      // action: { aircraftId } — reset the countdown to a full term (same rate).
+      //
+      // Superseded by EXTEND_LEASE, which is what every button now dispatches.
+      // Kept because it is a cheap alias, but it can no longer take time OFF a
+      // lease: resetting to the term shortened any lease that had more than a
+      // term left, which is a renew button that punishes you for pressing it.
       return {
         ...state,
         fleet: state.fleet.map(a =>
           a.id === action.aircraftId && a.ownershipType === 'lease'
-            ? { ...a, leaseRemainingWeeks: a.leaseTermWeeks ?? 104 }
+            ? { ...a, leaseRemainingWeeks: Math.max(a.leaseRemainingWeeks ?? 0, a.leaseTermWeeks ?? 104) }
             : a
         ),
       };
@@ -4687,77 +4693,180 @@ function reconcileState(parsed) {
   };
 }
 
+// The autosave used to be written here, by a `persistAutosave(state, storage)`
+// that owned its own localStorage call and its own quota detection. That moved
+// wholesale into store/saveStore.js when saves went to IndexedDB — including
+// the honest-failure behaviour it existed for, and its `{ok, reason, message}`
+// result, which the toast below still renders. Nothing calls it any more, so
+// keeping a copy of it here would only be a second implementation for someone
+// to fix the next bug in by mistake. tools/save-quota-test.mjs still covers
+// every way a browser reports a full store, now against the store's own path.
+
 /**
- * Write the autosave, and SAY whether it worked.
+ * How long after the last change the autosave waits before writing.
  *
- * The bug this replaces: the autosave was `try { setItem } catch (_) {}`. When
- * the browser's storage for the site filled up — which a long game does on its
- * own, and which a couple of manual slots plus a custom logo accelerates — every
- * subsequent write threw QuotaExceededError, the catch swallowed it, and the
- * game carried on looking completely normal while persisting nothing. The player
- * found out at the next refresh, having lost the session, and the Save/Load
- * screen was still telling them "your game also auto-saves continuously in the
- * background". A failure the player cannot see is worse than no autosave at all.
+ * The autosave used to fire on EVERY dispatch — every click wrote the whole
+ * state, which on a mature save is a megabyte of JSON.stringify per interaction.
+ * Asynchronous writes make an unthrottled version actively worse: overlapping
+ * transactions and last-write-wins races between them.
  *
- * Returns a result rather than throwing so the caller can surface it, and takes
- * the storage explicitly so it is testable outside a browser.
- *
- * @returns {{ok: boolean, reason?: 'quota'|'unavailable'|'error', message?: string}}
+ * The cost of the debounce is that a hard browser kill inside the window loses
+ * up to a second of play. Every ordinary way of leaving a page — closing the
+ * tab, navigating away, switching apps on mobile — is covered by the flush on
+ * pagehide/visibilitychange below.
  */
-export function persistAutosave(state, storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
-  if (!storage) return { ok: false, reason: 'unavailable', message: 'This browser is not allowing the game to store data. Private browsing usually causes this.' };
-  try {
-    storage.setItem(SAVE_KEY, JSON.stringify(state));
-    return { ok: true };
-  } catch (err) {
-    // Quota is the case worth naming precisely, because the player can act on
-    // it. Browsers disagree on how they report it: name, legacy code 22, and
-    // Firefox's 1014 are all in the wild.
-    const quota = err && (
-      err.name === 'QuotaExceededError' ||
-      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      err.code === 22 || err.code === 1014
-    );
-    return quota
-      ? { ok: false, reason: 'quota', message: 'Your browser’s storage for this game is full, so your progress is no longer being saved automatically. Delete a save slot to free space — anything you do until then will be lost if you refresh.' }
-      : { ok: false, reason: 'error', message: 'Your progress could not be saved. Anything you do from here will be lost if you refresh.' };
-  }
-}
+const AUTOSAVE_DEBOUNCE_MS = 1000;
 
 export function GameProvider({ children }) {
+  // Boot starts on a fresh state and is replaced by the save once it has been
+  // read. IndexedDB cannot answer synchronously, so the old useReducer lazy
+  // initialiser (which read localStorage inline) cannot survive the move.
+  //
+  // This costs less here than it would in most apps: index.html hides #root
+  // entirely until the player clicks "Play Free Now", so for the overwhelming
+  // majority of visits the hydrate happens behind the front door and there is
+  // no visible loading state at all.
+  // First-paint seed, not the source of truth.
+  //
+  // Saves live in IndexedDB now, which cannot be read synchronously — but where
+  // a legacy localStorage autosave is still present (any browser that has not
+  // yet been migrated, and every browser where IndexedDB is blocked) reading it
+  // here costs nothing and means the very first render already has the player's
+  // airline in it. The async hydrate below runs regardless and overrides this
+  // with whatever the store says, so IndexedDB always wins; migration then
+  // removes the localStorage copy and this initialiser quietly stops finding
+  // anything. It is also what lets the headless component tests in tools/ seed
+  // a save and render a component synchronously, as they always have.
   const [state, dispatch] = useReducer(reducer, null, () => {
     try {
-      const saved = localStorage.getItem(SAVE_KEY);
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null;
       if (saved) return reconcileState(JSON.parse(saved));
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* a save we cannot read is a new game, exactly as before */ }
     return freshState();
   });
+  // False until the save has been read. App holds the paint back on this, so a
+  // returning player never sees the setup screen flash before their airline
+  // appears. Server-side and in the headless component tests no effect ever
+  // runs, so this stays false there and only App's early return notices —
+  // which is exactly why the gate lives there and not in this provider.
+  const [hydrated, setHydrated] = useState(false);
+  const storeRef = useRef(null);
+
   // Module-level era state (fare ladder, cost scale, price year) is set by the
   // reducer on every ACTION — but useReducer's lazy initialiser never runs the
   // reducer, so a reloaded era save rendered the Marketplace on classic prices
   // until the first click. Idempotent; the reducer re-sets the same values.
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
 
+  // ── Hydrate ────────────────────────────────────────────────────────────────
+  // StrictMode double-invokes effects in development. A latch rather than a
+  // cleanup flag: cancelling on unmount and then returning early on the second
+  // mount would leave the game hydrating for ever.
+  const hydrateStarted = useRef(false);
+  useEffect(() => {
+    if (hydrateStarted.current || typeof window === 'undefined') return;
+    hydrateStarted.current = true;
+    (async () => {
+      try {
+        storeRef.current = await openSaveStore();
+        const record = await storeRef.current.read(AUTOSAVE_KEY);
+        // LOAD_STATE runs reconcileState, which is what the old boot path did.
+        if (record?.state) dispatch({ type: 'LOAD_STATE', payload: record.state });
+      } catch (_) {
+        // A save we cannot read is a new game, exactly as it was before —
+        // never a blank screen.
+      } finally {
+        setHydrated(true);
+      }
+    })();
+  }, []);
+
+  // ── Autosave ───────────────────────────────────────────────────────────────
+  const pendingState  = useRef(null);   // newest state not yet written
+  const writtenState  = useRef(null);   // newest state already written
+  const debounceTimer = useRef(null);
+  const writeInFlight = useRef(false);
   // Latched so the warning fires on the transition, not on every state change —
   // a broken autosave would otherwise queue a toast on every click.
   const autosaveBroken = useRef(false);
 
-  useEffect(() => {
-    const result = persistAutosave(state);
+  const report = useCallback((result) => {
     if (!result.ok && !autosaveBroken.current) {
       autosaveBroken.current = true;
       dispatch({ type: 'PUSH_TOAST', toast: {
-        type: 'danger', title: '⚠ Your game is not being saved',
+        type: 'danger', title: '\u26a0 Your game is not being saved',
         message: result.message, duration: 20000,
       } });
     } else if (result.ok && autosaveBroken.current) {
       autosaveBroken.current = false;
       dispatch({ type: 'PUSH_TOAST', toast: {
-        type: 'success', title: '✓ Saving again',
+        type: 'success', title: '\u2713 Saving again',
         message: 'Your progress is being saved automatically once more.', duration: 8000,
       } });
     }
-  }, [state]);
+  }, []);
+
+  // One write at a time, with the newest state coalesced behind it: if the game
+  // moved on while a write was in flight, the next pass picks up where it is
+  // now rather than queueing every intermediate state.
+  const writePending = useCallback(async () => {
+    const store = storeRef.current;
+    if (!store || writeInFlight.current) return;
+    const snapshot = pendingState.current;
+    if (!snapshot || snapshot === writtenState.current) return;
+
+    writeInFlight.current = true;
+    let result;
+    try {
+      result = await store.write(AUTOSAVE_KEY, makeRecord(AUTOSAVE_KEY, snapshot));
+    } catch (_) {
+      result = { ok: false, reason: 'error', message: 'Your progress could not be saved. Anything you do from here will be lost if you refresh.' };
+    } finally {
+      writeInFlight.current = false;
+    }
+    // Marked as attempted whether or not it worked. A failing store (a full
+    // one, or the memory rung in private browsing) would otherwise leave this
+    // pointer behind for ever and re-arm the timer every second on a game
+    // nobody is touching. The next dispatch re-arms it, which is the retry.
+    writtenState.current = snapshot;
+    report(result);
+
+    // The game moved on mid-write — go again with what it looks like now.
+    if (pendingState.current !== writtenState.current && !debounceTimer.current) {
+      debounceTimer.current = setTimeout(() => {
+        debounceTimer.current = null;
+        void writePending();
+      }, AUTOSAVE_DEBOUNCE_MS);
+    }
+  }, [report]);
+
+  useEffect(() => {
+    if (!hydrated) return;            // never persist the placeholder over a real save
+    pendingState.current = state;
+    if (debounceTimer.current) return;
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null;
+      void writePending();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }, [state, hydrated, writePending]);
+
+  // Leaving the page: write immediately rather than losing the debounce window.
+  // visibilitychange is the one that fires reliably on mobile, where a tab is
+  // usually killed in the background rather than closed.
+  useEffect(() => {
+    if (!hydrated) return undefined;
+    const flush = () => {
+      if (debounceTimer.current) { clearTimeout(debounceTimer.current); debounceTimer.current = null; }
+      void writePending();
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [hydrated, writePending]);
 
   // Expose routes already hydrated with their per-pair price, so every consumer can
   // keep reading route.classPrices / route.ticketPrice unchanged. The reducer stores
@@ -4768,8 +4877,14 @@ export function GameProvider({ children }) {
       routes: (state.routes ?? []).map(r => hydrateRoute(r, state.routePricing, state.routeCatering)),
     },
     dispatch,
-  }), [state]);
+    saveStore: storeRef.current,
+    hydrated,
+  }), [state, hydrated]);
 
+  // The provider always renders its children; App is what holds the paint back
+  // until `hydrated` (see its early return). Keeping the gate there rather than
+  // here is what lets the headless component tests in tools/ mount a single
+  // component under a GameProvider and get a real render, as they always have.
   return (
     <GameContext.Provider value={value}>
       {children}
