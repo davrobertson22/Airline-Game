@@ -44,9 +44,11 @@ import {
   computeMarketShare,
   computeConnectivityBonus,
   routeMaturityFactor,
+  computeConnectingDemand,
   HUB_TIERS,
 } from './demand.js';
-import { rivalIndexFor, isLegacy } from './network.js';
+import { rivalIndexFor, isLegacy, runNetworkTick } from './network.js';
+import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { memberPairKeysOf } from '../utils/market.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -55,6 +57,7 @@ import {
   defaultConfig,
   routeQualityBreakdown,
   isMultiStop,
+  isRouteActive,
   hubSpokeCounts,
   routePairKey,
   stateSensReduction,
@@ -66,6 +69,7 @@ import {
   rivalOffersFor,
   rivalSpecsFor,
   buildEventDemandModel,
+  currentGameDate,
   CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 
@@ -186,7 +190,7 @@ export function buildPlayerPairOffer(state, pairRoutes) {
     // Brand reach, resolved through the same helper the tick uses. Without it a
     // week-one carrier previews the market share of an established one — the
     // exact preview/tick divergence this module exists to prevent.
-    brandReach:       stateBrandReach(state, hubQ, false),
+    brandReach:       stateBrandReach(state, hubQ, false, [r0.origin, r0.destination]),
     // Lounges at this pair's endpoints. Same reason as brandReach: leaving it
     // off would preview the business share of a carrier with a lounge network
     // for one that has none (or vice versa).
@@ -241,6 +245,20 @@ function pairHasRival(state, key) {
 }
 
 /**
+ * A caller-built `{ week, month }` gameDate is completed with the world's
+ * absWeek. Three screens built that literal for themselves and every one of
+ * them quoted year-one demand while the tick compounded growth — 1% in week 20,
+ * 6.7% in year four. Only the absent field is filled; a caller's own absWeek wins.
+ */
+function withAbsWeek(state, gameDate) {
+  if (!gameDate || gameDate.absWeek != null) return gameDate;
+  // Fixtures that carry no calendar at all keep the bare date (no growth), as before.
+  if (typeof state?.week !== 'number') return gameDate;
+  const cur = currentGameDate(state);
+  return cur.absWeek != null ? { ...gameDate, absWeek: cur.absWeek } : gameDate;
+}
+
+/**
  * Demand-model market share for one city pair.
  *
  * @param {object} state
@@ -258,7 +276,7 @@ function pairHasRival(state, key) {
  * @returns {{ market, offers, results, playerResult, playerShare, totalPax, contested }}
  */
 export function pairMarketShare(state, origin, destination, opts = {}) {
-  const gameDate = opts.gameDate ?? state.gameDate ?? { month: 6 };
+  const gameDate = withAbsWeek(state, opts.gameDate ?? state.gameDate) ?? { month: 6 };
   const key = routePairKey(origin, destination);
 
   // Tag (multi-stop) routes self-contain their O&D split and must not join a
@@ -447,6 +465,161 @@ function sliceForRoute(pooled, route, aircraft, pairRoutes, fleet) {
 }
 
 /**
+ * The connecting feed weeklyTick will credit a route, computed the way the tick
+ * computes it — for a route that may not exist yet.
+ *
+ * Three surfaces used to call computeConnectingDemand() bare and disagree with
+ * the tick by an order of magnitude on any real hub: the tick's figure is
+ *
+ *   external gateway pool   computeConnectingDemand with the airport's weekly
+ *                           DEPARTURES as slots (the previews passed route
+ *                           COUNTS), gate congestion and hub-contest factors,
+ *                           then × cannibalisation × world-event multiplier;
+ *   + own-metal itineraries the A→hub→C markets runNetworkTick enumerates over
+ *                           designated hubs (network.js), this tail's share of
+ *                           the pair's seats;
+ *   capped by seat headroom connecting passengers occupy real seats, so a full
+ *                           aircraft carries none (partner feed competes for
+ *                           the same headroom but is booked separately).
+ *
+ * Measured on a six-spoke JFK hub: previews $1,751/wk, tick $29,000/wk; on a
+ * capacity-capped 7x JFK–DEN: previews $6,302/wk, tick $0.
+ *
+ * Mirrors weeklyTick from "Connecting passengers" to "const connecting = {…}".
+ * A change to either side must be made in both — tools/route-quote-
+ * reconciliation-test.mjs pins them together.
+ *
+ * @param {object} state
+ * @param {object} spec
+ *   origin, destination, aircraft, weeklyFrequency, ticketPrice, gameDate,
+ *   eventDemandMult (event-only, as projectRouteAddition receives it),
+ *   odPassengers + configuredSeatsOneWay (from the projected simulateRoute
+ *   result — the headroom cap needs them), replacesRouteId (a route being
+ *   edited is swapped for the probe rather than counted twice).
+ * @returns {object} same shape as weeklyTick's per-route `connecting`.
+ */
+export function projectConnectingFeed(state, spec) {
+  const {
+    origin, destination, aircraft, weeklyFrequency = 7, ticketPrice,
+    gameDate, eventDemandMult = 1, odPassengers = 0, configuredSeatsOneWay = 0,
+    replacesRouteId = null,
+  } = spec;
+  const empty = { totalPax: 0, totalRevenue: 0, externalPax: 0, externalRevenue: 0,
+                  itineraryPax: 0, itineraryRevenue: 0, feeds: [],
+                  origin: null, destination: null, priceFactor: 1,
+                  cannibalizationFactor: 1, capacityScale: 1 };
+  if (!origin || !destination || origin === destination) return empty;
+
+  const month = gameDate?.month ?? 6;
+  const fleet = state.fleet ?? [];
+  const probe = {
+    id: replacesRouteId ?? PREVIEW_ROUTE_ID, origin, destination, stops: [origin, destination],
+    aircraftId: aircraft?.id, weeklyFrequency, ticketPrice, hub: state.hub,
+  };
+  // The tick's `routes` view: the network as it will be with this route in it.
+  const routes = [
+    ...(state.routes ?? []).filter(r => r.id !== replacesRouteId && isRouteActive(r, month)),
+    probe,
+  ];
+  const routeCountByAirport = {}, slotsByAirport = {};
+  for (const r of routes) {
+    const f = r.weeklyFrequency ?? 7;
+    routeCountByAirport[r.origin]      = (routeCountByAirport[r.origin]      ?? 0) + 1;
+    routeCountByAirport[r.destination] = (routeCountByAirport[r.destination] ?? 0) + 1;
+    slotsByAirport[r.origin]      = (slotsByAirport[r.origin]      ?? 0) + f;
+    slotsByAirport[r.destination] = (slotsByAirport[r.destination] ?? 0) + f;
+  }
+
+  const hubs        = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
+  const gates       = state.gates ?? {};
+  const competitors = state.competitors ?? [];
+  const allianceMembership  = state.allianceMembership ?? null;
+  const codeshareAgreements = state.codeshareAgreements ?? [];
+  const allianceDef = state.allianceDef
+    ?? (allianceMembership ? getAlliance(allianceMembership.allianceId) : null);
+  const alliancePartnerIds  = allianceDef ? allianceMembers(allianceDef.id, competitors).map(c => c.id) : [];
+  const allPartnerIds = new Set([...alliancePartnerIds, ...codeshareAgreements.map(a => a.competitorId)]);
+  const partnerHubCodes = [];
+  for (const id of allPartnerIds) {
+    const comp = competitors.find(c => c.id === id);
+    if (comp?.homeHub) partnerHubCodes.push(comp.homeHub);
+  }
+
+  const worldMult  = state.worldDemandMult ?? 1;
+  const eventModel = buildEventDemandModel(state.activeEvents);
+  const demandMultFor = (a, b) => eventModel.multFor(a, b) * worldMult;
+  const rivalIndex = rivalIndexFor(state);
+  const legacy     = isLegacy(rivalIndex);
+
+  const net = runNetworkTick({
+    routes, competitors, allianceMembership, codeshareAgreements, allianceDef,
+    gameDate, hubs, gates, routeCountByAirport, slotsByAirport, demandMultFor, rivalIndex,
+  });
+  const contestFactors = {};
+  for (const [code, c] of Object.entries(net.hubContestMap ?? {})) contestFactors[code] = c.contestFactor;
+
+  const key = routePairKey(origin, destination);
+  const raw = computeConnectingDemand(
+    origin, destination, hubs,
+    slotsByAirport[origin] ?? 0, slotsByAirport[destination] ?? 0,
+    ticketPrice,
+    { weeklyFrequency, partnerHubCodes, gates, contestFactors },
+  );
+  const cannib = Math.min(1.0, net.cannibalizationMap?.[key] ?? 1.0);
+  const evConn = eventDemandMult * worldMult;
+  let extPax     = Math.round(raw.totalPax     * cannib * evConn);
+  let extRevenue = Math.round(raw.totalRevenue * cannib * evConn);
+
+  // This tail's share of the pair's one-way seats (the tick's legFeedShare).
+  let pairSeats = 0;
+  for (const r of routes) {
+    if (isMultiStop(r) || routePairKey(r.origin, r.destination) !== key) continue;
+    const ac = r.id === probe.id ? aircraft : fleet.find(a => a.id === r.aircraftId);
+    if (!ac) continue;
+    pairSeats += configBodies(ac.config ?? {}) * (r.weeklyFrequency ?? 7);
+  }
+  const feedShare = legacy ? 1 : (pairSeats > 0 ? Math.min(1, (configuredSeatsOneWay ?? 0) / pairSeats) : 1);
+  const ownLeg    = net.ownMetalOD?.byRouteKey?.[key] ?? null;
+  let itinPax     = Math.round((ownLeg?.pax     ?? 0) * feedShare);
+  let itinRevenue = Math.round((ownLeg?.revenue ?? 0) * feedShare);
+
+  // Partner-fed passengers seated on this leg compete for the same headroom.
+  let partnerPaxRaw = 0;
+  if (!legacy) {
+    for (const e of net.partnerODRevenue?.entries ?? []) {
+      if (!e.origin || !e.dest || !e.hub) continue;
+      const legKey = e.partnerLeg === 'leg2' ? routePairKey(e.origin, e.hub) : routePairKey(e.hub, e.dest);
+      if (legKey === key) partnerPaxRaw += e.pax;
+    }
+    partnerPaxRaw = Math.round(partnerPaxRaw * feedShare);
+  }
+
+  const seatHeadroom = Math.max(0, Math.round((configuredSeatsOneWay ?? 0) * 0.95) - (odPassengers ?? 0));
+  const wantPax  = extPax + itinPax + partnerPaxRaw;
+  const capScale = wantPax > seatHeadroom && wantPax > 0 ? seatHeadroom / wantPax : 1;
+  if (capScale < 1) {
+    extPax      = Math.round(extPax      * capScale);
+    extRevenue  = Math.round(extRevenue  * capScale);
+    itinPax     = Math.round(itinPax     * capScale);
+    itinRevenue = Math.round(itinRevenue * capScale);
+  }
+  return {
+    totalPax:         extPax + itinPax,
+    totalRevenue:     extRevenue + itinRevenue,
+    externalPax:      extPax,
+    externalRevenue:  extRevenue,
+    itineraryPax:     itinPax,
+    itineraryRevenue: itinRevenue,
+    feeds:            ownLeg?.feeds ?? [],
+    origin:           raw.origin,
+    destination:      raw.destination,
+    priceFactor:      raw.priceFactor,
+    cannibalizationFactor: +cannib.toFixed(3),
+    capacityScale:         +capScale.toFixed(3),
+  };
+}
+
+/**
  * Project what a route the player has NOT opened yet would actually carry.
  *
  * Five things the tick applies that a bare simulateRoute() call does not:
@@ -483,6 +656,7 @@ function sliceForRoute(pooled, route, aircraft, pairRoutes, fleet) {
  * @param {number} [spec.eventDemandMult]
  * @returns {{
  *   mature: object|null,      // simulateRoute result at full maturity
+ *   connecting: object|null,  // projectConnectingFeed(): the tick's connecting shape, mature week
  *   launch: object|null,      // simulateRoute result in week 0
  *   shared: boolean,          // pair already flown by another of your tails
  *   pairRouteCount: number,   // your routes on the pair INCLUDING this one
@@ -500,7 +674,9 @@ export function projectRouteAddition(state, spec) {
     origin, destination, aircraft, weeklyFrequency,
     classPrices, ticketPrice, cateringLevel, season,
     replacesRouteId = null,
-    gameDate = state.gameDate ?? { month: 6 },
+    // Defaults to the world's calendar WITH absWeek (currentGameDate) so the
+    // market grows as the tick's does; a caller-built date is completed below.
+    gameDate: gameDateIn = state.gameDate ?? currentGameDate(state),
     // TW: weeklyTick reads state.fuelMultiplier (tickPrep computes it and hands
     // it in as part of tickInput; a saved state does not carry it, so this is
     // 1.0 on a real save — exactly what the two call sites passed by hand).
@@ -513,6 +689,7 @@ export function projectRouteAddition(state, spec) {
     eventDemandMult = buildEventDemandModel(state.activeEvents).multFor(origin, destination),
   } = spec;
   if (!origin || !destination || !aircraft || origin === destination) return null;
+  const gameDate = withAbsWeek(state, gameDateIn);
 
   const key   = routePairKey(origin, destination);
   const fleet = state.fleet ?? [];
@@ -591,6 +768,9 @@ export function projectRouteAddition(state, spec) {
   // simulateRoute projects the EXPECTED week (jitter = 1) — an honest central
   // estimate rather than one arbitrary week's roll.
 
+  // Fleet utilisation as the tick will measure it — WITH this route flying.
+  // Reputation (and so brand reach and price sensitivity) reads it.
+  const utilWithProbe = fleetAvgUtilization(fleetPlus, [...routesPlus, ...(state.cargoRoutes ?? [])]);
   const runAt = (weeksOpen) => {
     const share = pairMarketShare(stateForOffer, origin, destination, {
       gameDate,
@@ -617,9 +797,9 @@ export function projectRouteAddition(state, spec) {
       weeksOpen,
       hubSpokes,
       ...(hubQ > 0 ? { hubQualityBonus: hubQ } : {}),
-      priceSensitivityReduction: stateSensReduction(state, hubQ),
+      priceSensitivityReduction: stateSensReduction(state, hubQ, utilWithProbe),
       marketingBoost: playerCampaignBoost(state, origin, destination),
-      brandReach: stateBrandReach(state, hubQ, false),
+      brandReach: stateBrandReach(state, hubQ, false, [origin, destination], utilWithProbe),
       // The same three lounge fields weeklyTick attaches. Without loungeCoverage
       // the projection sells day passes at an airport with no lounge; without
       // loungeContractFactor it quotes the full third-party premium ground rate
@@ -663,10 +843,20 @@ export function projectRouteAddition(state, spec) {
   const mature = runAt(matureWeeks);
   const launch = runAt(launchWeeks);
   if (!mature.result) return null;
+  const connecting = projectConnectingFeed(state, {
+    origin, destination, aircraft, weeklyFrequency, ticketPrice, gameDate,
+    eventDemandMult, replacesRouteId,
+    odPassengers: mature.result.passengers,
+    configuredSeatsOneWay: mature.result.configuredSeatsOneWay,
+  });
 
   return {
     mature: mature.result,
     launch: launch.result,
+    // The connecting feed the tick will credit this route (mature week), in the
+    // tick's own shape. mature.profit + connecting.totalRevenue is the route's
+    // operating profit — the figure every screen should call profit.
+    connecting,
     shared: others.length > 0,
     pairRouteCount: pairRoutes.length,
     // What the WHOLE pair carries once this tail joins it, and what the whole

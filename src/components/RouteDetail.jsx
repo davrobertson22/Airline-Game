@@ -12,7 +12,7 @@ import { playerCampaignBoost } from '../models/pairShare.js';
 import { rivalIndexFor, rivalOneStopOffersFor, rivalsOn, isLegacy } from '../models/network.js';
 import { getAlliance } from '../data/alliances.js';
 import {
-  simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, weekToGameDate,
+  simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, currentGameDate,
   hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
@@ -25,9 +25,6 @@ import { Glyph, GlyphLabel } from './Icons.jsx';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
-function weekToMonth(week) {
-  return weekToGameDate(week).monthIndex;
-}
 
 const TIER_COLOR = { budget: 'var(--yellow)', legacy: 'var(--accent)', premium: 'var(--purple)' };
 
@@ -191,7 +188,8 @@ function MarketSharePie({ slices }) {
 
 export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const { state, dispatch } = useGame();
-  const gameDate  = { week: state.week, month: weekToMonth(state.week) };
+  // currentGameDate carries absWeek so the market panel grows with the world.
+  const gameDate  = currentGameDate(state);
   const hubs      = state.hubs ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
 
   const originAirport = getAirport(origin);
@@ -319,7 +317,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // offer that omits one is not neutral, it is scored at parity.
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost:    playerCampaignBoost(state, origin, dest),
-          brandReach:        stateBrandReach(state, maxHubBonus, false),
+          brandReach:        stateBrandReach(state, maxHubBonus, false, [origin, dest]),
         };
       }
     }
@@ -406,7 +404,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           loungeAppeal: stateLoungeFields(state, origin, dest).loungeAppeal,
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost: playerCampaignBoost(state, origin, dest),
-          brandReach: stateBrandReach(state, maxHubBonus, false),
+          brandReach: stateBrandReach(state, maxHubBonus, false, [origin, dest]),
         };
         const compOffers = [...competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean), ...viaOffers];
         const [combined] = computeMarketShare(market, [combinedOffer, ...compOffers], { legacy: isLegacy(rivalIndexFor(state)) });
