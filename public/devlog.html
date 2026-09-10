@@ -65,6 +65,17 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">September 10, 2026</p>
+      <h2>Buying an airline no longer thins out the rest of your network</h2>
+      <p>From a Discord report by wj: demand sliding across the whole map right after a buyout. Two things were behind it, and both are fixed.</p>
+      <ul>
+        <li><strong>A nonstop only takes the connecting passengers it can seat.</strong> When you fly a market nonstop, travellers stop connecting over your hub &mdash; that part is real. But the game was treating every nonstop as a daily flight at the standard fare, so a once-a-week regional emptied your hub legs just as thoroughly as a four-times-daily jet, and the passengers it displaced had nowhere to sit. A nonstop is now judged on the frequency it actually flies and the fare you actually charge, and it can only pull the traffic it has seats for. The rest keep connecting.</li>
+        <li><strong>You inherit the schedule you paid for.</strong> A rival flying a route with four aircraft used to arrive as one thin route with three planes parked on the ramp. Those routes now come across with every aircraft that flew them, splitting the old schedule between them. Aircraft are only left idle once the schedule is fully covered.</li>
+      </ul>
+      <p>Net effect: an acquisition adds traffic instead of quietly deleting it, and buying a big carrier that overlaps your hub is worth what it looks like it is worth. How connecting traffic and nonstops trade off is covered in the <a href="/hub-strategy.html">hub strategy guide</a>, and what a route earns per seat in <a href="/route-economics.html">route economics</a>.</p>
+    </div>
+
+    <div class="entry">
       <p class="date">September 9, 2026</p>
       <h2>Rival connections get a name; two planes on one route get two departure times</h2>
       <p>Two display fixes from Discord reports, thanks to LtFrosty and Mariaklinga.</p>
