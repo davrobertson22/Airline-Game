@@ -49,6 +49,7 @@
     "test:p6-drift": "node tools/p6-drift-test.mjs",
     "test:crew": "node --import ./tools/_register-loader.mjs tools/crew-pipeline-test.mjs",
     "test:crew-ui": "node --import ./tools/_register-loader.mjs tools/crew-ui-test.mjs",
+    "test:crew-covered-ui": "node --import ./tools/_register-loader.mjs tools/crew-covered-ui-test.mjs",
     "test:demand-growth": "node tools/demand-growth-test.mjs",
     "test:fleet-cargo": "node --import ./tools/_register-loader.mjs tools/fleet-cargo-panel-test.mjs",
     "test:territory": "node --import ./tools/_register-loader.mjs tools/territory-hub-test.mjs",
