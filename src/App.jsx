@@ -9,6 +9,7 @@ import SaveLoadModal from './components/SaveLoadModal.jsx';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
 import SetupScreen from './components/SetupScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
+import SupportCard from './components/SupportCard.jsx';
 import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
@@ -564,6 +565,9 @@ function AppInner() {
       {/* Page content */}
       <div className="main-content">
         {tabContent[activeTab]}
+        {/* The ask, on the Dashboard only — not on every tab, and never over
+            the game or at a moment the player has just lost money. */}
+        {activeTab === 'dashboard' && <SupportCard />}
         {/* Disclaimer lives at the end of the scrollable content (desktop +
             mobile) so it's reachable on scroll without permanently occupying
             screen space. */}
@@ -578,6 +582,7 @@ function AppInner() {
               ['Glossary', '/glossary.html'],
               ['Devlog', '/devlog.html'],
               ['About', '/about.html'],
+              ['Support', '/support.html'],
               ['Privacy', '/privacy.html'],
             ].map(([label, href]) => (
               <a
