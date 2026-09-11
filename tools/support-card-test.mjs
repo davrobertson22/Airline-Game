@@ -4,11 +4,12 @@
 //
 // This component is the money path and it is easy to get subtly wrong: it
 // touches localStorage (which throws in private windows), and it must not
-// promise the badge or the ad-free perk, neither of which a game with no
-// accounts can deliver. Headwinds has its own twin of this file covering the
+// promise the badge, which a game with no accounts cannot deliver, nor an
+// ad-free game, which neither game offers — the ads help pay for both. Headwinds has its own twin of this file covering the
 // multiplayer card — it lives there rather than here because importing it
 // across repos loads a second copy of React and every hook call fails.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
@@ -44,11 +45,11 @@ test('renders, and points at the Ko-fi page', () => {
   assert.ok(html.includes('/support.html'), 'support page link missing');
 });
 
-test('promises nothing it cannot deliver (no badge, no ad-free)', () => {
+test('promises nothing it cannot deliver (no badge, no ad-free game)', () => {
   store = new Map(); throwOnStorage = false;
   const html = renderToString(React.createElement(TwSupportCard));
   assert.ok(!/SUPPORTER badge/i.test(html), 'solo game must not promise a badge — it has no accounts');
-  assert.ok(!/no ads/i.test(html), 'solo game cannot turn ads off for one player');
+  assert.ok(!/no ads/i.test(html), 'nobody gets an ad-free game — the ads help pay for this');
 });
 
 test('stays hidden once dismissed', () => {
@@ -66,6 +67,15 @@ test('renders when localStorage throws (private window)', () => {
   store = new Map(); throwOnStorage = true;
   assert.ok(renderToString(React.createElement(TwSupportCard)).includes(KOFI));
   throwOnStorage = false;
+});
+
+// The support PAGE has to keep the same promise the card does. An ad-free perk
+// was offered and withdrawn before launch, so the risk is a leftover line that
+// still promises it — a page saying "no ads" is a promise the game does not keep.
+test('the support page does not promise an ad-free game either', () => {
+  const html = readFileSync(new URL('../public/support.html', import.meta.url), 'utf8');
+  assert.ok(!/no ads\b|ad-free|ads are off|ads switch off|without ads/i.test(html),
+    'public/support.html still promises an ad-free game somewhere');
 });
 
 console.log(`\n${failed ? 'FAIL' : 'PASS'} — ${passed} passed, ${failed} failed`);
