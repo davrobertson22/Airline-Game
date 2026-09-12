@@ -248,6 +248,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
       map[t.id] = deployableFleetForRoute({
         fleet:          state.fleet,
         existingRoutes: state.cargoRoutes ?? [],
+        charters:       state.charters ?? [],
         typeId:         t.id,
         origin, dest,
         distKm:         routeData.dist,

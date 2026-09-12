@@ -64,6 +64,7 @@ export default function WeeklyDebrief() {
   const mechanicalFailures = lastReport.mechanicalFailures ?? [];
   const maintChecks        = lastReport.maintenanceChecks ?? { started: [], forced: [], completed: [], spend: 0 };
   const coverage           = lastReport.coverage ?? { started: [], ended: [], permanent: [], gaps: [] };
+  const charterOutcomes    = lastReport.charterOutcomes ?? { completed: [], breached: [] };
 
   // The debrief is the one screen every player reads every week, and it had
   // nothing to say about the only event that closes routes on its own. Say it
@@ -365,6 +366,40 @@ export default function WeeklyDebrief() {
                 <div key={'cg' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'rgba(210,153,34,.08)', border: '1px solid rgba(210,153,34,.25)', borderRadius: 8, fontSize: 12 }}>
                   <span style={{ fontSize: 16 }}>⚠️</span>
                   <div style={{ flex: 1 }}><span style={{ fontWeight: 600, color: 'var(--yellow)' }}>{g.original.name}</span> <span style={{ color: 'var(--text-muted)' }}>{g.routes} route{g.routes !== 1 ? 's' : ''} uncovered (~{formatMoney(g.revenueAtRisk)}/wk) — {g.reason === 'no-reserve' ? 'no same-type reserve based there' : 'reserve out of block hours'}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Charter contracts — only the ENDINGS. A contract quietly flying its
+            term is not news; one that finished and paid, or one the airline
+            failed to deliver, is. */}
+        {((charterOutcomes.completed?.length ?? 0) + (charterOutcomes.breached?.length ?? 0)) > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <SectionLabel>📜 Charter Contracts</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {(charterOutcomes.completed ?? []).map((c, i) => (
+                <div key={'chc' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'rgba(63,185,80,.08)', border: '1px solid rgba(63,185,80,.25)', borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ fontSize: 16 }}>📜</span>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--green)' }}>{c.origin}–{c.destination}</span>{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      contract complete — {c.weeksTotal} week{c.weeksTotal !== 1 ? 's' : ''} flown for {c.customer}, {formatMoney(c.fee)} earned
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(charterOutcomes.breached ?? []).map((c, i) => (
+                <div key={'chb' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'rgba(248,81,73,.10)', border: '1px solid rgba(248,81,73,.30)', borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ fontSize: 16 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--red)' }}>{c.origin}–{c.destination}</span>{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      contract BREACHED — no serviceable aircraft to fly it. {formatMoney(c.breachPenalty)} penalty,
+                      and your charter record has taken the hit.
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

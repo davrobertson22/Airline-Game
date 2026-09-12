@@ -215,7 +215,7 @@ export default function Routes() {
   // governs — including any routes a reserve is currently covering for it.
   // Counting only what it flies today made an out-of-service tail read as free.
   const usedHrsFor = (a) =>
-    committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? []);
+    committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? [], state.charters ?? []);
   const availableFleet = fleet.filter(a => usedHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS);
   // Reserves stand by on purpose — they aren't part of the "idle, earning
   // nothing" nudge (Fleet tab has a Reserve chip for them).
@@ -2355,7 +2355,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // network was out on cover as completely free, so this form offered a
   // grounded airframe as if it were spare metal and the reducer took the load.
   const usedBlockHrsFor = (a) =>
-    committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? []);
+    committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? [], state.charters ?? []);
 
   // Freighters can't fly passenger routes (the reducer rejects them) — keep them
   // out of this form entirely; they're managed in the cargo planner.
@@ -2365,7 +2365,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // an extra route that touches one of them; an idle plane (no routes) is free
   // to go anywhere. Used to keep ineligible airframes out of the picker.
   const servedBy = (a) => new Set(
-    routesCommittedTo(a?.id, routes, state.cargoRoutes ?? []).flatMap(r => routeStops(r))
+    routesCommittedTo(a?.id, routes, state.cargoRoutes ?? [], state.charters ?? []).flatMap(r => routeStops(r))
   );
 
   // Default aircraft. In add-flights mode, prefer one already flying this pair
@@ -2378,7 +2378,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
       ).map(r => r.aircraftId))
     : new Set();
   const connectsToPair = (a) => {
-    const acRoutes = routesCommittedTo(a.id, routes, cargoRoutes);
+    const acRoutes = routesCommittedTo(a.id, routes, cargoRoutes, state.charters ?? []);
     return acRoutes.length === 0 ||
       acRoutes.some(r => routeStops(r).some(c => c === initialOrigin || c === initialDest));
   };
@@ -2468,6 +2468,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const fit = blockHourFit({
     aircraftId: aircraft?.id, type,
     routes, cargoRoutes,
+    charters: state.charters ?? [],
     months: newMonths,
     hoursPerFlight: type && dist ? blockTimeHours(dist, type) * 2 : 0,
     weeklyFrequency: Number(frequency) || 0,
@@ -2504,7 +2505,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // routesCommittedTo + routeStops, exactly as the reducer asks it: a tag
   // rotation's intermediate stops are served airports, and a rotation out on
   // cover still belongs to this tail.
-  const aircraftRoutes   = aircraft ? routesCommittedTo(aircraft.id, routes, cargoRoutes) : [];
+  const aircraftRoutes   = aircraft ? routesCommittedTo(aircraft.id, routes, cargoRoutes, state.charters ?? []) : [];
   const servedAirports   = new Set(aircraftRoutes.flatMap(r => routeStops(r)));
   const connectivityOk   = aircraftRoutes.length === 0 ||
     servedAirports.has(origin) || (validDest && servedAirports.has(dest));

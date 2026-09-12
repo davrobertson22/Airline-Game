@@ -421,7 +421,10 @@ t('a covering reserve with spare hours takes the second tail too', () => {
   const { assignments, gaps } = planCovers({ fleet, routes, cargoRoutes: [], hubs: { JFK: { tier: 1 } }, absWeek: 0, routeRevenues: {} });
   assert.equal(gaps.length, 0);
   assert.equal(assignments.length, 1);
-  assert.deepEqual({ ...assignments[0] }, { routeId: 'r-new', cargo: false, reserveId: 'res', forId: 'brk2' });
+  // `kind` distinguishes a route from a cargo lane from a charter contract —
+  // contracts go through this same cover pass so a heavy check does not
+  // automatically breach one.
+  assert.deepEqual({ ...assignments[0] }, { routeId: 'r-new', cargo: false, kind: 'route', reserveId: 'res', forId: 'brk2' });
 });
 
 t('a tail flying a route of its OWN is never treated as spare capacity', () => {

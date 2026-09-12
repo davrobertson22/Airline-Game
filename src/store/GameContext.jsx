@@ -63,7 +63,7 @@ import {
 } from '../models/charterBoard.js';
 import {
   charterPermitFee, applyReliability, CHARTER_RELIABILITY_START,
-  CHARTER_RELIABILITY_ON_BREACH, CHARTER_TYPES,
+  CHARTER_RELIABILITY_ON_BREACH, CHARTER_RELIABILITY_ON_COMPLETE, CHARTER_TYPES,
 } from '../data/charters.js';
 import {
   COMPETITOR_AIRLINES,
@@ -755,6 +755,58 @@ export function charterAcceptBlockReason(state, offerId, aircraftId) {
   if (regHit) return regHit.reason ?? `Regulation blocks ${offer.origin}–${offer.destination}`;
 
   return null;
+}
+
+/**
+ * Settle every running contract against the week the engine just simulated.
+ *
+ * The tick reports a contract as `breached` when the assigned tail could not fly
+ * (AOG, heavy check, or nobody to crew it). It does not act on that, because a
+ * breach moves cash, reputation and the reliability score — all reducer business.
+ * This is where a contract's clock runs down, a positioning week turns into a
+ * working one, and a finished contract pays off the record.
+ *
+ * PURE: takes the state and the report, returns what changed. That matters
+ * because the forecast runs the identical tick, and anything that mutated here
+ * would make a projection a prediction of a week that cannot happen.
+ */
+export function settleCharters(state, report) {
+  const results = new Map((report?.charterResults ?? []).map(r => [r.charterId, r]));
+  const charters = [];
+  const completed = [];
+  const breached  = [];
+  let penalties = 0;
+  let reliability = state.charterReliability ?? CHARTER_RELIABILITY_START;
+
+  for (const c of state.charters ?? []) {
+    // Anything already finished is dropped: a contract's life ends with its
+    // outcome, and the news log is what keeps the history.
+    if (c.status !== 'active' && c.status !== 'positioning') continue;
+
+    const res = results.get(c.id);
+    if (res?.breached) {
+      penalties  += c.breachPenalty ?? 0;
+      reliability = applyReliability(reliability, CHARTER_RELIABILITY_ON_BREACH);
+      breached.push({ ...c, status: 'breached', breachReason: res.reason ?? 'unflyable' });
+      continue;
+    }
+
+    // A positioning week buys no term — the tail ferried out, it did not work.
+    if (c.status === 'positioning') {
+      const left = (c.positioningWeeksRemaining ?? 1) - 1;
+      charters.push(left > 0
+        ? { ...c, positioningWeeksRemaining: left }
+        : { ...c, positioningWeeksRemaining: 0, status: 'active' });
+      continue;
+    }
+
+    const left = (c.weeksRemaining ?? 1) - 1;
+    if (left > 0) { charters.push({ ...c, weeksRemaining: left }); continue; }
+    reliability = applyReliability(reliability, CHARTER_RELIABILITY_ON_COMPLETE);
+    completed.push({ ...c, weeksRemaining: 0, status: 'complete' });
+  }
+
+  return { charters, completed, breached, penalties, reliability };
 }
 
 /**
@@ -4046,6 +4098,16 @@ function reducer(state, action) {
       // balance-sheet repayment, NOT a deductible expense, so it is excluded from the
       // tax base (previously the full loan payment was deducted, which under-taxed
       // leveraged airlines and turned debt into a tax shelter).
+      // ── Charter contracts: settle the week the engine just flew ───────────
+      // Operating revenue and cost are already inside report.cashDelta (the tick
+      // folds them in with the routes). What is left is what a contract ENDING
+      // costs or pays: a breach penalty, and the delivery record.
+      // Settled against the COVERED list: a contract a reserve picked up this
+      // week was flown, not breached, and settleCharters must see the same
+      // assignment the tick did.
+      const charterSettle = settleCharters({ ...state, charters: coverPass.charters }, report);
+      const charterPenalties = charterSettle.penalties;
+
       const CORPORATE_TAX_RATE = 0.21;
       const weeklyDepreciation = fleetWeeklyDepreciation(state.fleet);
       // Seasonal reactivation fees are a deductible operating expense, treated like
@@ -4057,10 +4119,10 @@ function reducer(state, action) {
       // preTaxProfit below — this game's P&L card is walked row by row against
       // the week's cash movement, and a movement with no row is a reconciliation
       // failure by design.
-      const taxableIncome   = adjustedCashDelta - weeklyDepreciation - totalLoanInterest - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance;
+      const taxableIncome   = adjustedCashDelta - weeklyDepreciation - totalLoanInterest - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance - charterPenalties;
       const corporateTax    = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
       // Cash movement: operating cash − full loan payment − reactivation fees − tax.
-      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance + leaseDepositRefund;
+      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance + leaseDepositRefund - charterPenalties;
       const newCash = state.cash + preTaxProfit - corporateTax;
       let newWeek = state.week + 1;
       let newYear = state.year;
@@ -4263,6 +4325,9 @@ function reducer(state, action) {
         cargoRevenue:    report.totalCargoRevenue   ?? 0,
         cargoProfit:     report.totalCargoProfit    ?? 0,
         cargoTonnes:     report.totalCargoTonnes    ?? 0,
+        charterRevenue:  report.totalCharterRevenue ?? 0,
+        charterProfit:   report.totalCharterProfit  ?? 0,
+        charterPenalties: charterPenalties,
         loanPayments:       totalLoanPayments,
         loanInterest:       totalLoanInterest,
         leaseRedelivery:    leaseRedeliveryCost,
@@ -4338,6 +4403,7 @@ function reducer(state, action) {
         revenue:        report.totalRevenue ?? 0,   // grand total operating revenue (incl. cargo + partner)
         partnerRevenue: report.totalPartnerRevenue ?? 0,
         cargoRevenue:   report.totalCargoRevenue   ?? 0,
+        charterRevenue: report.totalCharterRevenue ?? 0,
         cost:           historyEntry.totalCost,
         profit:         historyEntry.profit,
         cash:           newCash,
@@ -4545,7 +4611,28 @@ function reducer(state, action) {
         weeksOpen: (r.weeksOpen ?? 0) + 1,
       }));
 
-      let newReputationPenalty = (state.reputationPenalty ?? 0) * REP_PENALTY_DECAY + forcedRepHit;
+      // A tail whose contract ended this week goes back to idle unless it still
+      // has a schedule or another contract. Done here rather than in
+      // settleCharters because only this point in the tick knows the routes that
+      // actually survived the week (lease expiry, closures, reserve hand-backs).
+      const charterFleet = (() => {
+        const ended = new Set([...charterSettle.completed, ...charterSettle.breached].map(c => c.aircraftId));
+        if (ended.size === 0) return finalFleet;
+        const stillBusy = (id) =>
+          finalRoutes.some(r => r.aircraftId === id) ||
+          finalCargoRoutes.some(r => r.aircraftId === id) ||
+          charterSettle.charters.some(c => c.aircraftId === id);
+        return finalFleet.map(a => (ended.has(a.id) && !stillBusy(a.id) && a.status === 'assigned')
+          ? { ...a, status: 'idle' } : a);
+      })();
+
+      // A breach is exactly the kind of failure the reputation system is for: the
+      // airline signed for lift it could not deliver. Charged on the same channel
+      // a forced maintenance check uses, scaled by how big the contract was.
+      const charterRepHit = charterSettle.breached
+        .reduce((sum, c) => sum + (c.reputationStake ?? 3), 0);
+
+      let newReputationPenalty = (state.reputationPenalty ?? 0) * REP_PENALTY_DECAY + forcedRepHit + charterRepHit;
       newReputationPenalty = newReputationPenalty < 0.1 ? 0 : Math.min(REP_PENALTY_MAX, newReputationPenalty);
 
       // ── News log ─────────────────────────────────────────────────────────────
@@ -4576,7 +4663,10 @@ function reducer(state, action) {
         week:              newWeek,
         year:              newYear,
         newsLog:           appendNews(state.newsLog, weekNews),
-        fleet:             finalFleet,
+        fleet:             charterFleet,
+        charters:          charterSettle.charters,
+        charterReliability: charterSettle.reliability,
+        charterDismissed:  pruneDismissed(state.charterDismissed ?? [], newAbsWeek),
         reputationPenalty: newReputationPenalty,
         routes:            finalRoutes,
         cargoRoutes:       finalCargoRoutes,
@@ -4591,7 +4681,7 @@ function reducer(state, action) {
           // operating cost so that (revenueEffective − totalCostAll) reconciles to cashDelta.
           revenueEffective: Math.round(report.totalRevenue + eventDemandAdj - strikeRevenueLoss),
           totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost + corporateTax + maintCheckSpend + aogSpend,
-          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
+          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,
         hubs:              hubsAfterBuild,

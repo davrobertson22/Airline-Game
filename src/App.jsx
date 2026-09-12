@@ -23,6 +23,7 @@ import RouteFinderScreen from './components/RouteFinderScreen.jsx';
 import Airports from './components/Airports.jsx';
 import RouteMap from './components/RouteMap.jsx';
 import Operations from './components/Operations.jsx';
+import Charters from './components/Charters.jsx';
 import Maintenance from './components/Maintenance.jsx';
 import Ancillaries from './components/Ancillaries.jsx';
 import Loyalty from './components/Loyalty.jsx';
@@ -135,6 +136,7 @@ const TABS = [
   { id: 'market',      label: 'Market',        Icon: MarketIcon      },
   { id: 'airports',    label: 'Gates',         Icon: GateIcon          },
   { id: 'hubs',        label: 'Hubs',          Icon: HubIcon           },
+  { id: 'charters',    label: 'Charters',     Icon: RoutesIcon        },
   { id: 'operations',  label: 'Operations',   Icon: OperationsIcon    },
   { id: 'maintenance', label: 'Maintenance',  Icon: WrenchIcon       },
   { id: 'ancillaries', label: 'Ancillaries',  Icon: AncillaryIcon     },
@@ -158,7 +160,7 @@ const NAV_GROUPS = [
   { label: 'Network',  Icon: MapIcon,        children: ['map', 'finder', 'planner', 'routes'] },
   { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
   { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
-  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'alliances', 'competition'] },
+  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'charters', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'alliances', 'competition'] },
   { id: 'finance' },
   { id: 'wiki' },
 ];
@@ -341,6 +343,7 @@ function AppInner() {
     market:      <Marketplace />,
     airports:    <Airports />,
     hubs:        <HubManagement />,
+    charters:    <Charters />,
     operations:  <Operations />,
     maintenance: <Maintenance />,
     ancillaries: <Ancillaries />,

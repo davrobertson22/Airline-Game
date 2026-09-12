@@ -142,6 +142,9 @@ t('ReserveNotice and ReserveBadge render nothing for a normal aircraft', () => {
 
 const SPENDING_ACTIONS = [
   'ADD_ROUTE', 'ADD_TAG_ROUTE', 'ADD_CARGO_ROUTE', 'TRANSFER_ROUTES', 'REASSIGN_ROUTE',
+  // Signing a charter with a stationed reserve ends its standby exactly as
+  // opening a route does — the tail is out on a contract, not waiting at base.
+  'ACCEPT_CHARTER', 'REASSIGN_CHARTER',
 ];
 
 // Every file under src/components that dispatches one of them.
@@ -168,7 +171,10 @@ t('the deploy surface is the six pickers we know about', () => {
     'RoutePlanner.jsx',
     'Routes.jsx',
     'TagRoutePlanner.jsx',
-  ]);
+    // Signing a charter with a stationed reserve ends its standby, so the
+    // Charters board carries the same warning the route pickers do.
+    'Charters.jsx',
+  ].sort());
 });
 
 for (const file of SITES) {
@@ -186,8 +192,9 @@ t('every reducer action that clears reserveBase has a picker that warns', () => 
   // engine — add its picker to the list above rather than muting this.
   const reducer = read('src/store/GameContext.jsx');
   const clears = (reducer.match(/reserveBase: null/g) ?? []).length;
-  assert.equal(clears, 8,
-    `expected 8 reserveBase-clearing sites in the reducer, found ${clears}`);
+  // 8 route-deploy sites + ACCEPT_CHARTER + REASSIGN_CHARTER.
+  assert.equal(clears, 10,
+    `expected 10 reserveBase-clearing sites in the reducer, found ${clears}`);
 });
 
 console.log(`\nreserve-deploy-warning-test: ${pass} passed, ${fail} failed`);

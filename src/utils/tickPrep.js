@@ -192,6 +192,9 @@ export function prepareWeek(state, {
     fleet:         tickedFleetPre,
     routes:        state.routes ?? [],
     cargoRoutes:   state.cargoRoutes ?? [],
+    // Contracts go through the cover pass too: a stationed reserve of the right
+    // type saves a charter from breaching when the assigned tail is in the shop.
+    charters:      state.charters ?? [],
     hubs:          state.hubs ?? {},
     absWeek:       curAbsWeek,
     routeRevenues: lastRouteRevenues,
@@ -270,6 +273,7 @@ export function prepareWeek(state, {
       fleet:        coverPass.fleet,
       routes:       seasonAdjustedRoutes,
       cargoRoutes:  coverPass.cargoRoutes,
+      charters:     coverPass.charters,
       fuelMultiplier,
       loyalty:      state.loyalty,
       gameDate,

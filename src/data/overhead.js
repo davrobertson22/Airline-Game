@@ -378,6 +378,27 @@ export const LANDING_FEE_PER_DEPARTURE = {
   'Outsize':     { mega: 13_000, major: 8_300, regional: 3_500 },
 };
 
+/**
+ * Map a freighter's payload to the landing-fee category used by weeklyLandingFee
+ * (the fee table is keyed by passenger body class; freighters pay the equivalent for
+ * their size/weight). Lives here rather than in simulation.js so charter and cargo
+ * pricing can charge the right fee without importing the engine.
+ */
+export function freighterLandingCategory(payloadTonnes = 0) {
+  if (payloadTonnes >= 150) return 'Outsize';
+  if (payloadTonnes >= 50) return 'Wide Body';
+  if (payloadTonnes >= 20) return 'Narrow Body';
+  if (payloadTonnes >= 10) return 'Regional Jet';
+  return 'Turboprop';
+}
+
+/** The landing-fee category for ANY type — freighters via their payload band. */
+export function landingCategoryFor(type) {
+  return type?.freighter
+    ? freighterLandingCategory(type.payloadTonnes ?? 0)
+    : (type?.category ?? 'Narrow Body');
+}
+
 /** Default fallback if category or tier not found. */
 const LANDING_FEE_DEFAULT = 1_400;
 

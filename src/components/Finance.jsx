@@ -453,6 +453,15 @@ function PLStatement({ proj }) {
   // Revenue — canonical, including connecting feed + partner O&D + all demand lifts.
   const totRev          = proj.effectiveRevenue;
   const totPartnerRev   = report.totalPartnerRevenue ?? 0;
+  // Charter revenue — already inside totRev (the tick folds contract fees into
+  // the grand total with the routes), broken out here as its own line exactly
+  // like cargo. Contracts are fixed-fee, so there is no tonnage or load factor
+  // to report alongside it — just the cheque and how many are running.
+  const totCharterRev     = report.totalCharterRevenue ?? 0;
+  const charterResults    = report.charterResults ?? [];
+  const charterRunning    = charterResults.filter(r => !r.breached).length;
+  const ytdCharterRev     = ytd(financialHistory, 'charterRevenue');
+
   // Cargo (freight) revenue — already inside totRev; broken out as its own line.
   const totCargoRev     = report.totalCargoRevenue ?? 0;
   const totCargoTonnes  = report.totalCargoTonnes ?? 0;
@@ -863,6 +872,19 @@ function PLStatement({ proj }) {
                   {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.partnerRevenue ? '+' + formatMoney(pw.partnerRevenue) : '—'}</td>}
                   <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totPartnerRev)}</td>
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
+              {totCharterRev > 0 && (
+                <tr>
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    <Glyph e="📜" /> Charter revenue <span style={{ color: '#9d8cff', fontWeight: 600 }}>(contracts)</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                      {charterRunning} contract{charterRunning !== 1 ? 's' : ''} flying · fixed fee
+                    </span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.charterRevenue ? '+' + formatMoney(pw.charterRevenue) : '—'}</td>}
+                  <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totCharterRev)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{ytdCharterRev ? formatMoney(ytdCharterRev) : '—'}</td>
                 </tr>
               )}
               {totCargoRev > 0 && (
@@ -2719,6 +2741,7 @@ const STAT_COLORS = {
   passRev:   '#38d39f',
   partnerRev:'#ffb43d',
   cargoRev:  '#c792ea',
+  charterRev:'#9d8cff',
   lf:        '#3ea6ff',
   yield:     '#38d39f',
   ask:       '#c792ea',
@@ -2946,7 +2969,7 @@ function Statistics() {
   const points = useMemo(() => downsampleStats(windowed).map(p => ({
     ...p,
     paxTotal: (p.paxOrganic ?? 0) + (p.paxConnecting ?? 0) + (p.paxInterline ?? 0),
-    passengerRev: Math.max(0, (p.revenue ?? 0) - (p.partnerRevenue ?? 0) - (p.cargoRevenue ?? 0)),
+    passengerRev: Math.max(0, (p.revenue ?? 0) - (p.partnerRevenue ?? 0) - (p.cargoRevenue ?? 0) - (p.charterRevenue ?? 0)),
     lfPct: (p.loadFactor ?? 0) * 100,
     yieldCents: (p.yield ?? 0) * 100,
   })), [windowed]);
@@ -3054,8 +3077,9 @@ function Statistics() {
           { key: 'passengerRev', label: 'Passenger',          color: STAT_COLORS.passRev,    kind: 'area' },
           { key: 'partnerRevenue', label: 'Partner (interline)', color: STAT_COLORS.partnerRev, kind: 'area' },
           { key: 'cargoRevenue', label: 'Cargo',              color: STAT_COLORS.cargoRev,   kind: 'area' },
+          { key: 'charterRevenue', label: 'Charter',           color: STAT_COLORS.charterRev, kind: 'area' },
         ]} />
-        <StatLegend items={[[STAT_COLORS.passRev, 'Passenger'], [STAT_COLORS.partnerRev, 'Partner / interline'], [STAT_COLORS.cargoRev, 'Cargo']]} />
+        <StatLegend items={[[STAT_COLORS.passRev, 'Passenger'], [STAT_COLORS.partnerRev, 'Partner / interline'], [STAT_COLORS.cargoRev, 'Cargo'], [STAT_COLORS.charterRev, 'Charter']]} />
       </div>
 
       {/* ── Network size ── */}

@@ -611,6 +611,7 @@ export default function RoutePlanner() {
       map[t.id] = deployableFleetForRoute({
         fleet:          state.fleet,
         existingRoutes: state.routes,
+        charters:       state.charters ?? [],
         typeId:         t.id,
         origin, dest,
         distKm:         routeData.dist,

@@ -60,6 +60,7 @@ const utilFor = (state, aircraft, month) => aircraftUtilization({
   type:        getAircraftType(aircraft?.typeId),
   routes:      state.routes ?? [],
   cargoRoutes: state.cargoRoutes ?? [],
+  charters:    state.charters ?? [],
   month,
   capHours:    MAX_WEEKLY_BLOCK_HOURS,
 });
@@ -607,7 +608,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   })[aircraft.id] ?? null,
   [state.fleet, state.routes, cargoRoutes, state.hubs, mAbsWeek, state.financialHistory, aircraft.id]);
   const mDue     = dueInfo(aircraft, type, mAbsWeek);
-  const mCheckOpts = { maintMod: aircraft.maintMod ?? 1, laborMult: laborEffects(state.labor).maintenanceCostMultiplier, hubFactor: aircraftHubMaintFactor(aircraft.id, state.routes, state.cargoRoutes, state.hubs) };
+  const mCheckOpts = { maintMod: aircraft.maintMod ?? 1, laborMult: laborEffects(state.labor).maintenanceCostMultiplier, hubFactor: aircraftHubMaintFactor(aircraft.id, state.routes, state.cargoRoutes, state.hubs, state.charters ?? []) };
   const ageWks   = aircraft.ageWeeks ?? 0;
   const ageYrs   = ageWks / 52;
   const maintMlt = maintenanceMultiplier(ageWks);
@@ -1828,7 +1829,7 @@ export default function Fleet() {
   const checkOptsFor = (a) => ({
     maintMod:  a.maintMod ?? 1,
     laborMult: maintLaborMult,
-    hubFactor: aircraftHubMaintFactor(a.id, routes, cargoRoutes, state.hubs),
+    hubFactor: aircraftHubMaintFactor(a.id, routes, cargoRoutes, state.hubs, state.charters ?? []),
   });
   const maintServiceable = fleet.filter(a => !isOutOfService(a) && !a.scheduledCheck && a.status !== 'retired');
   const maintDue = maintServiceable

@@ -121,8 +121,8 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
       // Everything this tail is on the hook for — its cargo network too, and any
       // rotation a reserve is covering for it (those come home). Filtering on
       // aircraftId alone showed a covered tail as free metal.
-      const acRoutes = routesCommittedTo(a.id, routes, cargoRoutes);
-      if (committedPeakBlockHours(a.id, t, routes, cargoRoutes) >= MAX_WEEKLY_BLOCK_HOURS) return false;
+      const acRoutes = routesCommittedTo(a.id, routes, cargoRoutes, state.charters ?? []);
+      if (committedPeakBlockHours(a.id, t, routes, cargoRoutes, state.charters ?? []) >= MAX_WEEKLY_BLOCK_HOURS) return false;
       if (acRoutes.length === 0) return true;
       return acRoutes.some(r => routeStops(r).some(c => stopSet.has(c)));
     })
@@ -153,6 +153,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
   const tagFit = blockHourFit({
     aircraftId: aircraft?.id, type,
     routes, cargoRoutes,
+    charters: state.charters ?? [],
     hoursPerFlight: route && type ? routeBlockHours(route, type, 1) : 0,
     weeklyFrequency: frequency,
     // The multi-stop guard charges every committed route whether or not it
@@ -173,7 +174,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
   const gateProblem = ready ? validStops.find(c => !(gates[c] > 0)) : null;
   const slotProblem = ready ? validStops.find(c => slotsUsedAt(c) + (incident[c] ?? 0) * frequency > (gates[c] ?? 0) * SLOTS_PER_GATE) : null;
 
-  const aircraftRoutes = aircraft ? routesCommittedTo(aircraft.id, routes, cargoRoutes) : [];
+  const aircraftRoutes = aircraft ? routesCommittedTo(aircraft.id, routes, cargoRoutes, state.charters ?? []) : [];
   const served = new Set(aircraftRoutes.flatMap(r => routeStops(r)));
   const connectivityOk = !aircraft || aircraftRoutes.length === 0 || validStops.some(c => served.has(c));
 
