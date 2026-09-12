@@ -25,6 +25,7 @@ import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/mark
 import { getAircraftType } from '../data/aircraft.js';
 import { valueRemaining } from '../data/overhead.js';
 import { ALLIANCES } from '../data/alliances.js';
+import { AIRPORTS } from '../data/airports.js';
 import {
   pickCompetitorAircraftType,
   tailsForRoute,
@@ -71,8 +72,63 @@ export function assignArchetype(airline) {
 /** Cash a carrier keeps untouched before funding expansion. */
 const CASH_RESERVE = { budget: 3_000_000, legacy: 8_000_000, premium: 12_000_000 };
 
-/** Network size ceilings (soft — mergers may exceed briefly). */
+/**
+ * Tier BASELINE network size. This is the centre of a distribution, not the
+ * ceiling any individual carrier flies to — see carrierMaxRoutes().
+ */
 const MAX_ROUTES = { budget: 26, legacy: 30, premium: 22 };
+
+/**
+ * Per-carrier network ceiling (Discord 2026-09-10, wj: "why do all AI airlines
+ * have 62 planes and 30 routes").
+ *
+ * MAX_ROUTES used to BE the ceiling, so every carrier of a tier grew to exactly
+ * the same number and stopped: within five game-years every legacy rival sat on
+ * 30 routes and every premium on 22, with fleets clustered around one number
+ * because fleet size is a function of route count. The board read as one airline
+ * copy-pasted twenty times.
+ *
+ * Each carrier now gets its own ceiling, from four factors:
+ *   - its tier baseline (above);
+ *   - a stable per-carrier draw from hashId(id) spanning 0.45–1.15, so two
+ *     legacy carriers differ by 2.5x end to end. The draw is centred at 0.80,
+ *     BELOW the old flat number, so the spread opens downward as well as up:
+ *     the typical rival is a little smaller than before and only the handful
+ *     that stack a mega hub, an expansionist streak and a second hub end up
+ *     bigger. This is a variety change, not a quiet difficulty increase.
+ *     Hash, not Math.random,
+ *     so the ceiling survives a save/load and never drifts mid-game;
+ *   - its archetype — an expansionist really does grow a wide thin network, a
+ *     niche carrier really does stay small;
+ *   - its home hub's size: a mega-hub carrier can support a bigger network than
+ *     one based at a major, and a regional-hub carrier stays small.
+ * A second hub lifts the ceiling 25% — that is the reward for surviving long
+ * enough to open one, and it is what keeps the very top of the board growing
+ * after the pack has settled.
+ */
+const ARCH_ROUTE_SCALE = {
+  expansionist: 1.20,
+  aggressive:   1.10,
+  copycat:      1.00,
+  balanced:     0.98,
+  fortress:     0.86,
+  niche:        0.70,
+};
+const HUB_ROUTE_SCALE = { mega: 1.15, major: 1.00, regional: 0.78 };
+const CARRIER_ROUTES_MIN = 8;
+const CARRIER_ROUTES_MAX = 60;   // a guard, not a destination — the factors below top out below it
+
+export function carrierMaxRoutes(airline) {
+  const base    = MAX_ROUTES[airline.tier] ?? 26;
+  // hashId is 16-bit; map to a 0.62–1.38 spread, stable for the life of the id.
+  const spread  = 0.45 + (hashId(String(airline.id ?? airline.name ?? '')) / 0xffff) * 0.70;
+  const archMul = ARCH_ROUTE_SCALE[airline._archetype] ?? 1.0;
+  const hubTier = AIRPORTS.find(a => a.code === airline.homeHub)?.tier ?? 'major';
+  const hubMul  = HUB_ROUTE_SCALE[hubTier] ?? 1.0;
+  const secondHubMul = airline.secondaryHub ? 1.15 : 1.0;
+  const n = Math.round(base * spread * archMul * hubMul * secondHubMul);
+  return Math.max(CARRIER_ROUTES_MIN, Math.min(CARRIER_ROUTES_MAX, n));
+}
 
 /** Never shrink below this many routes voluntarily. */
 const MIN_ROUTES = 3;
@@ -729,7 +785,7 @@ export function tickCompetitorAI(competitors, ctx) {
     }
 
     // 7. Expansion: one new route per action week, if healthy and funded.
-    const roomToGrow = Object.keys(routes).length < (MAX_ROUTES[c.tier] ?? 26);
+    const roomToGrow = Object.keys(routes).length < carrierMaxRoutes(c);
     const healthy    = lastProfit > 0 || cash > reserve * 2;
     if (roomToGrow && healthy && cash > reserve) {
       const cand = pickExpansionTarget(c, routes, { incumbents, playerPairs, playerHubs, playerNotice });

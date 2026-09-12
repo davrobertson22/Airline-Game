@@ -3,6 +3,7 @@ import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import { STARTING_CAPITAL } from '../data/credit.js';
 import { eraSeedCapital } from '../data/era.js';
+import { ERA_MIN_START_YEAR, ERA_MAX_START_YEAR } from '../data/aircraft.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
 import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
@@ -121,7 +122,11 @@ export default function SetupScreen() {
   const STEPS = ['Brand', 'Home hub', 'Launch'];
   const canContinue = step !== 1 || airlineName.trim().length > 0;
   const eraYearRaw  = eraSel === '' ? null : eraSel === 'custom' ? Number(eraCustom) : Number(eraSel);
-  const startYear   = Number.isInteger(eraYearRaw) && eraYearRaw >= 1930 && eraYearRaw <= 2100 ? eraYearRaw : null;
+  // The floor is ERA_MIN_START_YEAR (the oldest passenger type's entry into
+  // service), NOT a round number: an earlier start has an empty aircraft market,
+  // so the player cannot open a single route. See aircraft.js for the full note.
+  const startYear   = Number.isInteger(eraYearRaw)
+    && eraYearRaw >= ERA_MIN_START_YEAR && eraYearRaw <= ERA_MAX_START_YEAR ? eraYearRaw : null;
   const eraInvalid  = eraSel === 'custom' && startYear == null;
 
   // Founders' equity shown in the subtitle. Reads the live constant (never a
@@ -581,7 +586,7 @@ export default function SetupScreen() {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
               {[{ year: '', title: 'Classic', blurb: 'Timeless. The whole catalogue from day one, modern demand and fuel.' },
                 ...ERA_PRESETS.map(p => ({ ...p, year: String(p.year) })),
-                { year: 'custom', title: 'Custom year', blurb: 'Pick any start between 1930 and 2100.' }].map(opt => {
+                { year: 'custom', title: 'Custom year', blurb: `Pick any start between ${ERA_MIN_START_YEAR} and ${ERA_MAX_START_YEAR}.` }].map(opt => {
                 const active = eraSel === opt.year;
                 return (
                   <button key={opt.year || 'classic'} type="button" onClick={() => setEraSel(opt.year)}
@@ -600,14 +605,14 @@ export default function SetupScreen() {
               })}
             </div>
             {eraSel === 'custom' && (
-              <input type="number" min={1930} max={2100} value={eraCustom}
+              <input type="number" min={ERA_MIN_START_YEAR} max={ERA_MAX_START_YEAR} value={eraCustom}
                 onChange={e => setEraCustom(e.target.value)}
                 style={{ marginTop: 8, width: 140 }} aria-label="Custom start year" />
             )}
             {eraSel !== '' && (
               <div style={{ fontSize: 11, color: eraInvalid ? 'var(--danger, #e5484d)' : 'var(--text-muted)', marginTop: 8 }}>
                 {eraInvalid
-                  ? 'Enter a start year between 1930 and 2100.'
+                  ? `Enter a start year between ${ERA_MIN_START_YEAR} and ${ERA_MAX_START_YEAR}. The first airliner in the catalogue entered service in ${ERA_MIN_START_YEAR} — start earlier and there is nothing to fly.`
                   : `Your calendar starts in January ${startYear}. Aircraft become available the year they really entered service, `
                     + 'demand and fuel follow their historical curves, and prices stay in today\'s dollars. '
                     + (startYear < 1990 ? 'Codeshares, alliances, Wi-Fi and ancillaries unlock as they were invented.' : 'Every route tool works from day one.')}

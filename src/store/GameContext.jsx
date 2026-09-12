@@ -9,7 +9,7 @@ import {
   MAX_ROUTE_STOPS,
   loyaltyTier, loyaltyEnrollPull, loyaltyPaxBase,
   isRouteActive, routeActiveMonths, aircraftHubMaintFactor, routesCommittedTo,
-  blockHourFit, blockTimeHours,
+  blockHourFit, blockTimeHours, activeCharterOps,
   applyScheduleTrimMigration,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
   calcReconfCost, refitWeeks, calendarYear, shortYearLabel,
@@ -21,7 +21,8 @@ import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
          eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
-         canFitWifi } from '../data/aircraft.js';
+         canFitWifi, isLegalEraStartYear, ERA_MIN_START_YEAR,
+         ERA_MAX_START_YEAR } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
@@ -56,6 +57,14 @@ import {
 } from '../data/laborRelations.js';
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import {
+  generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
+  quoteCharterForAircraft,
+} from '../models/charterBoard.js';
+import {
+  charterPermitFee, applyReliability, CHARTER_RELIABILITY_START,
+  CHARTER_RELIABILITY_ON_BREACH, CHARTER_TYPES,
+} from '../data/charters.js';
 import {
   COMPETITOR_AIRLINES,
   initializeCompetitorRoutes,
@@ -151,7 +160,7 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
   const toType   = to   ? getAircraftType(to.typeId)   : null;
   if (!from || !to || !fromType || !toType) return { ok: false, reason: 'Aircraft not found' };
 
-  const all = routesCommittedTo(fromAircraftId, state.routes, state.cargoRoutes ?? []);
+  const all = routesCommittedTo(fromAircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
   const paxRoutes   = all.filter(r => !(state.cargoRoutes ?? []).some(c => c.id === r.id));
   const cargoRoutes = all.filter(r =>  (state.cargoRoutes ?? []).some(c => c.id === r.id));
   if (all.length === 0) return { ok: false, reason: 'No routes to transfer' };
@@ -164,7 +173,7 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
   // Target must be an open tail — a swap, not a merge onto a working aircraft.
   // "Open" means nothing is committed to it, including a network of its own
   // that a reserve happens to be covering right now.
-  if (routesCommittedTo(toAircraftId, state.routes, state.cargoRoutes ?? []).length > 0) {
+  if (routesCommittedTo(toAircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []).length > 0) {
     return { ok: false, reason: 'Already flying routes' };
   }
 
@@ -182,7 +191,7 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
   // category rules AND runway-length requirements can differ between types
   // (pair frequencies are unchanged, so totals stay as already approved).
   if (toType.id !== fromType.id) {
-    const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
+    const allOps = [...state.routes, ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])];
     for (const r of all) {
       for (const l of routeLegs(r)) {
         const pk = routePairKey(l.from, l.to);
@@ -249,7 +258,7 @@ export function reassignCompatibility(state, routeId, toAircraftId) {
   const from     = state.fleet.find(a => a.id === route.aircraftId);
   const fromType = from ? getAircraftType(from.typeId) : null;
   if (!fromType || toType.category !== fromType.category) {
-    const allOps = [...paxRoutes, ...cargoRoutes];
+    const allOps = [...paxRoutes, ...cargoRoutes, ...activeCharterOps(state.charters ?? [])];
     for (const l of routeLegs(route)) {
       const pk = routePairKey(l.from, l.to);
       const pairFreq = allOps.reduce((s, o) =>
@@ -262,7 +271,7 @@ export function reassignCompatibility(state, routeId, toAircraftId) {
 
   // Block hours: this route ON TOP of whatever the target already flies, at the
   // per-month peak so counter-seasonal routes that never overlap can share.
-  const targetRoutes = routesCommittedTo(toAircraftId, paxRoutes, cargoRoutes);
+  const targetRoutes = routesCommittedTo(toAircraftId, paxRoutes, cargoRoutes, state.charters ?? []);
   const withRoute    = [...targetRoutes, route];
   const months12     = Array.from({ length: 12 }, (_, i) => i + 1);
   const peakOf = (list) => Math.max(...months12.map(m => list
@@ -439,7 +448,7 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   // Block-hours on this aircraft, per-month peak, with this route at the new freq.
   // Counts the tail's WHOLE committed schedule (passenger + cargo, including any
   // routes a reserve is covering for it), not just what it happens to fly today.
-  const acRoutes = routesCommittedTo(route.aircraftId, state.routes, state.cargoRoutes ?? []);
+  const acRoutes = routesCommittedTo(route.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
   const peakOn = (t, list) => Math.max(0, ...months.map(m =>
     list.filter(r => isRouteActive(r, m)).reduce((s, r) =>
       s + routeBlockHours(r, t, freqOf(r)), 0)));
@@ -449,7 +458,7 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   if (route.coverForAircraftId) {
     const orig     = state.fleet.find(a => a.id === route.coverForAircraftId);
     const origType = orig ? getAircraftType(orig.typeId) : null;
-    if (origType && peakOn(origType, routesCommittedTo(orig.id, state.routes, state.cargoRoutes ?? []))
+    if (origType && peakOn(origType, routesCommittedTo(orig.id, state.routes, state.cargoRoutes ?? [], state.charters ?? []))
           > MAX_WEEKLY_BLOCK_HOURS) {
       return "Aircraft's weekly block-hour limit";
     }
@@ -535,10 +544,11 @@ export function addRouteBlockReason(state, action) {
   // ── Block-hours on this airframe, per-month peak across its routes ─────────
   // blockHourFit is the shared reading: the Add Flights form calls it too, so a
   // bar that says "fits" cannot be met by a refusal here.
-  const acRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? []);
+  const acRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
   const fit = blockHourFit({
     aircraftId: action.aircraftId, type,
     routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
+    charters: state.charters ?? [],
     months: newMonths,
     hoursPerFlight: blockTimeHours(dist, type) * 2,
     weeklyFrequency,
@@ -617,7 +627,7 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
 
   // Block-hours on this freighter, with this route at the new freq. Counts the
   // whole committed schedule, including routes a reserve is covering for it.
-  const otherBlockHrs = routesCommittedTo(route.aircraftId, state.routes, state.cargoRoutes ?? [])
+  const otherBlockHrs = routesCommittedTo(route.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
     .filter(r => r.id !== route.id)
     .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
   if (otherBlockHrs + routeBlockHours(route, type, target) > MAX_WEEKLY_BLOCK_HOURS)
@@ -625,7 +635,7 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
 
   // Gate slots at each endpoint, counted across passenger + cargo ops.
   const gates  = state.gates ?? {};
-  const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
+  const allOps = [...state.routes, ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])];
   // slotsUsedAt charges a passenger rotation the two movements it makes at a
   // stop in the middle, so the freighter and the passenger guard read the same
   // airport the same way.
@@ -634,6 +644,136 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
   if (slotsUsedAt(others, route.destination) + target > (gates[route.destination] ?? 0) * SLOTS_PER_GATE) return `No free gate slots at ${route.destination}`;
 
   return null;
+}
+
+// ─────────────────────────────────────────────
+// CHARTER CONTRACTS
+// ─────────────────────────────────────────────
+// Sibling of addRouteBlockReason: returns null when the contract can be signed
+// with this tail, else a short player-facing reason. The Charters page shows it
+// verbatim, so the board can grey out an aircraft and say WHY instead of the
+// submit silently no-opping.
+//
+// The offer is re-derived from the board rather than trusted from the caller —
+// the board is a pure function of the week (models/charterBoard.js), so an
+// expired, dismissed or invented contract simply is not there.
+//
+// What this deliberately does NOT check is whether the contract is worth taking.
+// Working that out is the feature.
+export function charterAcceptBlockReason(state, offerId, aircraftId) {
+  const absWeek = absoluteWeek(state.year, state.week);
+  const offer = generateCharterBoard(state, absWeek).find(o => o.id === offerId);
+  if (!offer) return 'That contract is no longer on the board';
+
+  const a = state.fleet.find(x => x.id === aircraftId);
+  if (!a) return 'Aircraft not found';
+  const type = getAircraftType(a.typeId);
+  if (!type) return 'Aircraft not found';
+  if (a.status === 'retired')  return 'That aircraft is retired';
+  if (isOutOfService(a))       return 'That aircraft is out of service';
+
+  const tail = a.name ?? a.tailNumber ?? 'That aircraft';
+
+  if (offer.freighter && !type.freighter) return `${tail} is not a freighter — this contract moves cargo`;
+  if (!offer.freighter && type.freighter) return `${tail} is a freighter — this contract moves passengers`;
+  if (offer.seatsRequired  != null && (type.seats ?? 0) < offer.seatsRequired) {
+    return `${tail} seats ${type.seats} — the contract needs ${offer.seatsRequired}`;
+  }
+  if (offer.tonnesRequired != null && (type.payloadTonnes ?? 0) < offer.tonnesRequired) {
+    return `${tail} lifts ${type.payloadTonnes}t — the contract needs ${offer.tonnesRequired}t`;
+  }
+  if ((type.runwayFt ?? 0) > offer.runwayFt) {
+    return `${tail} needs ${type.runwayFt.toLocaleString()}ft of runway — the tighter field on this contract has ${offer.runwayFt.toLocaleString()}ft`;
+  }
+
+  // Range is per AIRFRAME (engine/wingtip mods count), measured exactly as
+  // ADD_ROUTE measures it so the board and the reducer cannot disagree.
+  const range = effectiveRangeKm(a, type);
+  if (offer.distanceKm > range) {
+    return `${offer.origin}–${offer.destination} is ${offer.distanceKm.toLocaleString()}km — beyond ${tail}'s ${Math.round(range).toLocaleString()}km range`;
+  }
+  const station = aircraftStationOf(a, {
+    routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
+    charters: state.charters ?? [], hub: state.hub,
+  });
+  const ferryKm = station && station !== offer.origin ? routeDistanceKm(station, offer.origin) : 0;
+  if (ferryKm > range) {
+    return `${tail} cannot reach ${offer.origin} from ${station} in one leg to start the contract`;
+  }
+
+  // Block hours. The mission every week, and the ferry in the positioning week —
+  // whichever is larger is what this tail must have room for, because a contract
+  // it cannot position for is a contract it will breach.
+  const proto = charterOpRecord(offer, a.id, { weeklyFrequency: offer.flightsPerWeek });
+  const missionHrs = routeBlockHours(proto, type, offer.flightsPerWeek);
+  const ferryHrs   = ferryKm > 0 ? blockTimeHours(ferryKm, type) * 2 : 0;
+  const fit = blockHourFit({
+    aircraftId: a.id, type,
+    routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
+    charters: state.charters ?? [],
+    hoursPerFlight: Math.max(missionHrs, ferryHrs),
+    weeklyFrequency: 1,
+    ignoreSeason: true,
+    capHours: MAX_WEEKLY_BLOCK_HOURS,
+  });
+  if (!fit.fits) {
+    return `${tail} has no spare flying hours — this contract would need ${Math.round(fit.totalHours)}h/wk against a ${MAX_WEEKLY_BLOCK_HOURS}h limit`;
+  }
+
+  // Permits at the ends you do not already serve, paid on signature.
+  const served = servedAirportsOf(state);
+  const permits = charterPermitFee({
+    originCode: offer.origin, destCode: offer.destination,
+    originServed: served.has(offer.origin), destServed: served.has(offer.destination),
+  });
+  if (state.cash < permits) {
+    return `Permits and ground handling cost ${formatMoney(permits)} up front — not enough cash`;
+  }
+
+  // Slots, but only where you actually hold a gate. A charter into a station you
+  // do not serve buys handling from an agent instead of holding a stand there
+  // (locked design decision — requiring gates everywhere would confine charters
+  // to the network you already fly, which is most of what makes them worth having).
+  const gates  = state.gates ?? {};
+  const allOps = [...state.routes, ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])];
+  for (const code of [offer.origin, offer.destination]) {
+    if (!(gates[code] > 0)) continue;
+    if (slotsUsedAt(allOps, code) + offer.flightsPerWeek > gates[code] * SLOTS_PER_GATE) {
+      return `No free gate slots at ${code}`;
+    }
+  }
+
+  // Perimeter rules and per-pair frequency caps apply to a charter exactly as
+  // they apply to a schedule — a regulator counts departures, not intentions.
+  const pairKey = routePairKey(offer.origin, offer.destination);
+  const pairFreq = allOps
+    .filter(r => routeLegs(r).some(l => routePairKey(l.from, l.to) === pairKey))
+    .reduce((sum, r) => sum + (r.weeklyFrequency ?? 0), 0);
+  const regHit = checkRouteRestrictions(offer.origin, offer.destination, offer.distanceKm,
+    pairFreq + offer.flightsPerWeek, freighterBodyClass(type),
+    { routes: allOps, excludeKey: pairKey, aircraftType: type });
+  if (regHit) return regHit.reason ?? `Regulation blocks ${offer.origin}–${offer.destination}`;
+
+  return null;
+}
+
+/**
+ * The route-shaped record a charter contributes to block hours and slot counts.
+ * Kept in one place so the guard's preview and the accepted contract are the
+ * same object shape — a preview that models it differently is a bug waiting to
+ * be filed.
+ */
+export function charterOpRecord(offer, aircraftId, extra = {}) {
+  return {
+    id: `charter-op-${offer.id}`,
+    charter: true,
+    origin: offer.origin,
+    destination: offer.destination,
+    stops: [offer.origin, offer.destination],
+    aircraftId,
+    weeklyFrequency: offer.flightsPerWeek,
+    ...extra,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -670,6 +810,12 @@ function freshState() {
     routePricing: {},// { [pairKey]: { economy, premiumEconomy, businessClass, firstClass } } — one price set per O&D pair
     routeCatering: {},// { [pairKey]: cateringLevel } — one catering level per O&D pair
     cargoRoutes: [], // { id, origin, destination, aircraftId, yieldPrice ($/tonne-km), weeklyFrequency, weeksOpen, hub, cargo:true }
+    // Charter contracts. Route-SHAPED (origin/destination/aircraftId/weeklyFrequency)
+    // so they cost block hours through routesCommittedTo, but deliberately kept out
+    // of `routes`/`cargoRoutes`: a contract is not a market participant.
+    charters: [],          // see docs/charter-design.md for the record shape
+    charterDismissed: [],  // offer ids the player has waved away (pruned as slots refresh)
+    charterReliability: CHARTER_RELIABILITY_START,  // 0-100 delivery record; gates board size and fee quality
     gates:             {},    // { [airportCode]: gateCount } — each gate = 50 slots/wk
     hubs:              {},    // { [airportCode]: { tier: 0|1|2|3, tierSince } } — 0 = focus city
     hubConstruction:   {},    // { [airportCode]: { targetTier, weeksLeft, capex } } — upgrades in progress
@@ -945,7 +1091,7 @@ function reducer(state, action) {
       // freshState() builds already picks era-appropriate aircraft; the
       // starting cash scales with the era's capital scale (§4) — a 1950 airline
       // is a smaller business in constant dollars, and so is its seed money.
-      const _startYear = Number.isInteger(action.startYear) && action.startYear >= 1900 && action.startYear <= 2100
+      const _startYear = isLegalEraStartYear(action.startYear) && action.startYear != null
         ? action.startYear : null;
       setEraModuleState(_startYear, _startYear);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
@@ -1311,7 +1457,7 @@ function reducer(state, action) {
         // Best facility wins: hub discount or a certified jet base on this
         // aircraft's network, whichever is cheaper. They do not stack.
         const mfNow   = mroFactorsFor(resolveBaseFor(a, state.mroBases ?? {}, state.routes, state.cargoRoutes, curAbs));
-        const hubFNow = aircraftHubMaintFactor(a.id, state.routes, state.cargoRoutes, state.hubs);
+        const hubFNow = aircraftHubMaintFactor(a.id, state.routes, state.cargoRoutes, state.hubs, state.charters ?? []);
         const facNow  = Math.min(hubFNow, ct === 'D' ? mfNow.dCostMult : mfNow.cCostMult);
         const cost = checkCost(mType, ct, { maintMod: a.maintMod ?? 1, laborMult: laborEffects(state.labor).maintenanceCostMultiplier, hubFactor: facNow });
         if (state.cash < cost) return { ...state, error: 'Not enough cash to start this check.' };
@@ -1947,12 +2093,12 @@ function reducer(state, action) {
 
       // ── Block hours: cumulative across this aircraft's COMMITTED routes,
       //    legs-aware (and including any a reserve is covering for it) ──
-      const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [])
+      const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
         .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
       if (existingBlockHrs + routeBlockHours(proto, type, weeklyFrequency) > MAX_WEEKLY_BLOCK_HOURS) return state;
 
       // ── Connectivity: a plane already flying can only extend from a served stop ──
-      const aircraftRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? []);
+      const aircraftRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
       if (aircraftRoutes.length > 0) {
         const served = new Set(aircraftRoutes.flatMap(r => routeStops(r)));
         if (!stops.some(c => served.has(c))) return state;
@@ -2099,12 +2245,12 @@ function reducer(state, action) {
       // Block-hours across everything committed to this freighter — its cargo
       // network, anything a reserve is covering for it, and (defensively) any
       // passenger route that ever reached it.
-      const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [])
+      const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
         .reduce((sum, r) => sum + routeBlockHours(r, type, r.weeklyFrequency), 0);
       if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > MAX_WEEKLY_BLOCK_HOURS) return state;
 
       // Network connectivity: a freighter already flying can only extend from airports it serves.
-      const acCargoRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? []);
+      const acCargoRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
       if (acCargoRoutes.length > 0) {
         const served = new Set(acCargoRoutes.flatMap(r => [r.origin, r.destination]));
         if (!served.has(action.origin) && !served.has(action.destination)) return state;
@@ -2187,13 +2333,13 @@ function reducer(state, action) {
       // Guards only on INCREASES — reductions are always allowed, so a tail that
       // is somehow already over the cap can always ratchet its hours DOWN.
       if (type && newFreq > targetRoute.weeklyFrequency) {
-        const otherBlockHrs = routesCommittedTo(targetRoute.aircraftId, state.routes, state.cargoRoutes ?? [])
+        const otherBlockHrs = routesCommittedTo(targetRoute.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
           .filter(r => r.id !== targetRoute.id)
           .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
         if (otherBlockHrs + routeBlockHours(targetRoute, type, newFreq) > MAX_WEEKLY_BLOCK_HOURS) return state;
 
         const gates = state.gates ?? {};
-        const allOps = [...state.routes, ...(state.cargoRoutes ?? [])];
+        const allOps = [...state.routes, ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])];
         const otherOps = allOps.filter(r => r.id !== targetRoute.id);
         if (slotsUsedAt(otherOps, targetRoute.origin)      + newFreq > (gates[targetRoute.origin]      ?? 0) * SLOTS_PER_GATE) return state;
         if (slotsUsedAt(otherOps, targetRoute.destination) + newFreq > (gates[targetRoute.destination] ?? 0) * SLOTS_PER_GATE) return state;
@@ -2222,6 +2368,157 @@ function reducer(state, action) {
     // Designations cost one-time capex and (except focus cities) take weeks to
     // build. Prerequisites are validated by hubUpgradeChecklist (shared with the
     // HubManagement UI, so the player sees exactly what's enforced here).
+
+    // ── Charter contracts ────────────────────────────────────────────────────
+    // Sign a contract off the board. The offer is re-derived rather than trusted
+    // from the action, so nothing expired, dismissed or invented can be signed.
+    case 'ACCEPT_CHARTER': {
+      if (charterAcceptBlockReason(state, action.offerId, action.aircraftId)) return state;
+
+      const absWeek = absoluteWeek(state.year, state.week);
+      const offer = generateCharterBoard(state, absWeek).find(o => o.id === action.offerId);
+      const a     = state.fleet.find(x => x.id === action.aircraftId);
+      const type  = getAircraftType(a.typeId);
+      if (!offer || !a || !type) return state;
+
+      const served  = servedAirportsOf(state);
+      const permits = charterPermitFee({
+        originCode: offer.origin, destCode: offer.destination,
+        originServed: served.has(offer.origin), destServed: served.has(offer.destination),
+      });
+
+      // Positioning: where the tail is now (aircraftStationOf) versus where the
+      // work starts. An empty leg costs fuel, crew and a week of block hours and
+      // earns nothing — which is what makes a contract out of your own hub worth
+      // more to you than the same cheque out of a city you have never served.
+      const station = aircraftStationOf(a, {
+        routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
+        charters: state.charters ?? [], hub: state.hub,
+      });
+      const needsPositioning = !!station && station !== offer.origin;
+      const quote = quoteCharterForAircraft(offer, a, type, {
+        fuelIndex: state.fuelPrice?.index ?? 1.0,
+        served,
+        positionFrom: needsPositioning ? station : null,
+      });
+
+      const contract = {
+        ...charterOpRecord(offer, a.id),
+        id:            uid(),
+        offerId:       offer.id,
+        templateId:    offer.templateId,
+        type:          offer.type,
+        name:          offer.name,
+        icon:          offer.icon,
+        color:         offer.color,
+        customer:      offer.customer,
+        distanceKm:    offer.distanceKm,
+        seatsRequired: offer.seatsRequired,
+        tonnesRequired: offer.tonnesRequired,
+        freighter:     offer.freighter,
+        fee:           offer.fee,
+        feePerWeek:    offer.feePerWeek,
+        weeksTotal:    offer.weeks,
+        weeksRemaining: offer.weeks,
+        startWeek:     absWeek,
+        // Positioning eats the first week: the tail ferries out, flies nothing,
+        // and earns nothing. Already in place and the contract starts at once.
+        positioningWeeksRemaining: needsPositioning ? 1 : 0,
+        positionFrom:  needsPositioning ? station : null,
+        ferryCost:     quote?.ferry ?? 0,
+        ferryKm:       quote?.ferryKm ?? 0,
+        permitsPaid:   permits,
+        originServed:  served.has(offer.origin),
+        destServed:    served.has(offer.destination),
+        status:        needsPositioning ? 'positioning' : 'active',
+        breachPenalty: offer.breachPenalty,
+        reputationStake: offer.reputationStake,
+      };
+
+      return {
+        ...state,
+        cash:     state.cash - permits,
+        charters: [...(state.charters ?? []), contract],
+        fleet:    state.fleet.map(x =>
+          x.id === a.id ? withRouteStatus(x, 'assigned', { reserveBase: null }) : x),
+      };
+    }
+
+    case 'DISMISS_CHARTER_OFFER': {
+      const id = action.offerId;
+      if (!id) return state;
+      const absWeek = absoluteWeek(state.year, state.week);
+      const next = pruneDismissed([...(state.charterDismissed ?? []), id], absWeek);
+      return { ...state, charterDismissed: next };
+    }
+
+    // Walking away from a signed contract. Costs the penalty and the record —
+    // deliberately expensive, because a commitment you can drop for free is not
+    // a commitment and the whole board would be free money.
+    case 'CANCEL_CHARTER': {
+      const c = (state.charters ?? []).find(x => x.id === action.charterId);
+      if (!c || c.status === 'complete' || c.status === 'breached') return state;
+      const remaining = (state.charters ?? []).filter(x => x.id !== c.id);
+      const stillFlying = (id) =>
+        state.routes.some(r => r.aircraftId === id) ||
+        (state.cargoRoutes ?? []).some(r => r.aircraftId === id) ||
+        remaining.some(x => x.aircraftId === id && (x.status === 'active' || x.status === 'positioning'));
+      return {
+        ...state,
+        cash:     state.cash - c.breachPenalty,
+        charters: remaining,
+        charterReliability: applyReliability(state.charterReliability, CHARTER_RELIABILITY_ON_BREACH),
+        fleet: state.fleet.map(x =>
+          x.id === c.aircraftId ? withRouteStatus(x, stillFlying(x.id) ? 'assigned' : 'idle') : x),
+      };
+    }
+
+    // Move a running contract onto another tail — the way out of a breach when
+    // the assigned aircraft goes into a heavy check. Same requirement checks as
+    // signing it, because the customer's requirement has not changed.
+    case 'REASSIGN_CHARTER': {
+      const c = (state.charters ?? []).find(x => x.id === action.charterId);
+      const a = state.fleet.find(x => x.id === action.aircraftId);
+      if (!c || !a || c.aircraftId === a.id) return state;
+      if (c.status !== 'active' && c.status !== 'positioning') return state;
+      const type = getAircraftType(a.typeId);
+      if (!type || a.status === 'retired' || isOutOfService(a)) return state;
+
+      if (c.freighter && !type.freighter) return state;
+      if (!c.freighter && type.freighter) return state;
+      if (c.seatsRequired  != null && (type.seats ?? 0) < c.seatsRequired) return state;
+      if (c.tonnesRequired != null && (type.payloadTonnes ?? 0) < c.tonnesRequired) return state;
+      if (c.distanceKm > effectiveRangeKm(a, type)) return state;
+
+      // The new tail must have the hours, counting every other contract it holds.
+      const others = (state.charters ?? []).filter(x => x.id !== c.id);
+      const fit = blockHourFit({
+        aircraftId: a.id, type,
+        routes: state.routes, cargoRoutes: state.cargoRoutes ?? [], charters: others,
+        hoursPerFlight: routeBlockHours(c, type, c.weeklyFrequency),
+        weeklyFrequency: 1,
+        ignoreSeason: true,
+        capHours: MAX_WEEKLY_BLOCK_HOURS,
+      });
+      if (!fit.fits) return state;
+
+      const oldId = c.aircraftId;
+      const nextCharters = (state.charters ?? []).map(x =>
+        x.id === c.id ? { ...x, aircraftId: a.id } : x);
+      const stillFlying = (id) =>
+        state.routes.some(r => r.aircraftId === id) ||
+        (state.cargoRoutes ?? []).some(r => r.aircraftId === id) ||
+        nextCharters.some(x => x.aircraftId === id && (x.status === 'active' || x.status === 'positioning'));
+      return {
+        ...state,
+        charters: nextCharters,
+        fleet: state.fleet.map(x => {
+          if (x.id === a.id)   return withRouteStatus(x, 'assigned', { reserveBase: null });
+          if (x.id === oldId)  return withRouteStatus(x, stillFlying(oldId) ? 'assigned' : 'idle');
+          return x;
+        }),
+      };
+    }
 
     case 'DESIGNATE_FOCUS_CITY': {
       const code = action.airportCode;
@@ -3325,7 +3622,7 @@ function reducer(state, action) {
       // base only helps if a shop slot is still free this week; overflow work
       // goes to a third party at full price and full downtime.
       const checkFacility = (ac, ct) => {
-        const hubF = aircraftHubMaintFactor(ac.id, coverPass.routes, coverPass.cargoRoutes, state.hubs);
+        const hubF = aircraftHubMaintFactor(ac.id, coverPass.routes, coverPass.cargoRoutes, state.hubs, state.charters ?? []);
         const mf   = mroFactorsRep[ac.id] ?? null;
         if (!mf || !mf.code || !hasSlot(mroSlots, mf.code)) return { factor: hubF, weeksSaved: 0, base: null };
         const mult = ct === 'D' ? mf.dCostMult : mf.cCostMult;
@@ -3431,7 +3728,7 @@ function reducer(state, action) {
             if (!leaseSoonReturn) {
               // No jet-base discount on a forced grounding: the regulator parks it
               // where it stands, and the slot you'd have used was never booked.
-              const cost = checkCost(mType, ct, { maintMod: aged.maintMod ?? 1, laborMult: maintLaborMult, hubFactor: aircraftHubMaintFactor(aged.id, coverPass.routes, coverPass.cargoRoutes, state.hubs), forced: true });
+              const cost = checkCost(mType, ct, { maintMod: aged.maintMod ?? 1, laborMult: maintLaborMult, hubFactor: aircraftHubMaintFactor(aged.id, coverPass.routes, coverPass.cargoRoutes, state.hubs, state.charters ?? []), forced: true });
               maintCheckSpend += cost; forcedRepHit += FORCED_REP_HIT;
               checksForced.push({ id: aged.id, name: aged.name, tailNumber: aged.tailNumber ?? '', checkType: ct, cost, weeks: dur });
               mroJobs.push({ kind: 'check', checkType: ct, aircraftId: aged.id, name: aged.name, tailNumber: aged.tailNumber ?? '', cost, base: null, weeks: dur, forced: true });
@@ -4610,8 +4907,18 @@ function reconcileState(parsed) {
     return normalizeRouteStops(base);
   });
 
+  // Heal an illegal era start year (Discord 2026-09-11, Lancelotbronner). The
+  // era picker used to accept 1930, six years before the oldest airliner in the
+  // catalogue — those worlds have an empty aircraft market and cannot be played.
+  // Lift them to the first year that has metal rather than stranding the save:
+  // the player keeps their cash, network and game-year, and aircraft appear.
+  const healedStartYear = (parsed.startYear != null && !isLegalEraStartYear(parsed.startYear))
+    ? Math.max(ERA_MIN_START_YEAR, Math.min(ERA_MAX_START_YEAR, parsed.startYear))
+    : parsed.startYear;
+
   const reconciled = {
     ...parsed,
+    startYear:        healedStartYear,
     fleet:            cleanFleet,
     routes:           normalizedRoutes,
     routePricing,
@@ -4695,6 +5002,15 @@ function reconcileState(parsed) {
       return computeMarketCap(ph, parsed.cash ?? 0, parsed.awareness ?? 5).sharePrice;
     })(),
   };
+
+  // Charter contracts (see docs/charter-design.md) are on for EVERY save, with no
+  // world flag: an airline that accepts nothing is simulated exactly as before,
+  // which is what the golden master proves. Old saves just need the fields.
+  if (!Array.isArray(reconciled.charters))         reconciled.charters = [];
+  if (!Array.isArray(reconciled.charterDismissed)) reconciled.charterDismissed = [];
+  if (typeof reconciled.charterReliability !== 'number') {
+    reconciled.charterReliability = CHARTER_RELIABILITY_START;
+  }
 
   // Rival one-stop itineraries are the model for every Tailwinds game, old
   // saves included — there is no world flag to hide behind here, and the
