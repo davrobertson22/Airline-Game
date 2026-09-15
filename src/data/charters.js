@@ -70,11 +70,33 @@ export const CHARTER_PERMIT_FEE_BY_TIER = { mega: 42_000, major: 26_000, regiona
 export const CHARTER_UNSERVED_HANDLING_MULT = 0.85;
 
 /**
- * ACMI: the customer buys the fuel. You are paid per block hour for aircraft,
- * crew, maintenance and insurance. Priced off the reference operator's NON-fuel
- * cost, so the margin band means the same thing across every contract type.
+ * ACMI: the customer buys the fuel. You are paid for aircraft, crew, maintenance
+ * and insurance, so the fee is priced off the reference operator's NON-fuel
+ * cost and the margin band means the same thing it means everywhere else.
+ *
+ * Fuel is around two thirds of a mission, so that base is small and ACMI returns
+ * roughly a third of what fixed-fee work does per block hour. That is the
+ * product, not a bug: you are not taking fuel risk, so you are not paid for it.
+ * It is thin, reliable income on hours that would otherwise earn nothing — and
+ * during a fuel spike, when a fixed-fee contract signed at last month's prices is
+ * losing money every week, it is the only charter work still paying.
+ *
+ * Pricing the asset into it instead (the reference aircraft's weekly lease on
+ * top) was tried and reverted: it made ACMI the most profitable contract on the
+ * board at $6.4k a block hour, better than a mature scheduled route, because the
+ * fee then covered a lease that the charter P&L never pays — the fleet loop
+ * charges it whether the jet works or not. The balance probe caught it.
  */
 export const ACMI_FUEL_IS_CUSTOMERS = true;
+
+/**
+ * ACMI is not drawn for traps. A wet lease is a rate-card business between two
+ * airlines, not a competitive tender, so a systematically underpriced one is not
+ * a realistic failure mode — and an underpriced fee on a base that excludes fuel
+ * would be a rounding error rather than the decision the trap mechanic exists to
+ * create. Traps live where the money is: fixed-fee flying.
+ */
+export const ACMI_HAS_NO_TRAPS = true;
 
 // ── Reliability ──────────────────────────────────────────────────────────────
 //
@@ -217,8 +239,10 @@ export function referenceTypeFor({
  * ACMI strips fuel out of the priced cost because the customer buys it; the
  * player's own fuel bill is likewise waived at tick time.
  */
-export function charterFee({ refCost, weeks, type, uMargin, uTrap, reliability = 50 }) {
-  const isTrap = uTrap < CHARTER_TRAP_RATE;
+export function charterFee({ refCost, refType, weeks, type, uMargin, uTrap, reliability = 50 }) {
+  const isTrap = type === CHARTER_TYPES.ACMI && ACMI_HAS_NO_TRAPS
+    ? false
+    : uTrap < CHARTER_TRAP_RATE;
   const [lo, hi] = isTrap ? CHARTER_MARGIN_TRAP : CHARTER_MARGIN_GOOD;
   // Reliability lifts only the honest band's ceiling (see the constant's note).
   const lift = isTrap ? 0 : CHARTER_RELIABILITY_MARGIN_LIFT * ((reliability - 50) / 50);

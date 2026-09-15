@@ -74,6 +74,7 @@ export function buildWeekNews({
   newEvents = [], expiredEvents = [], competitorEvents = [],
   deliveries = [], checksCompleted = [], checksForced = [], failures = [],
   completedObjectives = [], profit = null, bestProfitBefore = null,
+  chartersSigned = [], chartersCompleted = [], chartersBreached = [],
 }) {
   const rows = [];
   const at = { absWeek, year, week };
@@ -171,6 +172,52 @@ export function buildWeekNews({
         total: deliveries.length,
         byType,
         names: deliveries.slice(0, 8).map((a) => a.name).filter(Boolean),
+      },
+    });
+  }
+
+  // ── Charter contracts ──────────────────────────────────────────────────────
+  // Signed, delivered and failed. A contract quietly flying its term is not news;
+  // the three moments that change what the airline owes or is owed are.
+  //
+  // Each is its own row rather than a weekly roll-up: a player signs a handful of
+  // contracts a year, not five a week, and "when did I take that Reykjavik
+  // series, and what did it pay?" is exactly the question this log exists to
+  // answer. A breach is tier 1 without exception — it is the single most
+  // expensive thing that can happen on this page.
+  for (const c of chartersSigned) {
+    rows.push({
+      ...at, category: 'company', kind: 'charter_signed', tier: 2,
+      subject: null, icon: c.icon ?? '📜',
+      data: {
+        origin: c.origin, destination: c.destination,
+        customer: c.customer ?? null, name: c.name ?? null,
+        fee: c.fee ?? 0, weeks: c.weeksTotal ?? 0,
+        positioning: (c.positioningWeeksRemaining ?? 0) > 0,
+      },
+    });
+  }
+  for (const c of chartersCompleted) {
+    rows.push({
+      ...at, category: 'company', kind: 'charter_completed', tier: 2,
+      subject: null, icon: '📜',
+      data: {
+        origin: c.origin, destination: c.destination,
+        customer: c.customer ?? null,
+        fee: c.fee ?? 0, weeks: c.weeksTotal ?? 0,
+      },
+    });
+  }
+  for (const c of chartersBreached) {
+    rows.push({
+      ...at, category: 'company', kind: 'charter_breached', tier: 1,
+      subject: null, icon: '⚠️',
+      data: {
+        origin: c.origin, destination: c.destination,
+        customer: c.customer ?? null,
+        penalty: c.breachPenalty ?? 0,
+        weeksLeft: c.weeksRemaining ?? 0,
+        reason: c.breachReason ?? 'unflyable',
       },
     });
   }

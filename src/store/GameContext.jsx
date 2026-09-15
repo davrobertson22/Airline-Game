@@ -21,8 +21,7 @@ import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
          eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
-         canFitWifi, isLegalEraStartYear, ERA_MIN_START_YEAR,
-         ERA_MAX_START_YEAR } from '../data/aircraft.js';
+         canFitWifi } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
@@ -109,7 +108,9 @@ import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
 import { normalizeCateringLevel } from '../data/catering.js';
 import { normalizeAncillaries, defaultAncillaries, ANCILLARY_MAP } from '../data/ancillaries.js';
 import { initialObjectives, initialObjectivesForState, checkObjectives, getObjective, objectiveDesc } from '../data/objectives.js';
-import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxScale, eraCapitalScale, eraSeedCapital, eraOverheadScale } from '../data/era.js';
+import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxScale, eraCapitalScale, eraSeedCapital, eraOverheadScale,
+         isLegalEraStartYear, ERA_MIN_START_YEAR, ERA_MAX_START_YEAR,
+         HORIZON_YEAR, horizonReached, pastHorizon } from '../data/era.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
@@ -896,7 +897,14 @@ function freshState() {
     fuelPrice: { index: 1.0, history: [] },  // fuel price index + 52-week history
     hedgeContracts: [],                       // active fuel hedge contracts
     loans: [],             // active loans: { id, principal, interestRate, termWeeks, weeklyPayment, weeksRemaining, totalInterestPaid, takenWeek }
-    phase: 'setup',  // 'setup' | 'playing' | 'bankrupt'
+    phase: 'setup',  // 'setup' | 'playing' | 'bankrupt' | 'ended'
+    // The horizon (data/era.js). Era worlds close at the end of 2050; classic
+    // worlds never do. horizonExempt is set only by reconcileState, for saves
+    // made before the horizon existed that are already past it.
+    runEnded: false,
+    runEndAcknowledged: false,
+    finalStats: null,
+    horizonExempt: false,
     // The hub-connectivity package (HUB_CONNECTIVITY_PLAN.md) is always on in
     // Tailwinds — from the very first state, so every preview built on a
     // fresh state scores by the same rules the tick will (an unset flag is
@@ -3344,7 +3352,16 @@ function reducer(state, action) {
     case 'ACKNOWLEDGE_VICTORY':
       return { ...state, victoryAcknowledged: true };
 
+    // Dismiss the final-call verdict. phase stays 'ended', so the clock does
+    // not restart — the player is looking at a finished season, not resuming.
+    case 'ACKNOWLEDGE_RUN_END':
+      return { ...state, runEndAcknowledged: true };
+
     case 'ADVANCE_WEEK': { try {
+      // The horizon is a hard stop. App.jsx already stops driving the clock
+      // once phase leaves 'playing', but guard here too so a stray dispatch
+      // (a queued auto-advance, a replayed action) cannot fly 2051.
+      if (state.phase === 'ended') return state;
       // Era games: the Comet 1 grounding fires as a pre-tick transform on the
       // scripted week, then the tick proceeds on the transformed state.
       if (state.startYear != null && !state.cometGrounded
@@ -4128,6 +4145,18 @@ function reducer(state, action) {
       let newYear = state.year;
       if (newWeek > 52) { newWeek = 1; newYear++; }
 
+      // ── The horizon ──────────────────────────────────────────────────────
+      // Week 52 of 2050 is the last week flown. The tick completes in full —
+      // the player sees a real final week, not a truncated one — and the run
+      // is sealed at the bottom of this case. Classic worlds (startYear null)
+      // never reach it; a save from before the horizon existed carries
+      // horizonExempt and is left alone.
+      // Recomputed below once newPhase is known — bankruptcy in the final week
+      // is a failure, not a placing, so it outranks the bell.
+      const horizonDue = !state.horizonExempt
+        && !state.runEnded
+        && horizonReached(state.startYear, newYear, newWeek);
+
       // Advance competitor networks (graceful fallback for old saves missing competitors)
       // Era worlds: retire any AI metal that predates its own entry into
       // service before the AI acts on it. Saved 1962 worlds are already flying
@@ -4655,7 +4684,16 @@ function reducer(state, action) {
         completedObjectives: completedObjectiveRows,
         profit: newsProfit,
         bestProfitBefore: Number.isFinite(bestProfitBefore) ? bestProfitBefore : null,
+        // Contracts signed THIS week are the ones in the book that were not
+        // there before the tick — the acceptance happened in an earlier action,
+        // so the news row is stamped with the week it becomes visible.
+        chartersSigned:    charterSettle.charters.filter(c => c.startWeek === nowAbsWeek),
+        chartersCompleted: charterSettle.completed,
+        chartersBreached:  charterSettle.breached,
       });
+
+      // Bankruptcy outranks the bell.
+      const horizonNow = horizonDue && newPhase !== 'bankrupt';
 
       return {
         ...state,
@@ -4714,12 +4752,40 @@ function reducer(state, action) {
         objectivesEnabled,
         showDebrief:              true,
         pendingToasts:            newToasts,
-        phase:                    newPhase,
         bankruptcyReason,
         missedLoanPayments:       newMissedLoanPayments,
         consecutiveNegativeWeeks: newConsecutiveNegativeWeeks,
         marketCap:                newMarketCap,
         sharePrice:               newSharePrice,
+        // The horizon closed: the run is over whatever the standings say. A
+        // separate ending from the conquest victory above — that one is "you
+        // ate everybody", this one is "time is up, here is where you finished"
+        // — so it gets its own flag and its own overlay rather than
+        // overloading gameWon, which means something specific.
+        phase:               horizonNow ? 'ended' : newPhase,
+        runEnded:            state.runEnded || horizonNow,
+        runEndAcknowledged:  horizonNow ? false : (state.runEndAcknowledged ?? false),
+        finalStats:          horizonNow ? (() => {
+          const mine  = newMarketCap ?? state.marketCap ?? 0;
+          // Rank against everyone still flying at the bell. Carriers that went
+          // under during the run are not in the field — finishing above a
+          // corpse is not a placing.
+          const field = (updatedCompetitors ?? [])
+            .map(c => ({ name: c.name, marketCap: c.marketCap ?? 0 }))
+            .sort((a, b) => b.marketCap - a.marketCap);
+          return {
+            year:        HORIZON_YEAR,
+            marketCap:   mine,
+            cash:        newCash + objectiveCashBonus,
+            fleetCount:  finalFleet.filter(a => a.status !== 'retired').length,
+            routeCount:  finalRoutes.length,
+            airports:    Object.values(state.gates ?? {}).filter(n => n > 0).length,
+            weeksPlayed: (newYear - 1) * 52 + newWeek,
+            rank:        field.filter(c => c.marketCap > mine).length + 1,
+            fieldSize:   field.length + 1,
+            rivals:      field.slice(0, 5),
+          };
+        })() : (state.finalStats ?? null),
         // Last rival collapsed or was absorbed → the player owns the skies.
         gameWon:             state.gameWon || rivalsGone,
         victoryAcknowledged: (rivalsGone && !state.gameWon) ? false : state.victoryAcknowledged,
@@ -4998,16 +5064,28 @@ function reconcileState(parsed) {
   });
 
   // Heal an illegal era start year (Discord 2026-09-11, Lancelotbronner). The
-  // era picker used to accept 1930, six years before the oldest airliner in the
-  // catalogue — those worlds have an empty aircraft market and cannot be played.
-  // Lift them to the first year that has metal rather than stranding the save:
-  // the player keeps their cash, network and game-year, and aircraft appear.
+  // era picker used to accept 1930, two decades before the era curves begin —
+  // those worlds have an empty aircraft market and no fuel history, and cannot
+  // be played. Lift them to the first modelled year rather than stranding the
+  // save: the player keeps their cash, network and game-year, and the world
+  // starts behaving.
   const healedStartYear = (parsed.startYear != null && !isLegalEraStartYear(parsed.startYear))
     ? Math.max(ERA_MIN_START_YEAR, Math.min(ERA_MAX_START_YEAR, parsed.startYear))
     : parsed.startYear;
 
+  // Grandfather worlds that predate the horizon. A save already past the end of
+  // 2050 — started beyond it, or simply played that far — would otherwise have
+  // a verdict dropped on it at the next year-end, ending a game somebody is in
+  // the middle of. Those worlds stay endless; the horizon applies to runs begun
+  // after it existed. Once set the flag persists, so this is decided once.
+  const horizonExempt = parsed.horizonExempt ?? pastHorizon(healedStartYear, parsed.year ?? 1);
+
   const reconciled = {
     ...parsed,
+    horizonExempt,
+    runEnded:           parsed.runEnded ?? false,
+    runEndAcknowledged: parsed.runEndAcknowledged ?? false,
+    finalStats:         parsed.finalStats ?? null,
     startYear:        healedStartYear,
     fleet:            cleanFleet,
     routes:           normalizedRoutes,

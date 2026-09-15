@@ -86,6 +86,84 @@ export const ERA_FUEL_ANCHORS = [
   [2020, 0.45], [2021, 0.85], [2022, 1.50], [2023, 1.15], [2026, 1.00],
 ];
 
+// ── Legal era start years ───────────────────────────────────────────────────
+//
+// Discord 2026-09-11 (Lancelotbronner), in a 1930 world: "there are no planes
+// available so I can't create routes but my competitors are somehow creating
+// very profitable routes with no planes assigned." Both halves were one cause —
+// a start year the game does not actually model.
+//
+// The picker used to accept anything from 1930, an arbitrary round number. The
+// floor is the first year the ERA MODEL is defined for, and that is the first
+// fuel anchor above: demand and fare curves carry a 1930 point, but there is no
+// fuel history before 1950, so a pre-1950 world runs on a flat extrapolation of
+// the 1950 price. tools/era-balance-test.mjs calibrates from 1950 too, and the
+// earliest preset is 1950 — every part of the era system was built from there.
+//
+// Derived from ERA_FUEL_ANCHORS rather than hardcoded, so extending the fuel
+// history backwards moves the floor with it. The catalogue is the other
+// constraint (the oldest airliner is the 1936 DC-3, so 1950 clears it with room
+// for five types); tools/era-start-floor-test.mjs asserts BOTH, and will fail
+// if the fuel history is ever extended below what the aircraft data supports.
+export const ERA_MIN_START_YEAR = ERA_FUEL_ANCHORS[0][0];
+
+/** Latest era start year the curves are defined for. */
+export const ERA_MAX_START_YEAR = 2100;
+
+/** Is this a legal era start year? (null = classic, always legal.) */
+export function isLegalEraStartYear(year) {
+  return year == null
+    || (Number.isInteger(year) && year >= ERA_MIN_START_YEAR && year <= ERA_MAX_START_YEAR);
+}
+
+// ── The horizon ──────────────────────────────────────────────────────────────
+// An era world is a RUN, not a sandbox: it closes at the end of calendar year
+// 2050 and the player is ranked on market cap against whoever is still flying.
+// A shared DATE rather than a fixed length per start year, so every era game is
+// racing the same clock and two runs are comparable: a 2000 start is a 51-year
+// run, a 1950 start a century.
+//
+// Classic worlds (startYear null) have no calendar and stay endless on purpose.
+// Every branch here is dead for them; tools/horizon-test.mjs holds that as an
+// invariant. Do not make any of this reachable without a startYear.
+export const HORIZON_YEAR = 2050;
+
+// Latest start year the picker offers for a NEW era game, leaving a run worth
+// playing (11 years at the ceiling). Deliberately NOT a change to
+// ERA_MAX_START_YEAR: that constant decides which SAVES are legal, and
+// reconcileState clamps an out-of-range save onto it — lowering it would
+// silently rewrite the calendar of an existing far-future world. This one only
+// gates the picker.
+export const ERA_MAX_NEW_START_YEAR = 2040;
+
+/** Whole calendar years an era run lasts, or null in a classic world. */
+export function runLengthYears(startYear) {
+  if (!Number.isInteger(startYear)) return null;
+  return HORIZON_YEAR - startYear + 1;
+}
+
+/**
+ * Is this the final week of the run? True only once the world has flown all of
+ * week 52 of HORIZON_YEAR. `year` is the 1-based ordinal game year, not the
+ * calendar year — the same convention as calendarYear() in utils/simulation.js.
+ * Classic worlds (startYear null) are never at a horizon.
+ */
+export function horizonReached(startYear, year, week) {
+  if (!Number.isInteger(startYear)) return false;
+  return (startYear + (year - 1)) >= HORIZON_YEAR && week >= 52;
+}
+
+/**
+ * Is this world ALREADY past the horizon? Only true for a save made before the
+ * horizon existed — a world started past 2050, or one played beyond it. Those
+ * are grandfathered at load (reconcileState sets horizonExempt) rather than
+ * having a verdict dropped on them mid-game.
+ */
+export function pastHorizon(startYear, year) {
+  if (!Number.isInteger(startYear)) return false;
+  return (startYear + (year - 1)) > HORIZON_YEAR;
+}
+
 export function eraFuelMean(calYear) {
   if (calYear == null || calYear > 2026) return null;
   return lerp(ERA_FUEL_ANCHORS, calYear);

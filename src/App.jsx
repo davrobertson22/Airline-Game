@@ -233,6 +233,8 @@ function AppInner() {
   const weeksSinceAd = useRef(0);
   const advanceWeek = useRef(() => {});
   advanceWeek.current = () => {
+    // The horizon is a hard stop: 2050 week 52 is the last week flown.
+    if (state.phase === 'ended') return;
     dispatch({ type: 'ADVANCE_WEEK' });
     setActiveTab('dashboard');
     resetTimer();
@@ -692,6 +694,19 @@ function AppInner() {
         />
       )}
 
+      {/* Final call — the horizon closed on an era run */}
+      {state.runEnded && !state.runEndAcknowledged && (
+        <FinalCallOverlay
+          stats={state.finalStats}
+          airlineName={state.airlineName}
+          logoId={state.logoId}
+          logoColor={state.logoColor}
+          customLogo={state.customLogo}
+          onReview={() => dispatch({ type: 'ACKNOWLEDGE_RUN_END' })}
+          onNewGame={handleReset}
+        />
+      )}
+
       {/* Onboarding tour */}
       {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
 
@@ -719,6 +734,119 @@ function AppInner() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Final call ───────────────────────────────────────────────────────────────
+// The horizon ending (data/era.js). Distinct from the victory screen above:
+// that one fires when the player has eaten the entire field, this one when the
+// clock runs out and the answer might be "fourth". It is a verdict, so it
+// reports a placing before it reports a number, and it does not offer to keep
+// playing — the run is the unit, and "Review the board" leaves the final week
+// on screen with the clock stopped.
+
+function FinalCallOverlay({ stats, airlineName, logoId, logoColor, customLogo, onReview, onNewGame }) {
+  const s = stats ?? {};
+  const rank  = s.rank ?? 1;
+  const field = s.fieldSize ?? 1;
+  const won   = rank === 1;
+  const ordinal = (n) => {
+    const t = n % 100;
+    if (t >= 11 && t <= 13) return `${n}th`;
+    return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] ?? 'th'}`;
+  };
+  const accent = won ? 'var(--green)' : 'var(--text)';
+  const leader = (s.rivals ?? [])[0] ?? null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9998,
+      background: won
+        ? 'radial-gradient(circle at 50% 30%, rgba(16,185,129,0.18), rgba(0,0,0,0.88))'
+        : 'radial-gradient(circle at 50% 30%, rgba(120,140,170,0.16), rgba(0,0,0,0.88))',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div className="card" style={{
+        width: '100%', maxWidth: 480, padding: '30px 28px 24px', textAlign: 'center',
+        border: `1px solid ${won ? 'rgba(16,185,129,0.5)' : 'var(--border)'}`,
+      }}>
+        <div style={{
+          fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
+          color: 'var(--text-muted)', marginBottom: 10,
+        }}>
+          Final call · December {s.year ?? 2050}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} />
+        </div>
+
+        <h2 style={{ fontSize: 25, marginBottom: 8, color: accent, lineHeight: 1.25 }}>
+          {won
+            ? 'The most valuable carrier in the sky'
+            : `${airlineName} finishes ${ordinal(rank)} of ${field}`}
+        </h2>
+
+        <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4, lineHeight: 1.55 }}>
+          {won
+            ? <>The horizon closes with {airlineName} worth more than anyone still flying{leader ? <> — {leader.name} finished second</> : null}.</>
+            : <>The horizon closes.{leader ? <> {leader.name} finishes on top.</> : null} Your airline is still in the air, which is more than most manage.</>}
+        </p>
+
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '18px 24px',
+          margin: '22px 0 16px', padding: '18px 12px', background: 'var(--surface2)', borderRadius: 10,
+        }}>
+          <VictoryStat label="Market cap" value={formatMoney(s.marketCap ?? 0)} />
+          <VictoryStat label="Cash" value={formatMoney(s.cash ?? 0)} />
+          <VictoryStat label="Aircraft" value={s.fleetCount ?? 0} />
+          <VictoryStat label="Routes" value={s.routeCount ?? 0} />
+          <VictoryStat label="Airports" value={s.airports ?? 0} />
+        </div>
+
+        {(s.rivals ?? []).length > 0 && (
+          <div style={{ textAlign: 'left', marginBottom: 18 }}>
+            <div style={{
+              fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--text-muted)', marginBottom: 6,
+            }}>
+              Still flying at the bell
+            </div>
+            {s.rivals.map(r => (
+              <div key={r.name} style={{
+                display: 'flex', justifyContent: 'space-between', gap: 12,
+                fontSize: 13, padding: '4px 0', borderBottom: '1px solid var(--border)',
+                color: 'var(--text-muted)',
+              }}>
+                <span>{r.name}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(r.marketCap ?? 0)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onNewGame}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
+              background: won ? 'var(--green)' : 'var(--accent)', border: 'none', color: '#fff',
+            }}
+          >
+            Fly It Again
+          </button>
+          <button
+            onClick={onReview}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+            }}
+          >
+            Review the Board
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

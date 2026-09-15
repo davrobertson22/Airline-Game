@@ -26,6 +26,7 @@ const PAGE = 60;
 const typeName = (id) => getAircraftType(id)?.name ?? id ?? 'an aircraft';
 const plural = (n, one, many) => `${Number(n ?? 0).toLocaleString()} ${n === 1 ? one : many}`;
 const pair = (routeKey) => (routeKey ? routeKey.replace('-', '–') : null);
+const pairOf = (d) => `${d.origin}–${d.destination}`;
 
 // Returns { headline, sub, list } — `headline` follows the subject when there
 // is one, and stands alone when there isn't.
@@ -77,6 +78,34 @@ function compose(item) {
       return {
         headline: `Best week yet — ${formatMoney(d.profit)} profit`,
         sub: d.previousBest > 0 ? `Previous best was ${formatMoney(d.previousBest)}.` : null,
+        standalone: true,
+      };
+
+    case 'charter_signed':
+      return {
+        headline: `Signed a ${d.weeks}-week charter — ${pairOf(d)}`,
+        sub: [
+          d.customer ? `For ${d.customer}` : null,
+          `${formatMoney(d.fee)} over the term`,
+          d.positioning ? 'Positioning first — the aircraft ferries out before it earns' : null,
+        ].filter(Boolean).join(' · '),
+        standalone: true,
+      };
+    case 'charter_completed':
+      return {
+        headline: `Charter delivered — ${pairOf(d)}`,
+        sub: [
+          d.customer ? `${d.weeks} weeks flown for ${d.customer}` : `${d.weeks} weeks flown`,
+          `${formatMoney(d.fee)} earned`,
+        ].filter(Boolean).join(' · '),
+        standalone: true,
+      };
+    case 'charter_breached':
+      return {
+        headline: `Charter BREACHED — ${pairOf(d)}`,
+        sub: `No serviceable aircraft to fly it${d.reason === 'no-crew' ? ' (nobody to crew it)' : ''}. `
+           + `${formatMoney(d.penalty)} penalty with ${plural(d.weeksLeft, 'week', 'weeks')} still to run, `
+           + `and your charter record has taken the hit.`,
         standalone: true,
       };
 

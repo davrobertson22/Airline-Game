@@ -205,18 +205,28 @@ test('the reference operator is the CHEAPEST qualifying type, not the smallest',
 
 // ── 5. Trap density ──────────────────────────────────────────────────────────
 
-test('about 28% of offers are priced below a competent operator’s cost', () => {
-  let traps = 0, n = 0;
+test('about 28% of trap-eligible offers are priced below a competent operator\u2019s cost', () => {
+  // Measured among the contracts that CAN be traps. ACMI is excluded by design
+  // (ACMI_HAS_NO_TRAPS): it is a rate-card business between two airlines priced
+  // off a base that excludes fuel, so an underpriced one is neither realistic
+  // nor a decision worth making. Measuring the whole board instead would let the
+  // real rate drift as the ACMI share of the board moves.
+  let traps = 0, eligible = 0, acmi = 0, acmiTraps = 0;
   for (const name of ['Test Air', 'Second Air', 'Third Air', 'Fourth Air']) {
     const st = baseState({ airlineName: name });
     for (let w = 0; w < 400; w++) {
-      for (const o of generateCharterBoard(st, w)) { n++; if (o.isTrap) traps++; }
+      for (const o of generateCharterBoard(st, w)) {
+        if (o.type === CHARTER_TYPES.ACMI) { acmi++; if (o.isTrap) acmiTraps++; continue; }
+        eligible++; if (o.isTrap) traps++;
+      }
     }
   }
-  const rate = traps / n;
-  assert.ok(n > 2000, `sample too small (${n})`);
+  const rate = traps / eligible;
+  assert.ok(eligible > 2000, `sample too small (${eligible})`);
   assert.ok(Math.abs(rate - CHARTER_TRAP_RATE) < 0.05,
-    `trap rate ${(rate * 100).toFixed(1)}% is not ~${CHARTER_TRAP_RATE * 100}% (n=${n})`);
+    `trap rate ${(rate * 100).toFixed(1)}% is not ~${CHARTER_TRAP_RATE * 100}% (n=${eligible})`);
+  assert.ok(acmi > 200, `barely any ACMI on the board (${acmi})`);
+  assert.equal(acmiTraps, 0, `${acmiTraps} ACMI contracts were drawn as traps`);
 });
 
 test('a trap is under water and an honest offer is not', () => {

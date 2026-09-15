@@ -219,20 +219,48 @@ airline must be EARNED" rule the event system already follows.
 
 ---
 
-## 7. Balance guardrails
+## 7. Balance guardrails — measured
 
-Charters must complement the schedule, never replace it.
+Charters must complement the schedule, never replace it. `tools/charter-balance-probe.mjs`
+(@not-a-test) measures it rather than asserting it. Over 260 weeks of boards,
+every contract flown with the metal its fee was priced against:
 
-- Fee margins priced so a well-run schedule beats a well-run charter operation on
-  return per block hour. Charters win on *marginal* hours, not average ones.
-- Real role: monetising spare block hours and idle/reserve tails, a cash bridge
-  through a bad quarter, and a seasonal complement — fly ski charters in the
-  months your leisure routes are dormant. That last one pairs directly with the
-  P1 seasonal route layer.
-- Positioning and turn time mean a charter consumes hours at a *worse* utilisation
-  ratio than a scheduled rotation. That is the intended tax.
+| | profit / block hour |
+|---|---|
+| Scheduled route, mature, well-priced, 95% LF | **$4.9k** |
+| Charter, good offers only | $1.3k |
+| Charter, signing everything on the board | $856 |
+| Charter, signing only the traps | −$413 |
+| The same contracts flown one size class too big | −$1.8k |
 
----
+Charter work returns about **27% of a well-run mature route per block hour**, which
+is the intended shape: it is worth flying on hours that would otherwise earn
+nothing — spare capacity, a reserve, a season when the leisure routes are dormant —
+and never worth flying instead of an airline. Reading the board rather than signing
+everything is worth roughly +50%, and signing the traps loses money outright.
+
+By type: freight and government pay best ($1.4k), series and ad-hoc passenger sit
+mid-board (~$800), sub-service $649, ACMI $396.
+
+### What the probe changed
+
+**ACMI was mispriced, twice.** Priced off non-fuel cost it returned $253/blk hr —
+thin by design (no fuel risk, no fuel margin), but close enough to pointless to be
+worth checking. Pricing the reference aircraft's weekly lease into it instead — on
+the theory that a wet-lease customer is buying the asset — took it to **$6.4k/blk hr,
+better than a mature scheduled route**, and dragged the whole board up until even
+the traps turned a profit. The fee was covering a lease the charter P&L never pays,
+because the fleet loop charges it whether the jet works or not.
+
+Reverted to the non-fuel base, with one change: **ACMI is never drawn as a trap**
+(`ACMI_HAS_NO_TRAPS`). A wet lease is a rate-card arrangement between two airlines,
+not a competitive tender, so a systematically underpriced one is not a realistic
+failure mode. It now sits at $396/blk hr — thin, safe, always positive, and the only
+charter work still paying during a fuel spike, which is when the board offers more
+of it.
+
+The trap rate is therefore measured among trap-ELIGIBLE contracts (~28%), not the
+whole board (~22%), so the real figure cannot drift as ACMI's share of the board moves.
 
 ## 8. UI
 
@@ -247,6 +275,23 @@ New **Charters** page (nav beside Cargo), two panes:
 
 Also: Weekly Debrief lines (won / completed / breached), News log entries for
 large contracts, and a `charterRevenue` row in Finance beside Cargo revenue.
+
+### On the network map (built Sep 2026, TheCookiesGuy's request)
+
+A contract is not a route record — §4 keeps it out of `state.routes` and
+`state.cargoRoutes` so demand pooling, pair-share and encroachment never see it
+as a market participant. The map draws from those two arrays, so the same
+decision makes contracts invisible unless they get a layer of their own:
+`charterMapEntries(state.charters)` in `RouteMap.jsx`, drawn yellow
+(`CHARTER_COLOR`) and dashed, with its own legend toggle beside Cargo.
+
+- Only `active` and `positioning` contracts draw. A completed one is history; a
+  breached one is not being flown.
+- A positioning contract also draws its **empty leg**, dotted and faint, back to
+  `positionFrom`. The ferry origin joins the airport set, so the line starts at a
+  labelled station rather than running off to an unmarked point.
+- Tooltip money comes from `report.charterResults` via the same `projectWeek`
+  pass the rest of the screen reads — the map never re-derives a contract's week.
 
 ---
 

@@ -193,7 +193,8 @@ export default function AwayDigest() {
           </Stat>
         </div>
 
-        {(digest.best || digest.worst || digest.biggestCost) && (
+        {(digest.best || digest.worst || digest.biggestCost
+          || digest.charterRevenue > 0 || digest.charterPenalties > 0) && (
           <div style={{ marginTop: 16, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7 }}>
             {digest.best && digest.worst && digest.best.label !== digest.worst.label && (
               <div>
@@ -207,6 +208,22 @@ export default function AwayDigest() {
               <div>
                 Biggest cost line was <strong style={{ color: 'var(--text)' }}>{digest.biggestCost.label}</strong>
                 {' '}at {formatMoney(digest.biggestCost.amount)}.
+              </div>
+            )}
+            {digest.charterRevenue > 0 && (
+              <div>
+                Charter contracts brought in <strong style={{ color: 'var(--text)' }}>{formatMoney(digest.charterRevenue)}</strong>
+                {' '}across {digest.charterWeeks} week{digest.charterWeeks !== 1 ? 's' : ''}.
+              </div>
+            )}
+            {/* The one thing on this screen you might not otherwise notice: a
+                contract breaches when its aircraft is unserviceable, and that is
+                precisely what happens while nobody is watching. */}
+            {digest.charterPenalties > 0 && (
+              <div style={{ color: 'var(--red)' }}>
+                You paid <strong>{formatMoney(digest.charterPenalties)}</strong> in charter breach penalties
+                while you were away — an aircraft on contract was out of service with nothing to cover it.
+                The news log has which contracts.
               </div>
             )}
           </div>

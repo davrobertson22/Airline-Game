@@ -3953,37 +3953,6 @@ export function aircraftAvailability(type, calYear = null) {
   return 'new';
 }
 
-/**
- * Earliest calendar year an era world can legally start (Discord 2026-09-11,
- * Lancelotbronner: "there are no planes available so I can't create routes but
- * my competitors are somehow creating very profitable routes with no planes
- * assigned", in a 1930 world).
- *
- * The era picker used to accept any year from 1930, but the catalogue's oldest
- * passenger type is the 1936 DC-3. A 1930-1935 world therefore had an EMPTY
- * aircraft market: the player could not buy a frame, so could not open a route,
- * while the AI — whose route P&L is computed from the route config and does not
- * require a real orderable type — carried on printing money on routes with no
- * metal behind them. Two different symptoms of one cause: a start year the data
- * cannot support.
- *
- * Derived from the data, not hardcoded, so adding a genuinely older type (a
- * Ford Trimotor, a Handley Page H.P.42) moves the floor on its own. Freighters
- * are excluded — a cargo-only start is not a playable game.
- */
-export const ERA_MIN_START_YEAR = AIRCRAFT_TYPES
-  .filter(t => !t.freighter && t.eis != null)
-  .reduce((min, t) => Math.min(min, t.eis), Infinity);
-
-/** Latest era start year the curves and catalogue are defined for. */
-export const ERA_MAX_START_YEAR = 2100;
-
-/** Is this a legal era start year? (null = classic, always legal.) */
-export function isLegalEraStartYear(year) {
-  return year == null
-    || (Number.isInteger(year) && year >= ERA_MIN_START_YEAR && year <= ERA_MAX_START_YEAR);
-}
-
 /** Can this type be acquired at all (bought or leased) at this calendar year? */
 export function aircraftOrderable(type, calYear = null) {
   // Classic games: the catalogue is timeless — every type is on the 2026

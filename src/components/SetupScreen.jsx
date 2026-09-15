@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import { STARTING_CAPITAL } from '../data/credit.js';
-import { eraSeedCapital } from '../data/era.js';
-import { ERA_MIN_START_YEAR, ERA_MAX_START_YEAR } from '../data/aircraft.js';
+import { eraSeedCapital, ERA_MIN_START_YEAR,
+         ERA_MAX_NEW_START_YEAR, HORIZON_YEAR, runLengthYears } from '../data/era.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
 import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
@@ -122,11 +122,10 @@ export default function SetupScreen() {
   const STEPS = ['Brand', 'Home hub', 'Launch'];
   const canContinue = step !== 1 || airlineName.trim().length > 0;
   const eraYearRaw  = eraSel === '' ? null : eraSel === 'custom' ? Number(eraCustom) : Number(eraSel);
-  // The floor is ERA_MIN_START_YEAR (the oldest passenger type's entry into
-  // service), NOT a round number: an earlier start has an empty aircraft market,
-  // so the player cannot open a single route. See aircraft.js for the full note.
+  // The floor is ERA_MIN_START_YEAR — the first year the era model is defined
+  // for, NOT a round number. See the note in era.js.
   const startYear   = Number.isInteger(eraYearRaw)
-    && eraYearRaw >= ERA_MIN_START_YEAR && eraYearRaw <= ERA_MAX_START_YEAR ? eraYearRaw : null;
+    && eraYearRaw >= ERA_MIN_START_YEAR && eraYearRaw <= ERA_MAX_NEW_START_YEAR ? eraYearRaw : null;
   const eraInvalid  = eraSel === 'custom' && startYear == null;
 
   // Founders' equity shown in the subtitle. Reads the live constant (never a
@@ -584,9 +583,9 @@ export default function SetupScreen() {
           <div className="form-group">
             <label className="form-label"><Glyph e="🕰" /> Era</label>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
-              {[{ year: '', title: 'Classic', blurb: 'Timeless. The whole catalogue from day one, modern demand and fuel.' },
+              {[{ year: '', title: 'Classic', blurb: 'Timeless and endless. The whole catalogue from day one, modern demand and fuel, no closing date.' },
                 ...ERA_PRESETS.map(p => ({ ...p, year: String(p.year) })),
-                { year: 'custom', title: 'Custom year', blurb: `Pick any start between ${ERA_MIN_START_YEAR} and ${ERA_MAX_START_YEAR}.` }].map(opt => {
+                { year: 'custom', title: 'Custom year', blurb: `Pick any start between ${ERA_MIN_START_YEAR} and ${ERA_MAX_NEW_START_YEAR}. Every era run ends in ${HORIZON_YEAR}.` }].map(opt => {
                 const active = eraSel === opt.year;
                 return (
                   <button key={opt.year || 'classic'} type="button" onClick={() => setEraSel(opt.year)}
@@ -605,15 +604,16 @@ export default function SetupScreen() {
               })}
             </div>
             {eraSel === 'custom' && (
-              <input type="number" min={ERA_MIN_START_YEAR} max={ERA_MAX_START_YEAR} value={eraCustom}
+              <input type="number" min={ERA_MIN_START_YEAR} max={ERA_MAX_NEW_START_YEAR} value={eraCustom}
                 onChange={e => setEraCustom(e.target.value)}
                 style={{ marginTop: 8, width: 140 }} aria-label="Custom start year" />
             )}
             {eraSel !== '' && (
               <div style={{ fontSize: 11, color: eraInvalid ? 'var(--danger, #e5484d)' : 'var(--text-muted)', marginTop: 8 }}>
                 {eraInvalid
-                  ? `Enter a start year between ${ERA_MIN_START_YEAR} and ${ERA_MAX_START_YEAR}. The first airliner in the catalogue entered service in ${ERA_MIN_START_YEAR} — start earlier and there is nothing to fly.`
-                  : `Your calendar starts in January ${startYear}. Aircraft become available the year they really entered service, `
+                  ? `Enter a start year between ${ERA_MIN_START_YEAR} and ${ERA_MAX_NEW_START_YEAR}. The historical curves — demand, fares and fuel — begin in ${ERA_MIN_START_YEAR}.`
+                  : `Your calendar starts in January ${startYear} and the horizon closes at the end of ${HORIZON_YEAR}: a ${runLengthYears(startYear)}-year run, `
+                    + 'scored on market cap against whoever is still flying. Aircraft become available the year they really entered service, '
                     + 'demand and fuel follow their historical curves, and prices stay in today\'s dollars. '
                     + (startYear < 1990 ? 'Codeshares, alliances, Wi-Fi and ancillaries unlock as they were invented.' : 'Every route tool works from day one.')}
               </div>

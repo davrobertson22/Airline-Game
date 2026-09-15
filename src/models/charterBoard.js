@@ -256,7 +256,7 @@ export function generateOffer({
     if (!ref) continue;                       // nothing in this era can fly it
 
     const { fee, feePerWeek, margin, isTrap } = charterFee({
-      refCost: ref.cost, weeks, type: tmpl.type, reliability,
+      refCost: ref.cost, refType: ref.type, weeks, type: tmpl.type, reliability,
       uMargin: hashUnit(`${key}|mrg${salt}`), uTrap: hashUnit(`${key}|trap${salt}`),
     });
 

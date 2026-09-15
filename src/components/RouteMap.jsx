@@ -150,6 +150,18 @@ const RIVAL_COLORS = {
 const RIVAL_DEFAULT_COLOR = '#7f95b3';
 const CARGO_COLOR     = '#e8833a';  // amber for cargo / freight routes
 
+// Charter contracts.
+//
+//   TheCookiesGuy  "Would be cool if charter contracts showed up on the map as a
+//                   different color (yellow maybe?)"   (Discord, 13 Sep 2026)
+//
+// Yellow, as asked, and a shade clear of the two things already near it: cargo's
+// amber is warmer and orange, and the gold hub pins are dots rather than lines.
+// The contract lines are dashed on top of that, because a charter is not a route
+// — it is a commitment with an end date, and it should not read as though you
+// have opened a service you will still be flying next quarter.
+export const CHARTER_COLOR = '#ffe14d';
+
 // ── Component ─────────────────────────────────────────────────────────────────
 // ── Viewport ownership ────────────────────────────────────────────────────────
 // The map moves the camera for exactly two reasons: the network it is drawing
@@ -218,6 +230,51 @@ export function hubMarkerSize(tier) {
   return { core, ring: core + 3 };
 }
 
+/**
+ * The contracts the map draws, with their airports resolved.
+ *
+ * A charter is NOT a route record, deliberately: charterOpRecord() feeds block
+ * hours and slot counts, but a contract never enters state.routes or
+ * state.cargoRoutes, because everything in those arrays is treated as a market
+ * participant by demand pooling, pair-share and encroachment. The same decision
+ * that keeps charters out of the market keeps them off the map unless they are
+ * drawn from state.charters directly — which is what this is for.
+ *
+ * Only contracts being flown THIS week qualify. A completed one is history and a
+ * breached one is not being flown; neither is a line on a map of what you are
+ * operating. A contract still ferrying out to its pickup does qualify, and
+ * carries the station it is coming from: that empty leg is what the tail is
+ * actually doing this week, and it is the cost the board's fee was quoted
+ * against.
+ *
+ * Exported so the layer effect and its tests share one derivation — renderToString
+ * runs no effects, so a Leaflet polyline can never be asserted directly.
+ */
+export function charterMapEntries(charters = []) {
+  const out = [];
+  for (const c of charters ?? []) {
+    if (!c || (c.status !== 'active' && c.status !== 'positioning')) continue;
+    const origin = getAirport(c.origin);
+    const dest   = getAirport(c.destination);
+    if (!origin || !dest) continue;
+    const ferry = (c.status === 'positioning' && c.positionFrom)
+      ? (getAirport(c.positionFrom) ?? null) : null;
+    out.push({
+      c,
+      // The map's filters read `r.aircraftId` and `chain`, and the contract is
+      // the operating record here — so it answers to both under its own name.
+      r: c,
+      origin, dest, ferry,
+      // The ferry origin belongs in the chain: it is where the line starts, and
+      // an endpoint with no marker and no place in the viewport is a line
+      // running off the edge of the map to nowhere.
+      chain: ferry ? [ferry, origin, dest] : [origin, dest],
+      multi: false,
+    });
+  }
+  return out;
+}
+
 /** Airports the map pins: every station you've designated (even one you have no
  *  routes at yet) plus both ends of every route drawn. */
 export function mapAirportCodes(hubCodes = [], ...routeDataSets) {
@@ -234,7 +291,7 @@ export function mapAirportCodes(hubCodes = [], ...routeDataSets) {
 
 export default function RouteMap() {
   const { state } = useGame();
-  const { fleet, routes, cargoRoutes = [], hub, hubs: hubsState,
+  const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
           competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
   // Every designated station, gold-pinned — not just the founding hub.
@@ -263,9 +320,11 @@ export default function RouteMap() {
   // and a map you cannot read is not more information than one you can.
   const [showRivals,    setShowRivals]    = useState(false);
   const [showCargo,     setShowCargo]     = useState(true);
+  const [showCharters,  setShowCharters]  = useState(true);
   const [acTypeFilter,  setAcTypeFilter]  = useState('all');  // 'all' | aircraft typeId
   const [airportFilter, setAirportFilter] = useState('all');  // 'all' | IATA code
   const cargoLayersRef = useRef([]);   // amber cargo route overlay layers
+  const charterLayersRef = useRef([]); // yellow charter contract overlay layers
 
   // Keep refs of current interaction state so the (rarely-rebuilt) layer effect
   // can apply correct styling without being a dependency.
@@ -360,6 +419,14 @@ export default function RouteMap() {
     for (const rr of proj.report?.cargoRouteResults ?? []) m[rr.routeId] = rr;
     return m;
   }, [proj]);
+  // This week's charter results, straight off the same canonical projection the
+  // rest of this screen reads. A contract's week is arithmetic the engine has
+  // already done; the map has no business re-deriving it.
+  const charterRrById = useMemo(() => {
+    const m = {};
+    for (const cr of proj.report?.charterResults ?? []) m[cr.charterId] = cr;
+    return m;
+  }, [proj]);
 
   const routeData = useMemo(() => {
     const avgUtil  = fleetAvgUtilization(fleet, [...routes, ...cargoRoutes]);
@@ -403,27 +470,32 @@ export default function RouteMap() {
     }).filter(Boolean);
   }, [cargoRoutes, fleet, cargoRrById, proj, gd, state.labor]);
 
+  // Contracts being flown this week, in the same shape the filters and the
+  // airport set already understand.
+  const charterData = useMemo(() => charterMapEntries(charters), [charters]);
+
   // ── Map filters: by aircraft type and by airport ─────────────────────────
   // Options come from the UNfiltered data so the dropdowns always list
   // everything; the map + table below render only what passes the filters.
   const typesInUse = useMemo(() => {
     const ids = new Set();
-    for (const r of [...routes, ...cargoRoutes]) {
+    for (const r of [...routes, ...cargoRoutes, ...charterData.map(d => d.c)]) {
       const a = fleet.find(x => x.id === r.aircraftId);
       if (a) ids.add(a.typeId);
     }
     return [...ids].map(getAircraftType).filter(Boolean)
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [routes, cargoRoutes, fleet]);
+  }, [routes, cargoRoutes, charterData, fleet]);
 
   const airportOptions = useMemo(() => {
     const codes = new Set([
       ...routeData.flatMap(d => d.chain.map(a => a.code)),
       ...cargoRouteData.flatMap(d => [d.origin.code, d.dest.code]),
+      ...charterData.flatMap(d => d.chain.map(a => a.code)),
     ]);
     return [...codes].map(getAirport).filter(Boolean)
       .sort((a, b) => a.code.localeCompare(b.code));
-  }, [routeData, cargoRouteData]);
+  }, [routeData, cargoRouteData, charterData]);
 
   const matchesFilters = useCallback((d) => {
     if (acTypeFilter !== 'all') {
@@ -438,12 +510,13 @@ export default function RouteMap() {
 
   const filteredRouteData      = useMemo(() => routeData.filter(matchesFilters), [routeData, matchesFilters]);
   const filteredCargoRouteData = useMemo(() => cargoRouteData.filter(matchesFilters), [cargoRouteData, matchesFilters]);
+  const filteredCharterData    = useMemo(() => charterData.filter(matchesFilters), [charterData, matchesFilters]);
   const filtersActive = acTypeFilter !== 'all' || airportFilter !== 'all';
 
   const airportSet = useMemo(() => (
-    mapAirportCodes(hubCodes, filteredRouteData, filteredCargoRouteData)
+    mapAirportCodes(hubCodes, filteredRouteData, filteredCargoRouteData, filteredCharterData)
       .map(getAirport).filter(Boolean)
-  ), [filteredRouteData, filteredCargoRouteData, hubCodes]);
+  ), [filteredRouteData, filteredCargoRouteData, filteredCharterData, hubCodes]);
 
   // Group route entries by city pair (direction-agnostic) so multiple aircraft
   // on the same JFK↔ORD pair show as ONE line + ONE row with aggregated stats.
@@ -718,6 +791,90 @@ export default function RouteMap() {
     }
   }, [cargoGroups, showCargo, selectedId, mapReady]);
 
+  // 4d. Sync charter contract overlay (yellow, dashed, with the empty leg)
+  //
+  // Drawn from state.charters rather than from a route array, for the reason in
+  // charterMapEntries above. Everything on this layer is deliberately temporary-
+  // looking: dashed because the contract ends, and the positioning leg dotted and
+  // faint because nobody is being carried on it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
+    const dim = selectedId != null ? 0.3 : 1;   // fade charters when focusing a route
+
+    charterLayersRef.current.forEach(l => map.removeLayer(l));
+    charterLayersRef.current = [];
+    if (!showCharters) return;
+
+    for (const { c, origin, dest, ferry } of filteredCharterData) {
+      const res      = charterRrById[c.id] ?? null;
+      const aircraft = fleet.find(a => a.id === c.aircraftId);
+      const acName   = aircraft ? (aircraft.tailNumber ?? aircraft.name ?? '—') : 'unassigned';
+      const weeks    = `${c.weeksRemaining ?? 0} of ${c.weeksTotal ?? c.weeksRemaining ?? 0} wk left`;
+      const feeStr   = `+${formatMoney(c.feePerWeek ?? 0)}/wk`;
+      // A positioning week earns nothing by design, so its profit line is the
+      // ferry cost with a minus in front of it — which is the number the player
+      // is meant to feel before signing the next one of these.
+      const profit   = res ? res.profit : null;
+      const profStr  = profit == null ? '—'
+        : `<span style="color:${profit >= 0 ? PROFIT_COLOR : LOSS_COLOR}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>`;
+      const positioning = c.status === 'positioning';
+
+      const tipHtml = `
+        <div class="map-tip">
+          <div class="map-tip-title" style="color:${CHARTER_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-sub">${c.icon ? `${c.icon} ` : ''}${c.customer ?? c.name ?? 'Charter'} · ${weeks}</div>
+          <div class="map-tip-sub">${acName} · ${c.weeklyFrequency ?? 1}×/wk${
+            positioning ? ` · positioning from ${ferry?.code ?? c.positionFrom}` : ''}</div>
+          <div class="map-tip-stats">
+            <div><span class="map-tip-lbl">Fee</span><span class="map-tip-val" style="color:${CHARTER_COLOR}">${feeStr}</span></div>
+            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
+          </div>
+          ${positioning ? '<div class="map-tip-hint">Ferrying out — earns nothing this week</div>' : ''}
+        </div>
+      `;
+
+      // The empty leg, under everything else.
+      if (ferry) {
+        for (const pts of segmentsForRoute(ferry.lat, ferry.lon, origin.lat, origin.lon)) {
+          const leg = L.polyline(pts, {
+            color: CHARTER_COLOR, weight: 1.5, opacity: 0.45 * dim,
+            dashArray: '2 7', lineCap: 'round', smoothFactor: 1,
+          });
+          leg.bindTooltip(
+            `<div class="map-tip"><div class="map-tip-title" style="color:${CHARTER_COLOR}">${ferry.code} → ${origin.code}</div>` +
+            `<div class="map-tip-sub">Positioning leg · ${Math.round(c.ferryKm ?? 0).toLocaleString()} km empty</div>` +
+            `<div class="map-tip-sub">Costs ${formatMoney(c.ferryCost ?? 0)}, earns nothing</div></div>`,
+            { sticky: true, className: 'game-tooltip', offset: [15, 0] },
+          );
+          leg.addTo(map);
+          charterLayersRef.current.push(leg);
+        }
+      }
+
+      const baseOp = (positioning ? 0.55 : 0.95) * dim;
+      for (const pts of segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon)) {
+        const glow = L.polyline(pts, {
+          color: CHARTER_COLOR, weight: 9, opacity: 0.12 * dim,
+          lineCap: 'round', smoothFactor: 1, interactive: false, className: 'route-glow',
+        });
+        glow.addTo(map);
+        charterLayersRef.current.push(glow);
+
+        const line = L.polyline(pts, {
+          color: CHARTER_COLOR, weight: 2.5, opacity: baseOp,
+          dashArray: '9 7', lineCap: 'round', smoothFactor: 1,
+        });
+        line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
+        line.on('mouseover', () => line.setStyle({ weight: 4, opacity: 1 }));
+        line.on('mouseout',  () => line.setStyle({ weight: 2.5, opacity: baseOp }));
+        line.addTo(map);
+        charterLayersRef.current.push(line);
+      }
+    }
+  }, [filteredCharterData, charterRrById, fleet, showCharters, selectedId, mapReady]);
+
   // 4. Sync routes + markers to map
   useEffect(() => {
     const map = mapRef.current;
@@ -908,7 +1065,9 @@ export default function RouteMap() {
     map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
   }, [selectedId, routeGroups, applyStyles]);
 
-  if (routes.length === 0 && cargoRoutes.length === 0) {
+  // A carrier can hold a contract before it opens a single scheduled route, and
+  // being told the map is empty while flying a 12-week series is a lie.
+  if (routes.length === 0 && cargoRoutes.length === 0 && charterData.length === 0) {
     return (
       <div className="empty-state" style={{ paddingTop: 80 }}>
         <div className="empty-state-icon"><Glyph e="🗺️" /></div>
@@ -932,7 +1091,9 @@ export default function RouteMap() {
           <div>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Route Network</span>
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-              {routeGroups.length} route{routeGroups.length !== 1 ? 's' : ''} · {airportSet.length} airports{filtersActive && <span style={{ color: 'var(--accent)' }}> · filtered</span>}
+              {routeGroups.length} route{routeGroups.length !== 1 ? 's' : ''} · {airportSet.length} airports{
+                filteredCharterData.length > 0 && ` · ${filteredCharterData.length} charter${filteredCharterData.length !== 1 ? 's' : ''}`
+              }{filtersActive && <span style={{ color: 'var(--accent)' }}> · filtered</span>}
               {selectedData && (
                 <span style={{ color: 'var(--accent)' }}> · focused {(selectedData.chain ?? [selectedData.origin, selectedData.dest]).map(a => a.code).join('→')}</span>
               )}
@@ -1018,6 +1179,28 @@ export default function RouteMap() {
               >
                 <span style={{ width: 18, height: 2, background: CARGO_COLOR, display: 'inline-block', borderRadius: 1 }} />
                 <Glyph e="📦" /> Cargo
+              </button>
+            )}
+
+            {/* Charter toggle — only when contracts are being flown */}
+            {charterData.length > 0 && (
+              <button
+                onClick={() => setShowCharters(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  opacity: showCharters ? 1 : 0.4, transition: 'opacity 0.15s',
+                  color: 'var(--text-muted)', fontSize: 11,
+                }}
+                title={showCharters
+                  ? 'Hide charter contracts'
+                  : 'Show charter contracts — dashed, with the positioning leg dotted'}
+              >
+                <span style={{
+                  width: 18, height: 0, borderTop: `2px dashed ${CHARTER_COLOR}`,
+                  display: 'inline-block',
+                }} />
+                <Glyph e="📋" /> Charters
               </button>
             )}
 

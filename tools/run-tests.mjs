@@ -28,7 +28,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -141,13 +141,13 @@ function runOne(file) {
       out += `\n[run-tests] killed after ${TIMEOUT_MS / 1000}s — suite hung.\n`;
     }, TIMEOUT_MS);
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
-      resolve({ file, code, out, elapsed: Date.now() - started });
+      resolve({ file, code, signal, out, elapsed: Date.now() - started });
     });
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ file, code: 1, out: out + String(err), elapsed: Date.now() - started });
+      resolve({ file, code: 1, signal: null, out: out + String(err), elapsed: Date.now() - started });
     });
   });
 }
@@ -155,6 +155,45 @@ function runOne(file) {
 const label = `${selected.length} suite${selected.length === 1 ? '' : 's'}`;
 const shardNote = shard ? ` ${DIM}(shard ${shard.index}/${shard.total} of ${matched.length})${OFF}` : '';
 console.log(`${DIM}running ${label} with ${JOBS} worker${JOBS === 1 ? '' : 's'}${OFF}${shardNote}\n`);
+
+// ── source snapshot ───────────────────────────────────────────────────────────
+// Suites run in parallel over several seconds, each loading the module graph at
+// a slightly different moment. If another process is editing the tree while the
+// run is in flight — a second session, an editor writing on save, a rebase —
+// different workers read different versions of the same file and suites fail in
+// ways that will not reproduce. That looked exactly like a flaky runner once
+// (2026-09-12) and cost an afternoon, so the runner now notices and says so
+// instead of leaving you to guess.
+function snapshotTree() {
+  const seen = new Map();
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(js|jsx|mjs)$/.test(e.name)) {
+        try { seen.set(p, statSync(p).mtimeMs); } catch { /* vanished mid-walk */ }
+      }
+    }
+  };
+  walk(path.join(ROOT, 'src'));
+  walk(TOOLS);
+  return seen;
+}
+function treeChanges(before, after) {
+  const changed = [];
+  for (const [p, m] of after) {
+    if (!before.has(p)) changed.push(`added   ${path.relative(ROOT, p)}`);
+    else if (before.get(p) !== m) changed.push(`changed ${path.relative(ROOT, p)}`);
+  }
+  for (const p of before.keys()) {
+    if (!after.has(p)) changed.push(`removed ${path.relative(ROOT, p)}`);
+  }
+  return changed;
+}
+const treeBefore = snapshotTree();
 
 const queue = [...selected];
 const results = [];
@@ -184,10 +223,15 @@ const wall = Date.now() - suiteStart;
 // ── report ────────────────────────────────────────────────────────────────────
 const failures = results.filter((r) => r.code !== 0);
 for (const f of failures) {
+  // A suite killed by a signal exited without printing anything, so "exit null"
+  // on its own reads as a mystery. Name the signal, and name the usual cause.
+  const how = f.signal
+    ? `killed by ${f.signal}${f.signal === 'SIGKILL' ? ' — out of memory, or the run timed out' : ''}`
+    : `exit ${f.code}`;
   console.log(`\n${RED}${'─'.repeat(72)}${OFF}`);
-  console.log(`${RED}FAILED${OFF} ${f.file} ${DIM}(exit ${f.code})${OFF}`);
+  console.log(`${RED}FAILED${OFF} ${f.file} ${DIM}(${how})${OFF}`);
   console.log(`${RED}${'─'.repeat(72)}${OFF}`);
-  console.log(f.out.trimEnd());
+  console.log(f.out.trim() ? f.out.trimEnd() : `${DIM}(no output)${OFF}`);
 }
 
 const slowest = [...results].sort((a, b) => b.elapsed - a.elapsed).slice(0, 5);
@@ -195,6 +239,14 @@ console.log(`\n${DIM}slowest: ${slowest.map((r) => `${r.file.replace(/\.mjs$/, '
 
 if (skipped.length) {
   console.log(`${DIM}skipped (@not-a-test): ${skipped.join(', ')}${OFF}`);
+}
+
+const treeMoved = treeChanges(treeBefore, snapshotTree());
+if (treeMoved.length) {
+  console.log(`\n${RED}source changed while the suite was running — results are not trustworthy${OFF}`);
+  for (const c of treeMoved.slice(0, 10)) console.log(`  ${c}`);
+  if (treeMoved.length > 10) console.log(`  …and ${treeMoved.length - 10} more`);
+  console.log(`${DIM}re-run once the tree is settled before believing any failure above.${OFF}`);
 }
 
 const passed = results.length - failed;

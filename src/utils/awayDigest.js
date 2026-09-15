@@ -100,6 +100,16 @@ export function buildAwayDigest(state, weeks) {
   const last  = window[window.length - 1];
 
   let cashDelta = 0, revenue = 0, cost = 0, passengers = 0;
+  // Charter contracts. Fees are already inside `revenue` (the tick folds them
+  // into the grand total with the routes), so these are breakdowns, not
+  // additions — the same trap the cargo comment below records.
+  //
+  // Penalties are the line that actually matters on a return screen: a contract
+  // breaches when its aircraft is unserviceable, which is exactly the kind of
+  // thing that happens while nobody is watching, and the only trace left in
+  // financialHistory is the money. Naming WHICH contract needs lastReport, which
+  // this module deliberately does not keep — the news log has it.
+  let charterRevenue = 0, charterPenalties = 0, charterWeeks = 0;
   let best = null, worst = null, profitable = 0, losing = 0;
   const series = [];
   // Cost lines worth naming when one of them dominates the span.
@@ -122,6 +132,9 @@ export function buildAwayDigest(state, weeks) {
     cost       += num(h.totalCost);
     passengers += num(h.passengers);
     if (profit >= 0) profitable += 1; else losing += 1;
+    charterRevenue   += num(h.charterRevenue);
+    charterPenalties += num(h.charterPenalties);
+    if (num(h.charterRevenue) > 0) charterWeeks += 1;
     if (!best  || profit > best.profit)  best  = { label: h.label ?? '', profit, week: h.week, year: h.year };
     if (!worst || profit < worst.profit) worst = { label: h.label ?? '', profit, week: h.week, year: h.year };
     for (const [k] of COST_LINES) costTotals[k] += num(h[k]);
@@ -174,6 +187,9 @@ export function buildAwayDigest(state, weeks) {
     svpsFrom:       statsBefore?.svps ?? null,
     svpsNow:        statsNow?.svps ?? null,
     avgLoadFactor:  lfWindow.length ? lfWindow.reduce((a, b) => a + b, 0) / lfWindow.length : null,
+    charterRevenue,
+    charterPenalties,
+    charterWeeks,
   };
 }
 
