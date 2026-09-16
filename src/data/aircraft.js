@@ -35,6 +35,13 @@
 //                       Supersonic is exempt — Concorde is a deliberate prestige
 //                       money-loser and an age penalty would just make it unusable.
 // category:             used to group aircraft in the market UI
+// bizjet:               true = a business jet. Grouped with the regional jets in
+//                       every category table (speed, turnaround, checks, fees) —
+//                       a 10-seat jet is not a turboprop and the tables step by
+//                       category — but flagged so the charter board can post
+//                       executive work that only a business jet may fly, and so
+//                       the per-seat fuel checks in the consistency suite know
+//                       not to judge a 10-seat cabin as a 90-seat one.
 // image:                Wikimedia Commons photo URL
 //
 // Sorted by manufacturer (A–Z), then purchase price (low–high).
@@ -1371,6 +1378,24 @@ export const AIRCRAFT_TYPES = [
     description: 'Largest CRJ. High seat count in the regional jet class.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Bombardier_CRJ-1000_%E2%80%98EC-LJT%E2%80%99_Iberia_Regional_%2832216523755%29.jpg/960px-Bombardier_CRJ-1000_%E2%80%98EC-LJT%E2%80%99_Iberia_Regional_%2832216523755%29.jpg',
   },
+  {
+    id: 'cl350',
+    name: 'Challenger 350',
+    manufacturer: 'Bombardier',
+    category: 'Regional Jet',
+    bizjet: true,
+    eis: 2014,
+    seats: 10,
+    range: 5_926,
+    runwayFt: 4800,
+    weeklyLease:       52_000,
+    purchasePrice: 27000000,
+    fuelBurnPer100km: 118,
+    crewCostPerKm: 0.85,
+    baseMaintenancePerWk: 15_000,
+    description: 'Super-midsize business jet. Ten seats, transcontinental range and a flat floor — the workhorse of the executive charter market.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Bombardier_Challenger_350_N360VJ_BWI_MD1.jpg/960px-Bombardier_Challenger_350_N360VJ_BWI_MD1.jpg',
+  },
 
   // ── BRITISH AEROSPACE ───────────────────────────────────────────────────────
   {
@@ -1452,6 +1477,24 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 2_000,
     description: 'Single-engine utility turboprop. Ideal for remote communities and island routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Iraqi_Air_Force_Cessna_208_Caravan_training_mission.jpg/960px-Iraqi_Air_Force_Cessna_208_Caravan_training_mission.jpg',
+  },
+  {
+    id: 'cj4',
+    name: 'Citation CJ4',
+    manufacturer: 'Cessna',
+    category: 'Regional Jet',
+    bizjet: true,
+    eis: 2010,
+    seats: 10,
+    range: 3_710,
+    runwayFt: 3400,
+    weeklyLease:       21_000,
+    purchasePrice: 11000000,
+    fuelBurnPer100km: 76.5,
+    crewCostPerKm: 0.72,
+    baseMaintenancePerWk: 7_500,
+    description: 'Light business jet. Cheap to own, quick to turn, and happy on a 3,400 ft strip — the entry ticket to executive charter work.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Cessna_Citation_CJ4_525C_N194ME_FDK_MD1.jpg/960px-Cessna_Citation_CJ4_525C_N194ME_FDK_MD1.jpg',
   },
 
   // ── COMAC ───────────────────────────────────────────────────────────────────
@@ -1568,6 +1611,24 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 17_600,
     description: 'Small regional jet, good for thin routes that need jet speed.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Embraer_ERJ-145MP_SP-LGM_2.JPG/960px-Embraer_ERJ-145MP_SP-LGM_2.JPG',
+  },
+  {
+    id: 'phenom300e',
+    name: 'Phenom 300E',
+    manufacturer: 'Embraer',
+    category: 'Regional Jet',
+    bizjet: true,
+    eis: 2009,
+    seats: 10,
+    range: 3_724,
+    runwayFt: 3200,
+    weeklyLease:       19_500,
+    purchasePrice: 10000000,
+    fuelBurnPer100km: 70,
+    crewCostPerKm: 0.72,
+    baseMaintenancePerWk: 7_000,
+    description: 'The best-selling light jet of its generation. A touch more frugal than the CJ4, and it works out of the shortest fields in the class.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Embraer_Phenom_300_N235EE_FDK_MD2.jpg/960px-Embraer_Phenom_300_N235EE_FDK_MD2.jpg',
   },
   {
     id: 'erj170',
@@ -1740,6 +1801,26 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 27_800,
     description: 'Dutch narrow-body workhorse. Still flying on many regional routes worldwide.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Fokker_100_%28KLM%29_PH-OFN_%2810676665315%29.jpg/960px-Fokker_100_%28KLM%29_PH-OFN_%2810676665315%29.jpg',
+  },
+
+  // ── GULFSTREAM ──────────────────────────────────────────────────────────────
+  {
+    id: 'g650er',
+    name: 'Gulfstream G650ER',
+    manufacturer: 'Gulfstream',
+    category: 'Regional Jet',
+    bizjet: true,
+    eis: 2014,
+    seats: 19,
+    range: 13_890,
+    runwayFt: 6000,
+    weeklyLease:      135_000,
+    purchasePrice: 70000000,
+    fuelBurnPer100km: 205,
+    crewCostPerKm: 1.05,
+    baseMaintenancePerWk: 32_000,
+    description: 'Ultra-long-range business jet. Nineteen seats and nearly 14,000 km — the only thing on this list that can take an executive party non-stop across the Pacific.',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Gulfstream_G650ER%2C_EBACE_2018%2C_Le_Grand-Saconnex_%28BL7C0749%29.jpg/960px-Gulfstream_G650ER%2C_EBACE_2018%2C_Le_Grand-Saconnex_%28BL7C0749%29.jpg',
   },
 
   // ── ILYUSHIN ────────────────────────────────────────────────────────────────

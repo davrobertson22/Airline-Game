@@ -39,6 +39,7 @@ export const CHARTER_TYPES = {
   ACMI:          'acmi',
   GOVERNMENT:    'government',
   SUBSERVICE:    'subservice',
+  EXECUTIVE:     'executive',
 };
 
 // ── Fee model constants ──────────────────────────────────────────────────────
@@ -97,6 +98,40 @@ export const ACMI_FUEL_IS_CUSTOMERS = true;
  * create. Traps live where the money is: fixed-fee flying.
  */
 export const ACMI_HAS_NO_TRAPS = true;
+
+/**
+ * EXECUTIVE: the customer is buying the aeroplane, not a seat on it.
+ *
+ * Every other fixed-fee contract is priced off the reference operator's
+ * OPERATING cost, because the aircraft flying it earns its keep on the schedule
+ * the rest of the week and the charter is marginal hours. A business jet has no
+ * schedule to earn its keep on — nothing in the catalogue seats ten at a fare
+ * that covers a jet — so a fee that ignored the asset would make every business
+ * jet a guaranteed loss and the executive board a page of traps.
+ *
+ * So the reference bizjet's weekly lease is priced into the fee, PRO RATA to
+ * the share of a busy charter week the mission consumes. A jet that flies
+ * executive work all week roughly covers its lease plus the margin; one that
+ * flies a single rotation covers a single rotation's slice. This is the
+ * industry's own pricing (hourly rates that carry the capital cost), and it is
+ * what ACMI deliberately does NOT do — see ACMI_FUEL_IS_CUSTOMERS — because an
+ * ACMI tail is an airliner with a schedule to go back to.
+ */
+export const EXECUTIVE_FEE_INCLUDES_ASSET = true;
+
+/** Block hours in a fully employed executive-charter week. */
+export const EXECUTIVE_UTILISATION_WEEK_HOURS = 60;
+
+/**
+ * The slice of the reference jet's weekly lease a mission of `blockHours`
+ * carries. Capped at a whole week — a contract cannot bill more asset than the
+ * asset has.
+ */
+export function executiveAssetShare(refType, blockHours) {
+  if (!EXECUTIVE_FEE_INCLUDES_ASSET || !refType) return 0;
+  const share = Math.min(1, Math.max(0, blockHours) / EXECUTIVE_UTILISATION_WEEK_HOURS);
+  return Math.round((refType.weeklyLease ?? 0) * share);
+}
 
 // ── Reliability ──────────────────────────────────────────────────────────────
 //
@@ -185,6 +220,9 @@ export function typeMeetsRequirement(type, req) {
   if (!type) return false;
   if (req.freighter && !type.freighter) return false;
   if (!req.freighter && type.freighter) return false;
+  // Executive work asks for a business jet by name. A Caravan seats the party
+  // and reaches the field; the customer is not getting on it.
+  if (req.bizjet && !type.bizjet) return false;
   if (req.seats   != null && (type.seats ?? 0) < req.seats) return false;
   if (req.tonnes  != null && (type.payloadTonnes ?? 0) < req.tonnes) return false;
   if (req.distanceKm != null && (type.range ?? 0) < req.distanceKm) return false;
@@ -202,13 +240,13 @@ export function typeMeetsRequirement(type, req) {
  */
 export function referenceTypeFor({
   originCode, destCode, seats = null, tonnes = null, runwayFt = null,
-  freighter = false, flightsPerWeek = 1, fuelIndex = 1.0, calYear = null,
+  freighter = false, bizjet = false, flightsPerWeek = 1, fuelIndex = 1.0, calYear = null,
 }) {
   const o = getAirport(originCode);
   const d = getAirport(destCode);
   if (!o || !d) return null;
   const dist = distanceKm(o, d);
-  const req  = { seats, tonnes, runwayFt, freighter, distanceKm: dist };
+  const req  = { seats, tonnes, runwayFt, freighter, bizjet, distanceKm: dist };
 
   let best = null;
   for (const type of AIRCRAFT_TYPES) {
@@ -239,7 +277,7 @@ export function referenceTypeFor({
  * ACMI strips fuel out of the priced cost because the customer buys it; the
  * player's own fuel bill is likewise waived at tick time.
  */
-export function charterFee({ refCost, refType, weeks, type, uMargin, uTrap, reliability = 50 }) {
+export function charterFee({ refCost, refType, weeks, type, uMargin, uTrap, reliability = 50, assetShare = 0 }) {
   const isTrap = type === CHARTER_TYPES.ACMI && ACMI_HAS_NO_TRAPS
     ? false
     : uTrap < CHARTER_TRAP_RATE;
@@ -250,7 +288,9 @@ export function charterFee({ refCost, refType, weeks, type, uMargin, uTrap, reli
 
   const priced = type === CHARTER_TYPES.ACMI
     ? Math.max(0, refCost.total - refCost.fuel)
-    : refCost.total;
+    : type === CHARTER_TYPES.EXECUTIVE
+      ? refCost.total + assetShare                // see EXECUTIVE_FEE_INCLUDES_ASSET
+      : refCost.total;
 
   const feePerWeek = Math.round(priced * margin);
   return {
@@ -296,6 +336,58 @@ export const CHARTER_TEMPLATES = [
     eventAffinity: { economy: 0.7 },
     reputationStake: 2,
     customers: ['a touring orchestra', 'a football club', 'a film production', 'a corporate offsite', 'a university squad', 'a conference organiser'],
+  },
+  // ── Small work (2026-09-16) ──────────────────────────────────────────────
+  //   Matvocaat  "I like to grow my airline organically, start out small and
+  //               buy the big airliners later. So charter contracts for 1-20
+  //               people would be great as well especially in early game"
+  //
+  // Everything above asks for at least 90 seats, so a two-Caravan startup opened
+  // the board to a page of work it could not touch. These two templates are
+  // sized for that fleet — and charterFleetFit() below is what tilts the board
+  // toward them for a small carrier and away from them for a widebody one.
+  {
+    id: 'adhoc_small',
+    destBias: 'hub',
+    type: CHARTER_TYPES.ADHOC_PAX,
+    name: 'Small group charter',
+    icon: '🧳',
+    color: '#5ec9b0',
+    blurb: 'A handful of people who need to be somewhere the schedule does not go. Any aircraft that seats them will do — the cheque is priced against the cheapest one that can.',
+    weight: 1.0,
+    weeks: [1, 2],
+    flights: [1, 3],
+    // Nineteen is the commuter exit limit — the Twin Otter, SkyCourier and
+    // Caravan class — and 1,600 km is where that class stops reaching. Both caps
+    // exist so the cheque is priced against one of those and not the cheapest
+    // regional jet in production, which a 20-seat 1,800 km job quietly was.
+    seats: [4, 19],
+    distBand: [150, 1_600],
+    months: ALL_YEAR,
+    seasonMult: 1.0,
+    eventAffinity: { economy: 0.85 },
+    reputationStake: 1,
+    customers: ['a wedding party', 'a mine crew rotation', 'a regional sports team', 'a survey crew', 'a band on tour', 'a medical team', 'a school expedition'],
+  },
+  {
+    id: 'executive',
+    destBias: 'hub',
+    type: CHARTER_TYPES.EXECUTIVE,
+    name: 'Executive charter',
+    icon: '💼',
+    color: '#d7b45a',
+    blurb: 'A private party who will fly on a business jet and nothing else. Priced against one, so only a business jet can make it pay.',
+    weight: 0.6,
+    weeks: [1, 3],
+    flights: [1, 3],
+    seats: [2, 8],
+    distBand: [300, 7_000],
+    months: ALL_YEAR,
+    seasonMult: 1.0,
+    eventAffinity: { economy: 0.6, demand: 1.2 },
+    reputationStake: 2,
+    bizjet: true,
+    customers: ['a family office', 'a board of directors', 'a touring headline act', 'a private equity firm', 'a government advance party', 'a racing team principal', 'a film star and entourage'],
   },
   {
     id: 'series_leisure',
@@ -424,7 +516,7 @@ export function getCharterTemplate(id) {
  * shape the board because the board is part of the WORLD — it is not a per-airline
  * dice roll, and nothing here reads the player's own airline.
  */
-export function templateWeight(tmpl, month = null, activeEvents = []) {
+export function templateWeight(tmpl, month = null, activeEvents = [], fleetProfile = null) {
   let w = tmpl.weight ?? 1;
   if (tmpl.months && month != null && tmpl.months.includes(month)) w *= (tmpl.seasonMult ?? 1);
   else if (tmpl.months && month != null) w *= 0.25;   // out of season, not extinct
@@ -432,5 +524,77 @@ export function templateWeight(tmpl, month = null, activeEvents = []) {
     const mult = tmpl.eventAffinity?.[ev?.type];
     if (mult != null) w *= mult;
   }
+  w *= charterFleetFit(tmpl, fleetProfile);
   return Math.max(0, w);
+}
+
+// ── Fleet fit ────────────────────────────────────────────────────────────────
+//
+// The one place the board reads the player's airline, and it reads the FLEET,
+// not the record. A broker posts work to carriers that can fly it: nobody rings
+// a two-Caravan outfit about a 300-seat pilgrimage rotation, and nobody rings a
+// widebody operator about eight people going to a wedding. Both kinds of work
+// stay on the board at a reduced weight — there should always be something to
+// grow into, and something beneath you that you could still take on a slow
+// week — but the mix follows the metal. Measured: a two-Caravan startup sees
+// small work on roughly half its slots, a 787 fleet on one in fifty.
+//
+// An airline with no fleet at all sees the untilted board: there is nothing to
+// fit yet, and the first plane bought will shape the next refresh.
+
+/** Weight kept by work nothing in the fleet can fly, or work far beneath it. */
+export const CHARTER_OUT_OF_REACH_WEIGHT = 0.15;
+
+/**
+ * Work "far beneath" a fleet: the template's LARGEST possible ask is still
+ * under this fraction of the fleet's SMALLEST passenger cabin. A 20-seat job
+ * against a 150-seat smallest cabin is 0.13; against a 50-seat CRJ it is 0.4
+ * and stays at full weight.
+ */
+export const CHARTER_BENEATH_FLEET_RATIO = 0.25;
+
+/**
+ * Summarise a fleet for charterFleetFit. `fleet` is state.fleet; `typeOf`
+ * resolves a tail to its catalogue type. Returns null for an empty fleet.
+ */
+export function charterFleetProfile(fleet = [], typeOf = getAircraftType) {
+  let minSeats = Infinity, maxSeats = 0, maxTonnes = 0, hasBizjet = false, hasFreighter = false, n = 0;
+  for (const a of fleet ?? []) {
+    if (!a || a.status === 'retired') continue;
+    const t = typeOf(a.typeId);
+    if (!t) continue;
+    n++;
+    if (t.freighter) {
+      hasFreighter = true;
+      maxTonnes = Math.max(maxTonnes, t.payloadTonnes ?? 0);
+    } else {
+      const seats = t.seats ?? 0;
+      if (seats > 0) { minSeats = Math.min(minSeats, seats); maxSeats = Math.max(maxSeats, seats); }
+      if (t.bizjet) hasBizjet = true;
+    }
+  }
+  if (n === 0) return null;
+  return {
+    minSeats: Number.isFinite(minSeats) ? minSeats : 0,
+    maxSeats, maxTonnes, hasBizjet, hasFreighter,
+  };
+}
+
+/**
+ * How much of a template's weight this fleet keeps: 1 when something in the
+ * fleet could fly the smallest version of the work and the work is not far
+ * beneath the fleet, CHARTER_OUT_OF_REACH_WEIGHT otherwise. Pure; no dice.
+ */
+export function charterFleetFit(tmpl, profile) {
+  if (!profile) return 1;
+  if (tmpl.freighter) {
+    return profile.hasFreighter && profile.maxTonnes >= (tmpl.tonnes?.[0] ?? 0) ? 1 : CHARTER_OUT_OF_REACH_WEIGHT;
+  }
+  if (tmpl.bizjet) return profile.hasBizjet ? 1 : CHARTER_OUT_OF_REACH_WEIGHT;
+  const [lo, hi] = tmpl.seats ?? [0, 0];
+  if (profile.maxSeats < lo) return CHARTER_OUT_OF_REACH_WEIGHT;              // nothing big enough
+  if (profile.minSeats > 0 && hi < profile.minSeats * CHARTER_BENEATH_FLEET_RATIO) {
+    return CHARTER_OUT_OF_REACH_WEIGHT;                                        // far beneath the fleet
+  }
+  return 1;
 }

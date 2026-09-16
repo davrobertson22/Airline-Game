@@ -271,6 +271,15 @@ export const AIRCRAFT_FAMILY = {
   // Grouped together — similar basic turboprop / piston MRO skill set.
   // The Do 228 and Cessna 408 are unpressurised utility twins in the Twin
   // Otter's class, so they join rather than each carrying a family of their own.
+  // ── Business jets (2026-09-16, Matvocaat: "maybe you could add a few bizjets") ──
+  // One family per programme: none of these shares a type rating, engines or
+  // tooling with anything else in the catalogue, and the Challenger 350 is a
+  // Learjet-derived Challenger 300, not the CRJ's Challenger 600 lineage.
+  cj4:        'cessna_citation',
+  phenom300e: 'embraer_phenom',
+  cl350:      'bombardier_challenger',
+  g650er:     'gulfstream_g650',
+
   bn2islander: 'utility_tp',
   c208b:       'utility_tp',
   pc12:        'utility_tp',
@@ -288,6 +297,7 @@ export const FAMILY_CATEGORY_LABEL = {
   regional:   'Regional Jet',
   turboprop:  'Turboprop',
   utility:    'Utility',
+  bizjet:     'Business Jet',
   supersonic: 'Supersonic',
 };
 
@@ -481,6 +491,18 @@ export const FAMILY_INFO = {
 
   // ── Utility turboprops ────────────────────────────────────────────────────
   utility_tp: { name: 'Utility turboprop (mixed)', category: 'utility', weeklyBaseCost: 8_000 },
+
+  // ── Business jets ─────────────────────────────────────────────────────────
+  // Interpolated between the ≤19-seat utility turboprop (8k) and the 37-50 seat
+  // regional jet (19k): a light jet has jet systems and jet type-rating overhead
+  // on a ten-seat cabin, so it sits a third of the way up that gap. The
+  // super-midsize Challenger is a 18t aircraft with a full flight-management
+  // suite, half-way. The G650ER is a 46t Rolls-Royce-powered intercontinental
+  // jet — heavier than a CRJ-900 — and anchors just under embraer_ejet's 23k.
+  cessna_citation:      { name: 'Cessna Citation',        category: 'bizjet', weeklyBaseCost: 12_000 },
+  embraer_phenom:       { name: 'Embraer Phenom',         category: 'bizjet', weeklyBaseCost: 12_000 },
+  bombardier_challenger:{ name: 'Bombardier Challenger',  category: 'bizjet', weeklyBaseCost: 15_000 },
+  gulfstream_g650:      { name: 'Gulfstream G650',        category: 'bizjet', weeklyBaseCost: 22_000 },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

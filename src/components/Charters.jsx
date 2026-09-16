@@ -179,7 +179,9 @@ function OfferCard({ offer, absWeek }) {
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
             For {offer.customer} · {km(offer.distanceKm)}
-            {' · '}{offer.freighter ? `needs ${offer.tonnesRequired}t payload` : `needs ${offer.seatsRequired} seats`}
+            {' · '}{offer.freighter ? `needs ${offer.tonnesRequired}t payload`
+              : offer.bizjet ? `needs a business jet with ${offer.seatsRequired} seats`
+              : `needs ${offer.seatsRequired} seats`}
             {' · '}{offer.runwayFt.toLocaleString()}ft runway
           </div>
         </div>

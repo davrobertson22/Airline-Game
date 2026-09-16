@@ -294,6 +294,9 @@ test('a passenger contract refuses a freighter, and a freight one refuses a pass
   let checkedPax = false, checkedFrt = false;
   // Walk the weeks until the board has offered one of each, checking the guard
   // against the mismatched fleet at the SAME week the guard will build for.
+  // Each fleet gets ITS OWN board: the board follows the metal (charterFleetFit),
+  // so the freighter airline and the passenger airline are not shown the same
+  // slate, and a slot id names a different contract on each.
   for (let w = 0; w < 300 && !(checkedPax && checkedFrt); w++) {
     const at = { ...st, year: Math.floor(w / 52) + 1, week: (w % 52) + 1 };
     const frtAt = { ...freighterFleet, year: at.year, week: at.week };
@@ -303,6 +306,8 @@ test('a passenger contract refuses a freighter, and a freight one refuses a pass
         assert.match(charterAcceptBlockReason(at, o.id, 'ac1') ?? '', /not a freighter/i);
         checkedFrt = true;
       }
+    }
+    for (const o of generateCharterBoard(frtAt, absOf(frtAt))) {
       if (!o.freighter && !checkedPax) {
         assert.match(charterAcceptBlockReason(frtAt, o.id, 'ac1') ?? '', /is a freighter/i);
         checkedPax = true;

@@ -312,3 +312,117 @@ export function seasonalProfitByType(state, spec = {}, { months = ALL_MONTHS } =
 
   return { months: monthList, byType };
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE SAME QUESTION, ASKED ABOUT THE WHOLE YEAR
+//
+//   ASAS  "i like the new route planner's plane finder, although an average
+//          per year feature would also be nice"  (15/9/26)
+//
+// A month picker answers "which plane in August". The strip beside each row
+// shows the shape of its year. Neither RANKS by the year — and on a lane with a
+// real season the plane that wins the peak month is not always the plane that
+// earns the most across the twelve, because the big cabin's peak is bought with
+// a trough the small cabin never sees. This ranks by the mean over the months
+// the route actually flies.
+//
+// It is one `rankAircraftForRoute` pass per flying month over the whole
+// candidate list, so it costs roughly twelve times the single-month ranking.
+// That is why the planner only runs it when the player asks for the year.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Rank `types` on one lane by AVERAGE forecast weekly net profit across the
+ * months the route operates.
+ *
+ * Rows carry the same fields as `rankAircraftForRoute`, so the planner can
+ * render them with the same table. `projection` holds the per-week averages
+ * over the months that priced; `byMonth`, `best`, `worst` and `swing` are the
+ * same seasonal shape `seasonalProfitByType` returns, so the strip beside an
+ * annual row comes from the same pass as the number it sits next to.
+ *
+ * A month outside the route's operating window is dormant, not a zero: a
+ * summer-only route averaged over twelve months would look half as good as it
+ * is for flying exactly the schedule the player asked for.
+ *
+ * @returns {Array<{
+ *   type, typeId, owned, tail, ready, onReserve, weeklyLease, seats,
+ *   weeklyFrequency, frequencyCapped,
+ *   projection: null | { passengers, loadFactor, revenue, connectingRevenue, netProfit, monthsPriced },
+ *   byMonth: Array<{ month, dormant, netProfit }>,
+ *   best, worst, swing,
+ *   flyingMonths: number[],
+ * }>}
+ */
+export function rankAircraftForYear(state, spec = {}, { months = ALL_MONTHS, limit = 0 } = {}) {
+  const flying = new Set(routeActiveMonths({ season: spec.season }));
+  const monthList = [...months];
+  const flyingMonths = monthList.filter((m) => flying.has(m));
+
+  const acc = new Map();   // typeId -> { row, byMonth: Map<month, projection|null>, sums }
+
+  for (const month of flyingMonths) {
+    const ranked = rankAircraftForRoute(state, {
+      ...spec,
+      limit: 0,
+      gameDate: gameDateInMonth(spec.gameDate, month),
+    });
+    for (const r of ranked) {
+      let a = acc.get(r.typeId);
+      if (!a) {
+        a = { row: r, byMonth: new Map(), n: 0, net: 0, lf: 0, pax: 0, rev: 0, conn: 0 };
+        acc.set(r.typeId, a);
+      }
+      a.byMonth.set(month, r.projection);
+      if (r.projection) {
+        a.n   += 1;
+        a.net += r.projection.netProfit;
+        a.lf  += r.projection.loadFactor;
+        a.pax += r.projection.passengers;
+        a.rev += r.projection.revenue;
+        a.conn += r.projection.connectingRevenue;
+      }
+    }
+  }
+
+  const out = [];
+  for (const a of acc.values()) {
+    const byMonth = monthList.map((month) => {
+      const dormant = !flying.has(month);
+      const p = dormant ? null : (a.byMonth.get(month) ?? null);
+      return { month, dormant, netProfit: p ? p.netProfit : null };
+    });
+    const live  = byMonth.filter((c) => !c.dormant && c.netProfit != null);
+    const best  = live.reduce((b, c) => (b == null || c.netProfit > b.netProfit ? c : b), null);
+    const worst = live.reduce((b, c) => (b == null || c.netProfit < b.netProfit ? c : b), null);
+    out.push({
+      ...a.row,
+      // The frequency cap is a property of the type and the sector, not the
+      // month, so the first month's figure stands for the year.
+      projection: a.n > 0 ? {
+        passengers:        Math.round(a.pax / a.n),
+        loadFactor:        a.lf / a.n,
+        revenue:           Math.round(a.rev / a.n),
+        connectingRevenue: Math.round(a.conn / a.n),
+        netProfit:         Math.round(a.net / a.n),
+        monthsPriced:      a.n,
+      } : null,
+      byMonth,
+      best:  best  ? { month: best.month,  netProfit: best.netProfit }  : null,
+      worst: worst ? { month: worst.month, netProfit: worst.netProfit } : null,
+      swing: best && worst ? best.netProfit - worst.netProfit : 0,
+      flyingMonths,
+    });
+  }
+
+  // Same order as the single-month ranking, so switching modes re-sorts the
+  // rows for one reason only: the number in the Net column changed.
+  out.sort((x, y) =>
+    (y.projection?.netProfit ?? -Infinity) - (x.projection?.netProfit ?? -Infinity)
+    || (Number(y.owned) - Number(x.owned))
+    || (y.seats - x.seats)
+    || x.type.name.localeCompare(y.type.name));
+
+  return limit > 0 ? out.slice(0, limit) : out;
+}

@@ -70,7 +70,9 @@ const PAGES = [
       <p>Regional jets solve a specific problem: routes with real demand, but not enough of it to fill a 150-seat narrow-body. In Tailwinds that describes a huge share of the map — secondary cities, short cross-border hops, and above all <em>hub feed</em>, the short flights that funnel connecting passengers into your hub for onward long-haul travel.</p>
       <p>Per-seat costs run higher than larger jets; that is the price of right-sizing. A regional jet is not competing with an A320 on cost per seat — it is competing with the empty seats the A320 would fly on a thin route. Judged that way, the category is one of the most reliably profitable in the game.</p>
       <h2>How to choose</h2>
-      <p>The E-Jet and CRJ families cover the 70–130 seat band; the E2 generation offers materially better burn for a higher lease. At the small end, 50-seaters only make sense on very thin or very short missions where nothing bigger could break even. As always: pick the seat count the route can fill, not the one with the prettiest efficiency number.</p>`,
+      <p>The E-Jet and CRJ families cover the 70–130 seat band; the E2 generation offers materially better burn for a higher lease. At the small end, 50-seaters only make sense on very thin or very short missions where nothing bigger could break even. As always: pick the seat count the route can fill, not the one with the prettiest efficiency number.</p>
+      <h2>Business jets</h2>
+      <p>Four business jets sit in this table too — the Citation CJ4, Phenom 300E, Challenger 350 and Gulfstream G650ER. They are not regional jets in any commercial sense: ten seats on a jet engine is the worst per-seat fuel figure in the game, and none of them will ever pay on a scheduled route. They exist for the <a href="/devlog.html">charter board</a>, where executive contracts demand a business jet and price against one, and where a light jet parked at the right airport can turn a fixed fee into a profit that no airliner could. Treat them as a sideline, not a fleet.</p>`,
   },
   {
     file: 'aircraft-turboprops.html',

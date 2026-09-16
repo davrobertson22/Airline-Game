@@ -677,6 +677,7 @@ export function charterAcceptBlockReason(state, offerId, aircraftId) {
 
   if (offer.freighter && !type.freighter) return `${tail} is not a freighter — this contract moves cargo`;
   if (!offer.freighter && type.freighter) return `${tail} is a freighter — this contract moves passengers`;
+  if (offer.bizjet && !type.bizjet) return `${tail} is not a business jet — this customer will fly on nothing else`;
   if (offer.seatsRequired  != null && (type.seats ?? 0) < offer.seatsRequired) {
     return `${tail} seats ${type.seats} — the contract needs ${offer.seatsRequired}`;
   }
@@ -2476,6 +2477,7 @@ function reducer(state, action) {
         seatsRequired: offer.seatsRequired,
         tonnesRequired: offer.tonnesRequired,
         freighter:     offer.freighter,
+        bizjet:        !!offer.bizjet,
         fee:           offer.fee,
         feePerWeek:    offer.feePerWeek,
         weeksTotal:    offer.weeks,
@@ -2546,6 +2548,7 @@ function reducer(state, action) {
 
       if (c.freighter && !type.freighter) return state;
       if (!c.freighter && type.freighter) return state;
+      if (c.bizjet && !type.bizjet) return state;
       if (c.seatsRequired  != null && (type.seats ?? 0) < c.seatsRequired) return state;
       if (c.tonnesRequired != null && (type.payloadTonnes ?? 0) < c.tonnesRequired) return state;
       if (c.distanceKm > effectiveRangeKm(a, type)) return state;
@@ -4953,7 +4956,10 @@ export { reducer as gameReducer, freshState, reconcileState };
 // CONTEXT + PROVIDER
 // ─────────────────────────────────────────────
 
-const GameContext = createContext(null);
+// Exported for the headless component tests in tools/, which need to mount a
+// screen under a hand-built value (a multiplayer `remoteApi`, say) that the
+// solo GameProvider never supplies. App code goes through useGame().
+export const GameContext = createContext(null);
 const SAVE_KEY = 'bbae_save_v2'; // bump version to avoid old-format conflicts
 
 /**

@@ -451,13 +451,37 @@ test('every neo and E2 earns a real generational gain per seat', () => {
 test('no regional jet burns like a narrowbody, and none is impossibly frugal', () => {
   // The 328JET implied ~1,390 kg/h for a 15.7 t twinjet — more than the table's
   // own 24 t CRJ-200 (~1,034 kg/h). Its 6.890 L/seat was 2.2x every other RJ.
-  const rj = AIRCRAFT_TYPES.filter(t => t.category === 'Regional Jet' && !t.freighter && t.seats > 0);
+  // Business jets share the category (for the speed, turnaround and fee tables)
+  // but not the cabin: ten seats on a jet is 7 L/seat by construction, and
+  // that is the product, not a data error. They get their own band below.
+  const rj = AIRCRAFT_TYPES.filter(t => t.category === 'Regional Jet' && !t.freighter && !t.bizjet && t.seats > 0);
   // Scoped to 1990-on. The 1960s trijets really were this bad — the Yak-40 at
   // 6.99 L/seat implies ~1,230 kg/h for 40 seats, which matches reality.
   const out = rj.filter(t => (t.eis ?? 0) >= 1990)
     .filter(t => perSeat(t.id) > 5.0 || perSeat(t.id) < 1.5)
     .map(t => `${t.name} ${perSeat(t.id).toFixed(3)} L/seat/100km`);
   assert.deepEqual(out, [], 'post-1990 regional jets sit between roughly 1.8 and 4.7 L/seat/100km');
+});
+
+test('business jets burn like business jets — a light jet is not a Caravan', () => {
+  // Matvocaat (2026-09-14): "maybe you could add a few bizjets to the game?"
+  // A 10-seat jet at 70-120 L/100km is 7-12 L/seat: far above any airliner,
+  // which is exactly why a bizjet only pays on work that DEMANDS a jet. The
+  // guard is against a future edit that quietly makes one competitive with a
+  // turboprop on a scheduled route (< 4 L/seat) or absurd (> 15 L/seat).
+  const biz = AIRCRAFT_TYPES.filter(t => t.bizjet);
+  assert.ok(biz.length >= 3, 'expected at least three business jets in the catalogue');
+  const off = biz.filter(t => perSeat(t.id) < 4.0 || perSeat(t.id) > 15.0)
+    .map(t => `${t.name} ${perSeat(t.id).toFixed(2)} L/seat/100km`);
+  assert.deepEqual(off, []);
+  for (const t of biz) {
+    assert.equal(t.category, 'Regional Jet', `${t.name}: business jets ride the regional-jet tables`);
+    assert.ok(!t.freighter && t.seats >= 6 && t.seats <= 19, `${t.name}: a business jet seats 6-19`);
+  }
+  // The range ladder is the point of having four: light, super-mid, ultra-long.
+  const byRange = [...biz].sort((a, b) => a.range - b.range);
+  assert.ok(byRange[byRange.length - 1].range > 12_000, 'one business jet must reach across an ocean');
+  assert.ok(byRange[0].range < 4_000, 'one business jet must be a light jet');
 });
 
 test('the four-engine long-haulers are thirsty but not absurd', () => {

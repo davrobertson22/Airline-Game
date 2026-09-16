@@ -73,6 +73,10 @@ const CAT_LABELS = {
   'Double Deck': 'Double Decker',
 };
 
+/** What a type's card calls it. Business jets ride the regional-jet tables but
+ *  are not regional jets to a player reading the market, so they say so. */
+const typeLabel = (t) => (t?.bizjet ? 'Business Jet' : (CAT_LABELS[t?.category] || t?.category));
+
 const DELIVERY_LEAD = {
   'Wide Body':    4,
   'Narrow Body':  3,
@@ -297,7 +301,7 @@ function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
             </div>
           )}
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-            {type?.manufacturer} {type?.name} · <span style={{ color: catColor }}>{CAT_LABELS[type?.category] || type?.category}</span>
+            {type?.manufacturer} {type?.name} · <span style={{ color: catColor }}>{typeLabel(type)}</span>
           </div>
         </div>
         <span style={{
@@ -549,7 +553,7 @@ function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
                         {r.onOrder > 0 && <span className="market-chip market-chip-yellow">{r.onOrder} ordered</span>}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {t.manufacturer} · <span style={{ color: r.catColor }}>{CAT_LABELS[t.category] || t.category}</span>
+                        {t.manufacturer} · <span style={{ color: r.catColor }}>{typeLabel(t)}</span>
                       </div>
                     </div>
                   </div>
@@ -952,7 +956,7 @@ export default function Marketplace() {
                     className="aircraft-cat-badge"
                     style={{ background: `${catColor}25`, color: catColor, border: `1px solid ${catColor}50` }}
                   >
-                    {CAT_LABELS[type.category] || type.category}
+                    {typeLabel(type)}
                   </span>
                   {eraLock && (
                     <span className="badge" title={eraLock} style={{

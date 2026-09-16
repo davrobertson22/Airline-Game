@@ -9,7 +9,7 @@ import {
   hubSpokeCounts, pairConnectivityBonus,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS, fleetAvgUtilization,
-  buildEventDemandModel, deployableFleetForRoute, MAX_WEEKLY_BLOCK_HOURS,
+  buildEventDemandModel, deployableFleetForRoute, deploymentShortfall, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, stateBrandReach, stateSensReduction, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
   effectiveRangeKm, calendarYear,
 } from '../utils/simulation.js';
@@ -22,7 +22,7 @@ import {
 import { rivalIndexFor, isLegacy, rivalsOn, rivalOneStopOffersFor } from '../models/network.js';
 import { projectRouteAddition, playerCampaignBoost } from '../models/pairShare.js';
 import {
-  rankAircraftForRoute, seasonalProfitByType, gameDateInMonth, ALL_MONTHS,
+  rankAircraftForRoute, rankAircraftForYear, seasonalProfitByType, gameDateInMonth, ALL_MONTHS,
 } from '../models/aircraftRecommender.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
@@ -44,6 +44,8 @@ import FareEditor, { CLASS_LABELS, CLASS_COLORS, referenceClassPrices } from './
 // the shortlist a player actually chooses from; the full list runs to 150+ types
 // on a short sector and reads as a catalogue dump.
 const TOP_RECOMMENDATIONS = 5;
+/** `rankMonth` value meaning "rank by the average over the months the route flies". */
+const RANK_YEAR = 'year';
 
 const MONTH_ABBR = ['', 'J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -446,7 +448,8 @@ export default function RoutePlanner() {
   // state by a slot inserted above cabinConfig. Append new state here.
   const [showAllRecs, setShowAllRecs] = useState(false);
   // Which month the recommendation panel prices its candidates at. null = follow
-  // the calendar. Appended below showAllRecs for the slot-order reason above.
+  // the calendar; RANK_YEAR = the average across the months the route flies.
+  // Appended below showAllRecs for the slot-order reason above.
   const [rankMonth, setRankMonth] = useState(null);
 
   // A pair handed over by the Route Finder's optional "Plan". Parked rather
@@ -876,8 +879,17 @@ export default function RoutePlanner() {
   // The date is rebuilt from gameDate's FIELDS rather than reused: currentGameDate
   // returns a fresh object every render, and it sits in this memo's dependency
   // list, so the whole catalogue was being re-ranked on every keystroke.
+  //
+  //   ASAS  "i like the new route planner's plane finder, although an average
+  //          per year feature would also be nice"  (15/9/26)
+  //
+  // `rankYear` ranks by the MEAN over the months the route flies instead. The
+  // strip already showed each row's year; this is the strip's answer promoted
+  // to the sort key, because on a seasonal lane the plane that wins the peak is
+  // not always the plane that earns the most across the twelve.
   const calendarMonth = gameDate.month;
-  const rankingMonth  = rankMonth ?? calendarMonth;
+  const rankYear      = rankMonth === RANK_YEAR;
+  const rankingMonth  = rankYear ? calendarMonth : (rankMonth ?? calendarMonth);
   const rankingDate = useMemo(
     () => gameDateInMonth(
       { week: gameDate.week, month: calendarMonth, absWeek: gameDate.absWeek },
@@ -888,7 +900,7 @@ export default function RoutePlanner() {
   // A month the route is not scheduled to fly in. The ranking still runs — seeing
   // what a dormant month WOULD pay is half of why you'd look — but it is labelled
   // rather than passed off as this route's economics.
-  const rankingOffSeason = (season?.months?.length ?? 0) > 0
+  const rankingOffSeason = !rankYear && (season?.months?.length ?? 0) > 0
     && !season.months.includes(rankingMonth);
 
   // Everything the ranking needs except the candidate list and the month. Shared
@@ -935,16 +947,28 @@ export default function RoutePlanner() {
   // runs with the card rather than behind a button. Freighters are left out —
   // this is a passenger route, and the planner's own default already refuses
   // them.
+  //
+  // The annual ranking is the same pass run once per flying month over the
+  // whole candidate list — roughly twelve times the cost, a tenth of a second
+  // or so on a busy save. It only runs when the player has asked for the year,
+  // so the default view pays nothing for the option.
   const recommendations = useMemo(() => {
     if (!recSpec || reachableTypes.length === 0) return [];
     const candidates = reachableTypes.filter(t => !t.freighter);
     if (candidates.length === 0) return [];
+    if (rankYear) {
+      return rankAircraftForYear(state, {
+        ...recSpec,
+        types: candidates,
+        gameDate: rankingDate,
+      });
+    }
     return rankAircraftForRoute(state, {
       ...recSpec,
       types: candidates,
       gameDate: rankingDate,
     });
-  }, [recSpec, reachableTypes, state.fleet, state.routes, state.hub, state.hubs, rankingDate]);
+  }, [recSpec, reachableTypes, state.fleet, state.routes, state.hub, state.hubs, rankingDate, rankYear]);
 
   // ── The year behind the ranking ──────────────────────────────────────────
   // A month picker on its own answers "best plane in December" and hides the
@@ -959,14 +983,25 @@ export default function RoutePlanner() {
     () => recommendations.slice(0, TOP_RECOMMENDATIONS).map(r => r.type),
     [recommendations]);
 
+  //
+  // In the annual mode the ranking pass has already priced every month for
+  // every row, so the strip is read straight off it — a second pass would be
+  // the same arithmetic done twice, with a second chance to disagree.
   const seasonStrip = useMemo(() => {
     if (!recSpec || stripTypes.length === 0) return null;
+    if (rankYear) {
+      const byType = new Map();
+      for (const r of recommendations.slice(0, TOP_RECOMMENDATIONS)) {
+        byType.set(r.typeId, { typeId: r.typeId, type: r.type, byMonth: r.byMonth, best: r.best, worst: r.worst, swing: r.swing });
+      }
+      return { months: ALL_MONTHS, byType };
+    }
     return seasonalProfitByType(state, {
       ...recSpec,
       types: stripTypes,
       gameDate: rankingDate,
     });
-  }, [recSpec, stripTypes, state.fleet, state.routes, state.hub, state.hubs, rankingDate]);
+  }, [recSpec, stripTypes, recommendations, rankYear, state.fleet, state.routes, state.hub, state.hubs, rankingDate]);
 
   // One scale across every row, so the strips compare with each other rather
   // than each being drawn to its own private maximum.
@@ -1358,14 +1393,29 @@ export default function RoutePlanner() {
                       <select
                         className="form-select"
                         value={rankMonth ?? ''}
-                        onChange={e => setRankMonth(e.target.value === '' ? null : Number(e.target.value))}
+                        onChange={e => setRankMonth(
+                          e.target.value === '' ? null
+                            : e.target.value === RANK_YEAR ? RANK_YEAR
+                            : Number(e.target.value))}
                         style={{ width: 'auto', fontSize: 11, padding: '3px 6px' }}
-                        title="Price every candidate at this month instead of the month the world is in. Demand growth is not wound forward — only the season changes."
+                        title="Price every candidate at this month instead of the month the world is in, or at the average across the months this route flies. Demand growth is not wound forward — only the season changes."
                       >
                         <option value="">This month — {MONTH_NAMES[calendarMonth]}</option>
+                        <option value={RANK_YEAR}>Average over the year</option>
                         {ALL_MONTHS.map(m => <option key={m} value={m}>{MONTH_NAMES[m]}</option>)}
                       </select>
-                      {rankMonth != null && rankMonth !== calendarMonth && (
+                      {rankYear && (
+                        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                          {(() => {
+                            const n = recommendations[0]?.flyingMonths?.length ?? 12;
+                            return n === 12
+                              ? 'Each row is its average week across all twelve months. '
+                              : `Each row is its average week across the ${n} months this route flies. `;
+                          })()}
+                          The card below still quotes {MONTH_NAMES[calendarMonth]}.
+                        </span>
+                      )}
+                      {!rankYear && rankMonth != null && rankMonth !== calendarMonth && (
                         <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
                           The card below still quotes {MONTH_NAMES[calendarMonth]}.
                         </span>
@@ -1385,13 +1435,13 @@ export default function RoutePlanner() {
                       <div style={{ fontSize: 12, color: 'var(--yellow)', marginTop: 8 }}>
                         Nothing reaching {dest} clears a profit at {frequency}×/wk and these fares — the
                         {' '}best of them, the <strong>{bestOverall.type.name}</strong>, still loses
-                        {' '}{formatMoney(Math.abs(bestOverall.projection.netProfit))}/wk. Try fewer flights, higher
+                        {' '}{formatMoney(Math.abs(bestOverall.projection.netProfit))}/wk{rankYear ? ' on average' : ''}. Try fewer flights, higher
                         {' '}fares, or a different market; the ranking below is least-bad, not good.
                       </div>
                     ) : bestReady && bestOverall && bestReady.typeId !== bestOverall.typeId ? (
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
                         Best you can fly today is the <strong style={{ color: 'var(--text)' }}>{bestReady.type.name}</strong>
-                        {' '}at {formatMoney(bestReady.projection.netProfit)}/wk. The {bestOverall.type.name} above it
+                        {' '}at {formatMoney(bestReady.projection.netProfit)}/wk{rankYear ? ' on average' : ''}. The {bestOverall.type.name} above it
                         {' '}would have to be leased first.
                       </div>
                     ) : null}
@@ -1404,7 +1454,7 @@ export default function RoutePlanner() {
                             <th style={{ textAlign: 'left',  padding: '4px 8px', fontWeight: 600 }}>Aircraft</th>
                             <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600 }}>Seats</th>
                             <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600 }}>Load</th>
-                            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600 }}>Net / wk</th>
+                            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600, whiteSpace: 'nowrap' }}>{rankYear ? 'Avg net / wk' : 'Net / wk'}</th>
                             <th style={{ textAlign: 'center', padding: '4px 8px', fontWeight: 600, whiteSpace: 'nowrap' }}>
                               Profit by month
                               <InfoTip text="The same forecast run in all twelve months, January on the left. Bars above the line clear a profit, below it a loss, and every row is drawn to the same scale so they compare with each other. A plane that wins the month you are looking at but sits deep in the red for half the year is a plane you will be parking; months your operating window excludes are left blank because the route is dormant then, not losing money." />
@@ -1491,7 +1541,7 @@ export default function RoutePlanner() {
                                         return (
                                           <span key={cell.month} title={label} style={{
                                             display: 'flex', flexDirection: 'column', width: 6,
-                                            borderBottom: cell.month === rankingMonth
+                                            borderBottom: !rankYear && cell.month === rankingMonth
                                               ? '2px solid var(--accent)' : '2px solid transparent',
                                             paddingBottom: 2,
                                           }}>
@@ -1749,16 +1799,13 @@ export default function RoutePlanner() {
                   // otherwise the best eligible one (idle first, then most spare).
                   const preferredD = eligible.find(d => d.aircraft.id === configSource) ?? eligible[0];
                   const preferred  = preferredD?.aircraft;
-                  const anySpare   = pool.some(d => d.hoursOk);   // has hours (network may not reach this lane)
                   const owned      = pool.length;
-                  // Backstop. The picker's reach (reachByType, here) and the pool's
-                  // rangeOk (deployableFleetForRoute, in simulation.js) are the same
-                  // measure taken in two files, so today a listed type always has at
-                  // least one tail that can reach. If they ever drift, the player gets
-                  // a true sentence about range instead of the "flying other networks"
-                  // one below — which is plainly false about a parked plane and points
-                  // at a fix that would not help.
-                  const outOfRange = owned > 0 && pool.every(d => d.rangeOk === false);
+                  // Why nothing can fly it, when nothing can. The type is listed when
+                  // its LONGEST-legged tail reaches the lane, and that tail may be the
+                  // busy one while the idle ones fall short as configured — so the
+                  // sentence has to separate "short" from "committed elsewhere", or it
+                  // tells a player with parked planes to go and lease another.
+                  const short      = deploymentShortfall(pool);
                   const lCost      = routeLaunchCost(routeData.dist);
                   const canAfford  = state.cash >= lCost;
                   const blocked    = !!routeRestriction;
@@ -1790,13 +1837,27 @@ export default function RoutePlanner() {
                           </button>
                         ) : (
                           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                            {owned === 0
-                              ? <>No {simulation.type.name} in your fleet — lease one from the Market first.</>
-                              : outOfRange
-                                ? <>Your {simulation.type.name}{owned > 1 ? 's reach' : ' reaches'} {Math.round(reachKmFor(simulation.type)).toLocaleString()} km as configured — {origin}–{dest} is {routeData.dist.toLocaleString()} km. Fit range-extending wingtips, lighten the cabin, or lease a longer-legged aircraft.</>
-                              : anySpare
-                                ? <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} flying other networks and can't reach {origin}–{dest} directly — an aircraft can only add a route that touches an airport it already serves. Lease another, or first route one through {origin} or {dest}.</>
-                                : <>Your {simulation.type.name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another route. Lease another {simulation.type.name} to open this route.</>}
+                            {(() => {
+                              const name  = simulation.type.name;
+                              const laneKm = routeData.dist.toLocaleString();
+                              const tailNames = (list) => list.map(a => a.tailNumber || a.name).join(', ');
+                              switch (short?.reason) {
+                                case 'none-owned':
+                                  return <>No {name} in your fleet — lease one from the Market first.</>;
+                                case 'out-of-range':
+                                  return <>Your {name}{owned > 1 ? 's reach' : ' reaches'} {Math.round(reachKmFor(simulation.type)).toLocaleString()} km as configured — {origin}–{dest} is {laneKm} km. Fit range-extending wingtips, lighten the cabin, or lease a longer-legged aircraft.</>;
+                                case 'no-hours':
+                                  return short.outOfRange > 0
+                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km) as configured, and {short.inRange === 1 ? 'it is' : 'they are'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk). The other {short.outOfRange} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most — lighten a cabin or fit range-extending wingtips to bring one into reach, or lease another {name}.</>
+                                    : <>Your {name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another route. Lease another {name} to open this route.</>;
+                                case 'other-networks':
+                                  return short.outOfRange > 0
+                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km) as configured, and {short.inRange === 1 ? 'it is' : 'they are'} flying other networks — an aircraft can only add a route that touches an airport it already serves. Your other {short.outOfRange}{short.idleOutOfRange > 0 ? ` (${short.idleOutOfRange} idle)` : ''} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most — lighten a cabin or fit range-extending wingtips to bring one into reach, route {tailNames(short.reachable)} through {origin} or {dest} first, or lease another.</>
+                                    : <>Your {name}{owned > 1 ? 's are' : ' is'} flying other networks and can't reach {origin}–{dest} directly — an aircraft can only add a route that touches an airport it already serves. Lease another, or first route one through {origin} or {dest}.</>;
+                                default:
+                                  return null;
+                              }
+                            })()}
                           </div>
                         )}
                         {simulation.netProfit < 0 && (

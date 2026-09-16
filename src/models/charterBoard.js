@@ -31,7 +31,9 @@ import { hash32 } from './departureBoard.js';
 import {
   CHARTER_TEMPLATES, CHARTER_TYPES, CHARTER_OFFER_TTL_BAND, CHARTER_BREACH_PENALTY_RATE,
   templateWeight, referenceTypeFor, charterFee, charterPermitFee, missionCostPerWeek,
+  charterFleetProfile, executiveAssetShare,
 } from '../data/charters.js';
+import { blockTimeHours } from '../utils/simulation.js';
 
 // ── Deterministic draws ──────────────────────────────────────────────────────
 
@@ -205,13 +207,14 @@ function destPool(originCode, tmpl) {
 export function generateOffer({
   seed, slot, absWeek, served, hubs = {}, homeCountry = '', month = null,
   activeEvents = [], reliability = 50, fuelIndex = 1.0, calYear = null,
+  fleetProfile = null,
 }) {
   const postedWeek = slotPostedWeek(seed, slot, absWeek);
   const ttl        = slotTtl(slot);
   const key        = `${seed}|charter|${slot}|${postedWeek}`;
   const stretch    = slot === 0 && hashUnit(`${key}|stretch`) < 0.5;
 
-  const weighted = CHARTER_TEMPLATES.map(t => ({ item: t, weight: templateWeight(t, month, activeEvents) }));
+  const weighted = CHARTER_TEMPLATES.map(t => ({ item: t, weight: templateWeight(t, month, activeEvents, fleetProfile) }));
   const origins  = originPool({ served, hubs, homeCountry, stretch });
   if (origins.length === 0) return null;
 
@@ -251,13 +254,21 @@ export function generateOffer({
     const ref = referenceTypeFor({
       originCode: origin, destCode: destination,
       seats: seatsRequired, tonnes: tonnesRequired, runwayFt,
-      freighter: !!tmpl.freighter, flightsPerWeek, fuelIndex, calYear,
+      freighter: !!tmpl.freighter, bizjet: !!tmpl.bizjet, flightsPerWeek, fuelIndex, calYear,
     });
     if (!ref) continue;                       // nothing in this era can fly it
+
+    // Executive work bills the asset pro rata to the hours it takes (see
+    // EXECUTIVE_FEE_INCLUDES_ASSET). Measured on the reference jet, out and back,
+    // with the engine's own block-time arithmetic so the fee and the tick agree.
+    const assetShare = tmpl.type === CHARTER_TYPES.EXECUTIVE
+      ? executiveAssetShare(ref.type, blockTimeHours(dist, ref.type) * 2 * flightsPerWeek)
+      : 0;
 
     const { fee, feePerWeek, margin, isTrap } = charterFee({
       refCost: ref.cost, refType: ref.type, weeks, type: tmpl.type, reliability,
       uMargin: hashUnit(`${key}|mrg${salt}`), uTrap: hashUnit(`${key}|trap${salt}`),
+      assetShare,
     });
 
     const customer = tmpl.customers[hashRange(`${key}|cust${salt}`, 0, tmpl.customers.length - 1)];
@@ -276,6 +287,7 @@ export function generateOffer({
       distanceKm: dist,
       seatsRequired, tonnesRequired,
       freighter: !!tmpl.freighter,
+      bizjet:    !!tmpl.bizjet,
       runwayFt,
       flightsPerWeek,
       weeks,
@@ -285,6 +297,7 @@ export function generateOffer({
       margin, isTrap,
       refTypeId: ref.type.id,
       refCostPerWeek: ref.cost.total,
+      assetSharePerWeek: assetShare,
       breachPenalty: Math.round(fee * CHARTER_BREACH_PENALTY_RATE),
       reputationStake: tmpl.reputationStake ?? 3,
       postedWeek,
@@ -314,6 +327,9 @@ export function generateCharterBoard(state = {}, absWeek = null) {
 
   const dismissed = new Set(state.charterDismissed ?? []);
   const taken     = new Set((state.charters ?? []).map(c => c.offerId).filter(Boolean));
+  // The board follows the metal (charterFleetFit): computed once per board, not
+  // once per slot.
+  const fleetProfile = charterFleetProfile(state.fleet ?? []);
 
   const offers = [];
   for (let slot = 0; slot < slots; slot++) {
@@ -326,6 +342,7 @@ export function generateCharterBoard(state = {}, absWeek = null) {
       reliability: state.charterReliability ?? 50,
       fuelIndex:   state.fuelPrice?.index ?? 1.0,
       calYear:     state.startYear != null ? state.startYear + Math.floor(week / 52) : null,
+      fleetProfile,
     });
     if (!offer) continue;
     if (dismissed.has(offer.id) || taken.has(offer.id)) continue;
