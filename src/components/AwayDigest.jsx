@@ -57,6 +57,9 @@ function ProfitStrip({ series }) {
  * save has jumped two or more weeks since this device last saw it; dismissing
  * it hands over to the ordinary debrief for the latest week.
  *
+ * Multiplayer only. Solo Tailwinds mounts it too (the shell is shared) but it
+ * renders nothing there — see the `scope` note below.
+ *
  * Everything here is derived from `financialHistory` and `statsHistory`, both
  * of which are already in the save — see utils/awayDigest.js for why nothing
  * new is stored to make this work.
@@ -77,7 +80,18 @@ export default function AwayDigest() {
   // how the rest of this codebase checks that a screen shows what it claims.
   // `phase` guards the pre-game screens, where a half-built state would
   // otherwise read as a fifty-week absence.
-  const ready = !!state && state.phase !== 'setup' && nowAbs > 0;
+  //
+  // `scope` is the guard that matters. The "last seen" key is per AIRLINE, and
+  // only the multiplayer client (Headwinds) has an airline id to scope it by. In
+  // solo play the world only moves while this component is mounted — every
+  // ADVANCE_WEEK re-renders it and moves the clock — so an absence can never
+  // accumulate, and with one unscoped key shared by every save on the device the
+  // only thing this screen ever reported was the gap between two DIFFERENT
+  // saves: start a new game at week 1, load your main one at week 40, and it
+  // announced "39 weeks passed" over weeks the player had clicked through one
+  // by one (ASAS and TheCookiesGuy, Discord, 13–14 Sep 2026). No scope, no
+  // digest.
+  const ready = !!scope && !!state && state.phase !== 'setup' && nowAbs > 0;
   const seen  = ready ? loadLastSeen(scope) : null;
   const weeks = (!ready || seen == null || dismissedAt === nowAbs)
     ? 0

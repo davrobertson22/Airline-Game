@@ -27,7 +27,7 @@ globalThis.window ??= {
 };
 if (!globalThis.window.localStorage) globalThis.window.localStorage = globalThis.localStorage;
 
-const { GameProvider, RemoteGameProvider, freshState } = await import('../src/store/GameContext.jsx');
+const { GameProvider, GameContext, freshState } = await import('../src/store/GameContext.jsx');
 const AwayDigest        = (await import('../src/components/AwayDigest.jsx')).default;
 const AllianceDashboard = (await import('../src/components/AllianceDashboard.jsx')).default;
 const { seenKeyFor }    = await import('../src/utils/awayDigest.js');
@@ -63,23 +63,46 @@ const SAVE = {
     statWeek(i + 1, i >= 18 ? { fleet: 8, routes: 14, destinations: 9, sharePrice: 13 } : {})),
 };
 
-const renderAway = (state = SAVE) =>
+// Solo: the real GameProvider, which hydrates from the localStorage autosave
+// and has no remoteApi — exactly what Tailwinds mounts.
+const renderSolo = () =>
   clean(renderToString(React.createElement(GameProvider, null, React.createElement(AwayDigest))));
+
+// Multiplayer: the digest is scoped to an airline id, which only the remote
+// client supplies. A hand-built context value stands in for it.
+const AIRLINE = 'airline-test-1';
+const renderAway = (state = SAVE) =>
+  clean(renderToString(React.createElement(
+    GameContext.Provider,
+    { value: { state, dispatch: () => {}, remoteApi: { airlineId: AIRLINE } } },
+    React.createElement(AwayDigest),
+  )));
+const SEEN = seenKeyFor(AIRLINE);
 
 // ── The away digest ─────────────────────────────────────────────────────────
 
 console.log('\n── While you were away ──────────────────────────────────');
 
-test('a first sighting shows nothing and just starts the clock', () => {
+test('solo play never shows a digest — even with a stale unscoped key on the device', () => {
+  // THE bug (ASAS, TheCookiesGuy — Discord, 13–14 Sep 2026). Solo saves have no
+  // airline id, so every save on the device shared seenKeyFor(null); starting a
+  // new game at week 1 and loading a week-30 save then read as "29 weeks
+  // passed" over weeks the player had clicked through one at a time.
   store.clear();
   store.set('bbae_save_v2', JSON.stringify(SAVE));
+  store.set(seenKeyFor(null), '1');
+  assert.equal(renderSolo().trim(), '', 'solo play has no absence to report');
+  assert.equal(store.get(seenKeyFor(null)), '1', 'and it must not touch the unscoped key either');
+});
+
+test('a first sighting shows nothing and just starts the clock', () => {
+  store.clear();
   assert.equal(renderAway().trim(), '', 'a brand-new device should not be told it was away');
 });
 
 test('twelve missed weeks produce a digest with the span in it', () => {
   store.clear();
-  store.set('bbae_save_v2', JSON.stringify(SAVE));
-  store.set(seenKeyFor(null), '18');    // last seen at week 18; the save is at 30
+  store.set(SEEN, '18');    // last seen at week 18; the save is at 30
   const html = renderAway();
   assert.ok(html.includes('While you were away'), 'the digest did not render');
   assert.ok(html.includes('12 weeks passed'), 'the span is not stated');
@@ -89,8 +112,7 @@ test('twelve missed weeks produce a digest with the span in it', () => {
 test('the aggregate cash figure is the span, not the last week', () => {
   // THE defect: the debrief could only ever show one week of a twelve-week gap.
   store.clear();
-  store.set('bbae_save_v2', JSON.stringify(SAVE));
-  store.set(seenKeyFor(null), '18');
+  store.set(SEEN, '18');
   const html = renderAway();
   // formatMoney abbreviates, so match its output rather than a raw figure.
   assert.ok(html.includes('$3.60M'),
@@ -101,8 +123,7 @@ test('the aggregate cash figure is the span, not the last week', () => {
 
 test('network movement across the gap is on the page', () => {
   store.clear();
-  store.set('bbae_save_v2', JSON.stringify(SAVE));
-  store.set(seenKeyFor(null), '18');
+  store.set(SEEN, '18');
   const html = renderAway();
   assert.ok(html.includes('Fleet') && html.includes('Routes') && html.includes('Destinations'));
   assert.ok(html.includes('+4'), 'the fleet grew by 4 over the span and should say so');
@@ -111,17 +132,21 @@ test('network movement across the gap is on the page', () => {
 
 test('one week away is not an absence', () => {
   store.clear();
-  store.set('bbae_save_v2', JSON.stringify(SAVE));
-  store.set(seenKeyFor(null), '29');
+  store.set(SEEN, '29');
   assert.equal(renderAway().trim(), '');
 });
 
 test('a save with no history renders nothing rather than an empty modal', () => {
   store.clear();
   const bare = { ...SAVE, financialHistory: [], statsHistory: [] };
-  store.set('bbae_save_v2', JSON.stringify(bare));
-  store.set(seenKeyFor(null), '18');
+  store.set(SEEN, '18');
   assert.equal(renderAway(bare).trim(), '');
+});
+
+test('another airline\'s clock is not this one\'s', () => {
+  store.clear();
+  store.set(seenKeyFor('some-other-airline'), '18');
+  assert.equal(renderAway().trim(), '', 'a different airline id must not produce a digest here');
 });
 
 // ── The alliance dashboard ──────────────────────────────────────────────────
