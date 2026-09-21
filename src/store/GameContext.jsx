@@ -41,10 +41,25 @@ import {
 import {
   wifiInstallCost, wifiRetrofitCost, wifiLeaseSurcharge, canRetrofitWifi, isWifiEquipped,
 } from '../data/wifi.js';
+import { FUEL_PROGRAMME_MAP, canActivateProgramme, programmeFailureMult } from '../data/fuelProgrammes.js';
+import { canRetrofitWingtips, fitWingtips } from '../data/retrofits.js';
+import {
+  canBuyRefinery, makeRefinery, refinerySaleValue, rollRefineryOutage,
+  tickCrackIndex, CRACK_BASE_INDEX, REFINERY_BUILD_WEEKS, REFINERY_CAPACITY_SHARE,
+  weeklyLitresOf, isCommissioned, isOnOutage,
+} from '../data/refinery.js';
+import { setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn, FUEL_OPS_VERSION } from '../data/fuelStations.js';
+import {
+  FARM_LEVELS, canTakeFarm, makeFarm, farmCloseRefund, farmDiscountsOf, farmLevelDef,
+} from '../data/fuelFarm.js';
 import {
   canBuildLounge, makeLounge, loungeCloseRefund, tickLoungeConstruction,
   normalizeLoungePolicy, isLoungeOpen, LOUNGE_BUILD_COST,
 } from '../data/lounges.js';
+import {
+  canBuildStation, makeStation, stationCloseRefund, stationLevelDef,
+  GROUND_STATION_MAX_LEVEL,
+} from '../data/groundStation.js';
 import {
   DEFAULT_LABOR_RELATIONS, tickUnrest, rollStrike, settlementPayMultiplier,
   scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand,
@@ -91,7 +106,9 @@ import {
   absoluteWeek,
   HEDGE_DURATIONS,
   FUEL_BASE_INDEX,
+  settleHedgeWeek, hedgeOutcome, foldHedgeOutcome,
 } from '../utils/fuel.js';
+import { hedgeUnwindDollars } from '../utils/fuelImpact.js';
 import {
   getAlliance,
   CODESHARE_WEEKLY_FEE_BY_TIER,
@@ -879,6 +896,11 @@ function freshState() {
     maintenanceBudget: DEFAULT_MAINTENANCE_BUDGET,
     mroBases:          {},    // { [code]: { level, families[], openedWeek, buildWeeksLeft, partsPool } }
     lounges:           {},    // { [code]: { code, openedWeek, buildWeeksLeft, capex } } — built airport lounges
+    // groundStations — { [code]: { code, level, openedWeek, buildWeeksLeft,
+    // upgradeTo, upgradeWeeksLeft } }, self-handling ground stations. NOT seeded
+    // here, and written back below and loaded only when non-empty: an always-
+    // present empty container would change the serialized state of every
+    // station-less world (Headwinds' golden master). Every reader takes `?? {}`.
     loungePolicy:      null,  // { loyaltyAccess, allianceAccess } — null until the first lounge is built
     marketingBudget:   0,          // weekly BRAND marketing spend ($) — builds awareness (adstock), no instant boost
     targetedMarketing: {},         // { [airportCode]: weeklySpend } — tactical campaigns per airport
@@ -1141,6 +1163,9 @@ function setEraModuleState(startYear, calYear) {
 
 function reducer(state, action) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
+  setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
+  setFuelStationDiscounts(fuelStationsOn(state)    // this airline's fuel farms (§8)
+    ? farmDiscountsOf(state, absoluteWeek(state?.year ?? 1, state?.week ?? 1)) : null);
   switch (action.type) {
 
     case 'START_GAME': {
@@ -1167,6 +1192,10 @@ function reducer(state, action) {
         paidInCapital: _startCash,
         marketCap:   _startCash * 1.5,
         sharePrice:  _startCash * 1.5 / TOTAL_SHARES,
+        // Fuel-ops rule version (FUEL_OPERATIONS_PLAN.md §7.4): every NEW game
+        // starts on station fuel pricing. Saves that predate this keep no key
+        // (world-flat fuel) until explicitly opted in.
+        fuelOpsV: FUEL_OPS_VERSION,
         airlineName: action.airlineName,
         logoId:      action.logoId    ?? 'horizon',
         logoColor:   action.logoColor ?? '#f5a623',
@@ -1542,6 +1571,114 @@ function reducer(state, action) {
     }
 
     // ─── Jet bases (MRO network) ─────────────────────────────────────────────
+    // ─── Fuel farms (FUEL_OPERATIONS_PLAN.md §8) ─────────────────────
+    // canTakeFarm() is the check the Stations table and Airport Detail show,
+    // so the button's capex and reasons are the reducer's. A stake upgrades
+    // to a farm for the difference.
+    case 'BUY_FUEL_STAKE':
+    case 'BUILD_FUEL_FARM': {
+      const level = action.type === 'BUILD_FUEL_FARM' ? 2 : 1;
+      const code  = action.code;
+      const check = canTakeFarm(state, code, level);
+      if (!check.ok) {
+        return {
+          ...state,
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            { type: 'warning', icon: '⛽', title: `${check.def?.name ?? 'Fuel farm'} at ${code} not taken`, message: check.reasons[0] },
+          ],
+        };
+      }
+      const abs = absoluteWeek(state.year, state.week);
+      const farm = makeFarm(code, level, abs, check.fullCapex);
+      return {
+        ...state,
+        cash: state.cash - check.capex,
+        fuelFarms: { ...(state.fuelFarms ?? {}), [code]: farm },
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type: 'success', icon: '⛽',
+            title: level === 2 ? `You own the fuel farm at ${code}` : `Consortium seat at ${code}`,
+            message: level === 2
+              ? `${formatMoney(check.capex)} spent. Your uplift here is ${Math.round(FARM_LEVELS[2].discount * FARM_LEVELS[2].rampFloor * 100)}% cheaper now, ${Math.round(FARM_LEVELS[2].discount * 100)}% once it beds in.`
+              : `${formatMoney(check.capex)} spent. Your uplift here is ${Math.round(FARM_LEVELS[1].discount * 100)}% cheaper from next week.`,
+            duration: 7000,
+          },
+        ],
+      };
+    }
+
+    case 'CLOSE_FUEL_FARM': {
+      const farms = state.fuelFarms ?? {};
+      const farm  = farms[action.code];
+      if (!farm) return state;
+      const { [action.code]: _gone, ...rest } = farms;
+      return {
+        ...state,
+        cash: state.cash + farmCloseRefund(farm),
+        fuelFarms: rest,
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          { type: 'info', icon: '⛽', title: `${farmLevelDef(farm.level)?.name ?? 'Fuel farm'} at ${action.code} sold`,
+            message: `${formatMoney(farmCloseRefund(farm))} recovered (${Math.round(farmCloseRefund(farm) / Math.max(1, farm.capex) * 100)}% of what you put in).` },
+        ],
+      };
+    }
+
+    // ─── Refinery (FUEL_OPERATIONS_PLAN.md §9) ──────────────────────
+    // The endgame tier: a slice of the fuel bill moves off the jet index and
+    // onto crude plus a refining cost. Capacity is fixed in litres at purchase
+    // and never grows, so the share it covers falls as the airline does — and
+    // the crack walk is seeded here, which is why an airline that never buys
+    // one carries no crack index at all.
+    case 'BUY_REFINERY': {
+      const check = canBuyRefinery(state);
+      if (!check.ok) {
+        return {
+          ...state,
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            { type: 'warning', icon: '🛢', title: 'Refinery not bought', message: check.reasons[0] },
+          ],
+        };
+      }
+      const abs = absoluteWeek(state.year, state.week);
+      return {
+        ...state,
+        cash: state.cash - check.capex,
+        refinery: makeRefinery(abs, weeklyLitresOf(state) * REFINERY_CAPACITY_SHARE),
+        fuelPrice: { ...(state.fuelPrice ?? { index: 1.0, history: [] }), crack: state.fuelPrice?.crack ?? CRACK_BASE_INDEX },
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type: 'success', icon: '🛢',
+            title: 'Refinery bought',
+            message: `${formatMoney(check.capex)} spent. It commissions in ${REFINERY_BUILD_WEEKS} weeks and will refine about `
+                   + `${Math.round(REFINERY_CAPACITY_SHARE * 100)}% of the fuel you burn today — priced off crude, not jet, `
+                   + `so it wins when the crack spread is wide and loses when it collapses.`,
+            duration: 9000,
+          },
+        ],
+      };
+    }
+
+    case 'SELL_REFINERY': {
+      const r = state.refinery;
+      if (!r) return state;
+      const proceeds = refinerySaleValue(r);
+      const { refinery: _gone, ...rest } = state;
+      return {
+        ...rest,
+        cash: state.cash + proceeds,
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          { type: 'info', icon: '🛢', title: 'Refinery sold',
+            message: `${formatMoney(proceeds)} recovered of the ${formatMoney(r.capex)} you put in. Your whole fuel bill is back on the jet market.` },
+        ],
+      };
+    }
+
     case 'BUILD_MRO_BASE': {
       // action: { code, level, families: [familyId] }
       const code  = action.code;
@@ -1701,6 +1838,93 @@ function reducer(state, action) {
     }
 
     // ─── Airport lounges ─────────────────────────────────────────────────────
+    // ─── Fuel-efficiency programme (FUEL_OPERATIONS_PLAN.md §6) ──────────
+    // Airline-wide burn levers. canActivateProgramme() is the same check the
+    // Fuel tab shows, so the capex on the toggle is the capex taken here.
+    // Switching off is free and immediate; switching on again pays the
+    // one-off again. The burn itself is applied by tickPrep through
+    // utils/fuelOps.js — nothing here touches fuel numbers.
+    case 'SET_FUEL_PROGRAMME': {
+      const def = FUEL_PROGRAMME_MAP[action.id];
+      if (!def) return state;
+      const current = state.fuelProgrammes ?? {};
+      const wantOn  = action.active === true;
+      const isOn    = current[def.id]?.active === true;
+      if (wantOn === isOn) return state;
+      if (!wantOn) {
+        const { [def.id]: _off, ...rest } = current;
+        return { ...state, fuelProgrammes: rest };
+      }
+      const check = canActivateProgramme(state, def.id);
+      if (!check.ok) {
+        return {
+          ...state,
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            { type: 'warning', icon: '⛽', title: `${def.label} not started`, message: check.reason },
+          ],
+        };
+      }
+      return {
+        ...state,
+        cash: state.cash - check.capex,
+        fuelProgrammes: {
+          ...current,
+          [def.id]: { active: true, sinceAbsWeek: absoluteWeek(state.year, state.week), paid: check.capex },
+        },
+        ...(check.capex > 0 ? {
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            { type: 'success', icon: '⛽', title: `${def.label} started`,
+              message: `${formatMoney(check.capex)} spent. Burn falls ${(def.burn * 100).toFixed(1)}% from next week.`, duration: 6000 },
+          ],
+        } : {}),
+      };
+    }
+
+    // ─── Winglet retrofit (FUEL_OPERATIONS_PLAN.md §6.2) ──────────────
+    // The INSTALL_WIFI shape: bulk ids, one quote helper shared with the UI,
+    // capex taken once, the tail's fuelMod/rangeMod folded exactly as an
+    // order-time fit would have folded them.
+    case 'RETROFIT_WINGTIPS': {
+      const ids = [...new Set((action.aircraftIds ?? (action.aircraftId ? [action.aircraftId] : [])).filter(Boolean))];
+      if (ids.length === 0) return state;
+      const targets = (state.fleet ?? []).filter(a => ids.includes(a.id));
+      if (targets.length === 0) return state;
+      const check = canRetrofitWingtips(targets, state.cash);
+      if (!check.ok) {
+        return {
+          ...state,
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            {
+              type: 'warning', icon: '🪶',
+              title: 'Wingtips not fitted',
+              message: check.eligible.length === 0
+                ? check.reasons[0]
+                : `${check.reasons[0]} Fitting ${check.eligible.length} aircraft costs `
+                  + `${formatMoney(check.capex)}; you have ${formatMoney(state.cash)}.`,
+            },
+          ],
+        };
+      }
+      const fitted = new Set(check.eligible.map(a => a.id));
+      return {
+        ...state,
+        cash:  state.cash - check.capex,
+        fleet: state.fleet.map(a => (fitted.has(a.id) ? fitWingtips(a) : a)),
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type: 'success', icon: '🪶',
+            title: fitted.size === 1 ? 'Wingtips fitted' : `Wingtips fitted to ${fitted.size} aircraft`,
+            message: `${formatMoney(check.capex)} spent. Burn on those tails falls from next week.`,
+            duration: 6000,
+          },
+        ],
+      };
+    }
+
     case 'BUILD_LOUNGE': {
       { const refused = refuseEraFeature(state, 'lounges'); if (refused) return refused; }
       const code    = action.code;
@@ -1725,6 +1949,50 @@ function reducer(state, action) {
       const rest = { ...lounges };
       delete rest[action.code];
       return { ...state, cash: state.cash + loungeCloseRefund(lounge), lounges: rest };
+    }
+
+    // ─── Ground handling stations ───────────────────────────────────────────
+    // Self-handling at ONE airport (data/groundStation.js). No era lock: airlines
+    // have loaded their own bags since the first DC-3.
+    case 'BUILD_GROUND_STATION': {
+      // action: { code, level }
+      const code     = action.code;
+      const level    = Math.max(1, Math.min(GROUND_STATION_MAX_LEVEL, Math.round(Number(action.level) || 1)));
+      const stations = state.groundStations ?? {};
+      if (!code || stations[code]) return state;
+      const check = canBuildStation(code, level, { stations, gates: state.gates ?? {}, cash: state.cash });
+      if (!check.ok) return { ...state, error: check.reasons[0] };
+      return {
+        ...state,
+        cash:           state.cash - check.capex,
+        groundStations: { ...stations, [code]: makeStation(code, level, absoluteWeek(state.year, state.week)) },
+      };
+    }
+
+    case 'UPGRADE_GROUND_STATION': {
+      // Upgrades build IN PLACE — the existing level keeps handling throughout.
+      const code     = action.code;
+      const stations = state.groundStations ?? {};
+      const existing = stations[code];
+      if (!existing) return state;
+      const level = Math.max(1, Math.min(GROUND_STATION_MAX_LEVEL, Math.round(Number(action.level) || existing.level + 1)));
+      const check = canBuildStation(code, level, { stations, gates: state.gates ?? {}, cash: state.cash });
+      if (!check.ok) return { ...state, error: check.reasons[0] };
+      const def = stationLevelDef(level);
+      return {
+        ...state,
+        cash:           state.cash - check.capex,
+        groundStations: { ...stations, [code]: { ...existing, upgradeTo: level, upgradeWeeksLeft: def.buildWeeks } },
+      };
+    }
+
+    case 'CLOSE_GROUND_STATION': {
+      const stations = state.groundStations ?? {};
+      const station  = stations[action.code];
+      if (!station) return state;
+      const rest = { ...stations };
+      delete rest[action.code];
+      return { ...state, cash: state.cash + stationCloseRefund(station), groundStations: rest };
     }
 
     case 'SET_LOUNGE_POLICY': {
@@ -1871,6 +2139,24 @@ function reducer(state, action) {
     // Each FOLDS the single-aircraft case rather than reimplementing it, so
     // reserve settlement, lease penalties, cover teardown and status
     // recomputation cannot drift from the one-at-a-time path.
+    // ── Tankering (FUEL_OPERATIONS_PLAN.md §7.2) ─────────────────────
+    // action: { routeId, mode: 'auto' | 'off' } — passenger or cargo route.
+    // 'auto' lets the sims carry return fuel out of the cheap end whenever the
+    // spread beats the carrying penalty and the tanks allow; the decision is
+    // re-made every tick. No cash changes hands; the setting is the whole act.
+    case 'SET_ROUTE_TANKERING': {
+      const mode = action.mode === 'auto' ? 'auto' : 'off';
+      const apply = (r) => (r.id === action.routeId ? { ...r, tankering: mode } : r);
+      const inPax   = (state.routes ?? []).some(r => r.id === action.routeId);
+      const inCargo = (state.cargoRoutes ?? []).some(r => r.id === action.routeId);
+      if (!inPax && !inCargo) return state;
+      return {
+        ...state,
+        ...(inPax   ? { routes:      state.routes.map(apply) } : {}),
+        ...(inCargo ? { cargoRoutes: state.cargoRoutes.map(apply) } : {}),
+      };
+    }
+
     case 'SELL_AIRCRAFT_BULK':
     case 'RETIRE_AIRCRAFT_BULK':
     case 'SCHEDULE_CHECKS':
@@ -2077,6 +2363,10 @@ function reducer(state, action) {
         seasonState:     newSeason
           ? (isRouteActive({ season: newSeason }, weekToGameDate(state.week).monthIndex) ? 'active' : 'dormant')
           : 'active',
+        // Station pricing worlds: a new route tankers when it pays, from day
+        // one. Routes that predate the flag stay 'off' until the player says
+        // otherwise, so nothing already flying changes on its own.
+        ...(fuelStationsOn(state) ? { tankering: 'auto' } : {}),
       };
       const updatedFleet = state.fleet.map(a =>
         a.id === action.aircraftId ? withRouteStatus(a, 'assigned', { reserveBase: null }) : a
@@ -2360,6 +2650,7 @@ function reducer(state, action) {
         launchCost,
         hub:             state.hub,
         cargo:           true,
+        ...(fuelStationsOn(state) ? { tankering: 'auto' } : {}),
       };
       const updatedFleet = state.fleet.map(a =>
         a.id === action.aircraftId ? withRouteStatus(a, 'assigned', { reserveBase: null }) : a
@@ -3387,12 +3678,14 @@ function reducer(state, action) {
       const {
         survivingEvents, expiredEvents, newEvents, allEvents, eventOtpDelta,
         baseFuelIndex, currentFuelIndex, fuelMultiplier, fuelPriceHistory,
+        hedgedMarketMultiplier, crackIndex, refinery: refineryWeek, hedgeableShare,
         activeHedges, liveHedges,
         gameMonth, gameDate, curAbsWeek,
         completedChecks, tickedFleetPre, coverPass,
         seasonalReactivationCost: seasonalReactivationCostPrep,
         seasonalReactivations, seasonAdjustedRoutes,
         baseBuild, tickedBases, loungeBuild, tickedLounges,
+        stationBuild, tickedStations,
         laborThisWeek,
       } = prep;
       let seasonalReactivationCost = seasonalReactivationCostPrep;
@@ -3405,6 +3698,13 @@ function reducer(state, action) {
       const _fuelCy          = calendarYear(state);
       const nextFuelIndex    = _fuelCy == null ? tickFuelPrice(baseFuelIndex)
         : tickFuelPrice(baseFuelIndex, undefined, eraFuelMean(_fuelCy) ?? FUEL_BASE_INDEX, ERA_FUEL_MIN_INDEX);
+
+      // The crack walk (data/refinery.js). Only an airline that owns a refinery
+      // has one — it is seeded when the refinery is ordered and walks from
+      // there — so a save that never buys one gains no key and every existing
+      // world's fuel history is untouched.
+      const nextCrackIndex = !state.refinery ? null
+        : tickCrackIndex(state.fuelPrice?.crack ?? CRACK_BASE_INDEX);
 
       // Age + mechanical tick must run BEFORE weeklyTick so that aircraft recovering
       // from grounding this week can actually fly and earn revenue.
@@ -3438,7 +3738,34 @@ function reducer(state, action) {
       // prep.tickInput is the whole pre-tick state. The ONLY thing added here is
       // this week's freshly-rolled AI challengers — a random draw, and therefore
       // the one input a projection is right not to share.
-      const report = weeklyTick({ ...prep.tickInput, encroachments: updatedEncroachments });
+      const report = weeklyTick({
+        ...prep.tickInput, encroachments: updatedEncroachments,
+        // Throughput fees other airlines paid at fuel farms this one owns,
+        // credited a week in arrears and booked as income inside the tick so
+        // the P&L reconciles. Nothing generates these in solo play today; the
+        // plumbing is here so the farm's income side is testable and the two
+        // codebases read the same.
+        ...(Number(action.incomingFarmFees) > 0 ? { farmFeeIncome: Number(action.incomingFarmFees) } : {}),
+      });
+
+      // ── Hedge scoreboard: what each live contract saved this week ─────────
+      // report.totalFuel is at the blended multiplier the sims were given, so
+      // dividing it back out gives the exact bill at 1.0× — no estimate. Each
+      // live contract is credited baseBill × effCoverage × (market − locked);
+      // the contracts tickPrep dropped as expired are folded into the lifetime
+      // record. `stats` stays null for a save that has never hedged, so no key
+      // is added to it (see settleHedgeWeek).
+      const hedgeSettlement = settleHedgeWeek({
+        prior:        state.hedgeContracts ?? [],
+        active:       liveHedges,
+        marketIndex:  currentFuelIndex,
+        // Scaled by the share the hedges actually cover: a refinery takes its
+        // slice of the litres off the jet index entirely, so crediting the
+        // contracts against the whole bill would pay them twice for it.
+        baseBill:     fuelMultiplier > 0 ? ((report.totalFuel ?? 0) / fuelMultiplier) * hedgeableShare : 0,
+        stats:        state.hedgeStats ?? null,
+        closedAbsWeek: curAbsWeek,
+      });
 
       // ── Loyalty program: grow/decay member base + maturity + points debt ──
       // Penetration-based S-curve. Enrollment slows as the base approaches the
@@ -3579,7 +3906,22 @@ function reducer(state, action) {
       const tickedFleet = coverPass.fleet;
 
       // 2. Roll for new failures on non-grounded aircraft
-      const newFailures = rollMechanicalFailures(tickedFleet, mainBudget);
+      // The statistical contingency-fuel programme (data/fuelProgrammes.js)
+      // trades a little margin for burn: its multiplier on the odds is exactly
+      // 1 when off, and the draw count is unchanged either way.
+      const newFailures = rollMechanicalFailures(tickedFleet, mainBudget, programmeFailureMult(state));
+
+      // Refinery outage: only drawn while one is actually running, so a save
+      // without a refinery consumes no random numbers and the walk is unmoved.
+      // A shutdown sends the covered litres back to the market for its duration.
+      let tickedRefinery = state.refinery ?? null;
+      let refineryOutageWeeks = 0;
+      if (tickedRefinery && isCommissioned(tickedRefinery, curAbsWeek) && !isOnOutage(tickedRefinery, curAbsWeek)) {
+        refineryOutageWeeks = rollRefineryOutage();
+        if (refineryOutageWeeks > 0) {
+          tickedRefinery = { ...tickedRefinery, outageUntilAbsWeek: curAbsWeek + refineryOutageWeeks };
+        }
+      }
 
       // ── AOG repair bills ──────────────────────────────────────────────────
       // A breakdown used to be free — the jet just sat there. It now carries a
@@ -3637,6 +3979,14 @@ function reducer(state, action) {
       // NOTE: leaseWarningToasts is populated inside the agedFleet.map() below,
       // so it must be pushed in AFTER that loop (not spread here at construction time).
       const newToasts = [
+        // Unplanned refinery shutdown: the covered litres go back to the jet
+        // market until it is back on line.
+        ...(refineryOutageWeeks > 0 ? [{
+          type: 'warning', icon: '🛢', title: 'Refinery shutdown',
+          message: `An unplanned outage takes your refinery off line for ${refineryOutageWeeks} weeks. `
+                 + `Until it restarts you are buying every litre on the jet market.`,
+          duration: 9000,
+        }] : []),
         // Era games: a toast queued immediately before this tick (the Comet
         // grounding fires pre-tick and recurses into ADVANCE_WEEK) must
         // survive it — this array REPLACES pendingToasts in the return.
@@ -3843,6 +4193,17 @@ function reducer(state, action) {
           message: `Your ${code} lounge is taking guests. Business travellers on routes through `
                  + `${code} now rate you higher, premium ground costs there have dropped, and you `
                  + `can sell day passes on the Ancillaries tab.`,
+        })),
+        ...stationBuild.opened.map(st => ({
+          type: 'success', icon: '\uD83D\uDEEB', duration: 9000,
+          title: `\uD83D\uDEEB ${stationLevelDef(st.level)?.name ?? 'Ground station'} open — ${st.code}`,
+          message: `Your own ramp crews are handling ${st.code}. Ground handling there is cheaper from this `
+                 + `week and your on-time rate gets a lift; both reach full effect over the next three months.`,
+        })),
+        ...stationBuild.upgraded.map(st => ({
+          type: 'success', icon: '\uD83D\uDEEB', duration: 9000,
+          title: `\uD83D\uDEEB ${st.code} upgraded to ${stationLevelDef(st.level)?.name ?? 'a bigger station'}`,
+          message: `${st.code} can now self-handle more of your departures.`,
         })),
       ];
 
@@ -4333,6 +4694,8 @@ function reducer(state, action) {
         leases:      report.totalLeases,
         maintenance: report.totalMaintenance,
         fuel:        report.totalFuel,
+        ...(report.totalFarmFeeIncome > 0 ? { farmFees: report.totalFarmFeeIncome } : {}),
+        ...(report.refineryShare > 0 ? { refineryShare: report.refineryShare, refinerySavings: report.refinerySavings ?? 0 } : {}),
         crew:        report.totalCrew,
         quality:     report.totalQuality,
         landingFees:     report.totalLandingFees    ?? 0,
@@ -4341,6 +4704,7 @@ function reducer(state, action) {
         ancillaryRevenue: report.totalAncillaryRevenue ?? 0,
         ancillaryCost:    report.totalAncillaryCost    ?? 0,
         groundHandling:  report.totalGroundHandling    ?? 0,
+        ...(report.totalGroundStationCosts != null ? { groundStations: report.totalGroundStationCosts } : {}),
         distribution:    report.totalDistributionCost  ?? 0,
         layover:         report.totalLayover           ?? 0,
         compensation:    report.totalCompensation   ?? 0,
@@ -4377,6 +4741,11 @@ function reducer(state, action) {
         // profit = actual cash change this week (after tax, matches newCash delta)
         profit:             preTaxProfit - corporateTax,
         fuelIndex:          currentFuelIndex,
+        // The blended multiplier the week was actually charged at, recorded
+        // only when hedges (or a refinery) made it differ from the market
+        // index — absent means "equal to fuelIndex". Keeping the key out of
+        // unhedged weeks leaves a never-hedged save byte-identical.
+        ...(fuelMultiplier !== currentFuelIndex ? { fuelMultiplier } : {}),
         // World events active during this week — the Dashboard's financial
         // history chart uses these for event markers + hover tooltips.
         events:             allEvents.map(e => ({ id: e.id, name: e.name, icon: e.icon, color: e.color })),
@@ -4734,9 +5103,13 @@ function reducer(state, action) {
         maintenanceBudget: mainBudget,
         mroBases:          tickedBases,
         lounges:           tickedLounges,
+        ...(Object.keys(tickedStations).length > 0 ? { groundStations: tickedStations } : {}),
         activeEvents:      allEvents,
-        fuelPrice:         { index: nextFuelIndex, history: fuelPriceHistory },
-        hedgeContracts:      liveHedges,
+        fuelPrice:         { index: nextFuelIndex, history: fuelPriceHistory,
+                             ...(nextCrackIndex != null ? { crack: nextCrackIndex } : {}) },
+        ...(tickedRefinery ? { refinery: tickedRefinery } : {}),
+        hedgeContracts:      hedgeSettlement.contracts,
+        ...(hedgeSettlement.stats ? { hedgeStats: hedgeSettlement.stats } : {}),
         loyalty:             updatedLoyalty,
         codeshareAgreements: tickedCodeshares,
         awareness:           Math.round(newAwareness * 10) / 10,
@@ -4815,6 +5188,15 @@ function reducer(state, action) {
       const opt = HEDGE_DURATIONS.find(o => o.id === action.durationId);
       if (!opt) return state;
 
+      // Coverage is a FRACTION of the fuel bill, and has to be policed like the
+      // duration above it. Stored verbatim, a coverage of -1000 paired with one
+      // of +1000.1 makes effectiveFuelMultiplier (which divides by the SIGNED
+      // sum of coverages) return a NEGATIVE multiplier, and every route on the
+      // airline books a large negative fuel cost for the life of the contract.
+      // Buying a hedge costs no cash, so nothing else stood in the way.
+      const coverage = Number(action.coverage);
+      if (!Number.isFinite(coverage) || coverage <= 0 || coverage > 1) return state;
+
       const marketIndex  = state.fuelPrice?.index ?? 1.0;
       const locked       = hedgeLockedPrice(marketIndex, opt);
       const startAbsWeek = absoluteWeek(state.year, state.week);
@@ -4822,7 +5204,7 @@ function reducer(state, action) {
         id:            uid(),
         durationId:    opt.id,
         durationLabel: opt.label,
-        coverage:      action.coverage,
+        coverage,
         lockedPrice:   locked,
         marketAtPurchase: marketIndex,
         startAbsWeek,
@@ -4832,6 +5214,44 @@ function reducer(state, action) {
       return {
         ...state,
         hedgeContracts: [...(state.hedgeContracts ?? []), newContract],
+      };
+    }
+
+    case 'UNWIND_HEDGE': {
+      // action: { id }
+      // Close a live contract early at mark-to-market minus the haircut. The
+      // quote is the engine's own (hedgeUnwindDollars → hedgeUnwindQuote), the
+      // same call the Fuel tab previews, so the button and the settlement can
+      // never disagree. In the money (a spike) it pays cash; underwater it
+      // costs cash, and is refused rather than allowed to overdraw — a hedge
+      // is the one product that must never be able to bankrupt you by exit.
+      const quote = hedgeUnwindDollars(state, action.id);
+      if (!quote) return state;                       // unknown, expired, or nothing flown yet
+      const cash = Number(state.cash) || 0;
+      if (cash + quote.settlement < 0) return state;  // can't afford to exit
+      const contract  = (state.hedgeContracts ?? []).find(h => h?.id === action.id);
+      const remaining = (state.hedgeContracts ?? []).filter(h => h?.id !== action.id);
+      const outcome   = hedgeOutcome(contract, {
+        settlement:    quote.settlement,
+        closedAbsWeek: absoluteWeek(state.year, state.week),
+        reason:        'unwound',
+      });
+      return {
+        ...state,
+        cash:           cash + quote.settlement,
+        hedgeContracts: remaining,
+        hedgeStats:     foldHedgeOutcome(state.hedgeStats ?? null, outcome),
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type:  quote.settlement >= 0 ? 'success' : 'warning',
+            icon:  '⛽',
+            title: `${contract.durationLabel} hedge unwound`,
+            message: quote.settlement >= 0
+              ? `Received $${(quote.settlement / 1e6).toFixed(1)}M for the ${quote.remaining} weeks remaining.`
+              : `Paid $${(Math.abs(quote.settlement) / 1e6).toFixed(1)}M to exit ${quote.remaining} weeks early.`,
+          },
+        ],
       };
     }
 
@@ -5127,6 +5547,16 @@ function reconcileState(parsed) {
     gates:            parsed.gates            ?? {},
     loans:            parsed.loans            ?? [],
     hedgeContracts:   parsed.hedgeContracts   ?? [],
+    // Scoreboard is created the first time a contract closes; readers use
+    // `state.hedgeStats ?? emptyHedgeStats()`. Only carried when present.
+    ...(parsed.hedgeStats ? { hedgeStats: parsed.hedgeStats } : {}),
+    // Fuel-efficiency programme toggles, likewise only when the save has any.
+    ...(parsed.fuelProgrammes ? { fuelProgrammes: parsed.fuelProgrammes } : {}),
+    // Fuel-ops rule version (station pricing at 2). Absent = 1: a save that
+    // predates it keeps world-flat fuel until it is explicitly opted in.
+    ...(Number.isInteger(parsed.fuelOpsV) ? { fuelOpsV: parsed.fuelOpsV } : {}),
+    ...(parsed.fuelFarms && Object.keys(parsed.fuelFarms).length ? { fuelFarms: parsed.fuelFarms } : {}),
+    ...(parsed.refinery ? { refinery: parsed.refinery } : {}),
     loyalty:          parsed.loyalty
       ? {
           effInvestment: parsed.loyalty.weeklyInvestment ?? 0,
@@ -5149,6 +5579,11 @@ function reconcileState(parsed) {
     // lounges and no policy, which is exactly the neutral state: appeal 1, no
     // day passes, full third-party premium ground contract.
     lounges:                  parsed.lounges                  ?? {},
+    // Ground handling stations — old saves have none, which is the neutral
+    // state: every passenger pays the contract rate, no on-time bonus. Carried
+    // only when the save actually has one (see freshState).
+    ...(parsed.groundStations && Object.keys(parsed.groundStations).length > 0
+      ? { groundStations: parsed.groundStations } : {}),
     loungePolicy:             parsed.loungePolicy ? normalizeLoungePolicy(parsed.loungePolicy) : null,
     awareness:                parsed.awareness                ?? 5,
     // Labor relations (unrest / strikes / negotiations) — added later; old saves

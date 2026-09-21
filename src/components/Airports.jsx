@@ -5,6 +5,8 @@ import { AIRPORTS, getAirport, gateMonthlyFee, totalGateMonthlyFee, REGIONS, get
 import { SLOTS_PER_GATE, cargoSlotsUsedAt } from '../utils/simulation.js';
 import { formatMoney } from '../utils/simulation.js';
 import { Glyph } from './Icons.jsx';
+import FuelBasisChip from './FuelBasisChip.jsx';
+import { stationFuelBasis, fuelStationsOn } from '../data/fuelStations.js';
 
 // Tier badge styling
 const TIER_RANK = { mega: 0, major: 1, regional: 2 };
@@ -81,6 +83,9 @@ const GATE_COLUMNS = [
   { id: 'slots',   label: 'Slots',   align: 'right' },
   { id: 'util',    label: 'Use',     align: 'right' },
   { id: 'cost',    label: 'Cost/wk', align: 'right' },
+  // Station fuel basis (FUEL_OPERATIONS_PLAN.md §7.3) — sortable, so the
+  // world can be ordered by cheapest fuel when choosing where to grow.
+  { id: 'fuel',    label: 'Fuel',    align: 'right', fuel: true },
 ];
 
 const GATE_SORTERS = {
@@ -90,6 +95,7 @@ const GATE_SORTERS = {
   slots:   (a, b) => a.used - b.used,
   util:    (a, b) => a.usagePct - b.usagePct,
   cost:    (a, b) => a.weeklyCost - b.weeklyCost,
+  fuel:    (a, b) => stationFuelBasis(a.code) - stationFuelBasis(b.code),
 };
 
 function utilColor(usagePct) {
@@ -99,8 +105,10 @@ function utilColor(usagePct) {
 }
 
 function GateTable({ rows, onAdd, onRemove, onDetails }) {
+  const { state } = useGame();
   const [sortCol, setSortCol] = useState(null);   // null = default order (region → hub → congestion)
   const [sortDir, setSortDir] = useState('desc');
+  const columns = fuelStationsOn(state) ? GATE_COLUMNS : GATE_COLUMNS.filter(c => !c.fuel);
 
   const sorted = (() => {
     if (!sortCol) return rows;
@@ -131,7 +139,7 @@ function GateTable({ rows, onAdd, onRemove, onDetails }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr>
-              {GATE_COLUMNS.map(c => (
+              {columns.map(c => (
                 <th key={c.id} onClick={() => clickHeader(c.id)} style={{ ...TH, textAlign: c.align }}>
                   {c.label}{sortCol === c.id ? (sortDir === 'desc' ? ' ▾' : ' ▴') : ''}
                 </th>
@@ -166,6 +174,9 @@ function GateTable({ rows, onAdd, onRemove, onDetails }) {
                     </div>
                   </td>
                   <td style={{ ...TD, textAlign: 'right', color: 'var(--red)' }}>{formatMoney(r.weeklyCost)}</td>
+                  {fuelStationsOn(state) && (
+                    <td style={{ ...TD, textAlign: 'right' }}><FuelBasisChip code={r.code} /></td>
+                  )}
                   <td style={{ ...TD, textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 4 }}>
                       <button

@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, routeBlockHours, weekToGameDate, formatGameDate, fleetAvgUtilization, rivalSpecsFor,
-  stateLoungeFields,
+  stateLoungeFields, stateGroundHandlingFields,
 } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
@@ -14,6 +14,8 @@ import { getSeasonalProfile } from '../models/demand.js';
 import BoardObjectives from './BoardObjectives.jsx';
 import InfoTip from './InfoTip.jsx';
 import { requestNav } from '../utils/navIntent.js';
+import { fuelImpact } from '../utils/fuelImpact.js';
+import { programmeSavingsFromReport } from '../data/fuelProgrammes.js';
 import { navPathFor } from '../navPath.js';
 import { leasesExpiringSoon, idleFleetAlertText, LEASE_EXPIRY_WARN_WEEKS } from '../utils/leaseAlerts.js';
 import {
@@ -47,6 +49,8 @@ export default function Dashboard() {
   // (so cargo, all fixed costs, loan interest and tax are included) rather than a
   // home-grown estimate.
   const proj = useMemo(() => projectWeek(state), [state]);
+  // What 1.28x actually costs THIS fleet, in dollars a week (fuelImpact.js).
+  const fuelKpi = useMemo(() => fuelImpact(state, { lookbacks: [] }), [state]);
 
   // Per-route results read from the SAME engine projection the Routes and Finance
   // screens use — never a standalone re-simulation. A bare simulateRoute() here
@@ -66,7 +70,7 @@ export default function Dashboard() {
         : (rrById[route.id] ?? simulateRoute(
             // Lounge fields — without them this fallback quotes the full
             // third-party premium ground rate on a route the tick discounts.
-            { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+            { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
             aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
             rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
             1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)));
@@ -506,6 +510,32 @@ export default function Dashboard() {
             sub={networkStats.revPerPax != null ? `${formatMoney(networkStats.revPerPax)} avg / pax` : undefined}
           />
         )}
+        {/* What the fuel index is costing THIS airline, in dollars a week
+            (utils/fuelImpact.js) — an index alone tells a player nothing. */}
+        {fuelKpi && fuelKpi.baseBill > 0 && (() => {
+          const up = fuelKpi.excess > 0;
+          const flat = Math.abs(fuelKpi.excess) < fuelKpi.baseBill * 0.02;
+          const lbl = fuelKpi.status.label;
+          const color = lbl === 'Crisis' || lbl === 'Very High' ? 'red'
+                      : lbl === 'High' ? 'yellow'
+                      : lbl === 'Normal' ? 'blue' : 'green';
+          // The efficiency programme's slice, when one is running (the tick
+          // records fuelBurnMod only then).
+          const progSaved = programmeSavingsFromReport(state.lastReport);
+          const sub = (flat ? `${formatMoney(fuelKpi.bill)}/wk · at normal price`
+                    : up ? `+${formatMoney(fuelKpi.excess)}/wk above normal · ${formatMoney(fuelKpi.perTenth)} per 0.1`
+                    : `−${formatMoney(Math.abs(fuelKpi.excess))}/wk below normal · ${formatMoney(fuelKpi.perTenth)} per 0.1`)
+                    + (progSaved > 0 ? ` · programmes −${formatMoney(progSaved)}/wk` : '');
+          return (
+            <KpiBox
+              label="Fuel"
+              value={`${fuelKpi.index.toFixed(2)}×`}
+              color={color}
+              sub={sub}
+              subColor={flat ? undefined : up ? 'var(--red)' : 'var(--green)'}
+            />
+          );
+        })()}
       </div>
 
       {/* ── Weekly P&L bridge (incl. cost-mix bar) ───────────────────────── */}

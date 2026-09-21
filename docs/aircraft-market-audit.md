@@ -1,0 +1,422 @@
+# Aircraft Market Audit — specs and pricing
+
+**Date:** 2026-09-20 · **Scope:** all 197 types in `src/data/aircraft.js`
+**Method:** real-world spec verification against published sources; economic sweep over 33 sectors × 24 market sizes (768 missions) using the engine's own cost functions (`fuelCostPerKm`, `weeklyLandingFee`, `weeklyInsuranceCost`, `crewScaleFor`, `hqScaleFor`, `maintenanceMultiplier`).
+
+---
+
+## Read this first: the existing tooling over-rates old metal
+
+Before any finding below, one correction to the measuring instrument.
+
+`tools/catalogue-deadweight-report.mjs` builds its cost model from the engine's functions, but its `fixedWeekly()` omits two things the live tick applies:
+
+1. **The delivered-age maintenance multiplier.** It charges `t.baseMaintenancePerWk` raw. The tick charges `baseMaintenancePerWk × maintenanceMultiplier(effectiveMaintAgeWeeks)`. A type arriving at 832 weeks starts at **2.28×**, not 1.0×.
+2. **The classic-game vintage rule.** `eraDeliveredAgeWeeks(type, null)` lifts any type whose line closed 50+ years ago to 20–30 years delivered age (up to **5.5×** maintenance), and `leaseDenial()` makes it buy-only.
+
+Correcting both changes the picture materially:
+
+| | deadweight model as written | age + vintage corrected |
+|---|---|---|
+| distinct winners | 36 | 25 |
+| vintage share of wins | **19.3%** | **3.9%** |
+| Vickers Vanguard | 57 wins | 18 wins |
+| Britannia, L-1649, DC-3, Viscount 800, CV-440 | all win | all drop out |
+
+**So the "1950s propliners dominate" reading that report invites is largely an artefact of the report.** The vintage rule is doing its job. Worth fixing the model before it drives a rebalance — the three lines needed are in `$HOME/audit/_audit-final.mjs` (see *Scratch files* at the end).
+
+Everything below uses the corrected model.
+
+---
+
+## HIGH · Propeller fuel burn is calibrated on a different scale to jets
+
+This is the one systematic spec error in the catalogue. Jets sit at the intended 92–98% of real burn. Propellers sit at roughly **50–70%**.
+
+Independently verified (engine cruise power × SFC, or published trip-fuel):
+
+| type | game `fuelBurnPer100km` | real (L/100km) | game as % of real |
+|---|---|---|---|
+| `il18` Il-18 | 210 | 415–545 | **39–51%** |
+| `q400` Dash 8 Q400 | 137.25 | 229–289 | **47–60%** |
+| `vanguard` Vanguard | 215 | ~366 | **59%** |
+| `atr72` ATR 72-600 | 122.75 | 176–195 | **63–70%** |
+
+Sources: Ivchenko AI-20 and Rolls-Royce Tyne cruise power/SFC ratings; Wikipedia *Fuel economy in aircraft* trip-fuel table for Q400 and ATR 72. The Dash 7's figure could not be verified — no public cruise fuel-flow data exists in reachable sources, so I am not proposing a number for it.
+
+A broader sweep (lower confidence, single-source) put the whole Dash 8 family, ATR 42, C208B, B1900D, Saab 340, PC-12 and Viscount 700 in the same 43–72% band.
+
+### What it does to the game
+
+The Q400 is currently **the most fuel-efficient aircraft per seat in the entire 197-type catalogue**:
+
+| rank | type | L/100km per seat |
+|---|---|---|
+| 1 | `q400` Dash 8 Q400 (2000) | 1.52 |
+| 2 | `vanguard` Vickers Vanguard (**1961**) | 1.55 |
+| 3 | `a330neo` A330-900neo (2018) | 1.57 |
+| 4 | `atr72` ATR 72-600 | 1.57 |
+| 5 | `f27` Fokker F27 (**1958**) | 1.58 |
+| 6 | `a321xlr` A321XLR (2024) | 1.62 |
+| … | `b7879` 787-9 | 1.71 |
+
+A 1961 Vanguard and a 1958 F27 out-performing the 787-9 per seat is the clearest single symptom. In-game a turboprop beats a comparable regional jet by **40–45%** per seat (Q400 vs E175, ATR 72 vs CRJ-700); the real gap is closer to 20–30%. Turboprops take 7 of the top 10 win slots in the sweep.
+
+**Recommendation.** Raise Turboprop-category burn toward real. A sensitivity run says the honest multiplier is roughly **×1.5–1.6 for modern turboprops** and **×1.7–2.0 for the pre-1975 types**. At ×1.6 the E195-E2 goes from 23 wins to 41 — modern regional jets get their niche back, which is the point. This does *not* fix findings 2 and 3 below; they are price problems.
+
+---
+
+## HIGH · The Dash 7 holds an unbreakable monopoly at commuter-turboprop pricing
+
+**50 wins (10.9% of decided missions), median profit margin over the second-best aircraft: ×11.72.**
+
+Every other winner in the sweep takes its missions by 1–8%. The Dash 7 takes them by an order of magnitude. The cause is structural:
+
+> **The Dash 7 is the only aircraft in the catalogue with more than 40 seats that can use a runway under 3,100 ft.**
+
+| runway | type | seats | weekly lease | purchase |
+|---|---|---|---|---|
+| **2,300 ft** | **`dash7` Dash 7** | **54** | **$12,000** | **$5.0M** |
+| 3,100 ft | `dhc8100` Dash 8-100 | 40 | $10,000 | $4.0M |
+| 3,300 ft | `dhc8200` Dash 8-200 | 40 | $12,000 | $5.0M |
+| 3,500 ft | `dhc8300` Dash 8-300 | 56 | $17,000 | $7.0M |
+| 3,600 ft | `atr42` ATR 42-600 | 50 | **$40,000** | **$20.0M** |
+
+The 2,300 ft figure is correct — the Dash 7 was a genuine four-engine STOL 50-seater. The problem is that a unique capability is priced as an ordinary commuter turboprop: it undercuts the ATR 42-600 by **3.3× on lease and 4× on purchase** while carrying four more seats into 1,300 ft less runway.
+
+This is not a fuel problem. Raising propeller burn by 60% takes the margin *up* to ×21, because its competitors on short fields are also propellers and it spreads fixed cost over more seats.
+
+**Recommendation.** Price the capability, not the airframe. Something in the **$28–34k/week, $14–17M** band puts it between the Dash 8-300 and the ATR 42 and leaves it the right answer on short fields without making it free money. Its 1,300 km range and 624-week delivered age remain real drawbacks, so it should keep the niche.
+
+---
+
+## MED-HIGH · The Il-18 escapes the vintage rule by two years
+
+**49 wins (10.7%)** — the second-biggest winner after the A380.
+
+`oop: 1978`, so the line closed 48 years ago. `VINTAGE_AFTER_YEARS = 50`. It misses the vintage threshold by two years, arrives at 832 weeks rather than 20–30 years, and stays leasable. Combined with the worst fuel understatement in the catalogue (39–51% of real) it becomes a 110-seat, 6,500 km aircraft for $12,500/week.
+
+The mechanism is a cliff edge: nothing about the aircraft changes, but in two years of real-world time it crosses the threshold and collapses from 49 wins to near zero. The F27 (`oop` 1987, 39 years) and Short 360 (`oop` 1991, 35 years) sit in the same pre-threshold window and both appear in the winners list.
+
+**Recommendation.** The fuel correction in finding 1 does most of the work here — at ×1.8 the Il-18 drops out of the winners entirely. Worth also considering whether a hard 50-year cliff is the right shape, or whether delivered age should ramp continuously from, say, 35 years closed. A ramp removes the cliff for the whole 1955–1990 cohort at once rather than type by type.
+
+---
+
+## MED · Concentration at the top
+
+| type | wins | share of decided | margin over #2 |
+|---|---|---|---|
+| `a380` A380 | 82 | **17.8%** | ×1.27 |
+| `dash7` | 50 | 10.9% | ×11.72 |
+| `il18` | 49 | 10.7% | ×1.13 |
+| `dhc6` Twin Otter | 42 | 9.1% | — (sole eligible) |
+
+The Twin Otter's 42 wins are legitimate — those are the sub-1,500 ft fields where nothing else fits, and it has no second place to beat.
+
+The **A380** is a design call rather than a bug. It wins every high-demand mission on raw seat count, including short-haul ones (JFK–BOS, LAX–SFO), at a 27% profit margin over the next aircraft. That is defensible — the biggest aircraft *should* own the biggest markets — but 17.8% of the grid from one type is heavy, and the margin means it wins clearly rather than narrowly. Flagging for your judgement, not recommending a change.
+
+Related, and more clearly wrong:
+
+| type | seats | weekly lease | purchase | burn |
+|---|---|---|---|---|
+| `b747400` 747-400 | 605 | **$109,000** | $55M | 1608.25 |
+| `b7478i` 747-8I | 605 | **$463,000** | $190M | 1400 |
+
+Identical seat count. The -8I burns 13% less fuel for a **4.25× lease premium** — the fuel saving recovers roughly half the premium even on heavy long-haul utilisation. The 747-400 wins; the -8I peaks at 78.5% of the winner. The consistency suite's Pareto check passes because the -8I is better on fuel and range, but it is economically dominated.
+
+---
+
+## MED · Price is not calibrated against delivered value
+
+Capital efficiency = peak weekly surplus before ownership cost ÷ weekly lease. The spread across the catalogue is **×1.2 to ×52.3 — a 43× range.**
+
+| | most underpriced | | least |
+|---|---|---|---|
+| `vanguard` | ×52.3 | `l410` | ×1.2 |
+| `b747100` | ×47.4 | `do228` | ×1.5 |
+| `il18` | ×46.3 | `b1900d` | ×1.7 |
+| `b747200` | ×37.1 | `dhc6` | ×1.9 |
+| `britannia` | ×36.2 | `c408` | ×2.0 |
+| `l1011` | ×34.5 | `c208b` | ×2.5 |
+
+Part of that spread is size — a 19-seater can never post a large peak — but the pattern within size classes holds: pre-1980 metal is priced near scrap while earning near-modern revenue, and small modern turboprops are priced at market while earning almost nothing.
+
+By category, median capital efficiency: Double Deck ×23.1, Turboprop ×14.7, Wide Body ×13.3, Narrow Body ×13.1, Regional Jet ×9.1. **Regional jets are the worst-value category in the game** — which is the other half of the finding-1 story.
+
+Seven types clear their costs on no mission in the grid: `cl350`, `cj4`, `phenom300e`, `g650er` (business jets — they fly the charter board, so the scheduled-route grid is the wrong test and these are not findings), `bn2islander`, `pc12`, and `comet1`. The Comet 1 carries a `withdrawnYear` and 9.55 L/100km per seat, the worst in the catalogue — presumably deliberate.
+
+---
+
+## LOW · Lease vs buy is not a real decision
+
+Lease yield (annual lease ÷ purchase price) runs **9.2% on modern types, 13.5–14.3% on vintage** — median 12.5%. Buying recoups in **7–11 years of avoided lease** against a 25–30 year useful life.
+
+Buying is therefore correct for every type in the catalogue whenever you have the cash; leasing is purely a cash-flow bridge. The yield spread makes it worse rather than better, because the aircraft that are cheapest to buy outright are also the most expensive to lease. That may be the intended design — cash constraint as the real tradeoff — but there is currently no type for which leasing is the better economic answer.
+
+---
+
+## Confirmed spec errors worth fixing
+
+Filtered to those I could verify. Range errors cluster on one cause: a ferry or reduced-payload figure used where the field wants max-payload range.
+
+| id | field | game | real | severity |
+|---|---|---|---|---|
+| `b727200f` | range | 3,500 km | ~1,852 km at max payload | HIGH |
+| `b767200sf` | range | 6,000 km | ~3,700 km at max payload | HIGH |
+| `b707320` | range | 10,650 km | ~6,920 km at 189 pax | HIGH |
+| `dc863` | range | 11,000 km | ~7,400 km | HIGH |
+| `il96300` | range | 11,500 km | ~8,000 km at 300 pax | HIGH |
+| `tu204` | range | 6,500 km | ~4,300 km | HIGH |
+| `casacn235` | range | 4,355 km | ~2,870 km at max payload | HIGH |
+| `an148` | range | 5,100 km | ~3,500 km (-100B) | HIGH |
+| `dc873f` | range | 7,400 km | ~5,400 km at max payload | HIGH |
+| `a330200f` | range | 7,400 km | ~5,900 km at 70 t | HIGH |
+| `b737max7` | eis | 2023 | FAA cert Aug 2026; service ~2027 | HIGH |
+| `b737max10` | eis | 2025 | not certified as of Sep 2026 | HIGH |
+| `a319neo` | eis | 2019 | 2022 (first delivery) | HIGH |
+| `spacejet` | eis | 2026 | programme cancelled Feb 2023 | HIGH |
+| `b767200sf` | burn | 640 | burns *more* than the larger `b767300f` (593.75) — backwards | MED |
+| `yak40` | seats | 40 | 32 (max certified) | MED |
+| `dc1030f` | payload | 78 t | ~65 t | MED |
+| `a300600f` | payload | 54 t | 48.3 t | MED |
+| `e190f` | payload | 13 t | 10.7 t | MED |
+| `hs748` | seats | 48 | 58 (high-density) | MED |
+| `emb120` | oop | 2001 | 2007 | MED |
+| `b377` | seats | 100 | 114 | MED |
+
+**One open question rather than an error:** `runwayFt` on the 737 family (Classic, NG and MAX) runs 15–42% below published MTOW balanced field length, while the A220 matches its real figure exactly. Either the field means "typical operational minimum" (in which case the A220 is the outlier) or it means MTOW TOFL (in which case the 737s are). Worth settling, since route eligibility hinges on it. The 787 family and the Embraer E-Jets show the same downward bias at 15–18%.
+
+## Things that look wrong but are not — don't chase these
+
+- **13 freighters "violating" the `deliveredAgeWeeks` band.** The band rule applies to passenger types only (`expectedAgeBand` filters to `PAX` and honours `bandEis`). Conversions deliberately arrive one band older because a fresh P2F conversion is an old airframe, and `b737800bcf` / `e190f` / `a321p2f` correctly carry 312 weeks despite recent conversion programmes. Working as designed.
+- **Concorde burning 24% above a literal cruise-burn calculation.** Deliberate; it is the prestige money-loser.
+- **Business jets failing every scheduled-route mission.** They fly the charter board.
+
+---
+
+## Suggested order of work
+
+1. **Fix the deadweight report's cost model** (age multiplier + vintage rule). Everything else gets measured against it.
+2. **Recalibrate Turboprop fuel burn** — ×1.5–1.6 modern, ×1.7–2.0 pre-1975. Biggest single lever; fixes the Il-18 and restores the regional-jet niche.
+3. **Reprice the Dash 7.** Independent of 2, and the only ×11 margin in the game.
+4. **Fix the verified range and EIS errors** — cheap, no balance risk.
+5. **Decide** the A380 share, the 747-400/-8I gap, the 50-year vintage cliff, and what `runwayFt` means. Design calls, not bugs.
+
+Steps 2 and 3 want a regression test each — a per-seat fuel-burn floor by category, and a "no type wins its missions by more than ×N" check — so neither can drift back.
+
+---
+
+## Reproducing this
+
+Four read-only analysis scripts produced the numbers above. They were written to `tools/`, then removed — the repo is back to its original state and `npm test` is unaffected (`aircraft-consistency-test` still passes 65/65; nothing in `src/` was touched).
+
+The one worth rebuilding is the corrected sweep. It is the deadweight report's model with two changes to `fixedWeekly()`:
+
+```js
+import { eraDeliveredAgeWeeks, isVintage } from '../src/data/aircraft.js';
+import { maintenanceMultiplier } from '../src/utils/simulation.js';
+
+const age = eraDeliveredAgeWeeks(t, null);              // was: implicit 0 / 260
+const maint = t.baseMaintenancePerWk * maintenanceMultiplier(age);
+const own = isVintage(t) ? Math.round(t.purchasePrice * 0.125 / 52)  // buy-only
+                         : t.weeklyLease;
+```
+
+Everything else — sectors, demand ladder, frequency optimisation — is unchanged from `catalogue-deadweight-report.mjs`. Folding these three lines into that report is step 1 of the work list above, and it makes the report's own conclusions trustworthy as a side effect.
+
+---
+
+# Addendum · The 767-300 complaint (2026-09-20)
+
+**Verdict: the complaint is directionally right but misattributed. The 767-300 is not an outlier — it sits almost exactly on its generation's price line. The underpricing is cohort-wide, and the 767-300 is one of its milder cases.**
+
+## It depends entirely on which metric the player is feeling
+
+On **profit per week** — what a mature, cash-rich airline optimises — the 767-300 is not underpriced. Across 10 long-haul sectors × 14 market sizes it wins **zero** missions; it ranks 11th–13th of 17 on every sector, squeezed by narrowbodies below and the A330neo/A380 above.
+
+On **return on capital** — what a cash-constrained player actually experiences — it looks very different:
+
+| type | ROC (peak, owned) | pays for itself in |
+|---|---|---|
+| `a310300` A310-300 | **349%/yr** | **15 weeks** |
+| `b747100` 747-100 | 347%/yr | 15 weeks |
+| `l1011` L-1011 | 322%/yr | 16 weeks |
+| `b767200er` 767-200ER | **307%/yr** | **17 weeks** |
+| `a300600r` A300-600R | 258%/yr | 20 weeks |
+| **`b767300` 767-300** | **250%/yr** | **21 weeks** |
+| `a330200` A330-200 | 168%/yr | 31 weeks |
+| `a330neo` A330-900neo | 108%/yr | 48 weeks |
+| `b7878` 787-8 | 64%/yr | 81 weeks |
+| `a350900` A350-900 | 53%/yr | 98 weeks |
+
+The 767-300 returns its purchase price 2.3× faster than an A330neo and 3.9× faster than a 787-8. That is what the complaint is picking up.
+
+But it is **13th** on that list. Repricing it alone just promotes the A310-300 — which is nearly twice as extreme — into the complaint slot.
+
+## Root cause: the freighter seam, unfixed on the passenger side
+
+The consistency suite already guards this exact failure for freighters. From its own header:
+
+> *"Used conversions were priced off scrap values (0.11–0.50 $M/tonne) and purpose-built freighters off new-market values (1.3–2.1 $M/tonne) — a 21.6× spread in capital cost against only a 2.7× spread in operating cost per tonne-km."*
+
+The same seam exists on the passenger side and nothing tests for it. Across the 38 passenger widebodies:
+
+| | spread |
+|---|---|
+| capital cost per seat | **15.2×** ($29k/seat 747-100 → $443k/seat A350-900ULR) |
+| fuel cost per seat-km | **2.5×** |
+| maintenance per seat | **2.1×** |
+
+A 15× capital spread against a 2.5× operating spread is the freighter bug in passenger clothing.
+
+## Where the 767-300 actually sits
+
+Fitting capital-cost-per-seat against `eis` across the widebody cohort gives a trend of **+4.7% per year of vintage**. Read against that line:
+
+| type | eis | actual $/seat | fitted $/seat | implied price | current |
+|---|---|---|---|---|---|
+| `a310300` | 1986 | $39k | $75k | **$21M** | $11M |
+| `b767400er` | 2000 | $96k | $142k | **$53M** | $36M |
+| `b767200er` | 1984 | $55k | $69k | $20M | $16M |
+| **`b767300`** | **1988** | **$80k** | **$82k** | **$29M** | **$28M** |
+| `a300600r` | 1988 | $66k | $82k | $30M | $24M |
+| `a330200` | 1998 | $135k | $130k | $53M | $55M |
+
+The 767-300 is within 3% of its own generation's line. **The A310-300 is the real outlier** — priced at roughly half what its vintage implies, and the single best return on capital in the game.
+
+## Two levers, and a caveat before pulling either
+
+**Caveat first.** The old-metal-pays-back-fast dynamic may be intended: cheap entry-level capital early, upgrade to modern metal once you can afford profit-per-week rather than return-on-capital. The profit-per-week sweep says the progression does work — the 767-300 wins nothing once you have capital. If that arc is the design, the complaint describes the early game working as intended, and the only defect is the A310-300 being mispriced *within* the cohort.
+
+If you do want to compress it:
+
+1. **Price lever.** Bring the pre-1995 widebody band up toward the trend line. Equalising payback to ~1.7× the modern cohort needs roughly a 2.6× increase across that band — drastic, and it would collide with era-mode's `ERA_NEW_BUILD_PREMIUM` pricing. A partial move that fixes only the genuine outliers (A310-300, 767-400ER) is much cheaper and lower-risk.
+
+2. **Revenue lever — probably the better one.** An old 767-300 currently earns the same fare per seat as a 787-9. In reality it would not. A generational yield penalty (via `ticketPremium` below 1.0, or a cabin-age term in demand) attacks the problem where it originates instead of inflating capital costs, and it leaves era mode's pricing untouched.
+
+Either way this wants a regression test in `aircraft-consistency-test.mjs` — the passenger mirror of the freighter `$M-per-tonne spread stays under 10x` check. Something like *capital cost per seat spread stays under 8× within a category, and no type's return on capital exceeds 2.5× the modern-cohort median.*
+
+## Suggested reply to the complaint
+
+The 767-300 isn't specifically underpriced — it's priced correctly for its generation, and its generation is priced generously across the board. The A310-300, 747-100 and 767-200ER all return capital faster than it does.
+
+---
+
+# Addendum 2 · Does the generational ladder actually deliver?
+
+**Short answer: yes on operating cost — 16 of 18 replacements earn a genuine gain. But on widebodies the price premium eats the whole gain, and the 777X is broken outright.**
+
+## Fuel per seat: the ladder is sound
+
+Each current type against the type it replaces, versus the manufacturer's real-world claim:
+
+| old → new | per-seat fuel | in-game gain | real claim | |
+|---|---|---|---|---|
+| `b737800` → `b737max8` | 2.12 → 1.84 | 13.2% | ~14% | ok |
+| `a320ceo` → `a320neo` | 2.20 → 1.82 | 17.5% | ~15% | ok |
+| `a321ceo` → `a321neo` | 2.10 → 1.63 | 22.5% | ~15% | ok |
+| `e195` → `e195e2` | 2.43 → 1.82 | 25.4% | ~16% | ok |
+| `b767300` → `b7878` | 2.00 → 1.77 | 11.6% | ~20% | ok |
+| `a330300` → `a330neo` | 1.81 → 1.57 | 12.9% | ~14% | ok |
+| `a340600` → `a3501000` | 2.63 → 1.77 | 32.9% | ~20% | ok |
+| `b747400` → `b7478i` | 2.66 → 2.31 | 12.9% | ~13% | ok |
+| **`b777200er` → `b7778x`** | **1.94 → 1.93** | **0.3%** | ~10% | **shortfall** |
+| **`b777300er` → `b7779x`** | **1.73 → 1.71** | **1.4%** | ~10% | **shortfall** |
+
+The narrowbody half is guarded by `aircraft-consistency-test.mjs` and is in good shape. The widebody half has no equivalent test, and that is where both failures sit.
+
+## The 777X is the one place "newer is better" genuinely fails
+
+The 777X-8 and 777X-9 are essentially reskins of the 777s they replace — 0.3% and 1.4% per-seat gain against a real GE9X-plus-composite-wing programme claiming 10%+. Measured in money at full utilisation they are actually **worse** than the aircraft they replace before you even pay for them (−3.0% and −0.6% per seat-km ex-capital).
+
+This is a straightforward data fix: the `b7778x` and `b7779x` `fuelBurnPer100km` figures need to come down roughly 8–10% relative to the 777-200ER/-300ER.
+
+## But the deeper answer is about price, not performance
+
+Cost per seat-km at full utilisation, ex-capital versus all-in (including the weekly lease):
+
+| old → new | ex-capital | all-in |
+|---|---|---|
+| `a321ceo` → `a321neo` | 17.9% better | **13.9% better** |
+| `e195` → `e195e2` | 18.3% better | **14.2% better** |
+| `a320ceo` → `a320neo` | 12.7% better | **8.9% better** |
+| `b737800` → `b737max8` | 6.5% better | **3.5% better** |
+| `a330300` → `a330neo` | 12.7% better | **7.4% better** |
+| `b767300` → `b7878` | 10.6% better | **1.7% WORSE** |
+| `a330200` → `a330800` | 3.4% better | **2.1% WORSE** |
+| `a340300` → `a350900` | 8.6% better | **6.9% WORSE** |
+| `b777300er` → `b7779x` | 0.6% worse | **5.1% WORSE** |
+| `b777200er` → `b7778x` | 3.0% worse | **19.6% WORSE** |
+
+**Every narrowbody upgrade stays profitable after you pay for it (3.5–14.2% better). Five of the widebody upgrades go negative.**
+
+So newer widebodies genuinely *do* perform better — they just don't *pay* better, because the capital premium is larger than the efficiency gain it buys. A 787-8 burns 10.6% less per seat-km than a 767-300 and costs 4.4× the lease to hold.
+
+## This is the 767-300 complaint from the other end
+
+Addendum 1 found a 15.2× capital spread against a 2.5× operating spread across passenger widebodies. This is the same fact stated forwards: if capital cost rises 15× across a generation ladder while operating cost falls 2.5×, then at some point up the ladder the upgrade stops paying — and the table above shows exactly where it stops.
+
+Two defects, then, not one:
+
+1. **The 777X fuel figures are wrong** and should be fixed on their own merits.
+2. **The widebody capital band is too wide** for the operating gain it buys. Narrowbodies show what the right relationship looks like — compressing the widebody band toward the narrowbody ratio would make every rung of the ladder pay, which is what "newer should perform better" actually requires.
+
+Worth a test: *every replacement type must beat the type it replaces on all-in cost per seat-km, not just on fuel.* That is the invariant the question implies, and nothing currently checks it.
+
+---
+
+# Addendum 3 · Which of the "worse" pairs are actually defects
+
+**Correction to Addendum 2.** That table compared a *used* older type against a *new* replacement. In classic mode the catalogue price of a closed line is its second-hand 2026 value, while an open line's price is new metal — so the older aircraft in most of those pairs was being priced as a ten-year-old airframe. That is not a generational defect; it is the used market working.
+
+Re-running with both sides priced as factory-fresh (`ERA_NEW_BUILD_PREMIUM = 2.5` applied to closed lines, delivered age 0):
+
+| old → new | as catalogue stands | new vs new | |
+|---|---|---|---|
+| `b767300` → `b7878` | −1.7% | **+0.1%** | false alarm |
+| `a330200` → `a330800` | −2.1% | **+6.8%** | false alarm |
+| `b777300er` → `b7779x` | −5.1% | **+13.8%** | false alarm |
+| `a340300` → `a350900` | −6.9% | **−5.0%** | marginal |
+| `b777200er` → `b7778x` | −19.6% | **−12.1%** | **real** |
+| `b747400` → `b7478i` | +0.9% | **−20.1%** | **real** (and hidden before) |
+
+Note the 747 pair moves the *other* way — it looked fine only because the 747-400 was priced used. New against new, the 747-8I is the worst generational step in the game.
+
+## Fix these
+
+**1. The 777X fuel figures.** `b7778x` gains 0.3% per seat over the 777-200ER and `b7779x` gains 1.4% over the 777-300ER, against a real GE9X-and-new-wing programme claiming ~10%. This is a plain spec error and is worth correcting whatever you decide about pricing — it also removes most of the −12.1% on the 777X-8. Both figures want to come down roughly 8–10%.
+
+**2. Nine types are out of production but still arrive factory-fresh.** The suite's `no out-of-production passenger type is delivered factory-fresh` test filters to `t.eis <= 2004`, so anything newer slips past it:
+
+| type | line closed | arrives | weekly lease |
+|---|---|---|---|
+| `b777200lr` | 2013 (13y ago) | 0w | $207,000 |
+| `b7478i` | 2017 (9y ago) | 0w | $463,000 |
+| `an148` | 2018 | 0w | $32,000 |
+| `ma600` | 2019 | 0w | $31,000 |
+| `crj1000` | 2020 | 0w | $51,000 |
+| `a380` | 2021 (5y ago) | 0w | $740,000 |
+| `e190` | 2021 | 0w | $55,000 |
+| `e195` | 2021 | 0w | $60,000 |
+| `ssj100` | 2022 | 0w | $56,000 |
+
+(`concorde` is also on this list and is the documented exception.)
+
+This is the root of the 747-8I result: a type nine years out of production, paying new-metal lease, with no delivered age to offset it. Giving these their band would fix the 747-8I generational step without touching its price.
+
+**It also connects to the A380.** The A380 is the single biggest winner in the game — 17.8% of all decided missions — and it too arrives factory-fresh from a line that closed in 2021. Banding it is a more principled way to trim that dominance than reaching for its price.
+
+The fix is to drop the `eis <= 2004` filter from that test and let the band table cover every closed line.
+
+## Leave these alone
+
+- **`b767300` → `b7878`, `a330200` → `a330800`, `b777300er` → `b7779x`.** All positive new-vs-new. The gap you see in-game is a used airframe costing less to own than a new one, which is correct and is what makes a fleet decision interesting.
+- **`a340300` → `a350900` at −5%.** The A350 buys 15.7% better fuel and 1,500 km more range for a 5% all-in premium at full utilisation. That is a tradeoff, not a defect.
+
+## The general principle
+
+Not every "newer is worse all-in" result is a bug. A ten-year-old airframe *should* cost less per seat-km to own than a new one — that is the second-hand market, and flattening it would remove the reason to ever buy used. The test worth encoding is narrower than Addendum 2 implied:
+
+> *Priced as new metal against new metal, every replacement type must beat the type it replaces on all-in cost per seat-km.*
+
+That invariant catches the 777X-8 and the 747-8I and passes everything else.

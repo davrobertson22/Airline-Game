@@ -36,10 +36,18 @@ import { routeAncillaries, ancillaryQualityBonus } from '../data/ancillaries.js'
 import {
   isWifiEquipped, wifiCoverageFor, groupWifiCoverage, fleetWifiCoverage, fleetWifiWeeklyCost,
 } from '../data/wifi.js';
+import { programmeWeeklyCost } from '../data/fuelProgrammes.js';
+import { routeFuelStations, fuelByStationOf, sumFuelByStation, setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn } from '../data/fuelStations.js';
+import { totalFarmWeeklyCost, farmDiscountsOf } from '../data/fuelFarm.js';
+import { refineryWeeklyOpex } from '../data/refinery.js';
 import {
   isLoungeOpen, totalLoungeWeeklyOpex, routeLoungeAppeal, loungeContractFactor,
   loungeEndpointCoverage, loungeGuestEconomics,
 } from '../data/lounges.js';
+import {
+  hasOpenStation, airportDeparturesMap, groundHandlingFactorAt, totalStationWeeklyCost,
+} from '../data/groundStation.js';
+import { absoluteWeek } from './fuel.js';
 import {
   buildRouteMarket,
   computeMarketShare,
@@ -552,6 +560,28 @@ export function stateLoungeFields(state, origin, destination) {
     loungeCoverage:       loungeEndpointCoverage(lounges, origin, destination),
     loungeContractFactor: loungeContractFactor(lounges, origin, destination),
   };
+}
+
+/**
+ * The ground handling factor a route would get from the airline's self-handling
+ * stations, resolved from STATE — the same call the tick makes, so a preview
+ * (route planner, Finance fallback sim, pair-share projection) is costed the
+ * way the tick will cost it. Returns {} when no open station touches the pair,
+ * so spreading it into a route object changes nothing for a station-less
+ * airline. `extraRoutes` lets a projection count the route it is about to add
+ * against station capacity.
+ *
+ * Spread it into the route: `{ ...route, ...stateGroundHandlingFields(state, o, d) }`.
+ */
+export function stateGroundHandlingFields(state, origin, destination, extraRoutes = []) {
+  const stations = state?.groundStations ?? {};
+  if (!hasOpenStation(stations)) return {};
+  const routes = [...(state?.routes ?? []), ...(extraRoutes ?? [])];
+  const departures = airportDeparturesMap(routes, routeStops);
+  const absWeek = state?.absWeek ?? (state?.year != null && state?.week != null
+    ? absoluteWeek(state.year, state.week) : 0);
+  const f = groundHandlingFactorAt(HUB_TIERS, state?.hubs ?? {}, stations, [origin, destination], departures, absWeek);
+  return f != null ? { groundHandlingFactor: f } : {};
 }
 
 /**
@@ -1892,7 +1922,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   // Operating costs
   const flights     = route.weeklyFrequency * 2;
   const aircraftFuelMod = aircraft.fuelMod ?? 1.0;  // from engine/wingtip config at order time
-  const fuelCost    = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod);
+  // Where the fuel is bought (data/fuelStations.js): the two stations' basis,
+  // and tankering when the route asks for it and the tanks allow. Exactly 1
+  // with the stations knob off, so classic worlds are byte-identical.
+  const stationPlan = routeFuelStations(route, {
+    sectorKm: dist, rangeKm: effectiveRangeKm(aircraft, type), blockHours: blockTimeHours(dist, type),
+  });
+  const fuelCost    = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod * stationPlan.factor);
   const crewCost    = Math.round(dist * type.crewCostPerKm * flights);
   const qualityCost =
     (SEAT_QUALITY_COST_PER_ROUTE[config.seatQuality ?? 'standard'] ?? 0) +
@@ -1921,8 +1957,20 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
   const ancillaryCost    = ancillary.cost;
   totalRevenue += ancillaryRevenue;
 
-  // Ground handling — ramp, baggage, gate agents, pushback; per boarded passenger
-  const groundHandlingCost = Math.round(weeklyGroundHandlingCost(classSummary) * stationF);
+  // Ground handling — ramp, baggage, gate agents, pushback; per boarded passenger.
+  // A self-handling station at either end (attached by weeklyTick as
+  // `groundHandlingFactor`, the BEST of the hub station discount and the
+  // station's own — see data/groundStation.js) cuts this line and nothing else:
+  // catering keeps the plain hub factor. Absent → the hub factor, byte-identical
+  // to before stations existed.
+  const groundHandlingBase = weeklyGroundHandlingCost(classSummary);
+  const handlingF = route.groundHandlingFactor != null
+    ? Math.max(0, Math.min(stationF, route.groundHandlingFactor)) : stationF;
+  const groundHandlingCost = Math.round(groundHandlingBase * handlingF);
+  // What self-handling saved this week over the contract (or hub) rate —
+  // surfaced for the airport page and the Finance line. Zero without a station.
+  const groundStationSavings = handlingF < stationF
+    ? Math.round(groundHandlingBase * (stationF - handlingF)) : 0;
 
   // Crew layover — when one-way block time > 4 hours
   const blockTimeOneWay = blockTimeHours(dist, type);
@@ -1958,6 +2006,13 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // Consumed by the Alliances page (eligibility) and available to any UI.
     qualityScore,
     fuelCost,
+    // Station pricing (only while the knob is on, so classic results are unchanged).
+    ...(stationPlan.enabled ? {
+      fuelStationFactor: stationPlan.factor,
+      fuelStationBasis:  stationPlan.basis,
+      fuelByStation:     fuelByStationOf(stationPlan, fuelCost),
+      tankering:         stationPlan.tankering,
+    } : {}),
     crewCost,
     qualityCost,
     cateringCost,
@@ -1970,6 +2025,9 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     ancillaryQuality,
     ancillaryByItem: ancillary.byItem,
     groundHandlingCost,
+    // Only when a station actually saved something, so a station-less route
+    // result is byte-identical to before (golden parity in Headwinds).
+    ...(groundStationSavings > 0 ? { groundStationSavings } : {}),
     loungeCost,
     layoverCost,
     compensationCost,
@@ -2349,7 +2407,10 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
   // Each leg is flown f×2 sectors/week; total ground covered = Σ leg distances.
   const sectorFactor    = f * 2;
   const aircraftFuelMod = aircraft.fuelMod ?? 1.0;
-  const fuelCost = Math.round(totalDist * fuelCostPerKm(type) * sectorFactor * fuelMultiplier * aircraftFuelMod);
+  // Station basis averaged over the legs, by leg length; no tankering on a
+  // multi-stop route in v1 (data/fuelStations.js). 1 with the knob off.
+  const stationPlan = routeFuelStations({ ...route, stops }, { legKm: legDistKm });
+  const fuelCost = Math.round(totalDist * fuelCostPerKm(type) * sectorFactor * fuelMultiplier * aircraftFuelMod * stationPlan.factor);
   const crewCost = Math.round(totalDist * type.crewCostPerKm * sectorFactor);
   const qualityCost =
     (SEAT_QUALITY_COST_PER_ROUTE[config.seatQuality ?? 'standard'] ?? 0) +
@@ -2372,7 +2433,14 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
   const ancillaryCost    = ancillary.cost;
   totalRevenue += ancillaryRevenue;
 
-  const groundHandlingCost = Math.round(weeklyGroundHandlingCost(classSummary) * stationFT);
+  // Ground handling with the self-handling factor over every stop (see
+  // simulateRoute); absent → the hub factor, unchanged.
+  const groundHandlingBase = weeklyGroundHandlingCost(classSummary);
+  const handlingFT = route.groundHandlingFactor != null
+    ? Math.max(0, Math.min(stationFT, route.groundHandlingFactor)) : stationFT;
+  const groundHandlingCost = Math.round(groundHandlingBase * handlingFT);
+  const groundStationSavings = handlingFT < stationFT
+    ? Math.round(groundHandlingBase * (stationFT - handlingFT)) : 0;
   const loungeCost         = weeklyLoungeCost(classSummary, route.loungeContractFactor ?? 1);
   // Layover cost accrues per leg whose one-way block time clears the threshold.
   const layoverCostRaw = legDistKm.reduce(
@@ -2401,6 +2469,13 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
       ? Math.round(segData.reduce((s, d) => s + d.quality, 0) / segData.length)
       : null,
     fuelCost,
+    // Station pricing (only while the knob is on, so classic results are unchanged).
+    ...(stationPlan.enabled ? {
+      fuelStationFactor: stationPlan.factor,
+      fuelStationBasis:  stationPlan.basis,
+      fuelByStation:     fuelByStationOf(stationPlan, fuelCost),
+      tankering:         stationPlan.tankering,
+    } : {}),
     crewCost,
     qualityCost,
     cateringCost,
@@ -2410,6 +2485,7 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
     ancillaryCost,
     ancillaryByItem: ancillary.byItem,
     groundHandlingCost,
+    ...(groundStationSavings > 0 ? { groundStationSavings } : {}),
     loungeCost,
     layoverCost,
     compensationCost,
@@ -2561,7 +2637,10 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
   // ── Operating costs ──────────────────────────────────────────────────────────
   const flights         = route.weeklyFrequency * 2;
   const aircraftFuelMod = aircraft.fuelMod ?? 1.0;
-  const fuelCost  = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod);
+  const stationPlan = routeFuelStations(route, {
+    sectorKm: dist, rangeKm: effectiveRangeKm(aircraft, type), blockHours: blockTimeHours(dist, type),
+  });
+  const fuelCost  = Math.round(dist * fuelCostPerKm(type) * flights * fuelMultiplier * aircraftFuelMod * stationPlan.factor);
   const crewCost  = Math.round(dist * type.crewCostPerKm * flights);
   const groundHandlingCost = Math.round(tonnesOneWay * 2 * CARGO_HANDLING_PER_TONNE);
 
@@ -2572,6 +2651,13 @@ export function simulateCargoRoute(route, aircraft, gameDate = { month: 6 }, lab
     backhaulFactor: backhaul,
     revenue,
     fuelCost,
+    // Station pricing (only while the knob is on, so classic results are unchanged).
+    ...(stationPlan.enabled ? {
+      fuelStationFactor: stationPlan.factor,
+      fuelStationBasis:  stationPlan.basis,
+      fuelByStation:     fuelByStationOf(stationPlan, fuelCost),
+      tankering:         stationPlan.tankering,
+    } : {}),
     crewCost,
     groundHandlingCost,
     totalOpCost,
@@ -3442,8 +3528,18 @@ export function weeklyTick(state) {
     fleet, routes: rawRoutes = [], cargoRoutes = [], charters = [],
     gameDate = { month: 6 }, gates = {}, labor,
     maintenanceBudget = 1.0, fuelMultiplier = 1.0,
+    // Fuel-efficiency programme (data/fuelProgrammes.js), threaded by tickPrep:
+    // `fuelMultiplier` above already carries the burn modifier for the sims;
+    // these two are its side effects and its bookkeeping. Both exactly 1 when
+    // no programme is on.
+    fuelBurnMod = 1, fleetMaintMod = 1,
+    // Refinery (data/refinery.js), threaded by tickPrep: the share of this
+    // week's litres it covered and the index points it beat the market by.
+    // Both 0 without one, so the report keeps no refinery keys.
+    refineryShare = 0, refineryEdge = 0, crackIndex = null,
     mroBases = {}, absWeek = 0,
     lounges = {}, loungePolicy = null,
+    groundStations = {},
     marketingBudget = 0,
     targetedMarketing = {},
     campaignStrength = {},
@@ -3451,6 +3547,12 @@ export function weeklyTick(state) {
     awareness = 5,
     encroachments = {},
   } = state;
+
+  // Station fuel pricing (data/fuelStations.js): a module-level knob set from
+  // THIS state, so a projection built on a foreign state cannot inherit the
+  // last caller's setting. Off => every station factor is exactly 1.
+  setFuelStationsEnabled(fuelStationsOn(state));
+  setFuelStationDiscounts(fuelStationsOn(state) ? farmDiscountsOf(state, absWeek) : null);
 
   // Crew pipeline, severe band: tails with nobody to fly them. Transient for this
   // week only (see tickPrep) — an unstaffed aircraft earns nothing but still costs
@@ -3730,6 +3832,17 @@ export function weeklyTick(state) {
     return { station: +station.toFixed(4), layover, maint };
   };
 
+  // Self-handling ground stations (data/groundStation.js). One departures map
+  // for the whole tick — station coverage is a property of the airport's
+  // schedule, not of any one route — and the factor is only attached when an
+  // open station touches the route, so a station-less airline's route objects
+  // are byte-identical to before.
+  const anyStation = hasOpenStation(groundStations);
+  const stationDepartures = anyStation ? airportDeparturesMap(routes, routeStops) : null;
+  const handlingFactorFor = (codes) => anyStation
+    ? groundHandlingFactorAt(HUB_TIERS, hubs, groundStations, codes, stationDepartures, absWeek)
+    : null;
+
   // Pre-build set of route-keys where an alliance/codeshare partner also operates
   const partnerContestedKeys = new Set();
   for (const comp of competitors) {
@@ -3834,6 +3947,7 @@ export function weeklyTick(state) {
   let totalAncillaryRevenue = 0; // à la carte ancillary REVENUE (bags/seats/wifi/…)
   let totalAncillaryCost    = 0; // à la carte ancillary provisioning COST
   let totalGroundHandling = 0;
+  let totalGroundStationSavings = 0;   // what self-handling saved vs the contract rate
   let totalLounge         = 0;
   let totalLayover        = 0;
   let totalCompensation   = 0;
@@ -4239,6 +4353,7 @@ export function weeklyTick(state) {
         // not what sold them the ticket.
         ...loungeFieldsFor(route.origin, route.destination),
         ...(tagHcf ? { hubCostFactors: tagHcf } : {}),
+        ...(() => { const g = handlingFactorFor(stopsList); return g != null ? { groundHandlingFactor: g } : {}; })(),
       };
       const result = simulateTagRoute(tagRoute, aircraft, gameDate, labor, fuelMultiplier, avgUtilization, satisfaction, eventDemandMultFor, ancillaries, competitors,
         (segKey) => tagSegmentDemand.get(`${route.id}|${segKey}`) ?? null, rivalIndex);
@@ -4266,6 +4381,7 @@ export function weeklyTick(state) {
       totalAncillaryRevenue += ancillaryRev;
       totalAncillaryCost    += result.ancillaryCost    ?? 0;
       totalGroundHandling += result.groundHandlingCost ?? 0;
+      totalGroundStationSavings += result.groundStationSavings ?? 0;
       totalLounge         += result.loungeCost         ?? 0;
       totalLayover        += result.layoverCost        ?? 0;
       totalCompensation   += result.compensationCost   ?? 0;
@@ -4280,7 +4396,7 @@ export function weeklyTick(state) {
       const weeklyMaintCost = Math.round(
         (type?.baseMaintenancePerWk ?? 0)
         * maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft))
-        * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0)
+        * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0) * fleetMaintMod
         * (tagHcf?.maint ?? 1.0)
       );
       totalHubCostSavings += result.hubCostSavings ?? 0;
@@ -4338,6 +4454,7 @@ export function weeklyTick(state) {
       // ground-contract discount — the same three the previews attach via
       // stateLoungeFields.
       ...loungeFieldsFor(route.origin, route.destination),      ...(hcfRoute ? { hubCostFactors: hcfRoute } : {}),
+      ...(() => { const g = handlingFactorFor([route.origin, route.destination]); return g != null ? { groundHandlingFactor: g } : {}; })(),
     };
 
     const rkRoute = [route.origin, route.destination].sort().join('-');
@@ -4491,6 +4608,7 @@ export function weeklyTick(state) {
     totalAncillaryRevenue += ancillaryRev;
     totalAncillaryCost    += result.ancillaryCost     ?? 0;
     totalGroundHandling += result.groundHandlingCost  ?? 0;
+    totalGroundStationSavings += result.groundStationSavings ?? 0;
     totalLounge         += result.loungeCost          ?? 0;
     totalLayover        += result.layoverCost         ?? 0;
     totalCompensation   += result.compensationCost    ?? 0;
@@ -4512,7 +4630,7 @@ export function weeklyTick(state) {
       * maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft))
       * maintenanceBudget
       * maintenanceCostMultiplier
-      * (aircraft.maintMod ?? 1.0)
+      * (aircraft.maintMod ?? 1.0) * fleetMaintMod
       * (hcfRoute?.maint ?? 1.0)
     );
 
@@ -4602,7 +4720,7 @@ export function weeklyTick(state) {
       * maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft))
       * maintenanceBudget
       * maintenanceCostMultiplier
-      * (aircraft.maintMod ?? 1.0)
+      * (aircraft.maintMod ?? 1.0) * fleetMaintMod
     );
 
     cargoRouteResults.push({
@@ -4695,7 +4813,7 @@ export function weeklyTick(state) {
     const mroF              = mroFactorsByAircraft[aircraft.id] ?? null;
     const facilityFactor    = Math.min(aircraftMaintFactor[aircraft.id] ?? 1.0, mroF?.lineFactor ?? 1.0);
     const baseMaint         = Math.round(
-      type.baseMaintenancePerWk * maintMult * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0)
+      type.baseMaintenancePerWk * maintMult * maintenanceBudget * maintenanceCostMultiplier * (aircraft.maintMod ?? 1.0) * fleetMaintMod
       * facilityFactor
     );
     // Reserve standby costs (design doc §4.4): a stationed reserve pays a
@@ -4778,6 +4896,19 @@ export function weeklyTick(state) {
   //     exactly why over-fitting a fleet quietly costs money. The traffic-driven
   //     part of the bill is separate and already inside totalAncillaryCost.
   const totalWifiCosts = fleetWifiWeeklyCost(fleet);
+  // Fuel-efficiency programme opex (licences, engine washes) — a fleet-wide
+  // overhead like Wi-Fi, charged every week the programmes are on.
+  const totalFuelProgrammeCosts = programmeWeeklyCost(state, fleet);
+  // Fuel farms and consortium stakes (data/fuelFarm.js): weekly opex on the
+  // capex. `farmFeeIncome` is the throughput rivals paid at farms the airline
+  // owns; solo Tailwinds has no rival uplift, so it stays 0 and the report
+  // keeps no key. Both 0 in a save with no farms.
+  const totalFuelFarmCosts = totalFarmWeeklyCost(state.fuelFarms);
+  // A refinery costs its opex every week from the day it is ordered — through
+  // the build, through an outage, and through every week the crack spread is
+  // against you. That is the deal.
+  const totalRefineryCosts = refineryWeeklyOpex(state);
+  const totalFarmFeeIncome = Math.max(0, Math.round(Number(state.farmFeeIncome) || 0));
 
   // 5d. Lounges — the room's own running cost, plus what the free-access
   //     policies cost net of what alliance partners settle for their members.
@@ -4805,6 +4936,12 @@ export function weeklyTick(state) {
   // bridge means; presenting it as either puts a phantom row on the Finance page
   // and breaks the bridge's residual check.
   const totalLoungeCosts = totalLoungeOpex + loungeGuests.netCost;
+
+  // 5e. Ground handling stations — payroll and GSE for every OPEN station,
+  //     whatever it handled. The saving it earned is already inside
+  //     totalGroundHandling (the route line was charged at the discounted rate);
+  //     totalGroundStationSavings is the same number surfaced for display.
+  const totalGroundStationCosts = totalStationWeeklyCost(groundStations);
 
   // 6. Hub investment costs — higher tiers require ongoing weekly spend
   let totalHubInvestment = 0;
@@ -4882,8 +5019,10 @@ export function weeklyTick(state) {
   const totalCost   = totalLeases + totalMaintenance + totalOpCost + totalGateFees
     + totalLaborCosts + totalFamilyBaseCosts + totalMroBaseCosts + totalHubInvestment
     + totalHQCost + totalInsurance + totalMarketingSpend + totalLoyaltyCost + totalPartnerFees
-    + totalDistributionCost + totalReserveParking + totalWifiCosts + totalLoungeCosts;
-  const cashDelta   = totalRevenue + totalPartnerRevenue - totalCost;
+    + totalDistributionCost + totalReserveParking + totalWifiCosts + totalLoungeCosts
+    + totalGroundStationCosts
+    + totalFuelProgrammeCosts + totalFuelFarmCosts + totalRefineryCosts;
+  const cashDelta   = totalRevenue + totalPartnerRevenue + totalFarmFeeIncome - totalCost;
 
   // ── Pooling invariant self-check (diagnostic only — changes no economics) ───
   // Aircraft sharing one O&D pair pool their demand in the pre-pass above and
@@ -4938,7 +5077,7 @@ export function weeklyTick(state) {
     ...(crewGroundedSet.size ? { crewGrounded: [...crewGroundedSet] } : {}),
     poolingAnomalies,
     cashDelta:              Math.round(cashDelta),
-    totalRevenue:           Math.round(totalRevenue + totalPartnerRevenue),
+    totalRevenue:           Math.round(totalRevenue + totalPartnerRevenue + totalFarmFeeIncome),
     totalConnecting:        Math.round(totalConnecting),
     totalLeases:            Math.round(totalLeases),
     totalMaintenance:       Math.round(totalMaintenance),
@@ -4964,8 +5103,36 @@ export function weeklyTick(state) {
     // Connectivity & lounges. Always present (0 when unused) so the Finance page
     // and the P&L bridge can name them unconditionally.
     totalWifiCosts:         Math.round(totalWifiCosts),
+    // Fuel-efficiency programme, farms and refinery: present only while
+    // something is on, so a save that never touched any of it keeps a
+    // byte-identical report. Readers use `?? 0` / `?? 1`.
+    ...(totalFuelProgrammeCosts > 0 ? { totalFuelProgrammeCosts: Math.round(totalFuelProgrammeCosts) } : {}),
+    ...(totalFuelFarmCosts > 0 ? { totalFuelFarmCosts: Math.round(totalFuelFarmCosts) } : {}),
+    ...(totalRefineryCosts > 0 ? { totalRefineryCosts: Math.round(totalRefineryCosts) } : {}),
+    ...(refineryShare > 0 ? {
+      refineryShare, refineryEdge,
+      ...(crackIndex != null ? { crackIndex } : {}),
+      // What the refinery made (+) or lost (−) this week on the litres it
+      // covered, against buying them on the jet market.
+      refinerySavings: Math.round((totalFuel / (fuelMultiplier || 1)) * refineryShare * refineryEdge),
+    } : {}),
+    ...(totalFarmFeeIncome > 0 ? { totalFarmFeeIncome } : {}),
+    ...(fuelBurnMod !== 1 ? {
+      fuelBurnMod,
+      // What the programmes saved this week: fuel at burn 1.0 minus fuel paid.
+      fuelProgrammeSavings: Math.round(totalFuel / fuelBurnMod - totalFuel),
+    } : {}),
     totalLoungeCosts:       Math.round(totalLoungeCosts),
     totalLoungeOpex:        Math.round(totalLoungeOpex),
+    // Ground handling stations. Spread ONLY when the airline runs one: an
+    // always-present key would change the serialized state of every
+    // station-less world, which in Headwinds costs the golden master a
+    // re-baseline for a change that alters no behaviour. Every reader takes
+    // `?? 0`, so absent and zero mean the same thing downstream.
+    ...(anyStation
+      ? { totalGroundStationCosts:   Math.round(totalGroundStationCosts),
+          totalGroundStationSavings: Math.round(totalGroundStationSavings) }
+      : {}),
     loungeGuests:           loungeGuests,
     wifiEquippedCount:      fleet.filter(a => isWifiEquipped(a) && a.status !== 'retired').length,
     wifiFleetCoverage:      fleetWifiCoverage(fleet, a => getAircraftType(a.typeId)?.seats ?? 0),
@@ -5030,6 +5197,10 @@ export function weeklyTick(state) {
     totalCost:              Math.round(totalCost),
     routeResults,
     fleetCosts,
+    // Fuel bought by station, $ this week, across passenger, tag and cargo
+    // routes — only while station pricing is on. The Stations table and the
+    // farms read it.
+    ...((() => { const m = sumFuelByStation([...routeResults, ...cargoRouteResults]); return m ? { fuelByStation: m } : {}; })()),
     // Cargo
     cargoRouteResults,
     totalCargoRevenue:      Math.round(totalCargoRevenue),

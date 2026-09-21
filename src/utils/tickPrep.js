@@ -46,17 +46,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  weekToGameDate, applyReserveCovers, isRouteActive, routeDistanceKm,
+  weekToGameDate, applyReserveCovers, isRouteActive, routeDistanceKm, routeStops,
 } from './simulation.js';
 import { completeCheck } from '../data/maintenance.js';
 import { crewShortfall, unstaffedCrewScale, unstaffedAircraftIds } from '../data/labor.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { rollEvents, tickEvents } from '../data/events.js';
-import { ERA_FUEL_MIN_INDEX } from '../data/era.js';
 import { tickBaseConstruction } from '../data/mroBase.js';
 import { tickLoungeConstruction } from '../data/lounges.js';
+import {
+  tickStationConstruction, hasOpenStation, airportDeparturesMap, stationOtpBonus,
+} from '../data/groundStation.js';
 import { routeLaunchCost } from '../data/overhead.js';
-import { clampFuelIndex, effectiveFuelMultiplier, absoluteWeek } from './fuel.js';
+import { absoluteWeek } from './fuel.js';
+import { resolveFuelForWeek } from './fuelOps.js';
+import { programmeMaintMod, programmeOtpDelta } from '../data/fuelProgrammes.js';
 
 /**
  * Run every deterministic pre-tick transform ADVANCE_WEEK applies before it
@@ -70,6 +74,9 @@ import { clampFuelIndex, effectiveFuelMultiplier, absoluteWeek } from './fuel.js
  *   event set for this week (action.worldEvents). Ignored outside multiplayer.
  * @param {number|null}   [opts.worldFuelIndex]  multiplayer: the world's shared
  *   fuel index for this week (action.worldFuelIndex). Ignored outside multiplayer.
+ * @param {number|null}   [opts.worldCrackIndex] multiplayer: the world's shared
+ *   jet-over-crude crack index (action.worldCrackIndex), read only by refinery
+ *   owners. Ignored outside multiplayer.
  * @param {boolean} [opts.rollNewEvents=true]  roll NEW events. The reducer does;
  *   a projection must not — a forecast has to be reproducible, and nobody can
  *   predict a die that has not been thrown. This is the ONLY random draw in this
@@ -82,6 +89,7 @@ import { clampFuelIndex, effectiveFuelMultiplier, absoluteWeek } from './fuel.js
 export function prepareWeek(state, {
   worldEvents = null,
   worldFuelIndex = null,
+  worldCrackIndex = null,
   rollNewEvents = true,
 } = {}) {
   const isMultiplayer = state?.multiplayer === true;
@@ -120,26 +128,32 @@ export function prepareWeek(state, {
     if (fx.otpDelta) eventOtpDelta += fx.otpDelta;
   }
   eventOtpDelta = Math.min(0.25, eventOtpDelta);
+  // The fuel-efficiency programme (data/fuelProgrammes.js) gives up
+  // punctuality for burn. It rides the same transient channel as event
+  // disruption, so nothing on state.labor moves and a switched-off programme
+  // leaves the week exactly as it was.
+  eventOtpDelta += programmeOtpDelta(state);
 
   // ── Fuel price + hedging ───────────────────────────────────────────────────
   // The shock belongs IN the index: a spike and a high index are the same
   // commodity move, so hedges must cover it. Multiplying it on after the hedge
   // blend makes being 100% hedged through a spike do nothing — the one moment
   // hedging exists for.
-  const injectedFuel = (isMultiplayer
-    && typeof worldFuelIndex === 'number' && Number.isFinite(worldFuelIndex))
-    ? worldFuelIndex : null;
-  const baseFuelIndex    = injectedFuel ?? state.fuelPrice?.index ?? 1.0;
-  const currentFuelIndex = fuelMult === 1 ? baseFuelIndex : clampFuelIndex(baseFuelIndex * fuelMult, state.startYear != null ? ERA_FUEL_MIN_INDEX : undefined);
-
-  const curAbsWeek   = absoluteWeek(state.year, state.week);
-  const allHedges    = state.hedgeContracts ?? [];
-  const activeHedges = allHedges.filter(h => h.expiryAbsWeek > curAbsWeek);
-  const liveHedges   = activeHedges;
-  const fuelMultiplier = state.fuelPrice
-    ? effectiveFuelMultiplier(currentFuelIndex, activeHedges)
-    // Pre-fuelPrice saves carry a bare multiplier and no index to shock.
-    : (state.fuelMultiplier ?? 1.0) * fuelMult;
+  //
+  // PRICE (fuelMultiplier, hedges blended) and BURN (fuelBurnMod, the
+  // efficiency programme) are resolved together in utils/fuelOps.js and kept
+  // apart: the sims receive their product (fuelSimMultiplier); the reducer,
+  // the report, history and every hedge calculation keep the price alone, so
+  // the base bill fuelImpact.js reconstructs is "this flying, with these
+  // programmes, at 1.0x" and hedge savings stay exact. Previews that do not
+  // run this prep derive the same product with fuelSimMultiplierOf.
+  const {
+    injectedFuel, baseFuelIndex, currentFuelIndex, curAbsWeek, activeHedges,
+    fuelMultiplier, hedgedMarketMultiplier, crackIndex, refinery, hedgeableShare,
+    fuelBurnMod, fuelSimMultiplier,
+  } = resolveFuelForWeek(state, { fuelMult, worldFuelIndex, worldCrackIndex });
+  const liveHedges    = activeHedges;
+  const fleetMaintMod = programmeMaintMod(state);
 
   const fuelPriceHistory = [...(state.fuelPrice?.history ?? []), currentFuelIndex].slice(-52);
 
@@ -225,6 +239,18 @@ export function prepareWeek(state, {
   const tickedBases  = baseBuild.bases;
   const loungeBuild  = tickLoungeConstruction(state.lounges ?? {}, curAbsWeek);
   const tickedLounges = loungeBuild.lounges;
+  // Ground handling stations follow the same rule as the hangar and the lounge:
+  // one that finishes this week self-handles this week.
+  const stationBuild   = tickStationConstruction(state.groundStations ?? {}, curAbsWeek);
+  const tickedStations = stationBuild.stations;
+  // Self-handling on-time bonus: share of this week's SCHEDULED departures a
+  // station covers, efficiency-weighted. Read off the season-adjusted routes so
+  // a dormant seasonal route neither fills a station nor dilutes the share.
+  // Zero — and no field attached — unless a station is actually open, so a
+  // station-less airline's labor object is byte-identical to before.
+  const stationOtp = hasOpenStation(tickedStations)
+    ? stationOtpBonus(tickedStations, airportDeparturesMap(seasonAdjustedRoutes, routeStops), curAbsWeek)
+    : 0;
 
   // Crew pipeline (A7): how far short of the crew this fleet needs the airline
   // is, this week. Travels down the SAME transient channel as eventOtpDelta —
@@ -245,11 +271,12 @@ export function prepareWeek(state, {
 
   // Disruption reaches the schedule through a transient field on the labor
   // object the tick hands down (see laborEffects). state.labor is untouched.
-  const laborThisWeek = (eventOtpDelta > 0 || crewShort)
+  const laborThisWeek = (eventOtpDelta > 0 || crewShort || stationOtp > 0)
     ? {
         ...(state.labor ?? {}),
         ...(eventOtpDelta > 0 ? { eventOtpDelta } : {}),
         ...(crewShort ? { crewShortfall: crewShort } : {}),
+        ...(stationOtp > 0 ? { stationOtpBonus: stationOtp } : {}),
       }
     : state.labor;
 
@@ -257,10 +284,13 @@ export function prepareWeek(state, {
     gameMonth, gameDate, curAbsWeek,
     survivingEvents, expiredEvents, newEvents, allEvents, eventOtpDelta,
     baseFuelIndex, currentFuelIndex, fuelMultiplier, fuelPriceHistory, injectedFuel,
+    fuelBurnMod, fuelSimMultiplier, fleetMaintMod,
+    hedgedMarketMultiplier, crackIndex, refinery, hedgeableShare,
     activeHedges, liveHedges,
     completedChecks, tickedFleetPre, coverPass,
     seasonalReactivationCost, seasonalReactivations, seasonAdjustedRoutes,
-    baseBuild, tickedBases, loungeBuild, tickedLounges,
+    baseBuild, tickedBases, loungeBuild, tickedLounges, stationBuild, tickedStations,
+    stationOtpBonus: stationOtp,
     laborThisWeek,
     crewShortfall: crewShort, crewUnstaffed, crewGroundedIds,
     // The exact object weeklyTick should be run over. The reducer overrides
@@ -274,13 +304,23 @@ export function prepareWeek(state, {
       routes:       seasonAdjustedRoutes,
       cargoRoutes:  coverPass.cargoRoutes,
       charters:     coverPass.charters,
-      fuelMultiplier,
+      // What the route sims multiply fuelCostPerKm by: price x burn. The
+      // price-only figure is `fuelMultiplier` on the prep result, not here.
+      fuelMultiplier: fuelSimMultiplier,
+      fuelBurnMod,
+      fleetMaintMod,
+      // Refinery bookkeeping for the report (data/refinery.js). Both 0 for an
+      // airline without one, so the report keeps no refinery keys.
+      refineryShare: refinery.share,
+      refineryEdge:  refinery.share > 0 ? refinery.edge : 0,
+      crackIndex,
       loyalty:      state.loyalty,
       gameDate,
       activeEvents: allEvents,
       mroBases:     tickedBases,
       lounges:      tickedLounges,
       loungePolicy: state.loungePolicy ?? null,
+      groundStations: tickedStations,
       absWeek:      curAbsWeek,
     },
   };

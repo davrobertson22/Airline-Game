@@ -52,6 +52,8 @@ import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { memberPairKeysOf } from '../utils/market.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
+import { fuelStationsOn } from '../data/fuelStations.js';
 import {
   configBodies,
   defaultConfig,
@@ -63,6 +65,7 @@ import {
   stateSensReduction,
   stateBrandReach,
   stateLoungeFields,
+  stateGroundHandlingFields,
   simulateRoute,
   fleetAvgUtilization,
   routeLandingFee,
@@ -716,7 +719,14 @@ export function projectRouteAddition(state, spec) {
     // TW: weeklyTick reads state.fuelMultiplier (tickPrep computes it and hands
     // it in as part of tickInput; a saved state does not carry it, so this is
     // 1.0 on a real save — exactly what the two call sites passed by hand).
-    fuelMultiplier = state.fuelMultiplier ?? 1.0,
+    // What the sims will actually multiply fuel by this week: the market
+    // index with the live event shock, blended with the hedges, times the
+    // efficiency programme's burn modifier (utils/fuelOps.js — the tick's own
+    // derivation). This used to read `state.fuelMultiplier ?? 1.0`, and
+    // `state.fuelMultiplier` is never written, so the Route Planner, the
+    // route finder and the aircraft recommender all forecast at par no
+    // matter what fuel was doing.
+    fuelMultiplier = fuelSimMultiplierOf(state),
     // TW: Tailwinds has no state.worldDemandMult. The tick's demand multiplier
     // for an O&D is buildEventDemandModel(state.activeEvents).multFor, and it
     // goes to BOTH buildRouteMarket and simulateRoute — so it does here. Resolved
@@ -747,6 +757,11 @@ export function projectRouteAddition(state, spec) {
     cateringLevel: cateringLevel ?? (state.routeCatering ?? {})[key],
     season,
     hub: state.hub,
+    // What ADD_ROUTE will write: a new route tankers on 'auto' in a station-
+    // pricing world (data/fuelStations.js), so the preview must too — or a
+    // repricing preview of an existing route keeps that route's own setting.
+    ...(spec.tankering != null ? { tankering: spec.tankering }
+      : fuelStationsOn(state) ? { tankering: 'auto' } : {}),
   };
 
   // Your OTHER routes on this pair. A route being edited is replaced, not joined —
@@ -845,6 +860,9 @@ export function projectRouteAddition(state, spec) {
       // on a route the tick discounts — wrong in both directions at once.
       ...stateLoungeFields(state, origin, destination),
       ...(hcf ? { hubCostFactors: hcf } : {}),
+      // Self-handling factor, with the route being launched counted against the
+      // station's capacity — the tick will see it in the schedule next week.
+      ...stateGroundHandlingFields(state, origin, destination, [previewRoute]),
     };
     const result = simulateRoute(
       route, aircraft, gameDate,

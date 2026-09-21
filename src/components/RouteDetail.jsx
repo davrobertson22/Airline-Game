@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
+import FuelBasisChip from './FuelBasisChip.jsx';
+import { fuelStationsOn } from '../data/fuelStations.js';
+import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { canFitWifiTo } from '../data/wifi.js';
 import {
@@ -16,7 +19,7 @@ import {
   hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
-  stateLoungeFields, stateSensReduction, CLASS_FARE_MULTIPLIERS,
+  stateLoungeFields, stateGroundHandlingFields, stateSensReduction, CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -437,8 +440,10 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
       // same labor / utilization / satisfaction inputs the engine uses.
       const result = simulateRoute(
-        { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
-        aircraft, gameDate, state.labor ?? null, 1.0,
+        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+        // The live fuel multiplier (price × burn), never a bare 1.0: the
+        // fallback preview must agree with the tick like every other one.
+        aircraft, gameDate, state.labor ?? null, fuelSimMultiplierOf(state),
         demandAllocations.get(aircraft.id) ?? null, rivalSpecsFor(state, route.origin, route.destination),
         fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
         state.satisfaction ?? null, eventDemand.multFor(origin, dest),
@@ -549,8 +554,10 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 22, letterSpacing: -0.5 }}>
             <AirportLink code={origin} style={{ fontSize: 22, fontWeight: 700 }} />
+            {' '}<FuelBasisChip code={origin} />
             {' → '}
             <AirportLink code={dest} style={{ fontSize: 22, fontWeight: 700 }} />
+            {' '}<FuelBasisChip code={dest} />
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
             {originAirport?.city} → {destAirport?.city} · {dist.toLocaleString()} km
@@ -683,6 +690,19 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
             <Stat label="Avg Load"     value={formatPercent(avgLoad)} color={avgLoad >= 0.75 ? 'var(--green)' : avgLoad >= 0.45 ? 'var(--yellow)' : 'var(--red)'} />
             <Stat label="Revenue/wk"   value={formatMoney(totalRev)} color="var(--green)" />
             <Stat label="Op Cost/wk"   value={formatMoney(totalOpCost)} color="var(--red)" />
+            {fuelStationsOn(state) && (() => {
+              // Station pricing: the pair's fuel bill, its basis, and the
+              // tankering verdict (FUEL_OPERATIONS_PLAN.md §7.3).
+              const fuel = playerSims.reduce((t, { result }) => t + (result.fuelCost ?? 0), 0);
+              const first = playerSims[0]?.result;
+              const tk = first?.tankering;
+              const sub = tk
+                ? (tk.saved > 0
+                    ? `tankering from ${tk.from}: −${formatMoney(Math.round((fuel / (first.fuelStationFactor || 1)) * tk.saved))}/wk`
+                    : `no tankering: ${tk.reason}`)
+                : `basis ${(first?.fuelStationBasis ?? 1).toFixed(2)}× · tankering off`;
+              return <Stat label="Fuel/wk" value={formatMoney(fuel)} color="var(--red)" sub={sub} />;
+            })()}
             <Stat label="Op Profit/wk" value={(totalRev - totalOpCost >= 0 ? '+' : '') + formatMoney(totalRev - totalOpCost)} color={totalRev - totalOpCost >= 0 ? 'var(--green)' : 'var(--red)'}
               sub="variable costs only" />
             <Stat
@@ -745,6 +765,29 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
               label={catLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
             />
           </div>
+          {/* Tankering (FUEL_OPERATIONS_PLAN.md §7.2): auto lets the engine
+              carry return fuel out of the cheap end whenever it pays; the
+              verdict is re-made every tick and shown on the Fuel/wk stat. */}
+          {fuelStationsOn(state) && (() => {
+            const modes = [...new Set(playerRoutes.map(r => r.tankering === 'auto' ? 'auto' : 'off'))];
+            const mode = modes.length === 1 ? modes[0] : 'mixed';
+            const set = (m) => playerRoutes.forEach(r => dispatch({ type: 'SET_ROUTE_TANKERING', routeId: r.id, mode: m }));
+            return (
+              <div data-testid="tankering-control" style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Tankering</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, minWidth: 200 }}>
+                  Carry the return fuel out of the cheaper end when the spread beats the cost of hauling it and the tanks allow. Decided every week; nothing to lose by leaving it on.
+                </span>
+                <div style={{ display: 'inline-flex', gap: 4 }}>
+                  {['auto', 'off'].map(m => (
+                    <button key={m} className={`btn ${mode === m ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11, padding: '3px 10px' }}
+                            onClick={() => set(m)}>{m === 'auto' ? 'Auto' : 'Off'}</button>
+                  ))}
+                </div>
+                {mode === 'mixed' && <span style={{ fontSize: 10, color: 'var(--yellow)' }}>mixed across aircraft</span>}
+              </div>
+            );
+          })()}
           {/* Quality score breakdown — engine-accurate per-source points */}
           {(() => {
             const r0 = playerRoutes[0];

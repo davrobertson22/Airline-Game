@@ -88,8 +88,9 @@ export function costBridge(proj, state = {}) {
   }
 
   const partnerRev   = n(r.totalPartnerRevenue);
+  const farmFees     = n(r.totalFarmFeeIncome);    // throughput fees at farms you own (0 in solo)
   const revenue      = n(r.totalRevenue);          // all-in, the margin denominator
-  const routeRevenue = revenue - partnerRev;       // what the flying itself earned
+  const routeRevenue = revenue - partnerRev - farmFees;   // what the flying itself earned
   const directCost   = n(r.totalOpCost);           // fuel, crew, service, landing fees
   const contribution = routeRevenue - directCost;
   const routeOperating = contribution - Math.round(ownFlying);
@@ -99,11 +100,15 @@ export function costBridge(proj, state = {}) {
   // Facilities and fleet-wide equipment the airline runs whether or not any
   // particular route operates: head office, insurance, the outsourced family
   // maintenance contract, jet bases, onboard connectivity (one charge per
-  // equipped tail) and the lounge network (rent, staff and free-access guests,
-  // net of what alliance partners settle).
+  // equipped tail), the lounge network (rent, staff and free-access guests,
+  // net of what alliance partners settle) and the ground handling stations
+  // (payroll and GSE; what they SAVE is already inside the route handling line).
   const overhead     = n(r.totalHQCost) + n(r.totalInsurance)
                      + n(r.totalFamilyBaseCosts) + n(r.totalMroBaseCosts)
-                     + n(r.totalWifiCosts) + n(r.totalLoungeCosts);
+                     + n(r.totalWifiCosts) + n(r.totalLoungeCosts)
+                     + n(r.totalGroundStationCosts)
+                     + n(r.totalFuelProgrammeCosts) + n(r.totalFuelFarmCosts)
+                     + n(r.totalRefineryCosts);
   const brand        = n(r.totalMarketingSpend) + n(r.totalLoyaltyCost) + n(r.totalHubInvestment);
   const distribution = n(r.totalDistributionCost) + n(r.totalPartnerFees);
   // A strike forfeits revenue but SAVES the variable cost of the flights it
@@ -115,7 +120,7 @@ export function costBridge(proj, state = {}) {
   // Anything totalCost carries that the buckets above don't name. Should be 0.
   const residual = ebitda - (
     routeOperating - Math.round(ownParked) - gates - labour - overhead
-    - brand - distribution + partnerRev - strike
+    - brand - distribution + partnerRev + farmFees - strike
   );
 
   const loans   = n(proj?.loanPayments);
@@ -164,6 +169,8 @@ export function costBridge(proj, state = {}) {
     'GDS, OTA and card fees at 2.5% of all revenue, plus alliance and codeshare membership fees.');
   if (partnerRev) push('partnerRev', 'Partner & codeshare revenue', partnerRev, 'income',
     'Your mileage-prorated share of itineraries flown partly on a partner’s metal.');
+  if (farmFees) push('farmFees', 'Fuel farm throughput fees', farmFees, 'income',
+    'What other airlines paid to fuel at farms you own.');
   if (strike) push('strike', 'Strike revenue loss', -strike, 'cost',
     'Revenue forfeited on flights cancelled by industrial action.');
   if (residual) push('residual', 'Other', residual, 'cost',

@@ -11,7 +11,7 @@ import {
   routeLandingFee, routeStops, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
   cargoSlotsUsedAt, fleetAvgUtilization, rivalSpecsFor,
   routesCommittedTo, committedPeakBlockHours, blockHourFit,
-  stateLoungeFields,
+  stateLoungeFields, stateGroundHandlingFields,
 } from '../utils/simulation.js';
 import { ModeToggle } from './CargoRoutePlanner.jsx';
 import AddGateButton from './AddGateButton.jsx';
@@ -144,7 +144,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
     // reflects the schedule pressure this flight would add.
     const avgUtil = fleetAvgUtilization(fleet, [...routes, ...cargoRoutes, { ...route, aircraftId: aircraft.id }]);
     return simulateTagRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
       aircraft, gd, state.labor ?? null, 1.0, avgUtil, state.satisfaction ?? null,
       null, state.ancillaries ?? null, state.competitors ?? [], null, rivalIndexFor(state));
   }, [route, aircraft, inRange, gd.month, state.labor]); // eslint-disable-line

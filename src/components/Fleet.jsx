@@ -12,7 +12,7 @@ import {
   MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
-  stateLoungeFields, coverOutlookByAircraft,
+  stateLoungeFields, stateGroundHandlingFields, coverOutlookByAircraft,
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
@@ -27,6 +27,8 @@ import { useConfirm } from './ConfirmModal.jsx';
 import FleetConfig from './FleetConfig.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { canRetrofitWifi, isWifiEquipped, WIFI_WEEKLY_OPEX, canFitWifiTo, wifiAirframeReason } from '../data/wifi.js';
+import { canRetrofitWingtips, wingtipDefFor, hasWingtips as tailHasWingtips, wingtipRetrofitCost } from '../data/retrofits.js';
+import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
 import { rivalIndexFor } from '../models/network.js';
 
 const CAT_COLORS = {
@@ -464,6 +466,57 @@ function WifiBadge({ aircraft }) {
   );
 }
 
+/**
+ * Wingtip devices on one tail: a badge when fitted, a retrofit button when the
+ * type has an option (FUEL_OPERATIONS_PLAN.md §6.2), nothing when it doesn't.
+ * Quoted through the engine's canRetrofitWingtips — the number the reducer
+ * charges — same rule as WifiBadge.
+ */
+function WingtipBadge({ aircraft }) {
+  const { state, dispatch } = useGame();
+  const confirm = useConfirm();
+  const def = wingtipDefFor(aircraft);
+  if (!def) return null;
+  if (tailHasWingtips(aircraft)) {
+    return (
+      <span className="badge" style={{ background: 'rgba(56,211,159,.10)', color: 'var(--green)', border: '1px solid rgba(56,211,159,.35)' }}
+            title={`${def.label} fitted — burn ${Math.round((1 - (def.fuelMod ?? 1)) * 1000) / 10}% lower, range ${Math.round(((def.rangeMod ?? 1) - 1) * 100)}% longer.`}>
+        <Glyph e="🪶" /> {def.label}
+      </span>
+    );
+  }
+  if (aircraft.status === 'retired') return null;
+  const quote = canRetrofitWingtips([aircraft], state.cash);
+  const cost  = wingtipRetrofitCost(aircraft);
+  return (
+    <button
+      className="btn"
+      style={{
+        fontSize: 11, padding: '2px 9px', background: 'var(--surface3)',
+        color: quote.ok ? 'var(--text-muted)' : 'var(--text-dim)',
+        border: '1px solid var(--border)', cursor: quote.ok ? 'pointer' : 'not-allowed',
+      }}
+      disabled={!quote.ok}
+      title={quote.ok
+        ? `Fit ${def.label}: burn ${Math.round((1 - (def.fuelMod ?? 1)) * 1000) / 10}% lower on this tail for ${formatMoney(cost)}.`
+        : quote.reasons[0]}
+      onClick={async () => {
+        if (!quote.ok) return;
+        if (await confirm({
+          title: `Fit ${def.label} to ${aircraft.name}?`,
+          body: `${formatMoney(cost)} now (the retrofit price — line-fit at order time is cheaper).\n\n`
+              + `Burn on this tail falls ${Math.round((1 - (def.fuelMod ?? 1)) * 1000) / 10}% from next week and range extends ${Math.round(((def.rangeMod ?? 1) - 1) * 100)}%. No running cost.`,
+          confirmLabel: `Fit for ${formatMoney(cost)}`,
+        })) {
+          dispatch({ type: 'RETROFIT_WINGTIPS', aircraftIds: [aircraft.id] });
+        }
+      }}
+    >
+      <Glyph e="🪶" /> Fit {def.label} · {formatMoney(cost)}
+    </button>
+  );
+}
+
 export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const { state, dispatch } = useGame();
   const confirm = useConfirm();
@@ -562,9 +615,10 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   // Passing the raw spot index ignored the player's hedges and overstated fuel
   // cost (and understated profit) by up to ~17% on the page where they inspect
   // an aircraft right after paying to hedge.
-  const nowAbsWeek     = absoluteWeek(state.year, state.week);
-  const activeHedges   = (state.hedgeContracts ?? []).filter(h => h.expiryAbsWeek > nowAbsWeek);
-  const fuelMult       = effectiveFuelMultiplier(state.fuelPrice?.index ?? 1.0, activeHedges);
+  // Derived by the tick's own resolveFuelForWeek (utils/fuelOps.js), so it
+  // also carries this week's event shock and the efficiency programme's burn
+  // — the hedge blend alone was still a preview that disagreed with the tick.
+  const fuelMult       = fuelSimMultiplierOf(state);
   // A freighter's routes live in state.cargoRoutes, never state.routes, so
   // filtering the passenger table alone told a 767F flying ten freight lanes it
   // was idle — under a utilisation box on the same card reading "10 routes"
@@ -585,7 +639,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
       ? simulateCargoRoute(r, aircraft, gd, state.labor ?? null, fuelMult, evMult,
           cargoAlloc.get(r.id) ?? null)
       : simulateRoute(
-          { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
+          { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination) },
           aircraft, gd, state.labor ?? null,
           fuelMult, null,
           rivalSpecsFor(state, r.origin, r.destination),
@@ -693,6 +747,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
                   </span>
                 )}
                 <WifiBadge aircraft={aircraft} />
+                <WingtipBadge aircraft={aircraft} />
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
                 {type?.name} · {type?.manufacturer}
@@ -1740,6 +1795,10 @@ export default function Fleet() {
   // engine's own canRetrofitWifi so the number on the button is the number the
   // reducer takes — the same shared-predicate rule canBuildBase follows.
   const wifiQuote         = canRetrofitWifi(checkedAircraft, state.cash);
+  // Wingtip retrofit, same shape: only tails whose type has a device and that
+  // don't already carry one, priced by the engine's canRetrofitWingtips.
+  const wingtipQuote      = canRetrofitWingtips(checkedAircraft, state.cash);
+  const checkedNoWingtips = wingtipQuote.eligible;
   const checkedNoWifi     = wifiQuote.eligible;
 
   function toggleChecked(id) {
@@ -1855,6 +1914,27 @@ export default function Fleet() {
   const checkedLeased    = checkedAircraft.filter(a => a.ownershipType === 'lease');
   const bulkBuyoutQuotes = checkedLeased.map(a => ({ a, ...leaseBuyoutQuote(state, a) }));
   const bulkBuyoutCost   = bulkBuyoutQuotes.reduce((s2, q) => s2 + q.price, 0);
+
+  async function handleBulkFitWingtips() {
+    if (checkedNoWingtips.length === 0) return;
+    const names = checkedNoWingtips.slice(0, 8).map(a => a.name).join(', ')
+                + (checkedNoWingtips.length > 8 ? `, +${checkedNoWingtips.length - 8} more` : '');
+    const skipped = wingtipQuote.unfittable?.length ?? 0;
+    const already = checkedAircraft.length - checkedNoWingtips.length - skipped;
+    const body = `${names}\n\n`
+      + `${formatMoney(wingtipQuote.capex)} in total, due now — the retrofit price (line-fit at order time is cheaper). `
+      + `Burn on each fitted tail falls by its device's rating (3–3.5%) from next week; no running cost.\n\n`
+      + (already > 0 ? `${already} of the aircraft you selected already have wingtips and won't be charged again.\n\n` : '')
+      + (skipped > 0 ? `${skipped} cannot be fitted — no wingtip device exists for that type.\n\n` : '');
+    if (await confirm({
+      title: `Fit wingtips to ${checkedNoWingtips.length} aircraft?`,
+      body,
+      confirmLabel: `Fit for ${formatMoney(wingtipQuote.capex)}`,
+    })) {
+      dispatch({ type: 'RETROFIT_WINGTIPS', aircraftIds: checkedNoWingtips.map(a => a.id) });
+      setCheckedIds([]);
+    }
+  }
 
   async function handleBulkFitWifi() {
     if (checkedNoWifi.length === 0) return;
@@ -2429,6 +2509,25 @@ export default function Fleet() {
                 onClick={handleBulkFitWifi}
               >
                 <Glyph e="📶" /> Fit Wi-Fi ({checkedNoWifi.length}) · {formatMoney(wifiQuote.capex)}
+              </button>
+            )}
+            {checkedNoWingtips.length > 0 && (
+              <button
+                className="btn"
+                style={{
+                  fontSize: 12, padding: '5px 12px',
+                  background: wingtipQuote.ok ? 'rgba(56,211,159,0.12)' : 'var(--surface3)',
+                  color: wingtipQuote.ok ? 'var(--green)' : 'var(--text-dim)',
+                  border: `1px solid ${wingtipQuote.ok ? 'rgba(56,211,159,0.4)' : 'var(--border)'}`,
+                  cursor: wingtipQuote.ok ? 'pointer' : 'not-allowed',
+                }}
+                disabled={!wingtipQuote.ok}
+                title={wingtipQuote.ok
+                  ? `Fit wingtips to ${checkedNoWingtips.length} aircraft for ${formatMoney(wingtipQuote.capex)}`
+                  : wingtipQuote.reasons[0]}
+                onClick={handleBulkFitWingtips}
+              >
+                <Glyph e="🪶" /> Fit wingtips ({checkedNoWingtips.length}) · {formatMoney(wingtipQuote.capex)}
               </button>
             )}
             <button

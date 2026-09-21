@@ -38,7 +38,7 @@ import {
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo, blockHourFit,
-  stateLoungeFields,
+  stateLoungeFields, stateGroundHandlingFields,
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
 
@@ -258,7 +258,7 @@ export default function Routes() {
     const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
     const evMult  = buildEventDemandModel(state.activeEvents).multFor(route.origin, route.destination);
     return simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
       aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null, evMult,
       state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -1117,7 +1117,7 @@ function TagRouteCard({ route, onClose, onAddAircraft, siblingCount = 1 }) {
   // attaches. Without them this card understates a two-lounge rotation's weekly
   // profit by the whole premium ground discount.
   const sim      = aircraft ? simulateTagRoute(
-    { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+    { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
     aircraft, gd, state.labor ?? null, 1.0,
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null, buildEventDemandModel(state.activeEvents).multFor,

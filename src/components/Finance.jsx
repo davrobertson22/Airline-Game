@@ -7,7 +7,7 @@ import {
   breakEvenLoadFactor,
   weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor,
-  stateLoungeFields,
+  stateLoungeFields, stateGroundHandlingFields,
 } from '../utils/simulation.js';
 import { getAircraftType, eraPurchasePrice } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
@@ -24,7 +24,7 @@ import { FAMILY_INFO, AIRCRAFT_FAMILY, activeFamilies as getActiveFamilies,
 import {
   fuelIndexStatus, fuelIndexDelta, absoluteWeek,
   HEDGE_DURATIONS, HEDGE_COVERAGES, expectedMeanIndex, hedgeLockedPrice,
-  effectiveFuelMultiplier, totalHedgedCoverage,
+  effectiveFuelMultiplier, totalHedgedCoverage, UNWIND_HAIRCUT,
   FUEL_MIN_INDEX, FUEL_MAX_INDEX,
 } from '../utils/fuel.js';
 import {
@@ -37,7 +37,18 @@ import {
   DEPRECIATION_YEARS,
 } from '../data/overhead.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { fuelImpact, hedgeQuoteDollars, hedgeUnwindDollars, hedgeScoreboard } from '../utils/fuelImpact.js';
+import {
+  FUEL_PROGRAMMES, fleetBurnMod, programmeWeeklyCost, programmeActivationCost, canActivateProgramme,
+  programmeSavingsFromReport,
+} from '../data/fuelProgrammes.js';
+import { fuelStationsOn, stationFuelBasis } from '../data/fuelStations.js';
+import FuelBasisChip from './FuelBasisChip.jsx';
+import FuelFarmControls from './FuelFarmControls.jsx';
+import FuelRefineryCard from './FuelRefineryCard.jsx';
+import AirportLink from './AirportLink.jsx';
 import { CATERING_LEVELS, normalizeCateringLevel } from '../data/catering.js';
+import { isStationOpen, stationLevelDef } from '../data/groundStation.js';
 import {
   LOAN_PRODUCTS, AIRCRAFT_LOAN_ID, STARTING_CAPITAL, LOAN_MIN_PRINCIPAL,
   creditRating, loanRate, borrowingCapacity, amortizedWeeklyPayment,
@@ -369,7 +380,7 @@ function PLStatement({ proj }) {
     // exists to reconcile to: a lounge owner is shown nearly 3x the premium
     // ground cost the tick actually charges.
     const result = simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
       aircraft, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtilization, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -495,6 +506,13 @@ function PLStatement({ proj }) {
 
   const totGroundHandling = report.totalGroundHandling;
   const ytdGroundHandling = ytd(financialHistory, 'groundHandling');
+  // Self-handling stations: what they cost to run and what they saved vs the
+  // contract rate (the saving is already inside totGroundHandling — the route
+  // line was charged at the discounted rate — so it is shown, not subtracted).
+  const totStationOpex    = report.totalGroundStationCosts   ?? 0;
+  const totStationSavings = report.totalGroundStationSavings ?? 0;
+  const ytdStationOpex    = ytd(financialHistory, 'groundStations');
+  const stationCodes      = Object.keys(state.groundStations ?? {}).filter(c => isStationOpen(state.groundStations[c])).sort();
 
   // Distribution: GDS fees, OTA commissions, credit-card processing
   const totDistribution = report.totalDistributionCost;
@@ -505,7 +523,7 @@ function PLStatement({ proj }) {
 
   // ── Grouping for display ───────────────────────────────────────────────────
   const totFlightOps  = totCrew + totLandingFees + totQual;
-  const totPassengerServices = totCatering + totGroundHandling;
+  const totPassengerServices = totCatering + totGroundHandling + totStationOpex;
   const totOtherCosts = totLayover + totCompensation;
   const totAircraftCosts = totFleet + totInsurance;
   const totPeopleLabor = totalLaborWeekly + totalFamilyCosts;
@@ -887,6 +905,40 @@ function PLStatement({ proj }) {
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{ytdCharterRev ? formatMoney(ytdCharterRev) : '—'}</td>
                 </tr>
               )}
+              {/* Fuel-farm throughput fees: what other airlines paid to fuel at
+                  farms you own. Never in a projection, so the projected column
+                  reads the prior week. */}
+              {((pw?.farmFees ?? 0) > 0 || (report.totalFarmFeeIncome ?? 0) > 0) && (
+                <tr data-testid="pl-farm-fees">
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    Fuel farm throughput fees
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>paid by airlines fuelling at farms you own</span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.farmFees ? '+' + formatMoney(pw.farmFees) : '—'}</td>}
+                  <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>{(report.totalFarmFeeIncome ?? 0) > 0 ? '+' + formatMoney(report.totalFarmFeeIncome) : '—'}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
+              {/* What the refinery made (or lost) on the litres it covered,
+                  against buying them on the jet market. A note, not a cost
+                  line — it is already inside Fuel & Oil. */}
+              {((pw?.refinerySavings ?? 0) !== 0 || (report.refinerySavings ?? 0) !== 0) && (
+                <tr data-testid="pl-refinery">
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    Refinery vs the jet market
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                      {Math.round((report.refineryShare ?? pw?.refineryShare ?? 0) * 100)}% of your litres priced off crude
+                    </span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', fontSize: 12, color: (pw.refinerySavings ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {pw.refinerySavings ? ((pw.refinerySavings >= 0 ? '+' : '−') + formatMoney(Math.abs(pw.refinerySavings))) : '—'}
+                  </td>}
+                  <td style={{ textAlign: 'right', fontWeight: 500, color: (report.refinerySavings ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {report.refinerySavings ? ((report.refinerySavings >= 0 ? '+' : '−') + formatMoney(Math.abs(report.refinerySavings))) : '—'}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
               {totCargoRev > 0 && (
                 <Fragment>
                   <tr>
@@ -969,6 +1021,45 @@ function PLStatement({ proj }) {
               <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13, fontWeight: 500 }}>{formatMoney(-totFuel)}</td>
               <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{ytdFuel > 0 ? formatMoney(-ytdFuel) : '—'}</td>
             </tr>
+            {/* How much of the fuel bill is the market being away from 1.0x.
+                A note row, not a cost line — it is already inside Fuel & Oil.
+                Uses the PRICE multiplier: proj.fuelMultiplier now also carries
+                the efficiency programme's burn. */}
+            {(() => {
+              const mult = proj.fuelPriceMultiplier ?? proj.fuelMultiplier;
+              if (!(totFuel > 0) || !(mult > 0) || Math.abs(mult - 1) < 0.02) return null;
+              const excess = Math.round(totFuel - totFuel / mult);
+              return (
+                <tr data-testid="pl-fuel-market-note">
+                  <td style={{ paddingLeft: 28, fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                    of which the market being at {mult.toFixed(3)}× {excess >= 0 ? 'cost' : 'saved'}
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-dim)' }}>—</td>}
+                  <td style={{ textAlign: 'right', fontSize: 12, fontStyle: 'italic', color: excess >= 0 ? 'var(--red)' : 'var(--green)' }}>
+                    {excess >= 0 ? '−' : '+'}{formatMoney(Math.abs(excess))}
+                  </td>
+                  <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-dim)' }}>—</td>
+                </tr>
+              );
+            })()}
+            {/* The efficiency programme, likewise a note: what this week's
+                flying would have burned without it. Only while something is on. */}
+            {(() => {
+              const saved = programmeSavingsFromReport(proj.report);
+              if (!(saved > 0)) return null;
+              const pwSaved = pw ? (state.lastReport && Math.round(state.lastReport.totalFuel ?? -1) === Math.round(pw.fuel ?? -2)
+                ? programmeSavingsFromReport(state.lastReport) : null) : null;
+              return (
+                <tr data-testid="pl-fuel-programme-note">
+                  <td style={{ paddingLeft: 28, fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                    of which efficiency programmes saved ({Math.round((1 - (proj.fuelBurnMod ?? 1)) * 1000) / 10}% burn)
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic' }}>{pwSaved != null ? `+${formatMoney(pwSaved)}` : '—'}</td>}
+                  <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--green)', fontStyle: 'italic' }}>+{formatMoney(saved)}</td>
+                  <td style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-dim)' }}>—</td>
+                </tr>
+              );
+            })()}
 
             {/* B. Flight Operations */}
             <CollapsibleSection
@@ -991,7 +1082,7 @@ function PLStatement({ proj }) {
                 colSpan={pw ? 4 : 3}
                 expanded={sections.passengerServices ?? true}
                 onToggle={() => toggleSection('passengerServices')}
-                summary={<TotalRow label="Passenger Services (collapsed)" prior={pw ? -((pw.catering ?? 0) + (pw.groundHandling ?? 0)) : undefined} weekly={-totPassengerServices} ytd={-(ytdCatering + ytdGroundHandling)} />}
+                summary={<TotalRow label="Passenger Services (collapsed)" prior={pw ? -((pw.catering ?? 0) + (pw.groundHandling ?? 0) + (pw.groundStations ?? 0)) : undefined} weekly={-totPassengerServices} ytd={-(ytdCatering + ytdGroundHandling + ytdStationOpex)} />}
               >
                 {(totCatering > 0 || totCateringRev > 0) && (
                   <>
@@ -1037,10 +1128,39 @@ function PLStatement({ proj }) {
                         </tr>
                       );
                     })}
+                    {totStationSavings > 0 && (
+                      <tr>
+                        <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
+                          Self-handled at {stationCodes.join(', ')}
+                          <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--green)' }}>
+                            saved {formatMoney(totStationSavings)} vs the contract rate (already netted above)
+                          </span>
+                        </td>
+                        {pw && <td />}
+                        <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>—</td>
+                        <td />
+                      </tr>
+                    )}
                     <LineItem label="  Total ground handling" prior={pw ? -(pw.groundHandling ?? 0) : undefined} weekly={-totGroundHandling} ytd={-ytdGroundHandling} />
                   </>
                 )}
-                <TotalRow label="Total Passenger Services" prior={pw ? -((pw.catering ?? 0) + (pw.groundHandling ?? 0)) : undefined} weekly={-totPassengerServices} ytd={-(ytdCatering + ytdGroundHandling)} />
+                {totStationOpex > 0 && (
+                  <>
+                    <SubSectionHeader label="Ground Handling Stations" />
+                    <tr>
+                      <td style={{ paddingLeft: 40, color: 'var(--text-muted)', fontSize: 12 }}>
+                        Station payroll &amp; equipment
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-dim)' }}>
+                          {stationCodes.map(c => `${c} ${stationLevelDef(state.groundStations[c].level)?.name ?? ''}`).join(' · ')}
+                        </span>
+                      </td>
+                      {pw && <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-(pw.groundStations ?? 0))}</td>}
+                      <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 12 }}>{formatMoney(-totStationOpex)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{ytdStationOpex > 0 ? formatMoney(-ytdStationOpex) : '—'}</td>
+                    </tr>
+                  </>
+                )}
+                <TotalRow label="Total Passenger Services" prior={pw ? -((pw.catering ?? 0) + (pw.groundHandling ?? 0) + (pw.groundStations ?? 0)) : undefined} weekly={-totPassengerServices} ytd={-(ytdCatering + ytdGroundHandling + ytdStationOpex)} />
               </CollapsibleSection>
             )}
 
@@ -2240,7 +2360,7 @@ function UnitEconomics({ proj }) {
     // Simulate with the engine's labor + fuel multiplier so costs match; use the
     // engine's BOOKED revenue (incl. connecting feed + demand lifts) for RASK/yield.
     const raw = simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
       a, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -2405,7 +2525,7 @@ function Forecast({ proj }) {
   const routeData = routes.map(r => {
     const a = fleet.find(x => x.id === r.aircraftId);
     return a ? simulateRoute(
-      { ...r, ...stateLoungeFields(state, r.origin, r.destination) },
+      { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination) },
       a, gd, fcLaborState, fuelMultiplier, null,
       rivalSpecsFor(state, r.origin, r.destination), fcAvgUtil, state.satisfaction ?? null,
       1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)) : null;
@@ -3633,6 +3753,264 @@ function CFTotalRow({ label, value }) {
 
 // ─── Fuel & Hedging ───────────────────────────────────────────────────────────
 
+export function FuelImpactCard({ state, compact = false }) {
+  const fi = useMemo(() => fuelImpact(state), [state]);
+  if (!fi) return null;
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 };
+  const up = fi.excess > 0;
+  const excessColor = Math.abs(fi.excess) < fi.baseBill * 0.02 ? 'var(--text-muted)' : up ? 'var(--red)' : 'var(--green)';
+  const signed = (v) => (v >= 0 ? '+' : '−') + formatMoney(Math.abs(v));
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const anchor = fi.low && fi.low.weeksAgo > 0 && Math.abs(fi.low.dIndex) >= 0.1 ? fi.low : null;
+  const lookbacks = fi.ago.filter(a => Math.abs(a.dIndex) >= 0.02);
+
+  return (
+    <div style={card} data-testid="fuel-impact">
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>WHAT FUEL IS COSTING YOU</div>
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Fuel bill this week</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{formatMoney(fi.bill)}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            {fi.shareOfRevenue != null ? `${pct(fi.shareOfRevenue)} of revenue` : ''}
+            {fi.shareOfCost != null ? ` · ${pct(fi.shareOfCost)} of costs` : ''}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>At normal prices (1.0×)</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)' }}>{formatMoney(fi.baseBill)}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>same flying, same fleet</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{up ? 'Above-normal fuel costs you' : 'Cheap fuel saves you'}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: excessColor }}>{formatMoney(Math.abs(fi.excess))}<span style={{ fontSize: 12, fontWeight: 400 }}>/wk</span></div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            {fi.excessVsProfit != null && up
+              ? (fi.excessVsProfit >= 1
+                  ? `${fi.excessVsProfit.toFixed(1)}× this week's profit`
+                  : `${pct(fi.excessVsProfit)} of this week's profit`)
+              : up && fi.profit <= 0 ? 'more than this week’s profit'
+              : fi.hedged ? `hedges saved ${formatMoney(fi.hedgeSaved)}` : `index ${fi.index.toFixed(2)}×`}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Every 0.1 on the index</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{formatMoney(fi.perTenth)}<span style={{ fontSize: 12, fontWeight: 400 }}>/wk</span></div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            {fi.hedged ? `${formatMoney(fi.hedgeSaved)}/wk saved by hedges` : 'unhedged — you pay the whole move'}
+          </div>
+        </div>
+      </div>
+
+      {(lookbacks.length > 0 || anchor) && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+          {lookbacks.map(a => (
+            <div key={a.weeks}>
+              <span style={{ color: 'var(--text-dim)' }}>{a.weeks} weeks ago ({a.label}):</span>
+              {' '}index {a.index.toFixed(2)}× → {fi.index.toFixed(2)}×,
+              {' '}fuel <span style={{ color: a.dBill > 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.dBill)}/wk</span>,
+              {' '}revenue {signed(a.dRevenue)}/wk,
+              {' '}profit <span style={{ color: a.dProfit < 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.dProfit)}/wk</span>
+            </div>
+          ))}
+          {anchor && (
+            <div>
+              <span style={{ color: 'var(--text-dim)' }}>Year low {anchor.index.toFixed(2)}× ({anchor.label}, {anchor.weeksAgo} wks ago):</span>
+              {' '}the same bill was {formatMoney(anchor.bill)} and profit was {formatMoney(anchor.profit)}/wk
+              {' '}— fuel alone is <span style={{ color: 'var(--red)' }}>{signed(anchor.dBill)}/wk</span> since.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The fuel-efficiency programme (FUEL_OPERATIONS_PLAN.md §6): seven
+ * airline-wide burn levers, each with a cost and a side effect. Eligibility
+ * and capex come from the engine's canActivateProgramme — the same check
+ * SET_FUEL_PROGRAMME runs — so the toggle never promises what the reducer
+ * then refuses. The dollar figures use this week's base bill so "−2% burn"
+ * reads as money.
+ */
+export function FuelProgrammeCard({ state, dispatch }) {
+  const impact   = fuelImpact(state, { lookbacks: [] });
+  const bill     = impact?.bill ?? 0;
+  const burnMod  = fleetBurnMod(state);
+  const active   = state.fuelProgrammes ?? {};
+  const activeCount = FUEL_PROGRAMMES.filter(p => active[p.id]?.active).length;
+  // Fuel at burn 1.0 for this week's flying, so each programme's slice is a
+  // share of the SAME base — what it saves (or would save) per week.
+  const fuelAtFullBurn = burnMod > 0 ? bill / burnMod : bill;
+  const weeklyOpex = programmeWeeklyCost(state);
+  const savedNow   = Math.round(fuelAtFullBurn - bill);
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 };
+  const sideEffect = (p) => {
+    if (p.otpDelta)    return `−${(p.otpDelta * 100).toFixed(1)} pt on-time`;
+    if (p.maintMod)    return `${p.maintMod > 1 ? '+' : '−'}${Math.round(Math.abs(p.maintMod - 1) * 100)}% maintenance`;
+    if (p.failureMult) return `+${Math.round((p.failureMult - 1) * 100)}% breakdown odds`;
+    if (p.requires === 'hub') return 'needs a designated hub';
+    return 'no trade-off';
+  };
+  const costLine = (p) => {
+    const parts = [];
+    const oneOff = programmeActivationCost(p.id, state.fleet ?? []);
+    const wk = (p.weekly?.flat ?? 0) + (p.weekly?.perTail ?? 0) * (state.fleet ?? []).filter(a => a.status !== 'retired').length;
+    if (oneOff > 0) parts.push(`${formatMoney(oneOff)} once`);
+    if (wk > 0)     parts.push(`${formatMoney(wk)}/wk`);
+    return parts.length ? parts.join(' + ') : 'free';
+  };
+  return (
+    <div style={card} data-testid="fuel-programme-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Fuel Efficiency Programme</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          {activeCount === 0
+            ? 'Nothing running — burn at 100%'
+            : `${activeCount} running · burn −${Math.round((1 - burnMod) * 1000) / 10}%`
+              + (bill > 0 ? ` · saving ${formatMoney(savedNow)}/wk` : '')
+              + (weeklyOpex > 0 ? ` · costing ${formatMoney(weeklyOpex)}/wk` : '')}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.6 }}>
+        Hedges fix the price; these cut the burn. Each one is worth a percent or two and each has a
+        catch — punctuality, maintenance, breakdown odds or a bill — so pick the ones your airline can wear.
+        Savings compound; everything on is about 8% off the fuel bill.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 8 }}>
+        {FUEL_PROGRAMMES.map(p => {
+          const isOn  = active[p.id]?.active === true;
+          const check = isOn ? null : canActivateProgramme(state, p.id);
+          const perWeek = bill > 0 ? Math.round(fuelAtFullBurn * p.burn) : null;
+          return (
+            <div key={p.id} data-testid={`fuel-programme-${p.id}`} style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 6,
+              background: isOn ? 'rgba(56,211,159,0.08)' : 'var(--surface-raised)',
+              border: `1px solid ${isOn ? 'rgba(56,211,159,0.35)' : 'var(--border)'}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 12 }}>{p.label}</span>
+                  <span style={{ fontSize: 12, color: 'var(--green)', whiteSpace: 'nowrap' }}>
+                    −{(p.burn * 100).toFixed(1)}% burn{perWeek != null ? ` · ${formatMoney(perWeek)}/wk` : ''}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3, lineHeight: 1.5 }}>{p.description}</div>
+                <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-dim)' }}>
+                  {costLine(p)} · {sideEffect(p)}
+                  {!isOn && check && !check.ok && <span style={{ color: 'var(--yellow)' }}> · {check.reason}</span>}
+                </div>
+              </div>
+              <button
+                className={isOn ? 'btn btn-ghost' : 'btn btn-primary'}
+                style={{ fontSize: 11, padding: '4px 10px', whiteSpace: 'nowrap' }}
+                disabled={!isOn && check && !check.ok}
+                title={isOn ? 'Switch off — free, takes effect next week' : (check?.ok ? 'Start this programme' : check?.reason)}
+                onClick={() => dispatch({ type: 'SET_FUEL_PROGRAMME', id: p.id, active: !isOn })}
+              >
+                {isOn ? 'Stop' : 'Start'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Stations (FUEL_OPERATIONS_PLAN.md §7.3): where last week's fuel was bought,
+ * each station's basis and share, and the tankering verdict per route —
+ * "saves $X/wk from DFW" or why not. Reads the tick's own report, so it can
+ * only ever show what was actually charged.
+ */
+export function FuelStationsCard({ state }) {
+  if (!fuelStationsOn(state)) return null;
+  const rep = state.lastReport;
+  const by  = rep?.fuelByStation ?? null;
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 };
+  const routes = [...(rep?.routeResults ?? []), ...(rep?.cargoRouteResults ?? [])];
+  const routeOf = (id) => [...(state.routes ?? []), ...(state.cargoRoutes ?? [])].find(r => r.id === id);
+  const total = by ? Object.values(by).reduce((s, v) => s + v, 0) : 0;
+  const rows = by ? Object.entries(by).map(([code, usd]) => ({ code, usd, basis: stationFuelBasis(code) })).sort((a, b) => b.usd - a.usd) : [];
+  const tankered = routes.filter(r => r.tankering && r.tankering.saved > 0).map(r => ({
+    r, saved: Math.round((r.fuelCost / (r.fuelStationFactor || 1)) * r.tankering.saved),
+  })).sort((a, b) => b.saved - a.saved);
+  const considered = routes.filter(r => r.tankering && !(r.tankering.saved > 0));
+  const offCount = routes.filter(r => r.fuelStationFactor != null && !r.tankering && (routeOf(r.routeId)?.tankering ?? 'off') !== 'auto').length;
+  const savedTotal = tankered.reduce((s, t) => s + t.saved, 0);
+  // Network basis: the bill divided by what the same flying costs at basis 1.
+  const netBasis = total > 0 && rows.length
+    ? rows.reduce((s, r) => s + r.usd, 0) / rows.reduce((s, r) => s + r.usd / r.basis, 0) : null;
+  return (
+    <div style={card} data-testid="fuel-stations-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Stations — where you buy fuel</div>
+        {total > 0 && (
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+            network basis {netBasis.toFixed(2)}× · {rows.length} stations
+            {savedTotal > 0 ? ` · tankering saved ${formatMoney(savedTotal)}/wk` : ''}
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.6 }}>
+        Every airport prices fuel as a fixed multiple of the world index — Gulf and US hubs cheap, islands dear.
+        A round trip buys half at each end; on short sectors out of a cheap station the engine carries the return
+        fuel instead (tankering) when that beats the cost of hauling it. Where you fly enough, buy into the
+        airport's fuel consortium (−4% here) or build the farm outright (−10%, one owner per airport, and every
+        rival fuelling there pays you a throughput fee).
+      </div>
+      {!by ? (
+        <div style={{ color: 'var(--muted)', fontSize: 12 }}>Fly a week to see your uplift by station.</div>
+      ) : (
+        <>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Station', 'Basis', 'Uplift / wk', 'Share', 'Fuel farm'].map(h => (
+                  <th key={h} style={{ textAlign: h === 'Station' || h === 'Fuel farm' ? 'left' : 'right', padding: '6px 10px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 12).map(r => (
+                <tr key={r.code} style={{ borderBottom: '1px solid var(--border)' }} data-testid={`fuel-station-row-${r.code}`}>
+                  <td style={{ padding: '6px 10px' }}><AirportLink code={r.code} style={{ fontFamily: 'monospace', fontWeight: 700 }} /></td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}><FuelBasisChip code={r.code} /></td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>{formatMoney(r.usd)}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--muted)' }}>{total > 0 ? `${Math.round((r.usd / total) * 100)}%` : '—'}</td>
+                  <td style={{ padding: '4px 10px' }}><FuelFarmControls code={r.code} compact /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 12 && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>and {rows.length - 12} smaller stations</div>}
+          <div style={{ marginTop: 12, fontSize: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Tankering this week</div>
+            {tankered.length === 0 && considered.length === 0 && (
+              <div style={{ color: 'var(--muted)' }}>
+                No route is set to tanker{offCount > 0 ? ` (${offCount} on Off — switch to Auto on the route page)` : ''}.
+              </div>
+            )}
+            {tankered.map(({ r, saved }) => (
+              <div key={r.routeId} style={{ color: 'var(--green)' }}>
+                {r.origin ?? routeOf(r.routeId)?.origin}–{r.destination ?? routeOf(r.routeId)?.destination}: carrying return fuel from {r.tankering.from}, saves {formatMoney(saved)}/wk
+              </div>
+            ))}
+            {considered.length > 0 && (
+              <div style={{ color: 'var(--muted)', marginTop: 2 }}>
+                {considered.length} route{considered.length === 1 ? '' : 's'} on Auto not worth tankering this week
+                {considered[0]?.tankering?.reason ? ` (e.g. ${considered[0].tankering.reason})` : ''}.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FuelHedging() {
   const { state, dispatch } = useGame();
   const [selDuration, setSelDuration] = useState('short');
@@ -3643,7 +4021,12 @@ function FuelHedging() {
   const nowAbsWeek   = absoluteWeek(state.year, state.week);
   const allContracts = state.hedgeContracts ?? [];
   const active       = allContracts.filter(h => h.expiryAbsWeek > nowAbsWeek);
-  const expired      = allContracts.filter(h => h.expiryAbsWeek <= nowAbsWeek).slice(-5);
+  // The scoreboard: what each live contract has saved so far, and the record
+  // of every one that closed (the tick folds expired contracts into
+  // hedgeStats, so the closed list lives there, not in hedgeContracts).
+  const board        = hedgeScoreboard(state);
+  const closed       = [...(board.stats.recent ?? [])].reverse();
+  const [unwinding, setUnwinding] = useState(null);   // contract id with the unwind panel open
 
   const status      = fuelIndexStatus(fuelIndex);
   const deltaLabel  = fuelIndexDelta(fuelIndex);
@@ -3666,6 +4049,9 @@ function FuelHedging() {
   const lockedPreview = selOpt ? hedgeLockedPrice(fuelIndex, selOpt) : fuelIndex;
   const expectedAvg   = selOpt ? expectedMeanIndex(fuelIndex, selOpt.weeks) : fuelIndex;
   const canBuy        = hedgedPct + selCoverage * 100 <= 100;
+  // The same lock, in dollars of this week's bill — so "25% at 1.249x" reads as
+  // "$50M/wk of fuel fixed at $62M/wk; saves $1.4M/wk if the market holds".
+  const quote         = selOpt ? hedgeQuoteDollars(state, selOpt, selCoverage) : null;
 
   // History chart. In multiplayer the just-ticked world index is stored as BOTH
   // the current index and the last history entry (the tick injects one shared
@@ -3691,11 +4077,34 @@ function FuelHedging() {
     if (!canBuy) return;
     dispatch({ type: 'BUY_HEDGE', durationId: selDuration, coverage: selCoverage });
   }
+  function handleUnwind(id) {
+    dispatch({ type: 'UNWIND_HEDGE', id });
+    setUnwinding(null);
+  }
+  // Expiry as a calendar week, from the absolute week — the old
+  // `min(52, week + weeks)` clamp printed "W52" for anything that crossed a
+  // year boundary, which every 52-week contract does.
+  const expiryLabel = (weeks) => {
+    const abs  = nowAbsWeek + (weeks ?? 0);
+    const yr   = Math.floor((abs - 1) / 52) + 1;
+    const wk   = ((abs - 1) % 52) + 1;
+    return `W${wk}, ${(state.startYear != null ? state.startYear - 1 : 0) + yr}`;
+  };
+  const signedMoney = (v) => `${v >= 0 ? '+' : '−'}${formatMoney(Math.abs(v))}`;
+  const pnlColor = (v) => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--muted)';
 
   const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      <FuelImpactCard state={state} />
+
+      <FuelProgrammeCard state={state} dispatch={dispatch} />
+
+      <FuelStationsCard state={state} />
+
+      <FuelRefineryCard state={state} dispatch={dispatch} />
 
       {/* ── Gauge + history ──────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -3786,7 +4195,8 @@ function FuelHedging() {
           Lock a fixed rate for part of your fleet's fuel bill. The rate is priced off where fuel is
           expected to average over the term — not off today's index — plus a small premium for the
           certainty. If the market runs hotter than that, you save. If it doesn't, you pay a little over
-          market — the cost of certainty. Contracts stack up to 100% total coverage.
+          market — the cost of certainty. Contracts stack up to 100% total coverage, and any contract
+          can be unwound early at its market value less a {Math.round(UNWIND_HAIRCUT * 1000) / 10}% haircut.
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -3853,7 +4263,13 @@ function FuelHedging() {
               // lock above or below today's index is a good deal.
               ['Expected average over term', `${expectedAvg.toFixed(3)}×`],
               ['Locked price', `${lockedPreview.toFixed(3)}× (${Math.round((selOpt?.premium ?? 0) * 100)}% premium for certainty)`],
-              ['Expires', `W${Math.min(52, state.week + (selOpt?.weeks ?? 0))}, ${(state.startYear != null ? state.startYear - 1 : 0) + state.year + (state.week + (selOpt?.weeks ?? 0) > 52 ? 1 : 0)}`],
+              ...(quote && quote.baseBillCovered > 0 ? [
+                ['Fuel covered', `${formatMoney(quote.baseBillCovered)}/wk of flying, fixed at ${formatMoney(quote.billCovered)}/wk`],
+                ['If the market stays at ' + fuelIndex.toFixed(3) + '×',
+                  `${quote.vsSpot >= 0 ? 'saves' : 'costs'} ${formatMoney(Math.abs(quote.vsSpot))}/wk (${formatMoney(Math.abs(quote.vsSpotTerm))} over the term)`],
+                ['Pays off when the index averages', `above ${quote.breakevenIndex.toFixed(3)}× · each 0.1 above = ${formatMoney(quote.perTenth)}/wk saved`],
+              ] : []),
+              ['Expires', expiryLabel(selOpt?.weeks)],
             ].map(([k, v]) => (
               <>
                 <span key={k + '_k'} style={{ color: 'var(--muted)' }}>{k}</span>
@@ -3877,6 +4293,22 @@ function FuelHedging() {
         </button>
       </div>
 
+      {/* ── Scoreboard ───────────────────────────────────────────────── */}
+      {(active.length > 0 || board.stats.contractsClosed > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+          {[
+            ['Open contracts, saved so far', signedMoney(board.openSavings), pnlColor(board.openSavings)],
+            ['Lifetime hedge P&L', signedMoney(board.lifetimeIncludingOpen), pnlColor(board.lifetimeIncludingOpen)],
+            ['Record (closed)', `${board.record} · ${board.stats.contractsClosed} closed`, 'inherit'],
+          ].map(([k, v, color]) => (
+            <div key={k} style={{ ...card, padding: '10px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{k}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Active contracts ──────────────────────────────────────────── */}
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Active Contracts ({active.length})</div>
@@ -3886,33 +4318,90 @@ function FuelHedging() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Duration', 'Coverage', 'Locked', 'vs Market', 'Weeks Left'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                {['Duration', 'Coverage', 'Locked', 'vs Market', 'Saved so far', 'Weeks Left', ''].map((h, i) => (
+                  <th key={h || `h${i}`} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {active.map(h => {
-                const weeksLeft = h.expiryAbsWeek - nowAbsWeek;
+              {board.active.map(h => {
+                const weeksLeft = h.weeksLeft;
                 // Relative to the market, not a subtraction of two index values.
                 // A 0.991 lock against a 0.794 market is 24.8% over it; the gap
                 // between the indices is 0.197, and printing that as "19.7%" was
                 // a percentage of nothing. The ±0.5% threshold below is relative
                 // too, so "≈ at market" means the same thing at any index.
                 const saving    = fuelIndex > 0 ? (fuelIndex - h.lockedPrice) / fuelIndex : 0;  // positive = saving, negative = overpaying
+                const isOpen    = unwinding === h.id;
+                // The engine's own quote — the number UNWIND_HEDGE will settle.
+                const uq        = isOpen ? hedgeUnwindDollars(state, h.id) : null;
                 return (
-                  <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '8px 10px' }}>{h.durationLabel}</td>
-                    <td style={{ padding: '8px 10px' }}>{Math.round(h.coverage * 100)}%</td>
-                    <td style={{ padding: '8px 10px', fontWeight: 600 }}>{h.lockedPrice.toFixed(3)}×</td>
-                    <td style={{ padding: '8px 10px',
-                      color: saving > 0.005 ? 'var(--green)' : saving < -0.005 ? 'var(--red)' : 'var(--muted)' }}>
-                      {saving > 0.005 ? `▼ ${(saving * 100).toFixed(1)}% below market`
-                       : saving < -0.005 ? `▲ ${(Math.abs(saving) * 100).toFixed(1)}% over market`
-                       : '≈ at market'}
-                    </td>
-                    <td style={{ padding: '8px 10px' }}>{weeksLeft}w</td>
-                  </tr>
+                  <Fragment key={h.id}>
+                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 10px' }}>{h.durationLabel}</td>
+                      <td style={{ padding: '8px 10px' }}>{Math.round(h.coverage * 100)}%</td>
+                      <td style={{ padding: '8px 10px', fontWeight: 600 }}>{h.lockedPrice.toFixed(3)}×</td>
+                      <td style={{ padding: '8px 10px',
+                        color: saving > 0.005 ? 'var(--green)' : saving < -0.005 ? 'var(--red)' : 'var(--muted)' }}>
+                        {saving > 0.005 ? `▼ ${(saving * 100).toFixed(1)}% below market`
+                         : saving < -0.005 ? `▲ ${(Math.abs(saving) * 100).toFixed(1)}% over market`
+                         : '≈ at market'}
+                      </td>
+                      <td style={{ padding: '8px 10px', color: pnlColor(h.realized) }}
+                          title={h.perWeekNow ? `${signedMoney(h.perWeekNow)}/wk at this week's index` : undefined}>
+                        {signedMoney(h.realized)}
+                        {h.perWeekNow !== 0 && (
+                          <span style={{ color: 'var(--muted)', fontSize: 11 }}> ({signedMoney(h.perWeekNow)}/wk)</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>{weeksLeft}w</td>
+                      <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                        <button className="btn btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => setUnwinding(isOpen ? null : h.id)}>
+                          {isOpen ? 'Cancel' : 'Unwind'}
+                        </button>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td colSpan={7} style={{ padding: '4px 10px 12px' }}>
+                          <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', fontSize: 12 }}>
+                            <div style={{ fontWeight: 600, marginBottom: 6 }}>Unwind Preview</div>
+                            {!uq ? (
+                              <div style={{ color: 'var(--muted)' }}>No fuel bill to price against yet — fly a week first.</div>
+                            ) : (
+                              <>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 0' }}>
+                                  {[
+                                    ['Weeks remaining', `${uq.remaining}w`],
+                                    ['Fuel still covered', `${formatMoney(uq.notional)} over the rest of the term`],
+                                    ['Market expects', `${uq.expectedIndex.toFixed(3)}× average vs your ${uq.lockedPrice.toFixed(3)}× lock`],
+                                    ['Market value of the remaining term', signedMoney(uq.mtm)],
+                                    ['Haircut', `−${formatMoney(uq.haircut)} (${Math.round(UNWIND_HAIRCUT * 1000) / 10}%)`],
+                                    [uq.settlement >= 0 ? 'You receive now' : 'You pay to exit', formatMoney(Math.abs(uq.settlement))],
+                                    ['Contract total if unwound', `${signedMoney(uq.totalIfUnwound)} (saved ${signedMoney(uq.realized)} so far)`],
+                                  ].map(([k, v]) => (
+                                    <Fragment key={k}>
+                                      <span style={{ color: 'var(--muted)' }}>{k}</span>
+                                      <span style={{ fontWeight: k.startsWith('You ') ? 600 : 400, color: k.startsWith('You ') ? pnlColor(uq.settlement) : 'inherit' }}>{v}</span>
+                                    </Fragment>
+                                  ))}
+                                </div>
+                                <button className="btn btn-primary" disabled={!uq.canAfford} onClick={() => handleUnwind(h.id)}
+                                        style={{ fontSize: 12, marginTop: 10 }}>
+                                  {uq.canAfford
+                                    ? (uq.settlement >= 0
+                                        ? `Unwind and receive ${formatMoney(uq.settlement)}`
+                                        : `Unwind and pay ${formatMoney(Math.abs(uq.settlement))}`)
+                                    : 'Not enough cash to exit'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -3920,18 +4409,30 @@ function FuelHedging() {
         )}
       </div>
 
-      {/* ── Recently expired ─────────────────────────────────────────── */}
-      {expired.length > 0 && (
-        <div style={{ ...card, opacity: 0.7 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recently Expired</div>
+      {/* ── Closed contracts ──────────────────────────────────────────── */}
+      {closed.length > 0 && (
+        <div style={{ ...card, opacity: 0.85 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Closed Contracts</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Duration', 'Coverage', 'Locked', 'How it ended', 'Result'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {expired.map(h => (
+              {closed.map(h => (
                 <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '6px 10px' }}>{h.durationLabel}</td>
-                  <td style={{ padding: '6px 10px' }}>{Math.round(h.coverage * 100)}%</td>
-                  <td style={{ padding: '6px 10px' }}>{h.lockedPrice.toFixed(3)}× locked</td>
-                  <td style={{ padding: '6px 10px', color: 'var(--muted)' }}>expired</td>
+                  <td style={{ padding: '6px 10px' }}>{Math.round((h.coverage ?? 0) * 100)}%</td>
+                  <td style={{ padding: '6px 10px' }}>{(h.lockedPrice ?? 0).toFixed(3)}×</td>
+                  <td style={{ padding: '6px 10px', color: 'var(--muted)' }}>
+                    {h.reason === 'unwound'
+                      ? `unwound (${signedMoney(h.settlement)} settlement)`
+                      : 'ran to expiry'}
+                  </td>
+                  <td style={{ padding: '6px 10px', fontWeight: 600, color: pnlColor(h.total) }}>{signedMoney(h.total)}</td>
                 </tr>
               ))}
             </tbody>
