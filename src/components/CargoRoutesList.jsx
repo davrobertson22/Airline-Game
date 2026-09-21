@@ -7,6 +7,7 @@ import { getAirport } from '../data/airports.js';
 import { groundedTitle } from '../data/maintenance.js';
 import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import OutOfRangeBadge from './OutOfRangeBadge.jsx';
 import { useToast } from './ToastSystem.jsx';
 
 const ACCENT = '#e8833a';
@@ -309,6 +310,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
               <Glyph e="🔧" /> {aircraft.groundedWeeksLeft}w
             </span>
           )}
+          <OutOfRangeBadge route={route} style={{ marginLeft: 6 }} />
           {!aircraft && (
             <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(248,81,73,0.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.3)', textTransform: 'uppercase' }}>
               No freighter
@@ -433,6 +435,7 @@ function CargoRouteCard({ route, aircraft, type, sim, pooled, controls }) {
                 <Glyph e="🔧" /> {aircraft.groundedWeeksLeft}w
               </span>
             )}
+            <OutOfRangeBadge route={route} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
             {aircraft ? `${aircraft.name}${aircraft.tailNumber ? ` · ${aircraft.tailNumber}` : ''}` : <GlyphLabel size={12} text="⚠ no freighter assigned" />}

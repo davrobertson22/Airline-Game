@@ -10,7 +10,7 @@ import {
   loyaltyTier, loyaltyEnrollPull, loyaltyPaxBase,
   isRouteActive, routeActiveMonths, aircraftHubMaintFactor, routesCommittedTo,
   blockHourFit, blockTimeHours, activeCharterOps,
-  applyScheduleTrimMigration,
+  applyScheduleTrimMigration, rangeStrandedRoutes,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
   calcReconfCost, refitWeeks, calendarYear, shortYearLabel,
 } from '../utils/simulation.js';
@@ -94,7 +94,7 @@ import {
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote } from '../models/competitorAI.js';
-import { buildWeekNews, appendNews, scheduleTrimNews } from '../models/newsLog.js';
+import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
 import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -1161,6 +1161,88 @@ function setEraModuleState(startYear, calYear) {
   setEraPriceYear(calYear);   // era new-build pricing (ERA_MODE_PLAN.md §6); null → catalogue prices
 }
 
+/**
+ * Flag every route its aircraft can no longer reach, clear the flag on routes
+ * that are reachable again, and tell the player about the newly stranded ones.
+ *
+ * WHY: the tick already refuses to fly a leg beyond effectiveRangeKm — it has
+ * to — but it did so silently. The route earned nothing, its aircraft kept
+ * billing lease and maintenance, and nothing said why. The 2026-09-20 aircraft
+ * audit corrected ten types whose range was a ferry figure, which would have
+ * stranded live routes in any save flying them; a cabin refit that costs range
+ * could always do the same.
+ *
+ * Nothing is closed or moved: REASSIGN_ROUTE already lets the player move a
+ * route to a longer-range tail while keeping its ramp and pricing, which is the
+ * cheap fix. This function only makes the problem visible — once, as a durable
+ * news row (plus a toast mid-game), and as `route.rangeStranded` for the Routes
+ * page to badge.
+ *
+ * Returns the SAME state object when nothing changed, which is what lets
+ * ADVANCE_WEEK use it as a re-entering pre-tick transform without looping.
+ */
+export function applyRangeStranding(state, { toast = true } = {}) {
+  const stranded = rangeStrandedRoutes(state);
+  const byRoute = new Map(stranded.map(x => [x.routeId, x]));
+  const absWeek = ((state.year ?? 1) - 1) * 52 + (state.week ?? 1);
+  const newly = [];
+  let changed = false;
+
+  const fix = (route) => {
+    const hit = byRoute.get(route.id);
+    if (hit) {
+      if (route.rangeStranded) return route;          // already told them
+      changed = true;
+      const aircraft = (state.fleet ?? []).find(a => a.id === hit.aircraftId);
+      const type = aircraft ? getAircraftType(aircraft.typeId) : null;
+      newly.push({
+        ...hit,
+        origin: route.origin, destination: route.destination, stops: route.stops,
+        aircraftName: aircraft?.tailNumber || aircraft?.name || null,
+        typeName: type?.name ?? null,
+      });
+      return {
+        ...route,
+        rangeStranded: {
+          from: hit.from, to: hit.to,
+          sectorKm: Math.round(hit.sectorKm), rangeKm: Math.round(hit.rangeKm),
+          since: absWeek,
+        },
+      };
+    }
+    if (route.rangeStranded) {                        // reachable again
+      changed = true;
+      const { rangeStranded: _cleared, ...rest } = route;
+      return rest;
+    }
+    return route;
+  };
+
+  const routes      = (state.routes ?? []).map(fix);
+  const cargoRoutes = (state.cargoRoutes ?? []).map(fix);
+  if (!changed) return state;
+
+  const next = { ...state, routes, cargoRoutes };
+  if (newly.length === 0) return next;
+
+  next.newsLog = appendNews(state.newsLog,
+    rangeStrandNews(newly, { absWeek, year: state.year ?? 1, week: state.week ?? 1 }));
+  if (toast) {
+    const lanes = newly.slice(0, 3).map(x => (Array.isArray(x.stops) && x.stops.length > 2
+      ? x.stops.join('–') : `${x.origin}–${x.destination}`));
+    const more = newly.length > 3 ? ` and ${newly.length - 3} more` : '';
+    next.pendingToasts = [...(state.pendingToasts ?? []), {
+      type: 'warning',
+      title: newly.length === 1 ? '📏 A route is out of range' : `📏 ${newly.length} routes are out of range`,
+      message: `${lanes.join(', ')}${more} can no longer be reached by the aircraft flying `
+             + `${newly.length === 1 ? 'it' : 'them'} and ${newly.length === 1 ? 'has' : 'have'} stopped flying. `
+             + `Reassign to a longer-range aircraft — the route keeps its ramp. Details in News.`,
+      duration: 12000,
+    }];
+  }
+  return next;
+}
+
 function reducer(state, action) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
@@ -2107,7 +2189,14 @@ function reducer(state, action) {
       // whole point: closing and re-opening cost both.
       const { routeId, toAircraftId } = action;
       if (!reassignCompatibility(state, routeId, toAircraftId).ok) return state;
-      const move = r => (r.id === routeId ? { ...r, aircraftId: toAircraftId } : r);
+      // reassignCompatibility has already refused a tail that cannot reach every
+      // leg, so the destination is known-good: drop any out-of-range flag now
+      // rather than leaving the badge up until the next tick.
+      const move = r => {
+        if (r.id !== routeId) return r;
+        const { rangeStranded: _fixed, ...rest } = r;
+        return { ...rest, aircraftId: toAircraftId };
+      };
       const nextRoutes = (state.routes ?? []).map(move);
       const nextCargo  = (state.cargoRoutes ?? []).map(move);
       const stillFlying = (id) =>
@@ -3662,6 +3751,13 @@ function reducer(state, action) {
           && calendarYear(state) === COMET_GROUNDING.calendarYear
           && state.week === COMET_GROUNDING.week) {
         return reducer(applyCometGrounding(state), action);
+      }
+      // Routes the assigned aircraft can no longer reach are flagged and told to
+      // the player BEFORE the tick (which will not fly them). Same identity when
+      // nothing changed, so this re-enters at most once per week.
+      {
+        const stranded = applyRangeStranding(state);
+        if (stranded !== state) return reducer(stranded, action);
       }
       // ── Deterministic pre-tick prep (utils/tickPrep.js) ────────────────────
       // Events aged and expired, the fuel shock folded into the index so hedges
@@ -5647,16 +5743,27 @@ function reconcileState(parsed) {
   // Anything it changes goes into the news log, because this edits routes the
   // player paid launch costs for and a toast would not survive the week.
   const trimmed = applyScheduleTrimMigration(reconciled);
-  if (trimmed === reconciled) return reconciled;
-  const trimNotices = (trimmed.scheduleTrimNotices ?? [])
-    .slice((reconciled.scheduleTrimNotices ?? []).length);
-  if (trimNotices.length === 0) return trimmed;
-  const trimWeek = { absWeek: ((trimmed.year ?? 1) - 1) * 52 + (trimmed.week ?? 1),
-                     year: trimmed.year ?? 1, week: trimmed.week ?? 1 };
-  return {
-    ...trimmed,
-    newsLog: appendNews(trimmed.newsLog, scheduleTrimNews(trimNotices, trimWeek)),
-  };
+  let loaded = trimmed;
+  if (trimmed !== reconciled) {
+    const trimNotices = (trimmed.scheduleTrimNotices ?? [])
+      .slice((reconciled.scheduleTrimNotices ?? []).length);
+    if (trimNotices.length > 0) {
+      const trimWeek = { absWeek: ((trimmed.year ?? 1) - 1) * 52 + (trimmed.week ?? 1),
+                         year: trimmed.year ?? 1, week: trimmed.week ?? 1 };
+      loaded = {
+        ...trimmed,
+        newsLog: appendNews(trimmed.newsLog, scheduleTrimNews(trimNotices, trimWeek)),
+      };
+    }
+  }
+
+  // Routes the aircraft can no longer reach — above all, saves flying one of the
+  // ten types whose range the 2026-09-20 audit corrected. Flag them and write
+  // the news row on LOAD, so the player reads why before they advance a week
+  // rather than after the route has already sat idle. Idempotent: a route that
+  // is already flagged is not reported twice. News only here; the schedule-trim
+  // precedent found a toast on load does not survive the first screen.
+  return applyRangeStranding(loaded, { toast: false });
 }
 
 // The autosave used to be written here, by a `persistAutosave(state, storage)`

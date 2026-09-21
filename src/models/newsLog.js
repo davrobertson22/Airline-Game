@@ -319,6 +319,40 @@ export function scheduleTrimNews(notices, { absWeek = 0, year = 1, week = 1 } = 
 }
 
 /**
+ * News rows for routes whose aircraft can no longer reach them.
+ *
+ * Built by applyRangeStranding (store/GameContext.jsx) the week a route first
+ * becomes unflyable — a corrected aircraft range, or a cabin refit that cost
+ * range. Like schedule_trim, this is a change to something the player paid
+ * launch costs for, so it has to outlive the week: a toast is drained by the
+ * next screen, and the player may only notice the route earning nothing a month
+ * later. One row per route, because each one needs its own decision.
+ *
+ * Stamped with the save's own game week (no wall clock).
+ */
+export function rangeStrandNews(stranded, { absWeek = 0, year = 1, week = 1 } = {}) {
+  return (stranded ?? []).map((s, i) => ({
+    id: `range${absWeek}-${i}`,
+    absWeek, year, week,
+    category: 'fleet', kind: 'route_out_of_range', tier: 1,
+    subject: null,
+    icon: '📏',
+    data: {
+      origin:      s.origin ?? null,
+      destination: s.destination ?? null,
+      stops:       Array.isArray(s.stops) && s.stops.length > 2 ? s.stops : null,
+      cargo:       !!s.cargo,
+      from:        s.from ?? null,
+      to:          s.to ?? null,
+      sectorKm:    Math.round(s.sectorKm ?? 0),
+      rangeKm:     Math.round(s.rangeKm ?? 0),
+      aircraft:    s.aircraftName ?? null,
+      typeName:    s.typeName ?? null,
+    },
+  }));
+}
+
+/**
  * Append this week's rows to the log, newest LAST, capped.
  *
  * Stored oldest-first so appending is a push and the cap trims from the front;

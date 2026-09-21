@@ -420,3 +420,55 @@ Not every "newer is worse all-in" result is a bug. A ten-year-old airframe *shou
 > *Priced as new metal against new metal, every replacement type must beat the type it replaces on all-in cost per seat-km.*
 
 That invariant catches the 777X-8 and the 747-8I and passes everything else.
+
+---
+
+# Addendum 4 · Changes applied (2026-09-20)
+
+All 156 test suites pass. `src/data/aircraft.js` was clean before this work, so `git diff src/data/aircraft.js` shows only these changes. Nothing was committed — the tree already held 57 files of in-progress fuel-farm work.
+
+## Applied
+
+**Turboprop fuel recalibration** — every Turboprop-category type raised toward the jets' 92–98%-of-real scale. Verified figures used directly where research supplied them (`q400` 137.25 → 233, `atr72` 122.75 → 176, `il18` 210 → 456, `vanguard` 215 → 348); the rest moved by a banded multiplier (×1.55 for `eis ≥ 1975`, ×1.85 before).
+
+Effect on the mission sweep:
+
+| | before | after |
+|---|---|---|
+| `il18` wins | 49 | **1** |
+| `vanguard` wins | 18 | **6** |
+| `e195e2` wins | 23 | **55** |
+| vintage share of wins | 3.9% | **1.4%** |
+| `c208b` margin over #2 | ×2.99 | **×1.20** |
+
+The E195-E2 result is the one that matters: modern regional jets have their niche back.
+
+**777X fuel** — `b7778x` 861 → 777, `b7779x` 937.75 → 856, giving each ~10% per seat over the frame it replaces instead of 0.3% and 1.4%.
+
+**Closed lines no longer arrive factory-fresh** — nine types given a delivered age equal to how long their line has been shut: `b777200lr` 676w, `b7478i` 468w, `an148` 416w, `ma600` 364w, `crj1000` 312w, `a380`/`e190`/`e195` 260w, `ssj100` 208w.
+
+**Dash 7 repriced** — $12,000 → $30,000/week, $5.0M → $15M (10.4% lease yield, inside the 8–15% band). It was leasing for less than a 40-seat Dash 8-200 while carrying 54 seats into 1,000 ft less runway.
+
+**Spec corrections** — `b737max7` eis 2023 → 2027, `b737max10` 2025 → 2028, `a319neo` 2019 → 2022, `yak40` seats 40 → 32, `hs748` 48 → 58, `b377` 100 → 114, `emb120` oop 2001 → 2007, `b767200sf` burn 640 → 535 (it was out-burning the larger 767-300F).
+
+**Tests** — new `tools/aircraft-generation-test.mjs` (3 checks: no propeller beats the best modern jet per seat; a turboprop's advantage over a same-size RJ stays under 40%; every replacement beats its predecessor by at least 5% per seat). `aircraft-consistency-test.mjs` extended: `expectedAgeBand()` now handles lines that closed after 2004, and the factory-fresh check covers every closed line rather than only `eis <= 2004`.
+
+## Two things I got wrong, caught by your own suite
+
+**Freighter payloads.** I had queued `dc1030f` 78 → 65 t, `a300600f` 54 → 48 t and `e190f` 13 → 11 t from the research pass. The consistency suite's own `REAL` table says 77, 54 and 13.5 — and it is better sourced (Embraer publishes 13.5 t for the E190F; my researcher was quoting charter-site *typical* payloads, not max structural). All three reverted. The suite also caught that the E190F change pushed the freighter $M-per-tonne spread to 10.2×, over its 10× guard.
+
+**My own generational test.** The first version hand-rolled a cost model and disagreed with the engine by up to 50 points on the same pairs. It is not in the file. The reason is written into the test as a comment: reconstructing a "new" price for a closed line via one global `ERA_NEW_BUILD_PREMIUM` cannot fairly span a 1989 747-400 and a 2012 747-8I, and the verdict swings by tens of percent depending on which side you lift.
+
+## Deliberately NOT applied
+
+**Range corrections.** Ten types carry ferry or reduced-payload range where the field wants max-payload range (`b727200f` 3,500 → ~1,900 km, `b767200sf` 6,000 → ~3,700, `b707320` 10,650 → ~6,920, `dc863` 11,000 → ~7,400, `il96300` 11,500 → ~8,000, `tu204` 6,500 → ~4,300, `casacn235` 4,355 → ~2,870, `an148` 5,100 → ~3,500, `dc873f` 7,400 → ~5,400, `a330200f` 7,400 → ~5,900).
+
+These are genuine errors, but `simulation.js` handles an over-range route with `if (dist > effectiveRange) return null` — no suspension, no news-log entry, no UI warning. Cutting these ranges would **silently zero revenue** on live routes while the player keeps paying costs, with nothing on screen explaining why. They need a migration path first: surface the route as grounded, post a news item, and let the player re-equip. Worth doing as its own change.
+
+**The widebody capital band.** Still 15.2× per seat against a 2.5× operating spread. Compressing it is the fix for both the 767-300 complaint and the generational ladder, but it is a design decision with real blast radius on existing saves, and the right move is to model it before committing. The test that would guard it is documented in `aircraft-generation-test.mjs` but not asserted, because it would fail on day one.
+
+**`spacejet`.** Flagged as a spec error (programme cancelled 2023, never entered service). Left alone — a what-if SpaceJet is the same kind of deliberate counterfactual as a still-flying Concorde, and removing it removes content.
+
+## One correction to Addendum 1
+
+The Dash 7's ×11.7 → ×16.5 margin over second place is largely a **grid artefact**, not 46 distinct problems. Its wins are almost entirely one airport — Barra, 2,776 ft — sampled at twelve demand levels, several of which (up to 59,000 passengers a week) Barra would never see. Second place is a 19-seat Twin Otter earning $5.5k, so the *ratio* is large while the situation is single. The reprice stands on the comparison with the Dash 8-200, not on that ratio.

@@ -109,6 +109,27 @@ function compose(item) {
         standalone: true,
       };
 
+    // A route whose aircraft can no longer reach one of its legs — a corrected
+    // aircraft range, or a cabin refit that cost range. It stops flying (it has
+    // to: the aeroplane cannot make the sector), so the row says exactly why and
+    // what fixes it. Reassigning keeps the route's ramp and pricing; closing and
+    // re-opening would cost both.
+    case 'route_out_of_range': {
+      const lane = d.stops ? d.stops.join('–') : pairOf(d);
+      const leg  = d.from && d.to ? `${d.from}–${d.to}` : lane;
+      const km   = (n) => `${Math.round(n ?? 0).toLocaleString()} km`;
+      const what = [d.aircraft, d.typeName && d.aircraft !== d.typeName ? `(${d.typeName})` : null]
+        .filter(Boolean).join(' ') || 'Its aircraft';
+      return {
+        headline: `${d.cargo ? 'Cargo route' : 'Route'} out of range — ${lane}`,
+        sub: `${what} reaches ${km(d.rangeKm)}, and the ${leg} leg is ${km(d.sectorKm)}, `
+           + `so this route has stopped flying and is earning nothing. Reassign it to a `
+           + `longer-range aircraft from the Routes page — the route keeps its pricing `
+           + `and its ramp-up — or close it.`,
+        standalone: true,
+      };
+    }
+
     case 'competitor_note':
       return { headline: '', sub: d.description ?? null, standalone: true };
 
