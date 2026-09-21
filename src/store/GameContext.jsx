@@ -1181,10 +1181,38 @@ function setEraModuleState(startYear, calYear) {
  * Returns the SAME state object when nothing changed, which is what lets
  * ADVANCE_WEEK use it as a re-entering pre-tick transform without looping.
  */
+/**
+ * The toast for routes that went out of range THIS week, read off the flags
+ * applyRangeStranding stamped (`rangeStranded.since`). Returns [] or [toast].
+ *
+ * It is derived from state rather than queued by applyRangeStranding because
+ * ADVANCE_WEEK REPLACES state.pendingToasts with the week's own list: a toast
+ * queued by the pre-tick pass is discarded by the very tick it announces (the
+ * Comet 1 grounding hit the same wall and preserves pre-tick toasts in era
+ * games only). ADVANCE_WEEK spreads this into its own list instead.
+ */
+export function rangeStrandToasts(state, absWeek) {
+  const hits = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]
+    .filter(r => r.rangeStranded && r.rangeStranded.since === absWeek);
+  if (hits.length === 0) return [];
+  const lanes = hits.slice(0, 3).map(r => (Array.isArray(r.stops) && r.stops.length > 2
+    ? r.stops.join('–') : `${r.origin}–${r.destination}`));
+  const more = hits.length > 3 ? ` and ${hits.length - 3} more` : '';
+  const one = hits.length === 1;
+  return [{
+    type: 'warning',
+    title: one ? '📏 A route is out of range' : `📏 ${hits.length} routes are out of range`,
+    message: `${lanes.join(', ')}${more} can no longer be reached by the aircraft flying `
+           + `${one ? 'it' : 'them'} and ${one ? 'has' : 'have'} stopped flying. `
+           + `Reassign to a longer-range aircraft — the route keeps its ramp. Details in News.`,
+    duration: 12000,
+  }];
+}
+
 export function applyRangeStranding(state, { toast = true } = {}) {
   const stranded = rangeStrandedRoutes(state);
   const byRoute = new Map(stranded.map(x => [x.routeId, x]));
-  const absWeek = ((state.year ?? 1) - 1) * 52 + (state.week ?? 1);
+  const absWeek = absoluteWeek(state.year ?? 1, state.week ?? 1);
   const newly = [];
   let changed = false;
 
@@ -1227,19 +1255,9 @@ export function applyRangeStranding(state, { toast = true } = {}) {
 
   next.newsLog = appendNews(state.newsLog,
     rangeStrandNews(newly, { absWeek, year: state.year ?? 1, week: state.week ?? 1 }));
-  if (toast) {
-    const lanes = newly.slice(0, 3).map(x => (Array.isArray(x.stops) && x.stops.length > 2
-      ? x.stops.join('–') : `${x.origin}–${x.destination}`));
-    const more = newly.length > 3 ? ` and ${newly.length - 3} more` : '';
-    next.pendingToasts = [...(state.pendingToasts ?? []), {
-      type: 'warning',
-      title: newly.length === 1 ? '📏 A route is out of range' : `📏 ${newly.length} routes are out of range`,
-      message: `${lanes.join(', ')}${more} can no longer be reached by the aircraft flying `
-             + `${newly.length === 1 ? 'it' : 'them'} and ${newly.length === 1 ? 'has' : 'have'} stopped flying. `
-             + `Reassign to a longer-range aircraft — the route keeps its ramp. Details in News.`,
-      duration: 12000,
-    }];
-  }
+  // Direct callers get the toast here. ADVANCE_WEEK passes toast:false and
+  // takes it from rangeStrandToasts inside its own list (see that function).
+  if (toast) next.pendingToasts = [...(state.pendingToasts ?? []), ...rangeStrandToasts(next, absWeek)];
   return next;
 }
 
@@ -2171,7 +2189,14 @@ function reducer(state, action) {
       // swapping a new delivery in for a leased plane costs nothing but the click.
       const { fromAircraftId, toAircraftId } = action;
       if (!transferCompatibility(state, fromAircraftId, toAircraftId).ok) return state;
-      const move = r => (r.aircraftId === fromAircraftId ? { ...r, aircraftId: toAircraftId } : r);
+      // transferCompatibility has range-checked every leg against the new tail,
+      // so any out-of-range flag on the moved routes is resolved — drop it now
+      // rather than leaving the badge up until the next tick.
+      const move = r => {
+        if (r.aircraftId !== fromAircraftId) return r;
+        const { rangeStranded: _fixed, ...rest } = r;
+        return { ...rest, aircraftId: toAircraftId };
+      };
       return {
         ...state,
         routes:      state.routes.map(move),
@@ -3756,7 +3781,7 @@ function reducer(state, action) {
       // the player BEFORE the tick (which will not fly them). Same identity when
       // nothing changed, so this re-enters at most once per week.
       {
-        const stranded = applyRangeStranding(state);
+        const stranded = applyRangeStranding(state, { toast: false });
         if (stranded !== state) return reducer(stranded, action);
       }
       // ── Deterministic pre-tick prep (utils/tickPrep.js) ────────────────────
@@ -4083,6 +4108,9 @@ function reducer(state, action) {
                  + `Until it restarts you are buying every litre on the jet market.`,
           duration: 9000,
         }] : []),
+        // Routes flagged out of range by this week's pre-tick pass. Built here,
+        // not queued pre-tick, because this array REPLACES pendingToasts.
+        ...rangeStrandToasts(state, nowAbsWeek),
         // Era games: a toast queued immediately before this tick (the Comet
         // grounding fires pre-tick and recurses into ADVANCE_WEEK) must
         // survive it — this array REPLACES pendingToasts in the return.

@@ -175,10 +175,39 @@ test('ADVANCE_WEEK flags the route, reports it once, and still advances exactly 
   assert.equal(strandNews(s).length, 1, 'a stranded route was reported again the following week');
 });
 
+test('the toast survives the weekly tick in a classic game', () => {
+  // ADVANCE_WEEK REPLACES state.pendingToasts with the week's own list. The
+  // stranding pass runs pre-tick and re-enters the reducer, so a toast queued
+  // there is thrown away by the very tick it announces — the Comet 1 grounding
+  // hit the same wall and only preserves pre-tick toasts in ERA games. Shipped
+  // in 5e1e818 with exactly that hole: news row and badge worked, the toast
+  // never reached a classic player. The toast has to come from ADVANCE_WEEK's
+  // own list.
+  let s = shortOf(flying());
+  assert.equal(s.startYear ?? null, null, 'fixture must be a classic game — era games keep pre-tick toasts');
+  s = gameReducer(s, { type: 'ADVANCE_WEEK' });
+  const toasts = (s.pendingToasts ?? []).filter(t => /out of range/i.test(t.title ?? ''));
+  assert.equal(toasts.length, 1, `expected one out-of-range toast after the tick, got ${toasts.length}`);
+  s = gameReducer({ ...s, pendingToasts: [] }, { type: 'ADVANCE_WEEK' });
+  assert.equal((s.pendingToasts ?? []).filter(t => /out of range/i.test(t.title ?? '')).length, 0,
+    'the toast repeated the following week');
+});
+
 test('REASSIGN_ROUTE to a tail that reaches it clears the flag immediately', () => {
   const s = applyRangeStranding(shortOf(flying()));
   const next = gameReducer(s, { type: 'REASSIGN_ROUTE', routeId: s.routes[0].id, toAircraftId: 'a2' });
   assert.equal(next.routes[0].aircraftId, 'a2', 'reassign was refused');
+  assert.equal(next.routes[0].rangeStranded, undefined, 'the badge should go the moment it is fixed');
+});
+
+test('TRANSFER_ROUTES to a tail that reaches them clears the flag immediately', () => {
+  // Swapping a longer-range tail in for the whole aircraft is the other natural
+  // fix, and transferCompatibility range-checks every leg. Without the clear
+  // the badge would linger a week after the problem was solved.
+  const s = applyRangeStranding(shortOf(flying()));
+  assert.ok(s.routes[0].rangeStranded, 'fixture: route should start flagged');
+  const next = gameReducer(s, { type: 'TRANSFER_ROUTES', fromAircraftId: 'a1', toAircraftId: 'a2' });
+  assert.equal(next.routes[0].aircraftId, 'a2', 'transfer was refused');
   assert.equal(next.routes[0].rangeStranded, undefined, 'the badge should go the moment it is fixed');
 });
 

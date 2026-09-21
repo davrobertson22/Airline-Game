@@ -472,3 +472,47 @@ These are genuine errors, but `simulation.js` handles an over-range route with `
 ## One correction to Addendum 1
 
 The Dash 7's ×11.7 → ×16.5 margin over second place is largely a **grid artefact**, not 46 distinct problems. Its wins are almost entirely one airport — Barra, 2,776 ft — sampled at twelve demand levels, several of which (up to 59,000 passengers a week) Barra would never see. Second place is a 19-seat Twin Otter earning $5.5k, so the *ratio* is large while the situation is single. The reprice stands on the comparison with the Dash 8-200, not on that ratio.
+
+---
+
+# Addendum 5 · Range migration (2026-09-20)
+
+157 suites pass, including the new `tools/range-stranding-test.mjs` (13 checks). A mutation check confirmed the test catches the weekly hook being removed.
+
+## The bug underneath
+
+`simulateRoute`, `simulateTagRoute` and `simulateCargoRoute` all `return null` for a leg beyond `effectiveRangeKm`, and `weeklyTick` does `if (!result) continue;`. Correct physics, silent failure: the route earned nothing, its aircraft kept billing lease and maintenance, and nothing anywhere said why. This was **reachable before the audit** — a cabin refit that costs range could always strand a route — so the fix closes a latent bug as well as making the range corrections safe to ship.
+
+## What was built
+
+- **Detector** (`simulation.js`): `routeRangeShortfall(route, aircraft)` and `rangeStrandedRoutes(state)`. They measure exactly as the tick does — unrounded `distanceKm` against `effectiveRangeKm` — so a route is flagged if and only if the tick will refuse it. Single-leg, multi-stop (reports the leg that fails, not the first) and cargo.
+- **Reducer** (`GameContext.jsx`): `applyRangeStranding(state)` flags newly stranded routes with `route.rangeStranded`, clears the flag when a route is reachable again, and writes a tier-1 news row plus a toast. Returns the same object when nothing changed, so it runs as a re-entering pre-tick transform in `ADVANCE_WEEK` (the Comet 1 grounding pattern) without looping. Also runs on **save load**, news-only (the schedule-trim precedent), so affected players read why before they advance a week. `REASSIGN_ROUTE` clears the flag immediately.
+- **UI**: shared `OutOfRangeBadge.jsx` on the Routes page and the cargo routes list, with the leg, the shortfall and the fix in its tooltip; stranded routes dim like grounded ones and count under the existing *Disrupted* filter. News renders `route_out_of_range` rows in full.
+
+Nothing is closed or moved automatically. `REASSIGN_ROUTE` already keeps a route's ramp and pricing, so the notice points at the cheap fix and leaves the decision with the player.
+
+## Range corrections — applied on the catalogue's own convention
+
+Checking anchor types showed the catalogue uses **two conventions**: passenger aircraft carry the manufacturer's *headline* range (every modern jet matches exactly), and freighters carry range *at max structural payload*. The research list mixed the two — several of its "corrections" were max-payload figures for passenger types, which would have put them on a different basis from every other passenger jet. Only corrections that are wrong on the game's own convention were applied:
+
+| type | was | now | basis |
+|---|---|---|---|
+| `a330200f` | 7,400 | **5,900** | Airbus: 5,900 km at 70 t (7,400 is at 65 t) |
+| `b767200sf` | 6,000 | **3,700** | max-payload range, Aircraft Commerce |
+| `dc873f` | 7,400 | **5,400** | max-payload range |
+| `dc863` | 11,000 | **7,400** | out-ranged the long-range DC-8-62 it was a stretch of |
+| `il96300` | 11,500 | **11,000** | Ilyushin headline range |
+| `an148` | 5,100 | **3,500** | the type is named the -100B; 5,100 matches no -100B figure |
+
+## Not applied, and why
+
+| type | reason |
+|---|---|
+| `b707320` | research supplied the 6,920 km *max-payload* figure; the game uses headline range for passenger jets, and no verified headline figure was found |
+| `tu204` | variant and basis both ambiguous across sources |
+| `casacn235` | 4,355 km may be the headline figure; basis unclear |
+| `b727200f` | only source was a charter broker — the same class of source that produced the wrong freighter payloads |
+
+## Housekeeping
+
+The `era.js` header still says `tools/golden-master/run.mjs must stay PARITY OK`; that directory was removed in an earlier commit, so the reference is stale.
