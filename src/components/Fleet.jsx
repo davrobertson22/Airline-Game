@@ -13,7 +13,7 @@ import {
   MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
-  stateLoungeFields, stateGroundHandlingFields, coverOutlookByAircraft,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, coverOutlookByAircraft,
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
@@ -640,7 +640,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
       ? simulateCargoRoute(r, aircraft, gd, state.labor ?? null, fuelMult, evMult,
           cargoAlloc.get(r.id) ?? null)
       : simulateRoute(
-          { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination) },
+          { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination), ...stateCateringFields(state, r) },
           aircraft, gd, state.labor ?? null,
           fuelMult, null,
           rivalSpecsFor(state, r.origin, r.destination),

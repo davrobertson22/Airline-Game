@@ -1,9 +1,10 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, formatPercent, simulateRoute, currentGameDate, maintenanceMultiplier, weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm, routeBlockHours, weekToGameDate, formatGameDate, fleetAvgUtilization, rivalSpecsFor,
-  stateLoungeFields, stateGroundHandlingFields,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields,
 } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
@@ -70,7 +71,7 @@ export default function Dashboard() {
         : (rrById[route.id] ?? simulateRoute(
             // Lounge fields — without them this fallback quotes the full
             // third-party premium ground rate on a route the tick discounts.
-            { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+            { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
             aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
             rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
             1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)));
@@ -332,6 +333,20 @@ export default function Dashboard() {
   // directly above KPI boxes that were all clickable — the player was told
   // exactly what was wrong and then left to rebuild the query by hand.
   const alerts = [];
+  // Aircraft on routes that will sit out next week with nobody to fly them.
+  // First, because it is the one that zeroes revenue outright — a new airline
+  // that never found Company ▸ Operations flew six routes of nobody for weeks
+  // (Discord 2026-09-21). Same list the tick parks (tickPrep).
+  {
+    const routed = new Set([...(routes ?? []), ...(cargoRoutes ?? [])].map(r => r.aircraftId));
+    const noCrew = crewGroundedAircraftIds(state).filter(id => routed.has(id)).length;
+    if (noCrew > 0)
+      alerts.push({
+        color: 'var(--red)', icon: AlertIcon,
+        text: `${noCrew} aircraft grounded — no crew to fly ${noCrew === 1 ? 'it' : 'them'}, so ${noCrew === 1 ? 'its routes carry' : 'their routes carry'} no passengers · hire in Operations`,
+        to: 'operations',
+      });
+  }
   if (idleAircraft > 0)
     alerts.push({ color: 'var(--yellow)', icon: AlertIcon, text: idleFleetAlertText(idleFleet), to: 'fleet', filter: { filterChip: 'idle' } });
   if (isFinite(weeksOfCash) && weeksOfCash < 4)

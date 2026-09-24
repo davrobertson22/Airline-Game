@@ -27,7 +27,7 @@ import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
          CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
-         absorbCrewFor, crewUnitsForBodies } from '../data/labor.js';
+         absorbCrewFor, crewUnitsForBodies, starterCrewTopUp, CREW_INSTANT_AIRCRAFT } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
          FORCED_REP_HIT, REP_PENALTY_DECAY, REP_PENALTY_MAX,
@@ -60,6 +60,10 @@ import {
   canBuildStation, makeStation, stationCloseRefund, stationLevelDef,
   GROUND_STATION_MAX_LEVEL,
 } from '../data/groundStation.js';
+import {
+  canSignCatering, makeCateringContract, cateringBreakCost, CATERING_SUPPLIER_MAP,
+  coverageLabel, contractWeeksLeft,
+} from '../data/cateringContracts.js';
 import {
   DEFAULT_LABOR_RELATIONS, tickUnrest, rollStrike, settlementPayMultiplier,
   scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand,
@@ -1265,6 +1269,48 @@ export function applyRangeStranding(state, { toast = true } = {}) {
   return next;
 }
 
+/**
+ * Starter crew (labor.js starterCrewTopUp): whenever an action grows the fleet
+ * of a crew-pipeline airline, top every group up to its starter floor — hired
+ * instantly, at the normal training cost, with a toast saying so. Runs as a
+ * wrapper so every route into the fleet (lease, purchase, delivery, used
+ * market) is covered by one rule instead of one copy per case.
+ */
+function withStarterCrew(prev, next) {
+  if (!next || next === prev || !next.crewPipeline) return next;
+  const before = prev?.fleet?.length ?? 0;
+  const after  = next.fleet?.length ?? 0;
+  if (after <= before) return next;
+  const typeOf = (a) => getAircraftType(a.typeId);
+  const { hires, cost } = starterCrewTopUp(next.labor, next.fleet, typeOf, next.cash ?? 0);
+  const groups = Object.keys(hires);
+  if (groups.length === 0) return next;
+  const labor = { ...next.labor };
+  for (const id of groups) {
+    labor[id] = { ...labor[id], headcount: (Number(labor[id]?.headcount) || 0) + hires[id] };
+  }
+  // The first top-up is the one a new player needs explained; later ones (the
+  // second aircraft) are small and say the same thing again, so stay quiet.
+  const firstCrew = LABOR_GROUPS.every(g => !(Number(prev?.labor?.[g.id]?.headcount) > 0));
+  return {
+    ...next,
+    cash: next.cash - cost,
+    labor,
+    pendingToasts: firstCrew
+      ? [...(next.pendingToasts ?? []), {
+          type: 'info', title: '👩‍✈️ Starter crew hired',
+          message: `Your first crew are on the payroll (${formatMoney(cost)} training). Your first ${CREW_INSTANT_AIRCRAFT} aircraft are crewed for you; `
+            + `every one after that needs crew hired in Company ▸ Operations, and pilots take ${CREW_LEAD_WEEKS.pilots} weeks to train.`,
+          duration: 12000,
+        }]
+      : next.pendingToasts,
+  };
+}
+
+function rootReducer(state, action) {
+  return withStarterCrew(state, reducer(state, action));
+}
+
 function reducer(state, action) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
@@ -2120,6 +2166,37 @@ function reducer(state, action) {
       const rest = { ...stations };
       delete rest[action.code];
       return { ...state, cash: state.cash + stationCloseRefund(station), groundStations: rest };
+    }
+
+    // ─── Catering contracts ─────────────────────────────────────────────────
+    // A commitment, not a building: no capex, no construction. Signing locks
+    // this week's book rate for the term; breaking early costs 35% of the
+    // remaining spend (data/cateringContracts.js). The state key is written
+    // only when non-empty, like groundStations, for golden parity with HW.
+    case 'SIGN_CATERING_CONTRACT': {
+      // action: { supplierId, years }
+      const contracts = state.cateringContracts ?? {};
+      const years = Math.round(Number(action.years) || 0);
+      const check = canSignCatering(action.supplierId, years, contracts);
+      if (!check.ok) return { ...state, error: check.reasons[0] };
+      const c = makeCateringContract(action.supplierId, years, absoluteWeek(state.year, state.week));
+      if (!c) return state;
+      return { ...state, cateringContracts: { ...contracts, [c.id]: c } };
+    }
+
+    case 'BREAK_CATERING_CONTRACT': {
+      const contracts = state.cateringContracts ?? {};
+      const c = contracts[action.id];
+      if (!c) return state;
+      const spend = state.lastReport?.cateringContractSpend?.[c.id] ?? 0;
+      const penalty = cateringBreakCost(c, absoluteWeek(state.year, state.week), spend);
+      const rest = { ...contracts };
+      delete rest[c.id];
+      const { cateringContracts: _drop, ...without } = state;
+      return {
+        ...(Object.keys(rest).length > 0 ? { ...state, cateringContracts: rest } : without),
+        cash: state.cash - penalty,
+      };
     }
 
     case 'SET_LOUNGE_POLICY': {
@@ -3834,6 +3911,7 @@ function reducer(state, action) {
         seasonalReactivations, seasonAdjustedRoutes,
         baseBuild, tickedBases, loungeBuild, tickedLounges,
         stationBuild, tickedStations,
+        cateringTick, stationOverflowNew,
         laborThisWeek,
       } = prep;
       let seasonalReactivationCost = seasonalReactivationCostPrep;
@@ -4356,6 +4434,26 @@ function reducer(state, action) {
           title: `\uD83D\uDEEB ${st.code} upgraded to ${stationLevelDef(st.level)?.name ?? 'a bigger station'}`,
           message: `${st.code} can now self-handle more of your departures.`,
         })),
+        ...(stationOverflowNew ?? []).map(o => ({
+          type: 'warning', icon: '\uD83D\uDEEB', duration: 10000,
+          title: `\uD83D\uDEEB ${o.code} ground station is over capacity`,
+          message: `You now fly ${o.departures} departures a week from ${o.code}; your `
+                 + `${stationLevelDef(o.level)?.name ?? 'station'} handles ${o.capacity}. The rest go to the `
+                 + `contractor at the full rate, so the station saves less every week you grow. Upgrading `
+                 + `builds in place without taking it offline.`,
+        })),
+        ...(cateringTick?.expiringSoon ?? []).map(c => ({
+          type: 'warning', icon: '\uD83C\uDF7D', duration: 10000,
+          title: `\uD83C\uDF7D ${CATERING_SUPPLIER_MAP[c.supplierId]?.name ?? 'Catering'} contract ends in ${contractWeeksLeft(c, curAbsWeek)} weeks`,
+          message: `Your ${coverageLabel(c.coverage)} catering contract lapses soon. After that those airports pay the `
+                 + `standard rate until you sign again — at whatever the book is offering then.`,
+        })),
+        ...(cateringTick?.expired ?? []).map(c => ({
+          type: 'info', icon: '\uD83C\uDF7D', duration: 9000,
+          title: `\uD83C\uDF7D ${CATERING_SUPPLIER_MAP[c.supplierId]?.name ?? 'Catering'} contract ended`,
+          message: `Your ${coverageLabel(c.coverage)} contract has run its term. Those airports are back on the `
+                 + `standard catering rate. Sign a new one on the Operations page.`,
+        })),
       ];
 
       // 5. Build recovery toasts (aircraft that just came back from grounding).
@@ -4410,6 +4508,28 @@ function reducer(state, action) {
         })),
       ];
       newToasts.push(...leaseWarningToasts, ...failureToasts, ...recoveryToasts, ...checkToasts, ...coverToasts);
+
+      // Aircraft that sat out the week with nobody to fly them. The tick parks
+      // them silently (tickPrep crewGroundedIds), and a new player who never
+      // found Company ▸ Operations flew six routes of nobody with no idea why
+      // (Discord 2026-09-21). Only tails with a route count — an idle spare
+      // without crew is costing nothing it wasn't already.
+      {
+        const routed = new Set([...(state.routes ?? []), ...(state.cargoRoutes ?? [])].map(r => r.aircraftId));
+        const parked = (prep.crewGroundedIds ?? []).filter(id => routed.has(id));
+        if (parked.length > 0) {
+          const inTraining = LABOR_GROUPS.some(g => (state.labor?.[g.id]?.pipeline ?? []).length > 0);
+          newToasts.push({
+            type: 'danger', icon: '🧑‍✈️',
+            title: `${parked.length} aircraft grounded — no crew`,
+            message: `${parked.length === 1 ? 'One aircraft' : `${parked.length} aircraft`} with routes had nobody to fly ${parked.length === 1 ? 'it' : 'them'} this week, so ${parked.length === 1 ? 'its routes' : 'their routes'} carried no passengers. `
+              + (inTraining
+                ? 'Crew are in training and the aircraft fly again as they qualify. Check Company ▸ Operations to see if you need more.'
+                : 'Hire pilots and cabin crew in Company ▸ Operations.'),
+            duration: 10000,
+          });
+        }
+      }
 
       // Encroachment notifications — a rival entering or leaving one of your routes.
       for (const ev of encroachEvents ?? []) {
@@ -5270,6 +5390,12 @@ function reducer(state, action) {
         mroBases:          tickedBases,
         lounges:           tickedLounges,
         ...(Object.keys(tickedStations).length > 0 ? { groundStations: tickedStations } : {}),
+        // Written only when non-empty (parity with Headwinds' golden master).
+        // If the last contract expired this week the key must be CLEARED, not
+        // left to `...state` above, or the lapsed deal would keep cooking.
+        ...(cateringTick?.contracts && Object.keys(cateringTick.contracts).length > 0
+          ? { cateringContracts: cateringTick.contracts }
+          : (state.cateringContracts ? { cateringContracts: undefined } : {})),
         activeEvents:      allEvents,
         fuelPrice:         { index: nextFuelIndex, history: fuelPriceHistory,
                              ...(nextCrackIndex != null ? { crack: nextCrackIndex } : {}) },
@@ -5536,7 +5662,7 @@ function reducer(state, action) {
 }
 
 // Exported for headless simulation/testing harnesses (no React required to use it).
-export { reducer as gameReducer, freshState, reconcileState };
+export { rootReducer as gameReducer, freshState, reconcileState };
 
 // ─────────────────────────────────────────────
 // CONTEXT + PROVIDER
@@ -5750,6 +5876,9 @@ function reconcileState(parsed) {
     // only when the save actually has one (see freshState).
     ...(parsed.groundStations && Object.keys(parsed.groundStations).length > 0
       ? { groundStations: parsed.groundStations } : {}),
+    // Catering contracts — carried only when the save has one.
+    ...(parsed.cateringContracts && Object.keys(parsed.cateringContracts).length > 0
+      ? { cateringContracts: parsed.cateringContracts } : {}),
     loungePolicy:             parsed.loungePolicy ? normalizeLoungePolicy(parsed.loungePolicy) : null,
     awareness:                parsed.awareness                ?? 5,
     // Labor relations (unrest / strikes / negotiations) — added later; old saves
@@ -5880,7 +6009,7 @@ export function GameProvider({ children }) {
   // removes the localStorage copy and this initialiser quietly stops finding
   // anything. It is also what lets the headless component tests in tools/ seed
   // a save and render a component synchronously, as they always have.
-  const [state, dispatch] = useReducer(reducer, null, () => {
+  const [state, dispatch] = useReducer(rootReducer, null, () => {
     try {
       const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null;
       if (saved) return reconcileState(JSON.parse(saved));

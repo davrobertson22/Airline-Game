@@ -31,6 +31,7 @@ import {
 import { consumeNavFilter } from '../utils/navIntent.js';
 import { useToast } from './ToastSystem.jsx';
 import { projectWeek } from '../utils/financeProjection.js';
+import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { projectRouteAddition } from '../models/pairShare.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
@@ -39,7 +40,7 @@ import {
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo, blockHourFit,
-  stateLoungeFields, stateGroundHandlingFields,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport,
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
 
@@ -252,14 +253,21 @@ export default function Routes() {
   // encroachment, marketing/loyalty lifts, landing fees). Routes the engine skips
   // (grounded or dormant-seasonal) aren't in the report, so fall back to a
   // standalone sim run with the same labor + fuel the engine used.
+  // Aircraft with nobody to crew them sit out the week (tickPrep), so the
+  // engine leaves their routes out of the report. The standalone fallback
+  // below would then quote what they WOULD earn — which is how a new airline
+  // with no crew hired saw six profitable routes and flew nobody (Discord
+  // 2026-09-21). They earn nothing; say so, and badge them "No crew".
+  const noCrew = useMemo(() => new Set(crewGroundedAircraftIds(state)), [state]);
   const engineResultFor = (route, aircraft) => {
     if (!aircraft) return null;
+    if (noCrew.has(aircraft.id)) return null;
     const rr = rrById[route.id];
     if (rr) return rr;
     const avgUtil = fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]);
     const evMult  = buildEventDemandModel(state.activeEvents).multFor(route.origin, route.destination);
     return simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
       aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null, evMult,
       state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -328,7 +336,8 @@ export default function Routes() {
     // aircraft-type / haul filters in the table view).
     const acs = group.routes.map(r => fleet.find(a => a.id === r.aircraftId)).filter(Boolean);
     const hasOutOfRange = group.routes.some(r => r.rangeStranded);
-    const hasDisrupted = acs.some(a => a.status === 'grounded') || hasOutOfRange;
+    const hasNoCrew    = group.routes.some(r => noCrew.has(r.aircraftId));
+    const hasDisrupted = acs.some(a => a.status === 'grounded') || hasOutOfRange || hasNoCrew;
     const hasDormant   = group.routes.some(r => r.season && !isRouteActive(r, gd.month));
     const regions = new Set([
       getRegion(getAirport(group.origin)?.country),
@@ -349,10 +358,10 @@ export default function Routes() {
 
     return {
       ...group, totalProfit, totalRevenue, totalPax, avgLoad, distance, classLoads,
-      hasDisrupted, hasOutOfRange, hasDormant, regions, typeIds, margin, totalFreq, quality,
+      hasDisrupted, hasOutOfRange, hasNoCrew, hasDormant, regions, typeIds, margin, totalFreq, quality,
       totalOpCost, totalFixed, econ,
     };
-  }), [routes, fleet, rrById, fixedByRoute, profitBasis]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [routes, fleet, rrById, fixedByRoute, profitBasis, noCrew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Aircraft types present across all groups (for the type filter dropdown).
   // NOTE: must stay above the detailPair early-return — hooks can't be conditional.
@@ -1119,7 +1128,7 @@ function TagRouteCard({ route, onClose, onAddAircraft, siblingCount = 1 }) {
   // attaches. Without them this card understates a two-lounge rotation's weekly
   // profit by the whole premium ground discount.
   const sim      = aircraft ? simulateTagRoute(
-    { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+    { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
     aircraft, gd, state.labor ?? null, 1.0,
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null, buildEventDemandModel(state.activeEvents).multFor,
@@ -1480,7 +1489,13 @@ function RouteTableRow({ group: g, zebra, selected, expanded, onToggleSelect, on
               <Glyph e="📏" /> Out of range
             </span>
           )}
-          {g.hasDisrupted && !g.hasOutOfRange && (
+          {g.hasNoCrew && !g.hasOutOfRange && (
+            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(248,81,73,0.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.3)', textTransform: 'uppercase' }}
+                  title="Nobody to fly this aircraft — it carries no passengers until crew are hired in Company ▸ Operations.">
+              <Glyph e="🧑‍✈️" /> No crew
+            </span>
+          )}
+          {g.hasDisrupted && !g.hasOutOfRange && !g.hasNoCrew && (
             <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(248,81,73,0.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.3)', textTransform: 'uppercase' }}>
               <Glyph e="🔧" /> Disrupted
             </span>
@@ -1589,6 +1604,8 @@ function ExpandedGroupPanel({ group, getResult, onClose, onPriceChange, onAddFli
             onChange={(level) => dispatch({ type: 'SET_ROUTE_CATERING', routeIds: group.routes.map(r => r.id), level })}
             distKm={dist}
             compact
+            capNote={group.routes[0] ? stateCateringCapReport(state, group.routes[0].origin, group.routes[0].destination,
+              groupCatLevel ?? 'full', routeStops(group.routes[0])) : null}
             label={groupCatLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
           />
         </div>
@@ -1691,6 +1708,15 @@ function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, o
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {group.hasNoCrew && (
+            <span style={{
+              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+              background: 'rgba(248,81,73,0.12)', color: 'var(--red)',
+              border: '1px solid rgba(248,81,73,0.35)',
+            }} title="Nobody to fly this aircraft — it carries no passengers until crew are hired in Company ▸ Operations.">
+              <Glyph e="🧑‍✈️" /> No crew
+            </span>
+          )}
           {sims.some(({ aircraft }) => aircraft?.status === 'grounded') && (
             <span style={{
               fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
@@ -1778,6 +1804,7 @@ function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, o
             onChange={setGroupCatering}
             distKm={dist}
             compact
+            capNote={routes[0] ? stateCateringCapReport(state, origin, destination, groupCatLevel ?? 'full', routeStops(routes[0])) : null}
             label={groupCatLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
           />
         </div>
@@ -2262,19 +2289,30 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
 
   const isGrounded = aircraft?.status === 'grounded';
   const isStranded = !!route?.rangeStranded;   // not flying — out of range
+  const isNoCrew   = !!aircraft && crewGroundedAircraftIds(state).includes(aircraft.id);
 
   return (
     <>
       <tr style={{
         borderBottom: showPricing ? 'none' : '1px solid var(--border-subtle)',
-        opacity: (isGrounded || isDormant || isStranded) ? 0.6 : 1,
-        background: (isGrounded || isStranded) ? 'rgba(248,81,73,0.04)' : undefined,
+        opacity: (isGrounded || isDormant || isStranded || isNoCrew) ? 0.6 : 1,
+        background: (isGrounded || isStranded || isNoCrew) ? 'rgba(248,81,73,0.04)' : undefined,
       }}>
         <td style={{ padding: '7px 8px', fontWeight: 600 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {aircraft?.name ?? '—'}
             <SeasonBadge route={route} month={curMonth} />
             <OutOfRangeBadge route={route} />
+            {isNoCrew && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                background: 'rgba(248,81,73,0.15)', color: 'var(--red)',
+                border: '1px solid rgba(248,81,73,0.3)',
+                textTransform: 'uppercase', letterSpacing: '.04em',
+              }} title="Nobody to fly this aircraft — it carries no passengers until crew are hired in Company ▸ Operations.">
+                <Glyph e="🧑‍✈️" /> No crew
+              </span>
+            )}
             {isGrounded && (
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,

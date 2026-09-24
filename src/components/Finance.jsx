@@ -7,7 +7,7 @@ import {
   breakEvenLoadFactor,
   weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor,
-  stateLoungeFields, stateGroundHandlingFields,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields,
 } from '../utils/simulation.js';
 import { getAircraftType, eraPurchasePrice } from '../data/aircraft.js';
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
@@ -381,7 +381,7 @@ function PLStatement({ proj }) {
     // exists to reconcile to: a lounge owner is shown nearly 3x the premium
     // ground cost the tick actually charges.
     const result = simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
       aircraft, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtilization, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -2361,7 +2361,7 @@ function UnitEconomics({ proj }) {
     // Simulate with the engine's labor + fuel multiplier so costs match; use the
     // engine's BOOKED revenue (incl. connecting feed + demand lifts) for RASK/yield.
     const raw = simulateRoute(
-      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+      { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
       a, gd, labor, proj.fuelMultiplier, null,
       rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
       evDemand.multFor(route.origin, route.destination), state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
@@ -2526,7 +2526,7 @@ function Forecast({ proj }) {
   const routeData = routes.map(r => {
     const a = fleet.find(x => x.id === r.aircraftId);
     return a ? simulateRoute(
-      { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination) },
+      { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination), ...stateCateringFields(state, r) },
       a, gd, fcLaborState, fuelMultiplier, null,
       rivalSpecsFor(state, r.origin, r.destination), fcAvgUtil, state.satisfaction ?? null,
       1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)) : null;

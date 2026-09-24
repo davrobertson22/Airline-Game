@@ -286,6 +286,49 @@ export function splitStarterHire(groupId, count, headcount, fleet, typeOf) {
   return { instant, trained: Math.max(0, count - instant) };
 }
 
+/**
+ * Starter crew, hired for the player. Discord 2026-09-21 (EpicLimaBean44): "I've
+ * made like 6 routes ... it shows profits, but I'm just not flying any
+ * passengers". A new crew-pipeline airline starts with nobody on the payroll,
+ * and the only place that said so was a card on the Operations screen — so a
+ * first-time player leased six jets, opened six routes, and watched every one
+ * of them sit on the ramp while the Routes screen quoted what they would earn.
+ *
+ * The starter allowance (CREW_INSTANT_AIRCRAFT) already waived the wait for the
+ * first couple of aircraft; this waives the step too. Whenever the fleet grows,
+ * each group is topped up to its starter floor, hired instantly at the normal
+ * training cost. Past the floor nothing is hired — beyond the first two
+ * aircraft, crew remain a resource the player plans for.
+ *
+ * Returns the hires in engine units (whole people's worth, rounded up) and
+ * their cost.
+ * Groups with no headcount recorded (unseeded, pre-pipeline saves) are left
+ * alone. Hires are skipped, flight-critical groups first, once cash runs out.
+ */
+export function starterCrewTopUp(labor, fleet, typeOf, cash = Infinity) {
+  const hires = {};
+  let cost = 0;
+  let left = Number.isFinite(cash) ? Math.max(0, cash) : Infinity;
+  for (const id of ['pilots', 'cabinCrew', 'groundStaff', 'maintenanceTeam']) {
+    const head = labor?.[id]?.headcount;
+    if (head == null) continue;
+    const room = starterCrewFloor(id, fleet, typeOf) - (Number(head) || 0);
+    // Whole PEOPLE, rounded up — not whole engine units. Rounding units up
+    // hired most of a spare crew (an A320neo is 1.02 units, so two of them
+    // came to three), which the player pays training for and never needed.
+    const per = CREW_PER_UNIT[id] ?? 1;
+    const people = Math.max(0, Math.ceil(room * per - 1e-6));
+    if (people <= 0) continue;
+    const units = people / per;
+    const c = crewHireCost(id, units);
+    if (c > left) continue;
+    hires[id] = units;
+    cost += c;
+    left -= c;
+  }
+  return { hires, cost };
+}
+
 /** Crew REQUIRED for a group, in narrowbody-equivalents. */
 export function crewRequired(groupId, fleet, typeOf) {
   return fleetCrewScale(groupId, fleet, typeOf);

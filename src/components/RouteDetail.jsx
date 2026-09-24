@@ -19,12 +19,13 @@ import {
   hubSpokeCounts, pairConnectivityBonus,
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
-  stateLoungeFields, stateGroundHandlingFields, stateSensReduction, CLASS_FARE_MULTIPLIERS,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateSensReduction, CLASS_FARE_MULTIPLIERS,
 } from '../utils/simulation.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -440,7 +441,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
       // same labor / utilization / satisfaction inputs the engine uses.
       const result = simulateRoute(
-        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination) },
+        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
         // The live fuel multiplier (price × burn), never a bare 1.0: the
         // fallback preview must agree with the tick like every other one.
         aircraft, gameDate, state.labor ?? null, fuelSimMultiplierOf(state),
@@ -549,6 +550,28 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       <button className="btn btn-ghost" style={{ fontSize: 13, marginBottom: 14 }} onClick={onBack}>
         ← Back to Routes
       </button>
+
+      {/* Aircraft with nobody to crew them do not fly (tickPrep), but the
+          figures below are the fallback projection of what they would earn.
+          Say so before anyone reads a profit that is not happening. */}
+      {(() => {
+        const noCrew = new Set(crewGroundedAircraftIds(state));
+        const n = playerSims.filter(({ aircraft }) => noCrew.has(aircraft?.id)).length;
+        if (n === 0) return null;
+        return (
+          <div style={{
+            marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+            background: 'rgba(248,81,73,0.10)', border: '1px solid rgba(248,81,73,0.35)',
+            color: 'var(--red)', fontSize: 13, lineHeight: 1.5,
+          }}>
+            <Glyph e="🧑‍✈️" /> <strong>{n === playerSims.length ? 'Not flying' : `${n} of ${playerSims.length} aircraft not flying`} — no crew.</strong>{' '}
+            <span style={{ color: 'var(--text)' }}>
+              The figures below are what {n === 1 ? 'this aircraft would' : 'these aircraft would'} earn once crewed. Until then {n === 1 ? 'it carries' : 'they carry'} no passengers.
+              Hire pilots and cabin crew in Company ▸ Operations.
+            </span>
+          </div>
+        );
+      })()}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         <div style={{ minWidth: 0 }}>
@@ -762,6 +785,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
               value={catLevel ?? 'full'}
               onChange={setRouteCatering}
               distKm={dist}
+              capNote={stateCateringCapReport(state, origin, dest, catLevel ?? 'full')}
               label={catLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
             />
           </div>

@@ -11,6 +11,7 @@ import {
   buildEventDemandModel, deployableFleetForRoute, deploymentShortfall, MAX_WEEKLY_BLOCK_HOURS,
   maxFrequency, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
   effectiveRangeKm, calendarYear,
+  stateCateringCapReport,
 } from '../utils/simulation.js';
 import {
   buildRouteMarket,
@@ -1329,7 +1330,8 @@ export default function RoutePlanner() {
 
                   {/* Catering */}
                   <div style={{ flexBasis: '100%' }}>
-                    <CateringSelector value={cateringLevel} onChange={setCateringLevel} distKm={routeData.dist} />
+                    <CateringSelector value={cateringLevel} onChange={setCateringLevel} distKm={routeData.dist}
+                      capNote={origin && dest ? stateCateringCapReport(state, origin, dest, cateringLevel) : null} />
                   </div>
 
                   {/* Seasonal operating window */}
