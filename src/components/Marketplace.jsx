@@ -19,6 +19,7 @@ import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear, cruis
 import { projectWeek } from '../utils/financeProjection.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
+import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import InfoTip from './InfoTip.jsx';
 import { LABOR_GROUPS, CREW_LEAD_WEEKS, crewBodiesForAircraft } from '../data/labor.js';
 import { Glyph } from './Icons.jsx';
@@ -226,7 +227,7 @@ function DeliveryForecast({ pendingOrders, currentAbsWeek }) {
   );
 }
 
-function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
+export function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft]     = useState('');
 
@@ -246,6 +247,9 @@ function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
   const lead      = DELIVERY_LEAD[type?.category] ?? 2;
   const progress  = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));
   const isOwned   = order.ownershipType === 'owned';
+  // Signed under the order book: paid in stages (models/orderPayments.js).
+  const staged    = hasPaymentSchedule(order);
+  const nextPay   = staged ? order.payments.find(p => !p.paid) : null;
   const cfg       = order.config;
   const totalSeats = cfg
     ? CABIN_CLASSES.reduce((s, c) => s + (cfg[c.key] || 0), 0)
@@ -375,7 +379,33 @@ function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
           display: 'flex', gap: 16, padding: '8px 0 10px',
           borderTop: '1px solid var(--border-subtle)', marginTop: 2,
         }}>
-          {isOwned ? (
+          {isOwned && staged ? (
+            <>
+              <div>
+                <div style={labelStyle}>Contract Price</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)', marginTop: 2 }}>
+                  {formatMoney(order.contractPrice ?? order.totalPrice)}
+                </div>
+              </div>
+              <div>
+                <div style={labelStyle}>Paid So Far</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+                  {formatMoney(amountPaid(order))}
+                </div>
+              </div>
+              {nextPay && (
+                <div>
+                  <div style={labelStyle}>{nextPay.kind === 'balance' ? 'Balance on Delivery' : 'Next Instalment'}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yellow)', marginTop: 2 }}>
+                    {formatMoney(nextPay.amount)}
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>
+                      {' '}{nextPay.absWeek - currentAbsWeek <= 0 ? 'due now' : `in ${nextPay.absWeek - currentAbsWeek}w`}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : isOwned ? (
             <div>
               <div style={labelStyle}>Purchase Price</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)', marginTop: 2 }}>
@@ -425,7 +455,9 @@ function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
               background: 'rgba(248,81,73,0.08)', color: 'var(--red)', cursor: 'pointer',
             }}
           >
-            Cancel Order{isOwned && order.totalPrice > 0 ? ' (95% refund)' : ' (free)'}
+            Cancel Order{staged
+              ? ` (${formatMoney(cancellationRefund(order))} back)`
+              : isOwned && order.totalPrice > 0 ? ' (95% refund)' : ' (free)'}
           </button>
         </div>
       </div>
@@ -640,10 +672,14 @@ export default function Marketplace() {
   const [checkout, setCheckout] = useState(null);
 
   async function handleCancelOrder(order) {
+    // One refund function for the dialog and the reducer (models/orderPayments.js).
+    const staged    = hasPaymentSchedule(order);
     const hasRefund = order.ownershipType === 'owned' && order.totalPrice > 0;
-    const refund    = hasRefund ? Math.round(order.totalPrice * 0.95) : 0;
+    const refund    = cancellationRefund(order);
     const deposit = order.ownershipType === 'lease' ? (order.leaseDeposit ?? 0) : 0;
-    const body = hasRefund
+    const body = staged
+      ? `You've paid ${formatMoney(amountPaid(order))} on this aircraft so far. The deposit is not refundable and paid instalments come back at 80%, so you'll be refunded ${formatMoney(refund)}. Nothing further will be charged.`
+      : hasRefund
       ? `You'll be refunded ${formatMoney(refund)} (a 5% cancellation fee applies).`
       : deposit > 0
         ? `Lease orders are free to cancel before delivery — your ${formatMoney(deposit)} security deposit is returned in full.`

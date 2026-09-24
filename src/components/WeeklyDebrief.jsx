@@ -5,6 +5,39 @@ import { AlertIcon, HeartIcon } from './Icons.jsx';
 import { leasesExpiringSoon, LEASE_EXPIRY_WARN_WEEKS } from '../utils/leaseAlerts.js';
 import { subscribeAwayDigest, pendingAwayWeeks } from '../utils/awayDigest.js';
 
+/**
+ * The debrief's cost breakdown for a stored weekly report. Reconciles exactly
+ * to the "All Costs" chip (totalCostAll): anything the named rows miss lands
+ * in an "Other" row, so a new charge with no row here shows up rather than
+ * vanishing. Pure, so tools/ can check it without expanding the panel.
+ */
+export function debriefCostRows(r) {
+  const n = v => (typeof v === 'number' ? v : 0);
+  const costAll = r.totalCostAll ?? r.totalCost ?? 0;
+  const costItems = [
+    { label: 'Fuel',                  v: n(r.totalFuel) },
+    { label: 'Crew & labor',          v: n(r.totalCrew) + n(r.totalLaborCosts) + n(r.totalFamilyBaseCosts) },
+    { label: 'Maintenance',           v: n(r.totalMaintenance) },
+    { label: 'Aircraft leases',       v: n(r.totalLeases) },
+    { label: 'Airport & ground fees', v: n(r.totalLandingFees) + n(r.totalGateFees) + n(r.totalGroundHandling) },
+    { label: 'Catering & service',    v: n(r.totalCatering) + n(r.totalLounge) + n(r.totalQuality) },
+    { label: 'Passenger compensation', v: n(r.totalCompensation) + n(r.totalLayover) },
+    { label: 'Distribution & partner fees', v: n(r.totalDistributionCost) + n(r.totalPartnerFees) },
+    { label: 'Marketing & loyalty',   v: n(r.totalMarketingSpend) + n(r.totalLoyaltyCost) },
+    { label: 'Overhead & insurance',  v: n(r.totalHQCost) + n(r.totalHubInvestment) + n(r.totalInsurance) },
+    { label: 'Loan payments',         v: n(r.loanPayments) },
+    { label: 'Lease redelivery',      v: n(r.leaseRedelivery) },
+    { label: 'Seasonal reactivation', v: n(r.seasonalReactivation) },
+    { label: 'Aircraft purchase payments', v: n(r.aircraftPayments) },
+    { label: 'Corporate tax',         v: n(r.corporateTax) },
+  ];
+  const knownCosts = costItems.reduce((s, i) => s + i.v, 0);
+  const otherCosts = costAll - knownCosts;
+  if (Math.abs(otherCosts) >= 1) costItems.push({ label: 'Other', v: otherCosts });
+  const costRows = costItems.filter(i => Math.abs(i.v) >= 1);
+  return costRows;
+}
+
 export default function WeeklyDebrief() {
   const { state, dispatch } = useGame();
   const { lastReport, showDebrief, week, year, activeEvents, routes, fleet } = state;
@@ -81,29 +114,8 @@ export default function WeeklyDebrief() {
   const showLoyalty = loyaltyMembers > 0 || loyaltyCost > 0;
 
   // ── Cost breakdown (reconciles exactly to the "All Costs" chip) ──────────
-  const r = lastReport;
-  const n = v => (typeof v === 'number' ? v : 0);
-  const costAll = r.totalCostAll ?? r.totalCost ?? 0;
-  const costItems = [
-    { label: 'Fuel',                  v: n(r.totalFuel) },
-    { label: 'Crew & labor',          v: n(r.totalCrew) + n(r.totalLaborCosts) + n(r.totalFamilyBaseCosts) },
-    { label: 'Maintenance',           v: n(r.totalMaintenance) },
-    { label: 'Aircraft leases',       v: n(r.totalLeases) },
-    { label: 'Airport & ground fees', v: n(r.totalLandingFees) + n(r.totalGateFees) + n(r.totalGroundHandling) },
-    { label: 'Catering & service',    v: n(r.totalCatering) + n(r.totalLounge) + n(r.totalQuality) },
-    { label: 'Passenger compensation', v: n(r.totalCompensation) + n(r.totalLayover) },
-    { label: 'Distribution & partner fees', v: n(r.totalDistributionCost) + n(r.totalPartnerFees) },
-    { label: 'Marketing & loyalty',   v: n(r.totalMarketingSpend) + n(r.totalLoyaltyCost) },
-    { label: 'Overhead & insurance',  v: n(r.totalHQCost) + n(r.totalHubInvestment) + n(r.totalInsurance) },
-    { label: 'Loan payments',         v: n(r.loanPayments) },
-    { label: 'Lease redelivery',      v: n(r.leaseRedelivery) },
-    { label: 'Seasonal reactivation', v: n(r.seasonalReactivation) },
-    { label: 'Corporate tax',         v: n(r.corporateTax) },
-  ];
-  const knownCosts = costItems.reduce((s, i) => s + i.v, 0);
-  const otherCosts = costAll - knownCosts;
-  if (Math.abs(otherCosts) >= 1) costItems.push({ label: 'Other', v: otherCosts });
-  const costRows = costItems.filter(i => Math.abs(i.v) >= 1);
+  const costAll  = lastReport.totalCostAll ?? lastReport.totalCost ?? 0;
+  const costRows = debriefCostRows(lastReport);
 
   function dismiss() {
     dispatch({ type: 'DISMISS_DEBRIEF' });

@@ -441,5 +441,90 @@ test('THIS WEEK: the Net profit printed IS the canonical projection', () => {
     'it must equal the "Projected Profit / wk" KPI exactly');
 });
 
+// ── An aircraft instalment (order book, package 1) ───────────────────────────
+// Under the `orderBook` flag an owned order is paid in stages, and each stage
+// is cash leaving the bank in the tick — below EBITDA, outside totalCost, not
+// in the tax base. Exactly the shape of charge this card has failed to name
+// before. A wide body ordered now has its T-6 instalment two ticks out.
+console.log('\n── A week that paid an aircraft instalment (order book) ───────────────────');
+
+const pdpRun = (() => {
+  let s = { ...startedAirline({ seed: 4242 }), orderBook: true };
+  s = gameReducer(s, { type: 'ORDER_AIRCRAFT', typeId: 'a330neo', quantity: 1, ownershipType: 'owned' });
+  const before = advanceUntil(s, () => false, 1).state;
+  const after  = gameReducer(before, { type: 'ADVANCE_WEEK' });
+  return { before, after };
+})();
+const pdpPnl = readWeeklyPnl(render(pdpRun.after));
+const pdpAhead = readWeeklyPnl(render(pdpRun.before));
+
+test('the fixture reached a week that paid an instalment', () => {
+  assert.ok((pdpRun.after.lastReport?.aircraftPayments ?? 0) > 0,
+    'no aircraft payment in the fixture week — every assertion below would be vacuous');
+});
+
+test('LAST WEEK: the instalment has its own row, at the engine’s figure', () => {
+  const row = pdpPnl.rows.find(r => r.key === 'aircraftPay');
+  assert.ok(row, 'the instalment left the bank with no line on the card to name it');
+  closeTo(row.lw, -pdpRun.after.lastReport.aircraftPayments, row.lwTol, 'the row must be the engine’s figure');
+});
+
+test('LAST WEEK: every row still adds up to the Net profit, with no "Other"', () => {
+  const w = walkColumn(pdpPnl, 'lw');
+  assert.ok(Math.abs(w.gap) <= w.tol, reportColumn(pdpPnl, 'lw', 'LAST WEEK'));
+  assert.ok(!pdpPnl.rows.some(r => r.key === 'netResidual'), 'an unexplained "Other" row is on screen');
+});
+
+test('THIS WEEK: the week before, the projection already shows it coming', () => {
+  const row = pdpAhead.rows.find(r => r.key === 'aircraftPay');
+  assert.ok(row, 'the projection column does not warn about next week’s instalment');
+  closeTo(row.pj, -pdpRun.after.lastReport.aircraftPayments, row.pjTol, 'and it must be what the tick then charged');
+  const w = walkColumn(pdpAhead, 'pj');
+  assert.ok(Math.abs(w.gap) <= w.tol, reportColumn(pdpAhead, 'pj', 'THIS WEEK (proj.)'));
+});
+
+// ── A lease going home with its security deposit ─────────────────────────────
+// Found while adding the aircraft-payment row (2026-09-21). The lease fixture
+// above builds its leases by relabelling owned tails, so they carry no deposit
+// and this case was never exercised. A real lease returns its deposit in its
+// final week, and two things did not see it:
+//   * projectWeek names it `leaseDepositRefund`, the bridge read
+//     `leaseDepositReturned`, so the week BEFORE a return the projection column
+//     printed the whole deposit as an unexplained "Other";
+//   * the bridge had a deposits row but the card never carried it, so the
+//     week AFTER, last week's rows missed the Net profit by the deposit.
+console.log('\n── A lease returning its security deposit ────────────────────────────────');
+
+const depositRun = (() => {
+  let s = startedAirline({ seed: 777 });
+  s = gameReducer(s, { type: 'ORDER_AIRCRAFT', typeId: 'b737800', quantity: 1, ownershipType: 'lease' });
+  s = advanceUntil(s, st => (st.pendingOrders ?? []).length === 0, 12).state;
+  s = { ...s, fleet: s.fleet.map(a => (a.ownershipType === 'lease' ? { ...a, leaseRemainingWeeks: 1 } : a)) };
+  return { before: s, after: gameReducer(s, { type: 'ADVANCE_WEEK' }) };
+})();
+const depositAhead = readWeeklyPnl(render(depositRun.before));
+const depositPnl   = readWeeklyPnl(render(depositRun.after));
+
+test('the fixture returns a real deposit', () => {
+  assert.ok((depositRun.after.lastReport?.leaseDepositReturned ?? 0) > 0,
+    'no deposit came back — the assertions below would be vacuous');
+});
+
+test('THIS WEEK: the week before the return, the projection adds up with no "Other"', () => {
+  const w = walkColumn(depositAhead, 'pj');
+  assert.ok(Math.abs(w.gap) <= w.tol, reportColumn(depositAhead, 'pj', 'THIS WEEK (proj.)'));
+  const other = depositAhead.rows.find(r => r.key === 'netResidual');
+  assert.ok(!other || other.pj == null || Math.abs(other.pj) <= other.pjTol,
+    `the returning deposit shows as an unexplained "Other" of ${other?.pjText}`);
+});
+
+test('LAST WEEK: the deposit has a row and the column adds up', () => {
+  const w = walkColumn(depositPnl, 'lw');
+  assert.ok(Math.abs(w.gap) <= w.tol, reportColumn(depositPnl, 'lw', 'LAST WEEK'));
+  const row = depositPnl.rows.find(r => r.key === 'deposits');
+  assert.ok(row, 'the returned deposit has no row on the card');
+  closeTo(row.lw, depositRun.after.lastReport.leaseDepositReturned, row.lwTol, 'at the engine’s figure');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

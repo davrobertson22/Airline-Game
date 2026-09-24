@@ -1,6 +1,8 @@
 # Aircraft Order Book — Design
 
-Status: **proposal. Nothing built.** Intended for both repos (Tailwinds first,
+Status: **Package 1 (pre-delivery payments) built in Tailwinds, 2026-09-21** —
+behind the `orderBook` flag, which new games do NOT yet set: it switches on
+together with Package 2. Everything else is proposal. Intended for both repos (Tailwinds first,
 Headwinds port in the same shape — see §13).
 
 ## Goal
@@ -42,7 +44,10 @@ them.
 | World flag | **`orderBook`**, same shape as `crewPipeline`. ON by default for newly created worlds, ABSENT on existing saves — they keep the classic vending machine forever. `reconcileState` must not retrofit it. |
 | Package 1 is a prerequisite | Pre-delivery payments ship **before or with** slots, never after. Slots without staged payments are cheap to hold, and cheap-to-hold slots are the hoarding problem. |
 | Backlog is a world constraint | Generated from world demand, never from "the player is winning". No rubber-banding, no per-airline targeting. |
-| Determinism | No RNG. FNV-1a `hash32` keyed on `absWeek`, exactly as `charterBoard.js` does. The golden master must stay PARITY OK with the flag off. |
+| Determinism | No RNG. FNV-1a `hash32` keyed on `absWeek`, exactly as `charterBoard.js` does. With the flag off a scripted game must be byte-identical to HEAD (the old `tools/golden-master/` harness was removed; see §13 for the parity check that replaces it). |
+| Delivery balance | **Always cash** (Dave, 2026-09-21). Charged on the delivery week whether or not the bank can cover it; a shortfall takes cash negative and the existing negative-cash rules (warnings, 6 weeks to bankruptcy) apply. No forfeiture, no auto-financing — a player finances a delivery by taking an aircraft loan against it. |
+| Signing requirement | **Deposit + every pre-delivery instalment** (Dave, 2026-09-21) — this order's AND the unpaid instalments already on the book, so one pile of cash cannot back two orders. The balance is not part of it. |
+| Rollout | Package 1 ships dark. `START_GAME` does not set `orderBook` until Package 2 lands, so the flag means one thing from the first world that has it and no world is upgraded mid-game. |
 | Lead time | **Compressed. Hard cap 52 wk.** Real lead times of 2–5 years (100–260 wk) outrun a lot of Tailwinds games — a backlog longer than the session is just a locked door. Typical quotes land 8–40 wk out; a fully committed line can never quote past 52. Realism yields to session length here, deliberately. |
 | AI competitors | **They buy through the order book.** No exemption — the AI queues for slots on the same lines, under the same caps. `competitorAI.js` stops spawning tails via `makeCompetitorTail` for growth and must cope with being slot-starved (grow slower, or go to the used board). Its orders are hash-derived, so the book stays deterministic. |
 | Allocation caps | **Both.** A per-line cap (~30% of rolling 52-wk output) *and* a looser per-manufacturer ceiling (~45%). Per-line alone lets an airline corner every Boeing narrowbody while sitting under 30% on each one. |
@@ -152,19 +157,53 @@ makes everything else safe.
 ~25% pre-delivery, which is roughly right, and it means **a slot you hold but do
 not need bleeds cash on a schedule against zero revenue**.
 
-Touches:
-- `ORDER_AIRCRAFT` builds the schedule instead of charging `unitTotalPrice` at once.
-- The tick charges instalments due this week; a missed instalment forfeits the
-  slot and everything paid (§8, use-it-or-lose-it).
-- `financeProjection.js` reads `payments[]` forward instead of treating the order
-  as sunk. This is the file that makes the commitment *visible* — without it the
-  player commits blind and the feature reads as a trap.
-- `CANCEL_ORDER` forfeits the deposit plus a share of paid PDPs, replacing the
-  flat 5% fee.
-- Leases are unchanged: `LEASE_DEPOSIT_WEEKS` already models the deposit, and the
-  lessor is the one carrying the PDPs on a lease placement.
+**The clamp.** An instalment whose week would fall before signing is due AT
+signing. That is what lets this ship ahead of slots: on today's 1–8 week lead
+times the whole pre-delivery quarter is still paid up front and only the
+balance waits for delivery; the schedule spreads out by itself once Package 2
+lengthens the window. `models/orderPayments.js` never knows what a lead time is.
 
-Shippable alone, with or without slots.
+### As built (Tailwinds, 2026-09-21)
+
+- **`src/models/orderPayments.js`** — the schedule, the clamp, the book-wide
+  signing requirement (`committedPreDelivery`), the tick's settlement
+  (`settleDuePayments`) and the one refund function (`cancellationRefund`) that
+  the reducer and both cancel dialogs call.
+- **`ORDER_AIRCRAFT`** — under the flag, owned orders carry `contractPrice` and
+  `payments[]` (airframe + line-fit Wi-Fi) and charge only the signing-week
+  payments. The bulk-discount loop resolves quantity against the staged
+  requirement. Leases and flag-off worlds take the classic path unchanged.
+- **`ADVANCE_WEEK`** — settles every payment due by the week the tick moves into
+  (the delivery pass's `newAbsWeek`, so a balance and its aircraft always land
+  together). Capital: in `preTaxProfit`, not in the tax base. Reported as
+  `lastReport.aircraftPayments`, present only in a week that paid something so
+  classic reports stay byte-identical.
+- **`CANCEL_ORDER`** — deposit forfeited, paid instalments refunded at 80%
+  (`PDP_CANCEL_REFUND_SHARE`). On today's lead times that is ~6.6% of the price
+  against the classic 5% — deliberately a little stiffer.
+- **Visibility** — `projectWeek` forecasts next week's payments; the P&L bridge
+  and Dashboard card carry an *Aircraft purchase payments* row in both columns;
+  the Finance 12-week forecast has an *Aircraft* column (so the existing "cash
+  turns negative in week +N" banner sees balances coming); the weekly debrief
+  names it; the order form quotes *due at signing / instalments / balance on
+  delivery*; the order card shows paid-so-far, the next payment and what
+  cancelling returns.
+- **Not built:** there is no "missed instalment" state. With always-cash there
+  is nothing to miss, so the §8 *use it or lose it* rule is superseded — the
+  negative-cash rules are the consequence instead.
+
+**Consequence worth knowing.** Signing on 25% means a player can commit to four
+times their cash. A 60-week soak ($900M airline signing $1.12B of aircraft, no
+routes) ends bankrupt when the balances land — correct under the chosen rules,
+and the forecast shows it coming, but it is a sharp edge for a new player. If it
+bites in playtesting, the cheapest mitigations are an order-form warning when the
+12-week forecast would go negative, or letting the book-to-fleet cap (§8) arrive
+with Package 2 as planned.
+
+**Known bypass for Package 2.** `BUY_AIRCRAFT` and `LEASE_AIRCRAFT` still deliver
+instantly and ignore the flag. Nothing in the UI dispatches either today (test
+fixtures do), but slots must gate them under the flag or they become the way
+round the order book.
 
 ---
 
@@ -308,7 +347,7 @@ register for this codebase.
 |---|---|---|
 | **Allocation cap** | No airline holds >30% of a line's rolling 52-week output | Manufacturers do not concentrate their order book or their credit risk. Legible in the UI. |
 | **Book-to-fleet cap** | Firm book ≤ 1.5 × operating fleet, floor of 2 frames | Scale buys proportionally more, not unboundedly more. The floor is what lets a startup order at all. |
-| **Use it or lose it** | Missed PDP forfeits the slot back to the pool, and the money | Removes free optionality on firm orders. |
+| ~~Use it or lose it~~ | Superseded by the always-cash decision (2026-09-21): instalments are always charged, so there is no missed PDP to forfeit. Negative cash and bankruptcy are the consequence. | Free optionality is still removed — the money leaves the bank on schedule regardless. |
 | **No profitable resale** | Cancelled slots return to the *pool*, not to a private buyer. Transfers need manufacturer consent plus a fee that eats the spread | Otherwise §5 is an arbitrage and hoarding funds itself. |
 | **Priority decay** | Serial deferrers and cancellers lose allocation priority | The relationship is an asset, so abusing it costs something. |
 | **World-size scaling** | `worldScale` in the rate formula | A 12-airline Headwinds world is not fighting over a 4-airline supply. |
@@ -396,8 +435,8 @@ slotSeed = `${worldSeed}|line|${typeId}|${absWeek}`
 ```
 
 Consequence: the order book replays identically on save/load, the finance
-projection can read forward without burning a draw, and the golden master stays
-PARITY OK with `orderBook` absent.
+projection can read forward without burning a draw, and with `orderBook` absent
+a scripted game stays byte-identical to HEAD (§13).
 
 ---
 
@@ -493,9 +532,10 @@ New suites under `tools/`, picked up automatically by `run-tests.mjs`.
 
 | Suite | Asserts |
 |---|---|
-| `orderbook-parity-test.mjs` | Golden master PARITY OK with the flag absent. The whole feature is inert on existing saves. |
+| `orderbook-parity-test.mjs` | Flag absent → byte-identical to HEAD. The whole feature is inert on existing saves. (Package 1 proved this out-of-tree: a 40-week scripted game — owned and leased orders, Wi-Fi, a cancellation, deliveries, projections and bridge rows every week — serialised identically against a `git archive HEAD` copy. The in-tree guard is `order-payments-test.mjs` §2.) |
 | `orderbook-determinism-test.mjs` | Same world seed + same week → byte-identical line state. Save/load mid-backlog replays identically. |
-| `pdp-schedule-test.mjs` | Instalments sum to the purchase price; `financeProjection` forward view matches what the tick actually charges; cancellation refunds match the reducer. |
+| `order-payments-test.mjs` **(built)** | Schedule math and the clamp; flag-off parity; signing charge and the book-wide requirement; instalment and balance land in the right tick; always-cash on a shortfall; payments are not tax-deductible; projection = charge; bridge names it with no residual; cancel refund = the quoted refund; the order form, order card, 12-week forecast and debrief. Proven failing on HEAD (20 of 27 at first run). |
+| `pnl-reconcile-test.mjs` **(extended)** | The rendered Dashboard card carries the instalment row and still adds up, the week of and the week before. |
 | `orderbook-allocation-test.mjs` | Allocation cap and book-to-fleet cap hold under a deliberate adversarial buyer; cancelled slots return to the pool and never to a private buyer. |
 | **`orderbook-floor-test.mjs`** | **The floor invariant, below.** |
 | `orderbook-substitutes-test.mjs` | Every mission role has ≥2 types on independent lines orderable at each of 1955 / 1962 / 1975 / 1990 / 2010 / 2026. |

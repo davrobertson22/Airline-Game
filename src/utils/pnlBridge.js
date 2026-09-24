@@ -128,18 +128,25 @@ export function costBridge(proj, state = {}) {
   // Security deposits returned with the airframes they secured. A return of
   // capital, not income — untaxed, and never booked as a cost on the way out —
   // but real cash, so it needs a row of its own or netResidual would flag it.
-  const deposits = n(proj?.leaseDepositReturned);
+  // A stored report calls it leaseDepositReturned; projectWeek calls it
+  // leaseDepositRefund. Reading only the first left every projection of a
+  // lease's final week with the whole deposit in "Other (below the line)".
+  const deposits = n(proj?.leaseDepositReturned ?? proj?.leaseDepositRefund);
   // Heavy checks (C/D) and AOG repairs net of insurance. The engine charges
   // these below EBITDA and outside report.totalCost, so they are invisible to
   // everything upstream of this line. A projection cannot forecast them, so it
   // supplies nothing and this is 0 there.
   const unplanned = n(proj?.unplannedMaint);
+  // Instalments and delivery balances on aircraft ordered under the order
+  // book (models/orderPayments.js). Capital, so it is not in the tax base —
+  // but it is cash leaving the bank, so it needs a row or netResidual flags it.
+  const aircraftPay = n(proj?.aircraftPayments);
   const tax     = n(proj?.corporateTax);
   const netProfit = n(proj?.netCash);
   // The residual above only guards revenue → EBITDA. This one guards EBITDA →
   // net, so the ladder is checked end to end: if the engine ever takes cash out
   // below EBITDA without a row here, it shows up instead of vanishing.
-  const netResidual = netProfit - (ebitda - loans - oneOff - unplanned - tax + deposits);
+  const netResidual = netProfit - (ebitda - loans - oneOff - unplanned - aircraftPay - tax + deposits);
 
   const rows = [];
   const push = (key, label, value, kind, tip) => rows.push({ key, label, value, kind, tip });
@@ -184,6 +191,8 @@ export function costBridge(proj, state = {}) {
     'Security deposits refunded when leased aircraft went back to the lessor. You paid these up front when the aircraft was ordered; they are your money coming home, so no tax is charged on them.');
   if (unplanned) push('unplanned', 'Heavy checks & AOG', -unplanned, 'cost',
     'Scheduled heavy maintenance (C and D checks) that fell due this week, plus unplanned AOG repairs after a mechanical failure, net of any insurance recovery. Lumpy by nature — a D check lands in one week rather than spread across the year — so it is charged here rather than in your weekly fixed costs, and a projection cannot forecast it.');
+  if (aircraftPay) push('aircraftPay', 'Aircraft purchase payments', -aircraftPay, 'cost',
+    'Deposits, pre-delivery instalments and delivery balances on aircraft you have ordered. This is capital — the price of the airframe, paid in stages — not an operating cost, so it is not deducted from taxable profit; the aircraft’s cost reaches your tax bill through depreciation instead.');
   if (tax)    push('tax',    'Corporate tax',     -tax,    'cost', 'Charged on taxable profit — the base is EBITDA less depreciation, loan INTEREST (principal is not deductible), one-time charges and heavy-check/AOG spend. Depreciation is deducted for tax but costs no cash, so the charge usually reads as less than the headline rate against the operating profit above.');
   if (netResidual) push('netResidual', 'Other (below the line)', netResidual, 'cost',
     'Cash the engine moved between operating profit and the bottom line that no row above names. This should always be zero — if you are seeing it, a charge was added below EBITDA without being added to this breakdown.');
@@ -230,6 +239,7 @@ export function bridgeInputsFromReport(report) {
     leaseRedelivery:      n(r.leaseRedelivery),
     leaseDepositReturned: n(r.leaseDepositReturned),
     unplannedMaint:       n(r.maintenanceChecks?.spend) + n(r.mro?.aogSpend) - n(r.mro?.aogInsurance),
+    aircraftPayments:     n(r.aircraftPayments),
     corporateTax:         n(r.corporateTax),
     netCash:              n(r.cashDelta),
   };

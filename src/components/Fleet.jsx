@@ -4,6 +4,7 @@ import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
 import { getAircraftType, LEASE_BUYOUT_PREMIUM } from '../data/aircraft.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
+import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
@@ -1659,10 +1660,14 @@ export default function Fleet() {
   }
 
   async function handleCancelOrder(order) {
+    // One refund function for the dialog and the reducer (models/orderPayments.js).
+    const staged    = hasPaymentSchedule(order);
     const hasRefund = order.ownershipType === 'owned' && order.totalPrice > 0;
-    const refund    = hasRefund ? Math.round(order.totalPrice * 0.95) : 0;
+    const refund    = cancellationRefund(order);
     const deposit = order.ownershipType === 'lease' ? (order.leaseDeposit ?? 0) : 0;
-    const body = hasRefund
+    const body = staged
+      ? `You've paid ${formatMoney(amountPaid(order))} on this aircraft so far. The deposit is not refundable and paid instalments come back at 80%, so you'll be refunded ${formatMoney(refund)}. Nothing further will be charged.`
+      : hasRefund
       ? `You'll be refunded ${formatMoney(refund)} (a 5% cancellation fee applies).`
       : deposit > 0
         ? `Lease orders are free to cancel before delivery — your ${formatMoney(deposit)} security deposit is returned in full.`

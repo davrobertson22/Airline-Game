@@ -16,6 +16,9 @@ import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
+import {
+  buildPaymentSchedule, preDeliveryTotal, signingAmount, committedPreDelivery,
+} from '../models/orderPayments.js';
 
 const CAT_COLORS = {
   'Turboprop':    '#ffb43d',
@@ -331,10 +334,32 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const unitLeaseDeposit  = unitWeeklyLease * 12;   // 3 months (12 weeks) upfront
   const totalLeaseDeposit = unitLeaseDeposit * quantity;
 
-  const canAfford     = mode === 'buy' ? cash >= buyTotalDue : cash >= totalLeaseDeposit;
-  const maxAffordable = mode === 'buy'
-    ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitWifiFee)))
-    : Math.max(0, Math.floor(cash / unitLeaseDeposit));
+  // ── Staged payments (order book §2) ──────────────────────────────────────
+  // Under the `orderBook` flag an owned order pays a deposit now, instalments
+  // before delivery and the balance on the delivery week. Signing needs cash
+  // for the deposit and every pre-delivery instalment — this order's and the
+  // unpaid ones already on the book. Same helpers ORDER_AIRCRAFT uses, so the
+  // quote and the charge cannot disagree.
+  const staged          = mode === 'buy' && state.orderBook === true;
+  const unitContract    = unitBuyPrice + unitWifiFee;
+  const unitPreDelivery = preDeliveryTotal(unitContract);
+  const committedPdp    = staged ? committedPreDelivery(pendingOrders) : 0;
+  const stagedSigning   = staged
+    ? deliveryWeeks.reduce((s, w) => s + signingAmount(buildPaymentSchedule(unitContract, currentAbsWeek, w), currentAbsWeek), 0)
+    : 0;
+  const stagedPreDelivery = unitPreDelivery * quantity;
+  const stagedLater       = stagedPreDelivery - stagedSigning;          // instalments still to come
+  const stagedBalance     = buyTotalDue - stagedPreDelivery;            // always cash, on delivery
+  const stagedNeed        = committedPdp + stagedPreDelivery;
+
+  const canAfford     = staged
+    ? cash >= stagedNeed
+    : mode === 'buy' ? cash >= buyTotalDue : cash >= totalLeaseDeposit;
+  const maxAffordable = staged
+    ? Math.max(0, Math.floor((cash - committedPdp) / Math.max(1, unitPreDelivery)))
+    : mode === 'buy'
+      ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitWifiFee)))
+      : Math.max(0, Math.floor(cash / unitLeaseDeposit));
 
   function setQty(n) { setQuantity(Math.max(1, Math.min(100, n))); }
 
@@ -743,12 +768,43 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
                   <span>Total{quantity > 1 ? ` (${quantity} aircraft)` : ''}</span>
                   <span style={{ color: canAfford ? 'var(--green)' : 'var(--red)' }}>{formatMoney(buyTotalDue)}</span>
                 </div>
-                {!canAfford && (
-                  <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
-                    Need {formatMoney(buyTotalDue - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
+                {staged ? (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontWeight: 600 }}>
+                      <span>Due at signing</span>
+                      <span>{formatMoney(stagedSigning)}</span>
+                    </div>
+                    {stagedLater > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: 'var(--text-muted)' }}>
+                        <span>Pre-delivery instalments (18, 12 and 6 weeks out)</span>
+                        <span style={{ color: 'var(--text)' }}>{formatMoney(stagedLater)}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: 'var(--text-muted)' }}>
+                      <span>Balance on delivery</span>
+                      <span style={{ color: 'var(--text)' }}>{formatMoney(stagedBalance)}</span>
+                    </div>
+                    {!canAfford && (
+                      <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
+                        Need {formatMoney(stagedNeed - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.45 }}>
+                      To sign you need the deposit and every pre-delivery instalment in the bank
+                      ({formatMoney(stagedPreDelivery)}{committedPdp > 0 ? `, plus ${formatMoney(committedPdp)} already owed on other orders` : ''}).
+                      The balance is charged in cash the week each aircraft arrives — if the bank can’t cover it, it goes negative.
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    {!canAfford && (
+                      <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
+                        Need {formatMoney(buyTotalDue - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, textAlign: 'right' }}>Full payment due at order</div>
+                  </>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, textAlign: 'right' }}>Full payment due at order</div>
               </div>
             ) : (
               <div style={{ fontSize: 13 }}>

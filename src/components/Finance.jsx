@@ -37,6 +37,7 @@ import {
   DEPRECIATION_YEARS,
 } from '../data/overhead.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { settleDuePayments, hasPaymentSchedule } from '../models/orderPayments.js';
 import { fuelImpact, hedgeQuoteDollars, hedgeUnwindDollars, hedgeScoreboard } from '../utils/fuelImpact.js';
 import {
   FUEL_PROGRAMMES, fleetBurnMod, programmeWeeklyCost, programmeActivationCost, canActivateProgramme,
@@ -2565,6 +2566,11 @@ function Forecast({ proj }) {
   const fcDepreciation = proj.depreciation;   // non-cash, constant across the horizon
   let runningCash = cash;
   let runningLoans = activeLoansSnapshot.map(l => ({ ...l }));
+  // Aircraft instalments and delivery balances (order book §2), week by week,
+  // through the same helper the tick settles them with. Offset +1 is the week
+  // the next tick moves into, so the first row matches the P&L projection.
+  let runningOrders = state.pendingOrders ?? [];
+  const hasStagedOrders = runningOrders.some(hasPaymentSchedule);
   const forecastWeeks = Array.from({ length: 12 }, (_, i) => {
     const offset       = i + 1;
     const month        = futureMonth(absWeekBase, offset);
@@ -2586,9 +2592,12 @@ function Forecast({ proj }) {
     // Tax on EBT (− depreciation − interest); cash net subtracts the full payment.
     const taxBase      = adjRev - totalCost - fcDepreciation - loanInterest;
     const tax          = Math.round(Math.max(0, taxBase) * CORPORATE_TAX_RATE);
-    const net          = adjRev - totalCost - loanPayments - tax;
+    const settled      = settleDuePayments(runningOrders, absWeekBase + offset);
+    runningOrders      = settled.orders;
+    const aircraftPay  = settled.total;
+    const net          = adjRev - totalCost - loanPayments - tax - aircraftPay;
     runningCash       += net;
-    return { offset, month, seasonal, adjRev, totalCost, loanPayments, tax, net, cash: runningCash };
+    return { offset, month, seasonal, adjRev, totalCost, loanPayments, aircraftPay, tax, net, cash: runningCash };
   });
 
   const firstNeg  = forecastWeeks.find(w => w.cash < 0);
@@ -2658,6 +2667,7 @@ function Forecast({ proj }) {
               <th style={{ textAlign: 'right' }}>Revenue</th>
               <th style={{ textAlign: 'right' }}>Op Costs</th>
               {activeLoansSnapshot.length > 0 && <th style={{ textAlign: 'right' }}>Loans</th>}
+              {hasStagedOrders && <th style={{ textAlign: 'right' }}>Aircraft</th>}
               <th style={{ textAlign: 'right' }}>Tax</th>
               <th style={{ textAlign: 'right' }}>Net</th>
               <th style={{ textAlign: 'right' }}>Cash</th>
@@ -2676,6 +2686,9 @@ function Forecast({ proj }) {
                 {activeLoansSnapshot.length > 0 && (
                   <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{w.loanPayments > 0 ? formatMoney(w.loanPayments) : '—'}</td>
                 )}
+                {hasStagedOrders && (
+                  <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{w.aircraftPay > 0 ? formatMoney(w.aircraftPay) : '—'}</td>
+                )}
                 <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{w.tax > 0 ? formatMoney(w.tax) : '—'}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 13, color: w.net>=0?'var(--green)':'var(--red)' }}>
                   {w.net>=0?'+':''}{formatMoney(w.net)}
@@ -2690,6 +2703,7 @@ function Forecast({ proj }) {
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
         Revenue and op costs adjusted for seasonality. Fixed costs (leases, maintenance, gates) held constant.
+        {hasStagedOrders && ' Aircraft column: instalments and delivery balances on your orders, in the week each falls due.'}
       </div>
     </div>
   );

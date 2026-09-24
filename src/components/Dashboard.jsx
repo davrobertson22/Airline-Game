@@ -200,11 +200,18 @@ export default function Dashboard() {
         operating: income('ebitda'),
         loans:     cost('loans'),
         oneOff:    cost('oneOff'),
+        // Security deposits coming home with returned leases. The bridge has
+        // always had this row; the card never carried it, so a lease-return
+        // week's rows missed the Net profit by exactly the deposit.
+        deposits:  income('deposits'),
         // Heavy checks and AOG repairs net of insurance. The engine charges
         // these below EBITDA and outside report.totalCost, so nothing that
         // reads totalCost can see them — they need their own line or last
         // week's column silently fails to add up to its own total.
         unplanned: cost('unplanned'),
+        // Instalments and delivery balances on aircraft ordered under the
+        // order book. Capital, not cost — but cash, so it needs its line.
+        aircraftPay: cost('aircraftPay'),
         tax:       cost('tax'),
         // The bridge's below-the-line guard. Should always be zero.
         netResidual: cost('netResidual'),
@@ -915,6 +922,14 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown, depreciation }) {
     tip: 'Lease redelivery and seasonal route reactivation fees.',
     lw: lastWeek ? -lastWeek.oneOff : null, pj: -projected.oneOff,
   });
+  if ((lastWeek?.deposits ?? 0) !== 0 || (projected.deposits ?? 0) !== 0) rows.push({
+    key: 'deposits', kind: 'line',
+    label: 'Lease deposits returned',
+    tip: 'Security deposits refunded when leased aircraft went back to the lessor. '
+       + 'You paid these up front when the aircraft was ordered; they are your own '
+       + 'money coming home, so no tax is charged on them.',
+    lw: lastWeek ? lastWeek.deposits : null, pj: projected.deposits ?? 0,
+  });
   if ((lastWeek?.unplanned ?? 0) !== 0 || (projected.unplanned ?? 0) !== 0) rows.push({
     key: 'unplanned', kind: 'line',
     label: 'Heavy checks & AOG',
@@ -927,6 +942,16 @@ function WeeklyPnL({ lastWeek, projected, costBreakdown, depreciation }) {
     lw: lastWeek ? -lastWeek.unplanned : null,
     pj: projected.unplanned == null ? null : -projected.unplanned,
     pjNote: 'Not forecast — heavy checks and AOG are lumpy and event-driven.',
+  });
+  if ((lastWeek?.aircraftPay ?? 0) !== 0 || (projected.aircraftPay ?? 0) !== 0) rows.push({
+    key: 'aircraftPay', kind: 'line',
+    label: 'Aircraft purchase payments',
+    tip: 'Deposits, pre-delivery instalments and delivery balances on aircraft '
+       + 'you have ordered. This is the price of the airframe paid in stages — '
+       + 'capital, not an operating cost — so it is not deducted from taxable '
+       + 'profit; the aircraft reaches your tax bill through depreciation instead. '
+       + 'The projection shows what falls due next week.',
+    lw: lastWeek ? -lastWeek.aircraftPay : null, pj: -(projected.aircraftPay ?? 0),
   });
   if ((lastWeek?.tax ?? 0) !== 0 || projected.tax !== 0) rows.push({
     key: 'tax', kind: 'line',

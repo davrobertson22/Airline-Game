@@ -99,6 +99,10 @@ import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.j
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import {
+  buildPaymentSchedule, preDeliveryTotal, signingAmount, markPaidThrough,
+  committedPreDelivery, settleDuePayments, cancellationRefund,
+} from '../models/orderPayments.js';
+import {
   tickFuelPrice,
   clampFuelIndex,
   effectiveFuelMultiplier,
@@ -1460,6 +1464,15 @@ function reducer(state, action) {
       let cashBalance    = state.cash;
       const newOrders    = [];
 
+      // Order book, package 1 (docs/order-book-design.md §2): under the
+      // `orderBook` world flag an OWNED order is paid on a staged schedule —
+      // deposit at signing, instalments before delivery, the balance on the
+      // delivery week — instead of in full now. Signing needs cash for the
+      // deposit and every pre-delivery instalment, this order's and the unpaid
+      // ones already on the book (models/orderPayments.js). Leases, and every
+      // world without the flag, take the classic path below unchanged.
+      const staged = action.ownershipType === 'owned' && state.orderBook === true;
+
       // Bulk-order discount (owned purchases only) — resolve the affordable quantity
       // first so requesting 100 can't grab the 20% tier on a few affordable frames.
       let orderQty  = quantity;
@@ -1468,7 +1481,10 @@ function reducer(state, action) {
         const unitCostAt = (disc) => Math.round(Math.round(eraPurchasePrice(type) * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost;
         while (orderQty > 0) {
           orderDisc = orderDiscount(orderQty);
-          if (cashBalance >= unitCostAt(orderDisc) * orderQty) break;
+          const need = staged
+            ? committedPreDelivery(runningPending) + preDeliveryTotal(unitCostAt(orderDisc)) * orderQty
+            : unitCostAt(orderDisc) * orderQty;
+          if (cashBalance >= need) break;
           orderQty--;
         }
         if (orderQty === 0) return state;
@@ -1507,10 +1523,19 @@ function reducer(state, action) {
         // Owned aircraft pay the connectivity capex up front; leased ones have
         // already had it amortised into unitWeeklyLease above, so charging it
         // here as well would bill for the same antenna twice.
-        const unitUpfrontCost = action.ownershipType === 'owned'
-          ? unitTotalPrice + wifiFitCost
-          : leaseDeposit;
-        if (cashBalance < unitUpfrontCost) break;
+        // Staged: the contract covers the airframe AND the line-fitted
+        // connectivity package, and only the signing-week payments leave now.
+        const contractPrice   = unitTotalPrice + wifiFitCost;
+        const schedule        = staged ? buildPaymentSchedule(contractPrice, currentAbsWeek, deliverAbsWeek) : null;
+        const unitUpfrontCost = staged
+          ? signingAmount(schedule, currentAbsWeek)
+          : action.ownershipType === 'owned'
+            ? contractPrice
+            : leaseDeposit;
+        const canSign = staged
+          ? cashBalance >= committedPreDelivery(runningPending) + preDeliveryTotal(contractPrice)
+          : cashBalance >= unitUpfrontCost;
+        if (!canSign) break;
 
         const serialNum = nextAircraftNumber(action.typeId, state.fleet, runningPending);
         const customName = (action.name ?? '').trim();
@@ -1536,6 +1561,7 @@ function reducer(state, action) {
           weeklyLease:   action.ownershipType === 'lease' ? unitWeeklyLease : 0,
           orderedWeek:   state.week,
           orderedYear:   state.year,
+          ...(staged ? { contractPrice, payments: markPaidThrough(schedule, currentAbsWeek) } : {}),
         };
 
         newOrders.push(order);
@@ -1561,9 +1587,10 @@ function reducer(state, action) {
       // Marketplace screens both promised "Lease orders are free to cancel
       // before delivery" — ordering and cancelling a lease quietly destroyed
       // twelve weeks of rent.
-      const refund = order.ownershipType === 'owned'
-        ? Math.round(order.totalPrice * 0.95)
-        : (order.leaseDeposit ?? 0);
+      // Under the order book (models/orderPayments.js) the deposit is kept
+      // and paid instalments come back at 80%; the screens quote the same
+      // function, so the dialog and the refund cannot disagree.
+      const refund = cancellationRefund(order);
       return {
         ...state,
         cash:          state.cash + refund,
@@ -4613,6 +4640,18 @@ function reducer(state, action) {
       const charterSettle = settleCharters({ ...state, charters: coverPass.charters }, report);
       const charterPenalties = charterSettle.penalties;
 
+      // ── Aircraft purchase payments (order book §2) ───────────────────────
+      // Instalments and delivery balances on orders signed under the
+      // `orderBook` flag, for every payment due by the week this tick moves
+      // into — the same week the delivery pass below uses, so a balance and
+      // its aircraft always land together. Capital, not cost: it leaves the
+      // bank (preTaxProfit) but is not deductible (depreciation carries the
+      // airframe). Always cash: charged whether or not the bank can cover it.
+      // Classic orders carry no schedule, so a classic week charges nothing
+      // and pendingOrders comes back as the same array.
+      const orderPaySettle   = settleDuePayments(state.pendingOrders ?? [], absoluteWeek(state.year, state.week) + 1);
+      const aircraftPayments = orderPaySettle.total;
+
       const CORPORATE_TAX_RATE = 0.21;
       const weeklyDepreciation = fleetWeeklyDepreciation(state.fleet);
       // Seasonal reactivation fees are a deductible operating expense, treated like
@@ -4627,7 +4666,7 @@ function reducer(state, action) {
       const taxableIncome   = adjustedCashDelta - weeklyDepreciation - totalLoanInterest - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance - charterPenalties;
       const corporateTax    = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
       // Cash movement: operating cash − full loan payment − reactivation fees − tax.
-      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance + leaseDepositRefund - charterPenalties;
+      const preTaxProfit    = adjustedCashDelta - totalLoanPayments - leaseRedeliveryCost - seasonalReactivationCost - maintCheckSpend - aogSpend + aogInsurance + leaseDepositRefund - charterPenalties - aircraftPayments;
       const newCash = state.cash + preTaxProfit - corporateTax;
       let newWeek = state.week + 1;
       let newYear = state.year;
@@ -5036,7 +5075,7 @@ function reducer(state, action) {
 
       // ── Deliver pending aircraft orders ──────────────────────────────────────
       const newAbsWeek      = absoluteWeek(newYear, newWeek);
-      const allPending      = state.pendingOrders ?? [];
+      const allPending      = orderPaySettle.orders;
       const toDeliver       = allPending.filter(o => o.deliverAbsWeek <= newAbsWeek);
       const remainingOrders = allPending.filter(o => o.deliverAbsWeek >  newAbsWeek);
 
@@ -5214,7 +5253,10 @@ function reducer(state, action) {
           // lease redelivery, seasonal reactivation fees and corporate tax on top of
           // operating cost so that (revenueEffective − totalCostAll) reconciles to cashDelta.
           revenueEffective: Math.round(report.totalRevenue + eventDemandAdj - strikeRevenueLoss),
-          totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost + corporateTax + maintCheckSpend + aogSpend,
+          totalCostAll: report.totalCost + totalLoanPayments + leaseRedeliveryCost + seasonalReactivationCost + corporateTax + maintCheckSpend + aogSpend + aircraftPayments,
+          // Present only in a week that paid something, so a classic save's
+          // reports stay byte-identical (the fuelMultiplier convention).
+          ...(aircraftPayments ? { aircraftPayments } : {}),
           loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
         encroachments:     updatedEncroachments,

@@ -18,6 +18,8 @@ import { weeklyTick } from './simulation.js';
 import { prepareWeek } from './tickPrep.js';
 import { getAircraftType, eraPurchasePrice } from '../data/aircraft.js';
 import { DEPRECIATION_YEARS } from '../data/overhead.js';
+import { paymentsDueBy } from '../models/orderPayments.js';
+import { absoluteWeek } from './fuel.js';
 
 const CORPORATE_TAX_RATE = 0.21;
 
@@ -204,7 +206,12 @@ function computeProjectWeek(state) {
   const corporateTax  = Math.round(Math.max(0, taxableIncome) * CORPORATE_TAX_RATE);
   // Cash bottom line: operating cash − loan payments − reactivation − tax (matches
   // the `profit` stored in history). Depreciation is non-cash so it doesn't affect cash.
-  const preTaxProfit  = ebitda - loanPayments - seasonalReactivation - leaseRedelivery + leaseDepositRefund;   // pre-tax CASH
+  // Aircraft purchase payments (order book §2): instalments and delivery
+  // balances the tick moving into next week will charge. Capital — not
+  // deductible, so the tax base above is untouched — but real cash. Read
+  // through the reducer's own helper, so forecast and charge cannot differ.
+  const aircraftPayments = paymentsDueBy(state.pendingOrders ?? [], absoluteWeek(state.year, state.week) + 1);
+  const preTaxProfit  = ebitda - loanPayments - seasonalReactivation - leaseRedelivery + leaseDepositRefund - aircraftPayments;   // pre-tax CASH
   const netCash       = preTaxProfit - corporateTax;
   // Accrual view (proper P&L): EBIT − interest − tax. Principal excluded.
   const netIncomeAccrual = ebit - interest - corporateTax;
@@ -228,6 +235,7 @@ function computeProjectWeek(state) {
     seasonalReactivation,
     leaseRedelivery,
     leaseDepositRefund,
+    aircraftPayments,
     preTaxProfit,
     corporateTax,
     netCash,
