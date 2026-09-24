@@ -21,7 +21,7 @@ import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
          eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
-         canFitWifi } from '../data/aircraft.js';
+         canFitWifi, lessorFirstYear, LESSOR_MIN_AGE_YEARS } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
@@ -1049,9 +1049,21 @@ function nextAircraftNumber(typeId, fleet = [], pendingOrders = []) {
 // Vintage metal on the 2026 market is buy-only — no lessor exists for a line
 // closed 50 years (aircraft.js isVintage). Null in era games and for anything
 // younger; the Marketplace renders the message on the lease button.
+// Era games: lessors take a type only LESSOR_MIN_AGE_YEARS after it enters
+// service (surplus types from day one) — see lessorFirstYear.
 export function leaseDenial(state, typeId) {
   const type = getAircraftType(typeId);
-  if (!type || calendarYear(state) != null || !isVintage(type)) return null;
+  if (!type) return null;
+  const cy = calendarYear(state);
+  if (cy != null) {
+    const from = lessorFirstYear(type);
+    if (cy >= from || (type.eis ?? 0) > cy) return null;   // not-yet-flying is orderDenial's message
+    return {
+      code: 'lessor_age', typeId: type.id, eis: type.eis, leasableFrom: from,
+      message: `Lessors take the ${type.name} from ${from}, ${LESSOR_MIN_AGE_YEARS} years after it enters service. Until then, buy it new or used.`,
+    };
+  }
+  if (!isVintage(type)) return null;
   return {
     code: 'vintage', typeId: type.id, oop: type.oop,
     message: `No lessor stocks the ${type.name} — the line closed in ${type.oop}. Vintage metal is bought outright.`,

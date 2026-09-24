@@ -4163,6 +4163,22 @@ export function vintageDeliveredAgeWeeks(type) {
   return Math.round(years * 52);
 }
 
+/**
+ * Era games: lessors only take a type once it has been in service this many
+ * years (Dave, 2026-09-24; mirrors Headwinds). New metal is bought.
+ */
+export const LESSOR_MIN_AGE_YEARS = 10;
+
+/**
+ * First calendar year an era lessor carries this type: EIS + LESSOR_MIN_AGE_YEARS,
+ * or EIS itself for war-surplus types (`surplus: true`) — postwar lessors were
+ * stocked with exactly those airframes.
+ */
+export function lessorFirstYear(type) {
+  const eis = type?.eis ?? 9999;
+  return type?.surplus ? eis : eis + LESSOR_MIN_AGE_YEARS;
+}
+
 /** Vintage on the 2026 market: the line closed VINTAGE_AFTER_YEARS+ ago, so it is buy-only. */
 export function isVintage(type) {
   return !!type && type.deliveredAgeWeeks > 0 && type.oop != null

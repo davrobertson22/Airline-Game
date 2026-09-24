@@ -14,6 +14,7 @@ import {
   efficiencyScore,
   seatEfficiency,
   fuelCostPerKm,
+  lessorFirstYear,
 } from '../data/aircraft.js';
 import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear, cruiseSpeedKmh } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
@@ -748,8 +749,11 @@ export default function Marketplace() {
   };
   // Lease button only: vintage metal in a classic game is buy-only (mirrors
   // the reducer's leaseDenial()).
+  // In era games lessors take a type only 10 years after it enters service.
   const leaseLockReason = (type) =>
-    eraLockReason(type) ?? ((calYear == null && isVintage(type)) ? `No lessor stocks it \u2014 line closed ${type.oop}. Buy it outright` : null);
+    eraLockReason(type) ?? (calYear == null
+      ? (isVintage(type) ? `No lessor stocks it \u2014 line closed ${type.oop}. Buy it outright` : null)
+      : (calYear < lessorFirstYear(type) ? `Lessors take it from ${lessorFirstYear(type)} \u2014 buy new or used until then` : null));
 
   const mfrsInCategory = ['All', ...[...new Set(
     (activeCategory === 'All' ? AIRCRAFT_TYPES : AIRCRAFT_TYPES.filter(t => t.category === activeCategory))
