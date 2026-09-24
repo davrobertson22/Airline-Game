@@ -20,7 +20,9 @@
 //
 // EVERY function returns its neutral value (null) when calYear is null: a
 // classic world never touches an era branch. That is the parity invariant —
-// tools/golden-master/run.mjs must stay PARITY OK whatever changes here.
+// tools/era-calendar-test.mjs guards it here. (This used to point at
+// tools/golden-master/run.mjs, which Tailwinds no longer carries; the golden
+// master lives on in the Headwinds repo, where the same rule applies.)
 //
 // The anchor values are the calibration surface for tools/era-balance-test.mjs
 // (load factor 60-85% and consistent return-on-capital per decade). Tune them

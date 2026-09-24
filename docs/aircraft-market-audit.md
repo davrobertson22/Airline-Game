@@ -516,3 +516,152 @@ Checking anchor types showed the catalogue uses **two conventions**: passenger a
 ## Housekeeping
 
 The `era.js` header still says `tools/golden-master/run.mjs must stay PARITY OK`; that directory was removed in an earlier commit, so the reference is stale.
+
+*(Fixed in Addendum 7, item 4.)*
+
+---
+
+# Addendum 6 · Headwinds port, and a toast bug in the Tailwinds release (2026-09-21)
+
+## A bug in 5e1e818, found while porting
+
+`ADVANCE_WEEK` **replaces** `state.pendingToasts` with the week's own list. The stranding pass runs pre-tick and re-enters the reducer, so the toast it queued was thrown away by the very tick it announced. The Comet 1 grounding — the pattern the pass was modelled on — hit the same wall and only preserves pre-tick toasts in era games. Net effect in 5e1e818: in a **classic** game the news row and the badge worked, and the toast never appeared. The original test checked the toast on a direct `applyRangeStranding` call and never through `ADVANCE_WEEK`, which is how it got through.
+
+**Fix:** `rangeStrandToasts(state, absWeek)` builds the toast from routes whose `rangeStranded.since` is the week being processed; `ADVANCE_WEEK` spreads it into its own toast list, and the pre-tick pass runs with `{ toast: false }`. A new test (*the toast survives the weekly tick in a classic game*) was verified failing on 5e1e818 before the fix.
+
+Also added: `TRANSFER_ROUTES` now clears the flag too (`transferCompatibility` already range-checks every leg), so swapping a longer-range tail in removes the badge immediately rather than a week later. Verified failing first.
+
+And `tools/range-stranding-ui-test.mjs`: SSR-renders the real Routes page and cargo list inside `GameProvider`. In Tailwinds it goes through the real load path — `reconcileState` → `applyRangeStranding` → badge — using `rangeMod` to make routes genuinely unreachable, because the load pass clears a hand-set flag on a route that is actually in range.
+
+## Headwinds
+
+The shared-engine sync tool is retired (it rsyncs with `--delete` and would clobber Headwinds-only work), so this was a hand port.
+
+**Data.** On the 193 types the two catalogues share, every field the audit touched was identical before the audit. Headwinds lacks only the four business jets, none of which were edited. The 79 field changes were derived from Tailwinds' actual pre→post data and replayed with each old value verified. Afterwards the two catalogues match on every audited field; the only remaining difference is Headwinds' own `doubleDeck` flag.
+
+**Engine.** Detector ported verbatim into `packages/engine/src/utils/simulation.js`; `applyRangeStranding`, `rangeStrandToasts`, the pre-tick hook and both flag-clears in `packages/engine/src/reducer.mjs`.
+
+**One deliberate difference: no news row.** Headwinds' News tab is the world's shared feed, served identically to every viewer; a stranded route is private and would tell rivals about your network. The durable record is the flag itself — the badge and the *Disrupted* filter — plus the toast, which `tickService` carries forward (up to 40) for players who are away. No load-time pass: in multiplayer, state only changes at ticks and actions, and a stranded route loses nothing until the next tick, which flags it.
+
+**UI.** Same badge, same Routes and cargo-list changes.
+
+## Verification
+
+- Engine behaviour verified failing on Headwinds HEAD `29e9be1` with a throwaway probe of the old call path, rather than an import error.
+- The UI test was verified failing on HEAD's components. The first cut **passed on HEAD** — the Routes page embeds the cargo list, so a flagged cargo route put a badge on it by itself. The test now flags each route separately and asserts on text only the passenger group badge carries.
+- Golden master (`run.mjs`): PARITY OK. Its fixtures fly only an A320ceo, an A320neo and a 787-9, none of which that round touched — so it is **not** coverage for an aircraft rebalance.
+- Beta-world parity was already failing on Headwinds HEAD, bisected to `3d8e727` (gate fee cap); re-baselined separately in `b61f66d`.
+
+## Observation (multiplayer, pre-existing)
+
+`buildRivalViews` counted every route's frequency and capacity, including routes that were not flying. Fixed in Addendum 7, item 12.
+
+---
+
+# Addendum 7 · The remaining twelve (2026-09-24)
+
+Twelve items were left open after Addendum 6. All twelve were measured again on the current data before anything changed. Nine are fixed. Two turned out not to be defects and stay unchanged, with the reasons below. One (the widebody capital band) was fixed narrowly rather than across the board. Tailwinds 165/165 suites, Headwinds 217/217. Each new behaviour has a test that fails on HEAD.
+
+## 1 · The deadweight report now costs aircraft the way the tick does
+
+`fixedWeeklyParts(t)` in `tools/catalogue-deadweight-report.mjs` charges maintenance at the delivered-age multiplier, hull insurance on vintage (owned) frames, and an imputed capital charge instead of a catalogue lease for buy-only vintage metal. The capital charge uses `VINTAGE_CAPITAL_YIELD`, the median lease yield, which is 12.1%. The new `tools/deadweight-model-test.mjs` runs a one-aircraft `weeklyTick` for a new A320neo, an aged 737-800 and a vintage Vanguard and checks the report agrees within 1%. On HEAD the report was off by 15% on the 737-800 and 5.5× on the Vanguard's maintenance.
+
+## 2 · Closed lines priced as new metal
+
+The convention: for a closed line, `purchasePrice` is what a used frame fetches at `deliveredAgeWeeks`, and era worlds multiply it by 2.5 while the line is open. Four widebodies broke that convention.
+
+| type | was | now | why |
+|---|---|---|---|
+| `b7478i` | $190M / $463k, 9y | **$80M / $186k** | 747-400 sibling is $55M at 10y; +45% for 13% less fuel per seat and 1,400 km more range. It had the worst return on capital in its cohort and won nothing |
+| `b777200lr` | 13y, $85M / $207k | **6y (`bandEis` 1997), $62M / $152k** | same line and same closure year as the 777-200ER, which arrives 6y old at $48M; +30% is the real list-price ratio |
+| `a380`, `b777300er` | — | **`pricedAsNew: true`** | see 9 |
+
+After the change, both the 747-8I and the 777-200LR are close alternatives in the sweep (91.5% and 93.4% of the winner at their peaks). Neither takes a mission from anything else.
+
+## 3 · 777X-8
+
+The earlier −12.1% compared the 777-8 with the wrong predecessor. Boeing's ultra-long-range shrink replaces the **777-200LR**, and new against new the gap to that aircraft was −1.1%. The remaining gap is maintenance and crew cost per seat, which is true of the real aircraft: it is sold for its range. Price trimmed from $195M/$471k to **$180M/$435k**, 0.84× the 777-9, which makes it +0.4% new against new. `aircraft-generation-test` now includes the `b777200lr → b7778x` pair.
+
+## 4 · `era.js` comment
+
+Now points at `tools/era-calendar-test.mjs` for Tailwinds and notes that the golden master lives in Headwinds.
+
+## 5 · The four held-back ranges
+
+`b707320` 10,650 → **9,260** km (Boeing headline, 141 passengers in two classes) and `tu204` 6,500 → **4,600** km (210 passengers). `casacn235` stays at 4,355, with no figure on the catalogue's basis to replace it. `b727200f` stays unchanged because its payload and range sources disagree. Range stranding (Addenda 5 and 6) covers any live route these changes affect.
+
+## 6 · Turboprops off the blanket multiplier
+
+29 propeller types were given their own figure: 0.95 × a verified real burn, where the source had at least medium confidence. 14 went up and 15 came down. The largest moves: `do228` +72%, `c46` +65%, `atr72f` +45% (the ATR 72F was never raised with the ATR 72), `dc3`/`c47` −33%, `bn2islander` −25%, `l188` −24%. `atr42` stays at 137.18: the only published figure is a max-cruise fuel flow (811 kg/h against about 600 typical), and using it put the ATR 42 behind the CRJ-200 per seat, which the generation test caught. A twins guard now keeps `atr72` and `atr72f` together.
+
+## 7 · Runway convention
+
+The catalogue's rule, taken from its own class medians, is `runwayFt` ≈ 0.85 × real MTOW takeoff field length for short-haul types (narrowbodies, regional jets and light freighters) and ≈ 1.00 × for long-haul types. 21 types were more than 15% off that rule and are now at the edge of the ±15% band, so each moves as little as possible. Largest moves: `b747400d` 9,800 → 7,500, `tu204` 7,200 → 5,700, `b737900er` 5,700 → 7,100, `b737200` 5,000 → 6,150. `b737500` and `c919` are documented exceptions. The new `tools/aircraft-runway-convention-test.mjs` holds 127 real takeoff lengths (123 in Headwinds, which has no business jets). It checks the band, checks the class medians, and checks that STOL types keep their short-field figures. The tick never checks runways, so routes already flying are grandfathered and the new figures bind at route creation and reassignment.
+
+## 8 · Widebody capital band: fixed narrowly, not compressed
+
+Measured again. The spread is 12.1× per seat on leases (15× on purchase price, set by the buy-only 747-100). Compressing it was rejected for three reasons.
+
+- **Real lease markets span more than this game does.** A new A350-900 leases for about 8.5× a 25-year-old 767-300ER. In the game the comparable pair is 5.9×.
+- **The sweep shows no harm per airframe.** Cheap old widebodies win nothing. The 767-300 wins zero missions on both the grid and realistic demand.
+- **Where old metal leads, it leads on return on capital.** Return on capital (surplus before ownership ÷ price) runs from 2.2× the widebody median (A310-300) down to 0.29× (A350-900ULR). That is the used market working, with age-driven maintenance already charged.
+
+What *was* wrong was inside cohorts, and that is fixed:
+
+- `a310300` $11M/$27k → **$18M/$43k**. It was cheaper than the older, shorter-ranged A310-200 ($15M), which made it the best return on capital in the game.
+- `il96300` $50M/$109k → **$30M/$65k**, the A340-300's $91k/seat at the same age. It burns 80% more per seat.
+
+The new `tools/aircraft-pricing-guard-test.mjs` is the passenger mirror of the freighter spread guard. It checks four things:
+
+- within a family, the newer variant never sells for less per seat;
+- the 777-200ER and -200LR arrive at the same age;
+- a used frame never costs more per seat than new metal of the type that replaces it;
+- in an era world, no closed widebody costs more new than 1.5× the dearest open-line widebody per seat.
+
+Four of its five checks fail on HEAD. `aircraft-consistency-test`'s price floor now treats a used frame from the 2010+ generation against the band below, because its $180k/seat floor is a new-metal floor.
+
+## 9 · A380: no price change, one era fix
+
+Measured against the game's real market sizes (`baseCityPairDemand`, at 25%, 50% and 100% capture) rather than the grid's 60–60,000:
+
+- **It wins 11 of 69 decided missions (15.9%), all long-haul trunks carrying 13,000+ passengers a week, at a median margin of 1.23.** It never wins short-haul or thin routes.
+- **It has the second-worst return on capital among widebodies** (0.34× median).
+- **Two 777-300ERs beat one A380 per dollar.** On JFK–LHR at 26,200 passengers a week, two 777-300ERs splitting the market earn $3.57M on $806k of ownership. One A380 earns $2.71M on $740k.
+
+So it is not dominant for a player who is short of capital, which is every player until late game. Cutting it to a used price (about $100–170M on any consistent rule) would make it dominant, as it would the 777-300ER at a used price. Both therefore keep new-metal prices on purpose, and are flagged `pricedAsNew`. `eraPriceScale` returns 1 for them. Before this fix, era worlds added the 2.5× new-build premium on top of a price that was already new: a 2010 A380 cost **$762M** and a 2005 777-300ER $425M.
+
+Not fixed, noted: the same era double-premium check across other categories flags `casacn235`, `a330200f`, `b7478f`, `l410` and `do228`. Each needs a judgement on whether its catalogue price is a used or a new figure.
+
+## 10 · The vintage cliff is a ramp
+
+`vintageDeliveredAgeWeeks` now ramps delivered age linearly from the published band at 35 years closed (`VINTAGE_RAMP_FROM_YEARS`) to the 20-year floor at 50, then on to the 30-year cap as before. Buy-only stays a hard line at 50 years, because that rule is about lessor behaviour, not wear. `isVintage` membership is unchanged. Examples: the Il-18 now arrives at 19.5y instead of 16y (maintenance 2.89× instead of 2.28×), and the 727-200 at 17.9y instead of 16y. `era-availability-test` gains a *no cliff* check: age never falls, and it never jumps more than a year per year closed.
+
+## 11 · Lease vs buy: not a defect
+
+Engine terms: straight-line value to a 10% floor at 30 years, 0.8% hull insurance on book value, a 5% selling fee, 4 weeks' lease as a redelivery charge, 12 weeks' refundable deposit, aircraft finance at 6.5% on 70% of value, and no interest on cash. On those terms, owning costs **0.4–0.6× leasing** over holds of two years or more when the cash is idle, and **0.6–0.85×** with aircraft finance. Leasing costs about 10–13% a year of the price. Aircraft return 50–370% a year on their best missions. So leasing is the cheaper way to fund growth, and buying is the better use of idle cash. That is how aviation finance works in reality. The lever that would keep leasing competitive late in the game is interest on idle cash, which is a design decision that touches every save's P&L. It is left for Dave to decide.
+
+## 12 · Headwinds: rivals counted capacity that wasn't flying
+
+`toRivalSpecs` and `toHumanCompetitor` (and `cargoRoutesOf`) in `apps/headwinds-server/src/lib/humanRivals.mjs` built every rival's offer from every route in their blob. `rivalOffersFor` counts a human competitor even without a spec, so both views needed the fix. `flyingThisWeek(state)` now mirrors the tick:
+
+- the route is in season this month (the rival's own calendar);
+- the aircraft is in service, or back this week, since `tickPrep` runs the downtime countdowns before the revenue sim;
+- the route is not retired, and every leg is in range.
+
+A route covered by a reserve already names the reserve, so it is judged on the tail actually flying it. End to end, a rival grounded for four weeks had been taking **$11,964 a week** of revenue from a JFK–BOS competitor in the test world, relative to a rival that flies nothing. The new `tools/rival-capacity-flying-test.mjs` has 9 checks, 7 of which were verified failing on HEAD. `rival-map-test`'s freight fixture now uses freighters that can reach its JFK–LHR lane.
+
+A rival that flies nothing still costs a competitor something through brand and share of voice. That is outside this item.
+
+## Headwinds port and golden masters
+
+The 66 field edits were derived from Tailwinds' pre→post data and replayed with every old value verified (66/66). The vintage-ramp and `pricedAsNew` engine hunks were applied by patch. The test changes were ported by hand where the files had diverged. Both golden masters (`run.mjs` and `beta-world`) stay PARITY OK with the rival fix on HEAD's catalogue. With the catalogue changes both hashes moved while their projections stayed identical: AI competitors fly catalogue types, so their cash and share prices shift. This is an intended balance change, and both were re-baselined with `--update`.
+
+## Mission sweep, before and after this round (corrected model)
+
+| | before | after |
+|---|---|---|
+| distinct winners | 28 | 28 |
+| top share | A380 18.4% | A380 18.5% |
+| largest real margin over #2 | ×1.24 (A380) | ×1.24 (A380) |
+
+(The Dash 7's ×16 is the Barra grid artefact from Addendum 4.) No new dominant choice appears. The largest movement is inside the turboprop mix, where the Q400 moves up and the Saab 2000 and Short 360 move down with their real burns.
