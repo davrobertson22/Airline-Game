@@ -7,6 +7,7 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { crewStatus, crewParkedAlertText } from '../data/labor.js';
 import { isOutOfService } from '../data/maintenance.js';
 import { isReserve } from '../data/reserve.js';
 import { getAirport } from '../data/airports.js';
@@ -333,6 +334,13 @@ export default function Dashboard() {
   // directly above KPI boxes that were all clickable — the player was told
   // exactly what was wrong and then left to rebuild the query by hand.
   const alerts = [];
+  // Crew FIRST. A parked aircraft is the one problem whose symptom (routes earning
+  // less than the planner said) points everywhere except at its cause — "Why am I
+  // not getting the full revenue from my routes?" was this (Discord 2026-09-29).
+  const crewSt = crewStatus(state, (a) => getAircraftType(a.typeId));
+  const crewAlert = crewParkedAlertText(crewSt);
+  if (crewAlert)
+    alerts.push({ color: crewSt.level === 'grounding' ? 'var(--red)' : 'var(--yellow)', icon: AlertIcon, text: crewAlert, to: 'operations' });
   // Aircraft on routes that will sit out next week with nobody to fly them.
   // First, because it is the one that zeroes revenue outright — a new airline
   // that never found Company ▸ Operations flew six routes of nobody for weeks

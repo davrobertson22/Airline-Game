@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
+import { useGame, slotsUsedAt as slotsUsedAtEngine, cargoRouteDenial } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
@@ -135,7 +135,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
   const [origin, setOrigin]   = useState(initialOrigin);
   const [dest,   setDest]     = useState(initialDest);
   const [selectedTypeId, setSelectedTypeId] = useState('');
-  const [frequency, setFrequency] = useState(7);
+  const [rawFrequency, setFrequency] = useState(7);
   const [yieldPrice, setYieldPrice] = useState(null); // null = auto reference yield
 
   // A lane handed over by the Route Finder's optional "Plan". The finder is its
@@ -168,6 +168,10 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
     if (!ready || !t) return 14;
     return Math.max(1, Math.min(14, maxFrequency(routeDistance(origin, dest), t)));
   }, [ready, origin, dest, selectedTypeId]);
+  // What the slider SHOWS is what gets projected and dispatched. The raw
+  // value survives a lane change (7× on a short hop), so a long lane showed
+  // "3×" while the projection and the launch still used 7.
+  const frequency = Math.min(rawFrequency, freqCap);
 
   const routeData = useMemo(() => {
     if (!ready) return null;
@@ -403,8 +407,8 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                   <div>
                     <div className="form-label" style={{ marginBottom: 6 }}>Flights / week</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={Math.min(frequency, freqCap)} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: 110, accentColor: ACCENT }} />
-                      <span style={{ fontWeight: 700, minWidth: 22 }}>{Math.min(frequency, freqCap)}×</span>
+                      <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={frequency} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: 110, accentColor: ACCENT }} />
+                      <span style={{ fontWeight: 700, minWidth: 22 }}>{frequency}×</span>
                     </div>
                     {freqCap < 14 && (
                       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 5, maxWidth: 190, lineHeight: 1.4 }}>
@@ -474,7 +478,14 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                   const short     = deploymentShortfall(pool);
                   const lCost     = routeLaunchCost(routeData.dist);
                   const canAfford = state.cash >= lCost;
-                  const blocked   = !canAfford || !slotsOk;
+                  // The engine's own verdict on this exact launch. Gates, slots
+                  // and cash have their own lines below; anything else (runway,
+                  // perimeter, curfew...) is spelled out here.
+                  const denial    = target
+                    ? cargoRouteDenial(state, { origin, destination: dest, aircraftId: target.aircraft.id, weeklyFrequency: frequency })
+                    : null;
+                  const blocked   = !canAfford || !slotsOk || !!denial;
+                  const denialMsg = denial && !['gate', 'slots', 'cash'].includes(denial.code) ? denial.reason : null;
                   // Airports missing a gate, and airports out of free slots.
                   const noGate    = [!originGate.hasGate && origin, !destGate.hasGate && dest].filter(Boolean);
                   const noSlot    = [
@@ -524,6 +535,11 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                           action="Opening this lane"
                           typeName={simulation.type.name}
                         />
+                      )}
+                      {denialMsg && (
+                        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 4 }}>
+                          <Glyph e="⛔" size={12} /> Can't open this lane: {denialMsg.split(': ').slice(1).join(': ') || denialMsg}
+                        </div>
                       )}
                       {/* Gate requirement */}
                       {noGate.length > 0 && (

@@ -19,7 +19,7 @@ import {
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
 import { absoluteWeek, effectiveFuelMultiplier } from '../utils/fuel.js';
-import { laborEffects } from '../data/labor.js';
+import { laborEffects, crewStatus } from '../data/labor.js';
 import { airframeNAV, dueInfo, checkCost, checkDurationWeeks, isOutOfService, groundedLabel, MAX_SCHEDULE_AHEAD_WEEKS, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
 import InfoTip from './InfoTip.jsx';
 import Callout from './Callout.jsx';
@@ -1566,6 +1566,9 @@ function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
 
 export default function Fleet() {
   const { state, dispatch } = useGame();
+  // Tails the crew pipeline parks this week (severe band) — same set the tick
+  // grounds, so the row can say why its routes earned nothing.
+  const crewParked = new Set(crewStatus(state, (a) => getAircraftType(a.typeId))?.parkedIds ?? []);
   const confirm = useConfirm();
   const { fleet, routes, cargoRoutes = [], pendingOrders = [], year, week } = state;
   const gameMonth = currentGameDate(state).month;
@@ -2741,6 +2744,12 @@ export default function Fleet() {
                         <span className="badge" style={{ background: 'rgba(56,139,253,.15)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,.4)' }}><Glyph e="🛡️" /> Reserve @ {aircraft.reserveBase}</span>
                       ) : (
                         <span className="badge badge-yellow">Idle</span>
+                      )}
+                      {crewParked.has(aircraft.id) && (
+                        <span className="badge badge-red"
+                              title="Not enough pilots or cabin crew to fly this aircraft this week. Its routes earn nothing while lease and maintenance still bill. Hire crew under Company ▸ Operations — it flies again the week they qualify.">
+                          <Glyph e="⚠" size={10} /> No crew
+                        </span>
                       )}
                       {assignedRoutes.some(r => r.coverForAircraftId) && (
                         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> covering{aircraft.reserveBase ? ` from ${aircraft.reserveBase}` : ''}</span>

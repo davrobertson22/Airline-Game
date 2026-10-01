@@ -6,10 +6,10 @@ import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import {
   baseCityPairDemand, referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE,
-  cargoSlotsUsedAt, routeLegs, routeSegments,
+  cargoSlotsUsedAt, routeLegs, routeSegments, currentGameDate,
 } from '../utils/simulation.js';
 import {
-  AIRPORT_GATEWAY_SCORES, HUB_TIERS,
+  AIRPORT_GATEWAY_SCORES, HUB_TIERS, pairDemandNow,
 } from '../models/demand.js';
 import { getAirportRestrictions } from '../data/airportRestrictions.js';
 import { rivalIndexFor, rivalOneStopOffersFor, rivalsOn } from '../models/network.js';
@@ -402,18 +402,21 @@ export default function AirportDetail({ code, onBack }) {
   const myTotalFreq = myPairs.reduce((s, p) => s + p.frequency, 0);
 
   // Top 15 city pairs involving this airport, by O&D demand
+  const demandDate = currentGameDate(state);
   const topPairs = useMemo(() => {
     return AIRPORTS
       .filter(a => a.code !== code)
       .map(a => ({
         code:   a.code,
         city:   a.city,
-        demand: baseCityPairDemand(code, a.code),
+        // This week's market, as the Route Planner prices it — not the bare
+        // modern-day pool (20× too big in a 1950 era world).
+        demand: pairDemandNow(code, a.code, demandDate),
         refP:   referencePrice(code, a.code),
       }))
       .sort((a, b) => b.demand - a.demand)
       .slice(0, 15);
-  }, [code]);
+  }, [code, demandDate.month, demandDate.absWeek]);
 
   const totalAirportDemand = useMemo(
     () => topPairs.reduce((s, p) => s + p.demand, 0),

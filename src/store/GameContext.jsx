@@ -27,7 +27,8 @@ import { openSaveStore, makeRecord, AUTOSAVE_KEY } from './saveStore.js';
 import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
          CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
-         absorbCrewFor, crewUnitsForBodies, starterCrewTopUp, CREW_INSTANT_AIRCRAFT } from '../data/labor.js';
+         absorbCrewFor, crewUnitsForBodies, starterCrewTopUp, CREW_INSTANT_AIRCRAFT,
+         erodePayPremium, autoReplacePlan } from '../data/labor.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
          FORCED_REP_HIT, REP_PENALTY_DECAY, REP_PENALTY_MAX,
@@ -66,7 +67,7 @@ import {
 } from '../data/cateringContracts.js';
 import {
   DEFAULT_LABOR_RELATIONS, tickUnrest, rollStrike, settlementPayMultiplier,
-  scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand,
+  scheduleFirstNegotiations, scheduleNextNegotiation, negotiationDemand, demandIsNoOp,
   MAX_PAY_MULTIPLIER,
   counterOfferMultiplier, counterAccepted, NEGOTIATION_EFFECTS,
   tickGrievance, grievedMoraleTarget,
@@ -121,6 +122,7 @@ import {
   getAlliance,
   CODESHARE_WEEKLY_FEE_BY_TIER,
   CODESHARE_DURATION_WEEKS,
+  applyAllianceEra,
 } from '../data/alliances.js';
 import {
   LOAN_MIN_PRINCIPAL, amortizedWeeklyPayment, outstandingBalance,
@@ -368,6 +370,69 @@ export function peakSlotsUsedAt(routes, code, months, freqOf = (r) => r.weeklyFr
 }
 
 const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+/**
+ * Why ADD_CARGO_ROUTE would refuse this launch — or null if it would accept.
+ * One source of truth for the reducer AND the cargo planner's button: the
+ * planner used to re-derive a subset of these checks and skipped the airport
+ * rules (runway length, perimeter, curfews), so the button looked live and the
+ * click did nothing (Bazooka, Discord 2026-09-29).
+ *
+ * Launch cost is included only when the launch opens a NEW route (adding
+ * frequency to the same freighter's existing lane costs nothing).
+ *
+ * @returns {{ code: string, reason: string } | null}
+ */
+export function cargoRouteDenial(state, { origin, destination, aircraftId, weeklyFrequency: rawFreq }) {
+  const deny = (code, reason) => ({ code, reason });
+  const aircraft = (state.fleet ?? []).find(a => a.id === aircraftId);
+  const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
+  if (!aircraft || !type) return deny('aircraft', 'That freighter is no longer in your fleet.');
+  if (!type.freighter) return deny('aircraft', 'Cargo routes need a dedicated freighter.');
+  if (origin === destination || isSameLocation(getAirport(origin), getAirport(destination)))
+    return deny('same', 'Origin and destination are the same place.');
+
+  const weeklyFrequency = Math.max(1, Math.round(Number(rawFreq) || 0));
+  const dist = routeDistanceKm(origin, destination);
+
+  const reach = effectiveRangeKm(aircraft, type);
+  if (dist > reach)
+    return deny('range', `${aircraft.name} reaches ${Math.round(reach).toLocaleString()} km — this lane is ${Math.round(dist).toLocaleString()} km.`);
+
+  const pairKey = [origin, destination].sort().join('-');
+  const allOps  = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])];
+  const existingPairFreq = allOps
+    .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
+    .reduce((s, r) => s + r.weeklyFrequency, 0);
+  const reg = checkRouteRestrictions(origin, destination, dist, existingPairFreq + weeklyFrequency,
+    freighterBodyClass(type), { routes: allOps, excludeKey: pairKey, aircraftType: type });
+  if (reg) return deny('restriction', reg.reason);
+
+  const committed = routesCommittedTo(aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
+  const existingBlockHrs = committed.reduce((sum, r) => sum + routeBlockHours(r, type, r.weeklyFrequency), 0);
+  if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > MAX_WEEKLY_BLOCK_HOURS)
+    return deny('hours', `${aircraft.name} doesn't have ${weeklyFrequency} more round trips of block hours this week.`);
+
+  if (committed.length > 0) {
+    const served = new Set(committed.flatMap(r => [r.origin, r.destination]));
+    if (!served.has(origin) && !served.has(destination))
+      return deny('network', `${aircraft.name} already flies elsewhere — a busy freighter can only add lanes from airports it serves.`);
+  }
+
+  const gates = state.gates ?? {};
+  const noGate = [origin, destination].filter(c => !(gates[c] > 0));
+  if (noGate.length) return deny('gate', `No gate at ${noGate.join(' & ')}.`);
+  const noSlot = [origin, destination].filter(c =>
+    slotsUsedAt(allOps, c) + weeklyFrequency > gates[c] * SLOTS_PER_GATE);
+  if (noSlot.length) return deny('slots', `Not enough free slots at ${noSlot.join(' & ')}.`);
+
+  const consolidates = (state.cargoRoutes ?? []).some(r => r.aircraftId === aircraftId
+    && ((r.origin === origin && r.destination === destination)
+     || (r.origin === destination && r.destination === origin)));
+  if (!consolidates && state.cash < routeLaunchCost(dist))
+    return deny('cash', 'Not enough cash for the launch cost.');
+  return null;
+}
 
 // Year-round slot usage at `code` — the freight guards' reading. A cargo lane
 // never goes dormant, so it must fit in the BUSIEST month, which is a peak and
@@ -1320,7 +1385,30 @@ function withStarterCrew(prev, next) {
 }
 
 function rootReducer(state, action) {
-  return withStarterCrew(state, reducer(state, action));
+  const next = withStarterCrew(state, reducer(state, action));
+  return action?.type === 'ADVANCE_WEEK' ? withAutoReplace(state, next) : next;
+}
+
+// Groups with "replace leavers automatically" on rehire the week's leavers as
+// an ordinary HIRE_CREW right after the tick — same cost, same training wait,
+// same accounting as the player clicking Hire. (Inside the tick it would need
+// its own P&L row; outside it, it is simply a hire.) See autoReplacePlan.
+function withAutoReplace(prev, next) {
+  if (!next || next === prev || !next.crewPipeline || !next.labor) return next;
+  const plan = autoReplacePlan(next.labor, next.fleet ?? [], (a) => getAircraftType(a.typeId));
+  if (plan.length === 0) return next;
+  let s = next;
+  for (const { group, bodies, owedAfter } of plan) {
+    let owed = owedAfter;
+    if (bodies >= 1) {
+      const hired = reducer(s, { type: 'HIRE_CREW', group, bodies });
+      // Couldn't afford it: keep owing the whole amount, try again next week.
+      if (hired === s) owed += crewUnitsForBodies(group, bodies);
+      else s = hired;
+    }
+    s = { ...s, labor: { ...s.labor, [group]: { ...s.labor[group], replaceOwed: owed } } };
+  }
+  return s;
 }
 
 function reducer(state, action) {
@@ -1343,9 +1431,12 @@ function reducer(state, action) {
         ? action.startYear : null;
       setEraModuleState(_startYear, _startYear);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
+      const _fresh = freshState();
       return {
-        ...freshState(),
+        ..._fresh,
         startYear:   _startYear,
+        // Era: no global alliances before 1997 — AI carriers start unallied.
+        competitors: applyAllianceEra(_fresh.competitors, _startYear).competitors,
         // Era: the fuel walk opens at the decade's scripted mean (0.43 in 1950),
         // not the modern 1.0 it would otherwise take years to drift down from.
         ...(_startYear != null && eraFuelMean(_startYear) != null
@@ -2799,50 +2890,12 @@ function reducer(state, action) {
     // gates, slots, block-hours, regulatory, connectivity) but with no cabins,
     // pricing in $/tonne-km yield instead of ticket fares, and no catering.
     case 'ADD_CARGO_ROUTE': {
+      // Every refusal lives in cargoRouteDenial — the planner's button reads the
+      // same function, so a click the engine would drop can't look live.
+      if (cargoRouteDenial(state, action)) return state;
       const aircraft = state.fleet.find(a => a.id === action.aircraftId);
-      const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
-      if (!aircraft || !type) return state;
-      // Cargo routes require a dedicated freighter.
-      if (!type.freighter) return state;
-      if (action.origin === action.destination) return state;
-      if (isSameLocation(getAirport(action.origin), getAirport(action.destination))) return state;
-
       const weeklyFrequency = Math.max(1, Math.round(Number(action.weeklyFrequency) || 0));
       const dist = routeDistanceKm(action.origin, action.destination);
-
-      // Range (incl. engine/wingtip rangeMod)
-      const effectiveRange = effectiveRangeKm(aircraft, type);
-      if (dist > effectiveRange) return state;
-
-      // Regulatory restrictions (perimeter rules etc. apply to freighters too).
-      const pairKey = [action.origin, action.destination].sort().join('-');
-      const allOps  = [...state.routes, ...(state.cargoRoutes ?? [])];
-      const existingPairFreq = allOps
-        .filter(r => [r.origin, r.destination].sort().join('-') === pairKey)
-        .reduce((s, r) => s + r.weeklyFrequency, 0);
-      if (checkRouteRestrictions(action.origin, action.destination, dist, existingPairFreq + weeklyFrequency,
-            freighterBodyClass(type), { routes: allOps, excludeKey: pairKey, aircraftType: type })) return state;
-
-      // Block-hours across everything committed to this freighter — its cargo
-      // network, anything a reserve is covering for it, and (defensively) any
-      // passenger route that ever reached it.
-      const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
-        .reduce((sum, r) => sum + routeBlockHours(r, type, r.weeklyFrequency), 0);
-      if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > MAX_WEEKLY_BLOCK_HOURS) return state;
-
-      // Network connectivity: a freighter already flying can only extend from airports it serves.
-      const acCargoRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
-      if (acCargoRoutes.length > 0) {
-        const served = new Set(acCargoRoutes.flatMap(r => [r.origin, r.destination]));
-        if (!served.has(action.origin) && !served.has(action.destination)) return state;
-      }
-
-      // Gates required at both endpoints; slots counted across passenger + cargo ops.
-      const gates = state.gates ?? {};
-      if (!(gates[action.origin] > 0))      return state;
-      if (!(gates[action.destination] > 0)) return state;
-      if (slotsUsedAt(allOps, action.origin)      + weeklyFrequency > gates[action.origin]      * SLOTS_PER_GATE) return state;
-      if (slotsUsedAt(allOps, action.destination) + weeklyFrequency > gates[action.destination] * SLOTS_PER_GATE) return state;
 
       // Consolidate onto an existing identical cargo route for this freighter.
       const existingRoute = (state.cargoRoutes ?? []).find(r =>
@@ -3386,6 +3439,23 @@ function reducer(state, action) {
             pipeline: trained > 0
               ? [...(g.pipeline ?? []), { count: trained, readyAbsWeek }]
               : (g.pipeline ?? []),
+          },
+        },
+      };
+    }
+
+    case 'SET_AUTO_REPLACE': {
+      // action: { group, enabled } — rehire this group's leavers every week.
+      if (!LABOR_GROUP_MAP[action.group]) return state;
+      const current = state.labor ?? DEFAULT_LABOR_STATE;
+      return {
+        ...state,
+        labor: {
+          ...current,
+          [action.group]: {
+            ...(current[action.group] ?? { payMultiplier: 1.0, morale: 80 }),
+            autoReplace: !!action.enabled,
+            replaceOwed: 0,
           },
         },
       };
@@ -4589,7 +4659,9 @@ function reducer(state, action) {
       // Crew pipeline (A7): the week we are advancing INTO — batches whose
       // training finishes by then join the line.
       const crewAbsWeek = absoluteWeek(state.year ?? 1, state.week ?? 1) + 1;
-      for (const [id, g] of Object.entries(currentLabor)) {
+      for (const [id, g0] of Object.entries(currentLabor)) {
+        // The market catches up: a premium over 1.0× erodes ~6%/yr (labor.js).
+        const g = { ...g0, payMultiplier: erodePayPremium(g0.payMultiplier) };
         const target   = grievedMoraleTarget(moraleTarget(g.payMultiplier), grievancePrev?.[id]);
         const newMorale = g.morale + (target - g.morale) * 0.12;
         const morale = Math.max(5, Math.min(100, Math.round(newMorale * 10) / 10));
@@ -4610,6 +4682,7 @@ function reducer(state, action) {
           ...g, morale,
           headcount: Math.max(0, Math.round((onLine - left) * 100) / 100),
           pipeline: stillTraining,
+          lastLeavers: left,   // read by withAutoReplace after the week
         };
       }
 
@@ -4660,8 +4733,8 @@ function reducer(state, action) {
 
       // 3. Contract negotiations — tick the open one, or table a new demand.
       if (updatedRelations.negotiation
-          && updatedRelations.negotiation.demandMultiplier
-             <= (updatedLabor[updatedRelations.negotiation.group]?.payMultiplier ?? 1.0) + 1e-9) {
+          && demandIsNoOp(updatedLabor[updatedRelations.negotiation.group]?.payMultiplier ?? 1.0,
+                          updatedRelations.negotiation.demandMultiplier)) {
         // Save written before the ceiling fix: an open demand for the pay the
         // player is already on. There is no honest answer to it, so close it
         // quietly — no morale hit, no unrest, no lapse-into-refusal.
@@ -4844,6 +4917,7 @@ function reducer(state, action) {
           playerHubs:      Object.keys(state.hubs ?? {}),
           playerMarketCap: state.marketCap ?? 0,
           playerCampaignSpend: state.targetedMarketing ?? {},
+          calendarYear:    calendarYear(state),
         });
 
       // Simulate competitor networks, accumulate cash, and track profit history
