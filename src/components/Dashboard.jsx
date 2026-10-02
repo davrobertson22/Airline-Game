@@ -19,7 +19,7 @@ import { requestNav } from '../utils/navIntent.js';
 import { fuelImpact } from '../utils/fuelImpact.js';
 import { programmeSavingsFromReport } from '../data/fuelProgrammes.js';
 import { navPathFor } from '../navPath.js';
-import { leasesExpiringSoon, idleFleetAlertText, LEASE_EXPIRY_WARN_WEEKS } from '../utils/leaseAlerts.js';
+import { leasesAtRisk, idleFleetAlertText, leaseWarnPhrase, leaseAutoRenewSetting } from '../utils/leaseAlerts.js';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
   PROFIT_LABELS, PROFIT_SHORT, PROFIT_HELP,
@@ -390,12 +390,12 @@ export default function Dashboard() {
   // entire warning was a toast at 8 and 4 weeks — which nobody who was away
   // has ever seen, and in a world that ticks whether you are watching or not,
   // "away" is the normal state.
-  const expiringLeases = leasesExpiringSoon(fleet);
+  const expiringLeases = leasesAtRisk(state, fleet);
   if (expiringLeases.length > 0) {
     const soonest = expiringLeases[0];
     alerts.push({
       color: 'var(--yellow)', icon: AlertIcon,
-      text: `${expiringLeases.length} lease${expiringLeases.length !== 1 ? 's' : ''} expiring within ${LEASE_EXPIRY_WARN_WEEKS} weeks (soonest ${soonest.name}, ${soonest.leaseRemainingWeeks}w) · extend, buy out, or their routes close`,
+      text: `${expiringLeases.length} lease${expiringLeases.length !== 1 ? 's' : ''} expiring within ${leaseWarnPhrase(state)} (soonest ${soonest.name}, ${soonest.leaseRemainingWeeks}w) · ${leaseAutoRenewSetting(state).enabled ? 'marked let-expire — extend or buy out to keep them' : 'extend, buy out, turn on auto-renew, or their routes close'}`,
       to: 'fleet', filter: { filterChip: 'expiring' },
     });
   }
