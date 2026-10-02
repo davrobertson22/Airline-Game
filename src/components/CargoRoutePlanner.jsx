@@ -166,7 +166,10 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
   const freqCap = useMemo(() => {
     const t = getAircraftType(selectedTypeId);
     if (!ready || !t) return 14;
-    return Math.max(1, Math.min(14, maxFrequency(routeDistance(origin, dest), t)));
+    // No fixed 14/wk ceiling: the engine has none (only block hours and gate
+    // slots), so a short lane could take 20+ flights once opened but not at
+    // launch (Barca, Discord 2026-09-30). Port from Headwinds.
+    return Math.max(1, maxFrequency(routeDistance(origin, dest), t));
   }, [ready, origin, dest, selectedTypeId]);
   // What the slider SHOWS is what gets projected and dispatched. The raw
   // value survives a lane change (7× on a short hop), so a long lane showed
@@ -410,7 +413,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                       <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={frequency} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: 110, accentColor: ACCENT }} />
                       <span style={{ fontWeight: 700, minWidth: 22 }}>{frequency}×</span>
                     </div>
-                    {freqCap < 14 && (
+                    {ready && selectedTypeId && (
                       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 5, maxWidth: 190, lineHeight: 1.4 }}>
                         Max <strong style={{ color: ACCENT }}>{freqCap}/wk</strong> for one freighter on this distance (weekly block-hour limit). Add another freighter for more.
                       </div>
