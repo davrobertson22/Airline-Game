@@ -109,6 +109,27 @@ export function segmentsForChain(points, n = 80) {
   return withWorldCopy(chain);
 }
 
+// ── Framing the network ──────────────────────────────────────────────────────
+// Reported on Discord 2026-10-02 (Headwinds, Gulf hub): the map opened on a
+// frame fitted to the AIRPORTS, but a long-haul arc bulges well past its two
+// ends — a Gulf hub's West Coast lines peak near 77°N even after polar
+// softening, far above the northernmost airport — so the opening view clipped
+// them at the top edge until the player zoomed out by hand.
+//
+// The frame is the airports PLUS the drawn lines. Pass each route's canonical
+// path (segments[0] — the origin-anchored copy); the shifted world copy would
+// widen the frame by a whole world for nothing. Latitudes are clamped to the
+// Web Mercator limit. Ported from Headwinds' mapCore.js — keep the two in step.
+export const MERCATOR_MAX_LAT = 85;
+
+export function frameLatLngs(airports = [], paths = []) {
+  const clamp = (lat) => Math.max(-MERCATOR_MAX_LAT, Math.min(MERCATOR_MAX_LAT, lat));
+  const out = [];
+  for (const a of airports) if (a) out.push([clamp(a.lat), a.lon]);
+  for (const path of paths) for (const pt of path ?? []) out.push([clamp(pt[0]), pt[1]]);
+  return out;
+}
+
 /** A rotation's identity: its stop chain, direction-normalised so A→B→C and the
  *  same rotation entered as C→B→A are one line on the map rather than two
  *  overlapping ones. Exported for the map's tests. */
@@ -398,6 +419,12 @@ export default function RouteMap() {
       zoomControl: false,
       attributionControl: true,
       worldCopyJump: true,
+      // Fractional fits. With whole-number zoom, a network a few pixels too
+      // tall for zoom 2 drops to zoom 1 and shows three and a half copies of
+      // the world; quarter steps let fitBounds land on the frame that fits.
+      // The +/− buttons still step a whole level.
+      zoomSnap: 0.25,
+      zoomDelta: 1,
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -927,6 +954,8 @@ export default function RouteMap() {
     layersRef.current.forEach(l => map.removeLayer(l));
     layersRef.current = [];
     lineGroupsRef.current = new Map();
+    // Canonical path of every drawn line — the viewport frames these too.
+    const framePaths = [];
 
     // Route polylines (glow halo underneath + crisp main line on top).
     // One line per city pair — all aircraft on the pair are aggregated into the group.
@@ -942,6 +971,7 @@ export default function RouteMap() {
       const segments = g.multi
         ? segmentsForChain(chain.map(a => [a.lat, a.lon]))
         : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
+      framePaths.push(segments[0]);
 
       const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
       const pax     = g.hasResult ? Math.round(g.passengers).toLocaleString() : '—';
@@ -1075,7 +1105,8 @@ export default function RouteMap() {
 
     // Frame the network — only when its extent actually changed.
     if (claimViewportFit(fittedExtentRef, airportSet)) {
-      const bounds = L.latLngBounds(airportSet.map(a => [a.lat, a.lon]));
+      // Airports AND the arcs between them — see frameLatLngs above.
+      const bounds = L.latLngBounds(frameLatLngs(airportSet, framePaths));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 5 });
     }
 
