@@ -3330,6 +3330,33 @@ function reducer(state, action) {
       return { ...state, routePricing: nextPricing };
     }
 
+    // Bulk "Reset to ref": put every cabin on the selected pairs back to its
+    // market reference fare. action: { routeIds: [...] }
+    // Reference per cabin is round(economy ref × class multiplier) — the same
+    // figure the fare editor shows and its own "Reset to ref" writes, so a bulk
+    // reset lands exactly on "ref" rather than a dollar off on premium cabins.
+    case 'BULK_RESET_PRICING': {
+      const resetIds = new Set(action.routeIds ?? []);
+      if (resetIds.size === 0) return state;
+      const resetPairs = new Map();
+      for (const r of state.routes) {
+        if (!resetIds.has(r.id)) continue;
+        const key = routePairKey(r.origin, r.destination);
+        if (!resetPairs.has(key)) resetPairs.set(key, { origin: r.origin, destination: r.destination });
+      }
+      if (resetPairs.size === 0) return state;
+      const resetPricing = { ...(state.routePricing ?? {}) };
+      for (const [key, { origin, destination }] of resetPairs) {
+        const refP = mktReferencePrice(origin, destination);
+        const refs = {};
+        for (const [cls, m] of Object.entries(CLASS_FARE_MULTIPLIERS)) {
+          refs[cls] = clampClassPrice(Math.round(refP * m), refP, cls);
+        }
+        resetPricing[key] = { ...(resetPricing[key] ?? {}), ...refs };
+      }
+      return { ...state, routePricing: resetPricing };
+    }
+
     case 'UPDATE_FREQUENCY': {
       const targetRoute = state.routes.find(r => r.id === action.routeId);
       if (!targetRoute) return state;

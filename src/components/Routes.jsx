@@ -514,6 +514,27 @@ export default function Routes() {
     });
   }
 
+  // Bulk: put every cabin on the selected pairs back to its market reference fare
+  // (the bulk twin of the fare editor's "Reset to ref").
+  async function bulkResetToRef(groupsToReset) {
+    const routeIds = groupsToReset.flatMap(g => g.routes.map(r => r.id));
+    if (routeIds.length === 0) return;
+    const n = groupsToReset.length;
+    const ok = await confirm({
+      title: `Reset fares on ${n} route${n !== 1 ? 's' : ''} to reference?`,
+      body: 'Every cabin on the selected routes goes back to its market reference fare. Any custom fares on them are replaced.',
+      confirmLabel: 'Reset to ref',
+    });
+    if (!ok) return;
+    dispatch({ type: 'BULK_RESET_PRICING', routeIds });
+    addToast({
+      type: 'success',
+      title: 'Fares reset',
+      message: `${n} route${n !== 1 ? 's' : ''} back to reference fares`,
+    });
+    clearSelection();
+  }
+
   // Bulk: set catering level on every selected pair at once.
   function bulkSetCatering(groupsToSet, level) {
     const routeIds = groupsToSet.flatMap(g => g.routes.map(r => r.id));
@@ -948,6 +969,7 @@ export default function Routes() {
         <SelectionActionBar
           groups={selectedGroups}
           onApplyToGroups={(g, pct) => { applyPctToGroups(g, pct); clearSelection(); }}
+          onResetToRef={bulkResetToRef}
           onSetCatering={bulkSetCatering}
           onCloseGroups={bulkCloseGroups}
           onClear={clearSelection}
@@ -2073,8 +2095,9 @@ function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
 // ─── Selection action bar ─────────────────────────────────────────────────────
 //
 // Appears when the player has ticked one or more route cards. Offers the same
-// per-class % adjustment, applied only to the explicitly selected routes.
-function SelectionActionBar({ groups, onApplyToGroups, onSetCatering, onCloseGroups, onClear }) {
+// per-class % adjustment, applied only to the explicitly selected routes, plus a
+// one-click reset of every cabin back to its reference fare.
+function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onCloseGroups, onClear }) {
   const [pct, setPct] = useState({});
   const [catering, setCatering] = useState('');
   const classes = classesPresentIn(groups);
@@ -2112,6 +2135,15 @@ function SelectionActionBar({ groups, onApplyToGroups, onSetCatering, onCloseGro
         onClick={apply}
       >
         Apply %
+      </button>
+      <button
+        className="btn btn-ghost"
+        style={{ fontSize: 13 }}
+        disabled={classes.length === 0}
+        onClick={() => { setPct({}); onResetToRef(groups); }}
+        title="Set every cabin on the selected routes back to its market reference fare"
+      >
+        Reset to ref
       </button>
 
       {/* Bulk catering */}
