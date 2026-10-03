@@ -5296,7 +5296,11 @@ export function weeklyTick(state) {
     // Network / O&D data for the UI and GameContext
     partnerODRevenue,        // { totalRevenue, entries[] } — detailed O&D breakdown
     partnerHealthDecay,      // { [competitorId]: hpLost } — for partnership state updates
-    networkConnections:      networkTick.connections, // full Connection[] for debugging/UI
+    // networkTick.connections is NOT attached: nothing read it, and in Headwinds
+    // it was 46 MB of the 154 MB of live airline state on 2026-10-03 (13.6 MB
+    // in one save). Here it bloated the localStorage save the same way. A
+    // screen that needs connections should get a trimmed, per-hub view, as
+    // ownMetalOD below does — never the full Connection[].
     // Hub systems (§B–§F)
     hubContestMap,           // { [code]: { playerShare, rivals, ... } } — hub competition
     hubThroughput,           // { [code]: connecting pax/wk } — T3 prereq + HubManagement
