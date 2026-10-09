@@ -3,7 +3,7 @@ import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { designAgeQualityPts } from '../models/demand.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
-import { getAircraftType, LEASE_BUYOUT_PREMIUM } from '../data/aircraft.js';
+import { getAircraftType, LEASE_BUYOUT_PREMIUM, AIRCRAFT_CATEGORIES } from '../data/aircraft.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { getAirport } from '../data/airports.js';
@@ -19,6 +19,7 @@ import {
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
 import { absoluteWeek, effectiveFuelMultiplier } from '../utils/fuel.js';
+import { orderProgress } from '../data/delivery.js';
 import { laborEffects, crewStatus } from '../data/labor.js';
 import { airframeNAV, dueInfo, checkCost, checkDurationWeeks, isOutOfService, groundedLabel, MAX_SCHEDULE_AHEAD_WEEKS, autoSchedulingActive, AUTO_SCHEDULE_PAY_MIN, AUTO_SCHEDULE_BUDGET_MIN } from '../data/maintenance.js';
 import InfoTip from './InfoTip.jsx';
@@ -39,6 +40,9 @@ const CAT_COLORS = {
   'Regional Jet': '#38d39f',
   'Narrow Body':  '#3ea6ff',
   'Wide Body':    '#a98bff',
+  'Double Deck':  '#7c5cff',
+  'Supersonic':   '#f778ba',
+  'Freighter':    '#e8833a',
 };
 
 const CABIN_COLORS = {
@@ -1253,8 +1257,10 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
 
 // ─── Main Fleet page ──────────────────────────────────────────────────────────
 
-const DELIVERY_LEAD = { 'Wide Body': 4, 'Narrow Body': 3, 'Regional Jet': 2, 'Turboprop': 1 };
-const CATEGORY_ORDER = ['Turboprop', 'Regional Jet', 'Narrow Body', 'Wide Body'];
+// Every category the catalogue has. This was the four passenger body classes
+// only, so a fleet's 747s, A380s, Concorde and freighters were missing from the
+// By Category view and sorted ahead of turboprops elsewhere.
+const CATEGORY_ORDER = AIRCRAFT_CATEGORIES;
 
 // ─── By Type view ─────────────────────────────────────────────────────────────
 
@@ -2367,8 +2373,7 @@ export default function Fleet() {
                 const type       = getAircraftType(order.typeId);
                 const catColor   = CAT_COLORS[type?.category] || '#93a4ba';
                 const weeksLeft  = order.deliverAbsWeek - currentAbsWeek;
-                const lead       = DELIVERY_LEAD[type?.category] ?? 2;
-                const progress   = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));
+                const progress   = orderProgress(order, type, currentAbsWeek, absoluteWeek);
                 const deliverY   = Math.floor((order.deliverAbsWeek - 1) / 52) + 1;
                 const _dWIY      = ((order.deliverAbsWeek - 1) % 52) + 1;
                 const { monthName: deliverMon, weekInMonth: deliverWIM } = weekToGameDate(_dWIY);

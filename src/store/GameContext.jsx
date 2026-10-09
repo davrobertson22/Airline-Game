@@ -76,6 +76,7 @@ import {
 } from '../data/laborRelations.js';
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import { deliverySchedule } from '../data/delivery.js';
 import {
   generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
   quoteCharterForAircraft,
@@ -1555,12 +1556,9 @@ function reducer(state, action) {
     }
 
     // ─── Ordered aircraft with staggered delivery ────────────────────────────────
-    // Lead times by category (weeks). The FIRST delivery of a type takes 2× the lead.
-    // Subsequent deliveries in the same queue stack at +lead intervals after the last.
-    //   Wide Body    → first 8w, then every 4w
-    //   Narrow Body  → first 6w, then every 3w
-    //   Regional Jet → first 4w, then every 2w
-    //   Turboprop    → first 2w, then every 1w
+    // Lead times live in data/delivery.js (one table for the reducer AND every
+    // screen that quotes a date). The FIRST delivery of a type takes 2× the lead;
+    // subsequent deliveries in the same queue stack at +lead after the last.
     case 'ORDER_AIRCRAFT': {
       const type = getAircraftType(action.typeId);
       if (!type) return state;
@@ -1569,8 +1567,6 @@ function reducer(state, action) {
       if (orderDenial(state, action.typeId)) return state;
       if (action.ownershipType === 'lease' && leaseDenial(state, action.typeId)) return state;   // vintage: buy-only
 
-      const DELIVERY_LEAD = { 'Wide Body': 4, 'Narrow Body': 3, 'Regional Jet': 2, 'Turboprop': 1 };
-      const lead     = DELIVERY_LEAD[type.category] ?? 2;
       const quantity = Math.max(1, Math.min(100, action.quantity ?? 1));
 
       const currentAbsWeek = absoluteWeek(state.year, state.week);
@@ -1641,15 +1637,7 @@ function reducer(state, action) {
       }
 
       for (let i = 0; i < orderQty; i++) {
-        const pendingOfType = runningPending.filter(o => o.typeId === action.typeId);
-
-        // First-ever order of this type takes 2× lead; subsequent stack at +lead
-        const maxExistingDelivery = pendingOfType.length > 0
-          ? Math.max(...pendingOfType.map(o => o.deliverAbsWeek))
-          : null;
-        const deliverAbsWeek = maxExistingDelivery === null
-          ? currentAbsWeek + 2 * lead          // first in queue → 2× lead
-          : maxExistingDelivery + lead;         // subsequent → +lead after last
+        const [deliverAbsWeek] = deliverySchedule(type, runningPending, currentAbsWeek, 1);
 
         // Price: uniform bulk-order discount (orderDisc) applied to every frame.
         const unitBasePrice  = action.ownershipType === 'owned'

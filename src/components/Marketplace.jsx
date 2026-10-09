@@ -19,6 +19,7 @@ import {
 import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear, cruiseSpeedKmh } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
 import { absoluteWeek } from '../utils/fuel.js';
+import { nextDeliveryWeeks, orderProgress } from '../data/delivery.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
 import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import InfoTip from './InfoTip.jsx';
@@ -97,16 +98,6 @@ const CAT_LABELS = {
 /** What a type's card calls it. Business jets ride the regional-jet tables but
  *  are not regional jets to a player reading the market, so they say so. */
 const typeLabel = (t) => (t?.bizjet ? 'Business Jet' : (CAT_LABELS[t?.category] || t?.category));
-
-const DELIVERY_LEAD = {
-  'Wide Body':    4,
-  'Narrow Body':  3,
-  'Regional Jet': 2,
-  'Turboprop':    1,
-  'Double Deck':  5,
-  'Supersonic':   4,
-  'Freighter':    4,
-};
 
 function AircraftPhoto({ src, alt, category }) {
   const [failed, setFailed] = useState(false);
@@ -264,8 +255,7 @@ export function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
   const type      = getAircraftType(order.typeId);
   const catColor  = CAT_COLORS[type?.category] || '#93a4ba';
   const weeksLeft = order.deliverAbsWeek - currentAbsWeek;
-  const lead      = DELIVERY_LEAD[type?.category] ?? 2;
-  const progress  = Math.max(0, Math.min(1, 1 - (weeksLeft / lead)));
+  const progress  = orderProgress(order, type, currentAbsWeek, absoluteWeek);
   const isOwned   = order.ownershipType === 'owned';
   // Signed under the order book: paid in stages (models/orderPayments.js).
   const staged    = hasPaymentSchedule(order);
@@ -930,15 +920,10 @@ export default function Marketplace() {
       {layout === 'table' && filtered.length > 0 && (() => {
         const nowAbs = absoluteWeek(year, week);
         const rows = filtered.map(type => {
-          const lead          = DELIVERY_LEAD[type.category] ?? 2;
           const alreadyOwned  = ownedCounts[type.id] || 0;
           const onOrder       = pendingCounts[type.id] || 0;
           const buyPrice      = effectivePurchasePrice(type, 1, calYear);   // era new-build premium while the line is open
           const effScore      = efficiencyScore(type) ?? 0;
-          const pendingOfType = pendingOrders.filter(o => o.typeId === type.id);
-          const maxExisting   = pendingOfType.length > 0
-            ? Math.max(...pendingOfType.map(o => o.deliverAbsWeek))
-            : nowAbs;
           return {
             type,
             name:     type.name,
@@ -957,7 +942,7 @@ export default function Marketplace() {
             lease:    eraWeeklyLease(type, calYear),
             buy:      buyPrice,
             discPct:  0,
-            delivery: Math.max(nowAbs + lead, maxExisting + lead) - nowAbs,
+            delivery: nextDeliveryWeeks(type, pendingOrders, nowAbs),
             owned:    alreadyOwned,
             onOrder,
             canAffordBuy: cash >= buyPrice && !eraLockReason(type),
@@ -974,7 +959,6 @@ export default function Marketplace() {
       <div className="aircraft-market-grid">
         {filtered.map(type => {
           const currentAbsWeek = absoluteWeek(year, week);
-          const lead           = DELIVERY_LEAD[type.category] ?? 2;
           // Runway AFTER signing this lease: the burn the projection already sees
           // (which includes every lease currently on the books) plus this one's
           // rent. A profitable airline has no runway problem — Infinity, same as
@@ -997,11 +981,7 @@ export default function Marketplace() {
           const effColor      = effScore >= 70 ? 'var(--green)' : effScore >= 40 ? 'var(--yellow)' : 'var(--red)';
 
           // Delivery note
-          const pendingOfType = pendingOrders.filter(o => o.typeId === type.id);
-          const maxExisting   = pendingOfType.length > 0
-            ? Math.max(...pendingOfType.map(o => o.deliverAbsWeek))
-            : currentAbsWeek;
-          const nextDeliveryWeeks = Math.max(currentAbsWeek + lead, maxExisting + lead) - currentAbsWeek;
+          const deliveryIn    = nextDeliveryWeeks(type, pendingOrders, currentAbsWeek);
 
           const hasOptions = (type.configOptions?.engines?.length > 1) || !!type.configOptions?.wingtips;
 
@@ -1169,7 +1149,7 @@ export default function Marketplace() {
 
                 {/* Delivery note */}
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                  <Glyph e="📅" /> Delivery in <strong>{nextDeliveryWeeks} week{nextDeliveryWeeks !== 1 ? 's' : ''}</strong>
+                  <Glyph e="📅" /> Delivery in <strong>{deliveryIn} week{deliveryIn !== 1 ? 's' : ''}</strong>
                   {onOrder > 0 && ` (${onOrder} already queued)`}
                 </div>
                 {deliveredAgeYears(type, calYear) > 0 && (
