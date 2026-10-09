@@ -5,9 +5,10 @@ import { formatMoney, SLOTS_PER_GATE } from '../utils/simulation.js';
 /**
  * Inline "+ Add gate" button for fixing gate/slot shortfalls without leaving
  * the current screen (e.g. the new-route form). Shows the monthly fee for the
- * next gate at the airport and dispatches ADD_GATE on click.
+ * next gate at the airport and dispatches ADD_GATE on click. `compact` is the
+ * short label for a table cell (the Route Finder's slots column).
  */
-export default function AddGateButton({ code, style }) {
+export default function AddGateButton({ code, style, compact = false }) {
   const { state, dispatch } = useGame();
   const count = (state.gates ?? {})[code] ?? 0;
   const fee = gateMonthlyFee(getAirport(code), count + 1);
@@ -19,7 +20,7 @@ export default function AddGateButton({ code, style }) {
       title={`Lease one more gate at ${code} (+${SLOTS_PER_GATE} slots) for ${formatMoney(fee)}/mo`}
       onClick={() => dispatch({ type: 'ADD_GATE', airportCode: code })}
     >
-      + Add gate ({formatMoney(fee)}/mo)
+      {compact ? `+ Gate ${formatMoney(fee)}/mo` : `+ Add gate (${formatMoney(fee)}/mo)`}
     </button>
   );
 }

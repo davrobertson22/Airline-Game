@@ -6,6 +6,7 @@ import { distanceKm, formatMoney, currentGameDate, calendarYear } from '../utils
 import { cargoCityPairDemand, cargoReferenceYield, cargoBackhaulFactor } from '../utils/market.js';
 import { Glyph } from './Icons.jsx';
 import InfoTip from './InfoTip.jsx';
+import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
 
 const PAGE_SIZE = 25;
 const ACCENT    = '#e8833a';
@@ -26,6 +27,8 @@ const SORT_OPTIONS = [
  */
 export default function CargoRouteFinder({ onPick, standalone = false }) {
   const { state } = useGame();
+  // Free gate slots per airport, counted the way the engine's guards count them.
+  const slotPosition = useSlotPosition();
 
   const [open, setOpen]         = useState(!!standalone);
   const [origin, setOrigin]     = useState(state.hub || '');
@@ -266,12 +269,13 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
               <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>
                 {results.length.toLocaleString()} unserved lane{results.length !== 1 ? 's' : ''} from {originAirport.code} · showing {shown.length}
               </div>
+              <OriginSlotsLine code={originAirport.code} freq={7} position={slotPosition} />
               <div style={{ overflowX: 'auto', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface2)' }}>
-                      {['Destination', 'Distance', 'Cargo Demand', 'Ref Yield', '≈ Rate', 'Rev Potential', ''].map((h, i) => (
-                        <th key={i} style={{ padding: '7px 12px', textAlign: i >= 1 && i <= 5 ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Destination', 'Distance', 'Cargo Demand', 'Ref Yield', '≈ Rate', 'Rev Potential', 'Your slots', ''].map((h, i) => (
+                        <th key={i} style={{ padding: '7px 12px', textAlign: i >= 1 && i <= 6 ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -292,6 +296,9 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
                           <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>${refYield.toFixed(3)}</td>
                           <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>${(refYield * dist / 1000).toFixed(2)}/kg</td>
                           <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--green)', whiteSpace: 'nowrap' }} title="Weekly lane revenue at reference yield IF you carried the whole pool — a comparison scale, not a promise">{formatMoney(revPotential)}</td>
+                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                            <SlotCell code={a.code} freq={7} position={slotPosition} />
+                          </td>
                           <td style={{ padding: '7px 12px', textAlign: 'right' }}>
                             {onPick && (
                               <button
