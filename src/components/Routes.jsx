@@ -44,6 +44,41 @@ import {
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
 
+// ─── Remembered view settings ────────────────────────────────────────────────
+// How the player likes this page laid out: the card sort, the table's sort
+// column + direction, and Table vs Cards when they've picked one. Kept in
+// localStorage (per browser, like the profit basis) because component state
+// doesn't survive leaving the tab — and advancing the week lands on the
+// Dashboard, so the page was rebuilt every week back on "Profit" (Discord
+// 2026-10-13). On a phone a backgrounded tab is often discarded too, which
+// loses everything that isn't stored. Ported from Headwinds.
+const ROUTES_VIEW_KEY  = 'routes_view_prefs_v1';
+const CARD_SORTS       = ['profit', 'revenue', 'load', 'quality', 'distance'];
+const TABLE_SORT_COLS  = ['route', 'dist', 'freq', 'load', 'quality', 'pax', 'rev', 'profit', 'margin'];
+
+export function loadRoutesViewPrefs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ROUTES_VIEW_KEY) || '{}') || {};
+    return {
+      sortBy:   CARD_SORTS.includes(raw.sortBy) ? raw.sortBy : 'profit',
+      tableCol: TABLE_SORT_COLS.includes(raw.tableCol) ? raw.tableCol : 'profit',
+      tableDir: raw.tableDir === 'asc' ? 'asc' : 'desc',
+      // null = never chosen: fall back to the screen-size default.
+      viewMode: raw.viewMode === 'table' || raw.viewMode === 'cards' ? raw.viewMode : null,
+    };
+  } catch (_) {
+    return { sortBy: 'profit', tableCol: 'profit', tableDir: 'desc', viewMode: null };
+  }
+}
+
+export function saveRoutesViewPrefs(patch) {
+  try {
+    let cur = {};
+    try { cur = JSON.parse(localStorage.getItem(ROUTES_VIEW_KEY) || '{}') || {}; } catch (_) {}
+    localStorage.setItem(ROUTES_VIEW_KEY, JSON.stringify({ ...cur, ...patch }));
+  } catch (_) {}
+}
+
 const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Stable empty-hub reference so the airport-filter memo doesn't re-run every
@@ -170,7 +205,8 @@ export default function Routes() {
 
   // Search / filter / sort
   const [search,    setSearch]    = useState('');
-  const [sortBy,    setSortBy]    = useState('profit');
+  const [sortBy,    setSortByState] = useState(() => loadRoutesViewPrefs().sortBy);
+  const setSortBy = (v) => { setSortByState(v); saveRoutesViewPrefs({ sortBy: v }); };
 
   // Which profit this screen means. Persisted and shared with the Dashboard via
   // utils/routeEconomics.js, so the alert that says "4 loss-making city pairs"
@@ -206,12 +242,16 @@ export default function Routes() {
   const [tagAddStops, setTagAddStops] = useState(null);
 
   // View mode: 'table' (default — scales to hundreds of routes) | 'cards'
-  const [viewMode, setViewMode] = useState(() => {
+  const [viewMode, setViewModeState] = useState(() => {
+    // A Table/Cards choice the player has made wins over the default.
+    const saved = loadRoutesViewPrefs().viewMode;
+    if (saved) return saved;
     // Phones default to the card view: the wide compare table is unwieldy
     // on a narrow screen and cards are touch-friendly. Desktop unchanged.
     try { return window.matchMedia('(max-width: 640px)').matches ? 'cards' : 'table'; }
     catch { return 'table'; }
   });
+  const setViewMode = (v) => { setViewModeState(v); saveRoutesViewPrefs({ viewMode: v }); };
 
   // Hours committed to a tail at its BUSIEST month — the quantity the cap
   // governs — including any routes a reserve is currently covering for it.
@@ -1322,8 +1362,8 @@ const TABLE_SORTERS = {
 
 function RouteTable({ groups, getResult, selectedKeys, onToggleSelect, onSelectMany, onClose, onPriceChange, onAddFlights, onViewDetail, basis = BASIS_FULL }) {
   const { state: gameState } = useGame();
-  const [sortCol, setSortCol] = useState('profit');
-  const [sortDir, setSortDir] = useState('desc');   // 'asc' | 'desc'
+  const [sortCol, setSortCol] = useState(() => loadRoutesViewPrefs().tableCol);
+  const [sortDir, setSortDir] = useState(() => loadRoutesViewPrefs().tableDir);   // 'asc' | 'desc'
   const [shown,   setShown]   = useState(TABLE_PAGE_SIZE);
   const [expandedKeys, setExpandedKeys] = useState(() => new Set());
 
@@ -1343,12 +1383,13 @@ function RouteTable({ groups, getResult, selectedKeys, onToggleSelect, onSelectM
   const totalPax    = groups.reduce((s, g) => s + (g.totalPax ?? 0), 0);
 
   function clickHeader(colId) {
-    if (sortCol === colId) {
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
-    } else {
-      setSortCol(colId);
-      setSortDir(colId === 'route' ? 'asc' : 'desc');
-    }
+    const col = colId;
+    const dir = sortCol === colId
+      ? (sortDir === 'desc' ? 'asc' : 'desc')
+      : (colId === 'route' ? 'asc' : 'desc');
+    setSortCol(col);
+    setSortDir(dir);
+    saveRoutesViewPrefs({ tableCol: col, tableDir: dir });
   }
 
   function toggleExpand(key) {
