@@ -14,7 +14,6 @@ import {
   efficiencyScore,
   seatEfficiency,
   fuelCostPerKm,
-  lessorFirstYear,
 } from '../data/aircraft.js';
 import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear, cruiseSpeedKmh } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
@@ -23,6 +22,7 @@ import { nextDeliveryWeeks, orderProgress } from '../data/delivery.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
 import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import InfoTip from './InfoTip.jsx';
+import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS } from '../utils/marketFilters.js';
 import { designAgeQualityPts, DESIGN_AGE_GRACE_YEARS, DESIGN_AGE_CAP_YEARS, DESIGN_AGE_MAX_PENALTY } from '../models/demand.js';
 import { LABOR_GROUPS, CREW_LEAD_WEEKS, crewBodiesForAircraft } from '../data/labor.js';
 import { Glyph } from './Icons.jsx';
@@ -677,6 +677,21 @@ export default function Marketplace() {
     try { localStorage.setItem('market_layout', l); } catch { /* private mode */ }
   }
   const [sort, setSort] = useState({ key: 'name', dir: 1 });
+  // "Show only" chips (utils/marketFilters.js). Remembered across sessions, like
+  // the layout: twenty years into an era save the list is long every visit.
+  const [marketFilters, setMarketFiltersState] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('market_filters') ?? 'null');
+      return { ...DEFAULT_MARKET_FILTERS, ...(saved && typeof saved === 'object' ? saved : {}) };
+    } catch { return { ...DEFAULT_MARKET_FILTERS }; }
+  });
+  function toggleMarketFilter(key) {
+    setMarketFiltersState(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem('market_filters', JSON.stringify(next)); } catch { /* private mode */ }
+      return next;
+    });
+  }
 
   // Checkout modal state: { typeId, mode: 'lease'|'buy' } or null
   const [checkout, setCheckout] = useState(null);
@@ -731,19 +746,11 @@ export default function Marketplace() {
   // orderDenial() so a disabled button and a rejected action always agree.
   // Null in classic games.
   const calYear = calendarYear(state);
-  const eraLockReason = (type) => {
-    if (calYear == null) return null;
-    if ((type?.eis ?? 0) > calYear) return `Enters service ${type.eis}`;
-    if (aircraftAvailability(type, calYear) === 'expired') return `No airworthy frames left — line closed ${type.oop}`;
-    return null;
-  };
+  const eraLockReason = (type) => marketLockReason(type, calYear);
   // Lease button only: vintage metal in a classic game is buy-only (mirrors
   // the reducer's leaseDenial()).
   // In era games lessors take a type only 10 years after it enters service.
-  const leaseLockReason = (type) =>
-    eraLockReason(type) ?? (calYear == null
-      ? (isVintage(type) ? `No lessor stocks it \u2014 line closed ${type.oop}. Buy it outright` : null)
-      : (calYear < lessorFirstYear(type) ? `Lessors take it from ${lessorFirstYear(type)} \u2014 buy new or used until then` : null));
+  const leaseLockReason = (type) => marketLeaseLockReason(type, calYear);
 
   const mfrsInCategory = ['All', ...[...new Set(
     (activeCategory === 'All' ? AIRCRAFT_TYPES : AIRCRAFT_TYPES.filter(t => t.category === activeCategory))
@@ -752,6 +759,18 @@ export default function Marketplace() {
 
   const safeMfr = mfrsInCategory.includes(activeMfr) ? activeMfr : 'All';
 
+  // The dated-design chip only exists in era worlds (classic designs never
+  // date), so a remembered "on" can't hide anything in a classic save.
+  const activeFilters = { ...marketFilters, hideDated: calYear != null && marketFilters.hideDated };
+  const filterChips = [
+    { key: 'inProduction', label: 'In production',
+      title: 'Hide types whose production line has closed — they can only be bought second-hand.' },
+    ...(calYear != null ? [{ key: 'hideDated', label: 'Hide dated designs',
+      title: 'Hide designs passengers already mark down for age (the "Dated design" badge).' }] : []),
+    { key: 'leasable', label: 'Leasable now',
+      title: 'Show only types a lessor will lease you right now.' },
+  ];
+
   const q = query.trim().toLowerCase();
   const filtered = AIRCRAFT_TYPES.filter(t =>
     // Era: show what flies now plus what's announced for the next three years
@@ -759,7 +778,8 @@ export default function Marketplace() {
     (calYear == null ? t.withdrawnYear == null : ((t.eis ?? 0) <= calYear + 3 && aircraftAvailability(t, calYear) !== 'expired')) &&
     (activeCategory === 'All' || t.category === activeCategory) &&
     (safeMfr        === 'All' || t.manufacturer === safeMfr) &&
-    (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q))
+    (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q)) &&
+    passesMarketFilters(t, calYear, activeFilters)
   );
 
   return (
@@ -897,6 +917,37 @@ export default function Marketplace() {
                 }}
               >
                 {mfr}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Show-only filters (utils/marketFilters.js) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Show only
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingBottom: 4, marginTop: 6 }}>
+          {filterChips.map(({ key, label, title }) => {
+            const isActive = !!activeFilters[key];
+            return (
+              <button
+                key={key}
+                title={title}
+                aria-pressed={isActive}
+                data-market-filter={key}
+                onClick={() => toggleMarketFilter(key)}
+                style={{
+                  flexShrink: 0, padding: '4px 12px', borderRadius: 20,
+                  border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  background: isActive ? 'rgba(56,139,253,0.15)' : 'var(--surface2)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: isActive ? 600 : 400,
+                  cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+                }}
+              >
+                {isActive ? '✓ ' : ''}{label}
               </button>
             );
           })}

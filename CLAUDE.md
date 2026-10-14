@@ -42,4 +42,7 @@ Applies to Headwinds too.
   it exists. It runs in parallel, reports every failure instead of stopping at the first, and exits
   non-zero if any failed. `npm run test:list` / `npm run test:serial`; `node tools/run-tests.mjs <substring>`
   runs a subset. A file that only prints a report carries `@not-a-test` in its header and is skipped.
+- `src/data/airportMarkets.js` (the Airports → All airports market columns) is **generated** — do not hand-edit.
+  Regenerate with `node tools/generate-airport-markets.mjs` whenever airports, metros or the demand model change;
+  `tools/airport-markets-test.mjs` fails when it is stale.
 - Game data: `src/data/` (aircraft, airports, alliances...). Simulation: `src/models/` and `src/utils/`. `.bak`/`.pre*` files in `src/data/` are manual backups — ignore them.
