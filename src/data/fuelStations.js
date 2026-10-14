@@ -42,6 +42,7 @@
  */
 
 import { AIRPORTS, getAirport, getRegion } from './airports.js';
+import { onDemandWorldChange } from './demandWorld.js';
 
 // ── The table ─────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,9 @@ export const FUEL_STATION_NORMALISER = (() => {
 })();
 
 const _cache = new Map();
+// A station's basis carries its airport's tier, which a randomized-demand world
+// can change — clear on every world change.
+onDemandWorldChange(() => _cache.clear());
 
 /**
  * The station's basis: a fixed multiple of the world fuel index, 3 decimals,

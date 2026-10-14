@@ -25,6 +25,7 @@
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { metroPrimary } from '../data/metros.js';
 import { eraDemandGrowthFactor } from '../data/era.js';
+import { demandFactor } from '../data/demandWorld.js';
 import {
   baseCityPairDemand, cargoCityPairDemand,
   COUNTRY_DEMAND_GROWTH, DEFAULT_DEMAND_GROWTH, DEMAND_GROWTH_CAP,
@@ -106,5 +107,9 @@ export function airportMarketNow(code, row, buckets, { absWeek = null, eraStartY
     const s = row[k + 1] ?? 0;
     if (s) pax += s * bucketGrowth(gO, buckets[k], absWeek, eraStartYear);
   }
-  return { pax: Math.round(pax), cargo: row[0] ?? 0 };
+  // Randomized-demand world: the table is the REAL world, so scale by this
+  // airport's traffic roll (1 in a realistic game). Its partners' rolls average
+  // out to ~1 — the world is normalised to its real total — so this is the
+  // airport's own market to within a few percent, which is what a sort needs.
+  return { pax: Math.round(pax * demandFactor(code)), cargo: row[0] ?? 0 };
 }

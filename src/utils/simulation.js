@@ -38,6 +38,7 @@ import {
 } from '../data/wifi.js';
 import { programmeWeeklyCost } from '../data/fuelProgrammes.js';
 import { routeFuelStations, fuelByStationOf, sumFuelByStation, setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn } from '../data/fuelStations.js';
+import { applyDemandWorld } from '../data/demandWorld.js';
 import { totalFarmWeeklyCost, farmDiscountsOf } from '../data/fuelFarm.js';
 import { refineryWeeklyOpex } from '../data/refinery.js';
 import {
@@ -3665,6 +3666,9 @@ export function weeklyTick(state) {
   // last caller's setting. Off => every station factor is exactly 1.
   setFuelStationsEnabled(fuelStationsOn(state));
   setFuelStationDiscounts(fuelStationsOn(state) ? farmDiscountsOf(state, absWeek) : null);
+  // Same for the randomized-demand world: the tick prices demand off THIS state's
+  // world (no-op when it is already live, which it is in the game itself).
+  applyDemandWorld(state.demandWorld ?? null);
 
   // Crew pipeline, severe band: tails with nobody to fly them. Transient for this
   // week only (see tickPrep) — an unstaffed aircraft earns nothing but still costs

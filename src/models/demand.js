@@ -31,6 +31,7 @@
 
 import { baseCityPairDemand, referencePrice, routeDistance, pairDemandGrowth, getEraCalendarYear } from '../utils/market.js';
 import { pairAppeal } from '../data/metros.js';
+import { onDemandWorldChange } from '../data/demandWorld.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
 import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm, aircraftAvailability, aircraftOrderable } from '../data/aircraft.js';
@@ -2795,6 +2796,8 @@ export const TIER_PRICE_MULT = { budget: 0.76, legacy: 1.04, premium: 1.45 };
 const TIER_STARTER_ROUTES = { budget: 7, legacy: 6, premium: 5 };
 
 let _bigAirportCache = null;
+// Tiers move in a randomized-demand world, so the pool is rebuilt when it changes.
+onDemandWorldChange(() => { _bigAirportCache = null; });
 /** Mega + major airports — the candidate destination pool for AI route planning. */
 export function bigAirports() {
   if (!_bigAirportCache) {

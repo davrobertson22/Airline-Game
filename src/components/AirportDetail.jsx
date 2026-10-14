@@ -3,7 +3,8 @@ import { requestDepartureBoard } from './Departures.jsx';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
-import { AIRPORTS, getAirport } from '../data/airports.js';
+import { AIRPORTS, getAirport, baseTierOf } from '../data/airports.js';
+import { demandWorldActive, demandFactor } from '../data/demandWorld.js';
 import {
   baseCityPairDemand, referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE,
   cargoSlotsUsedAt, routeLegs, routeSegments, currentGameDate,
@@ -561,6 +562,20 @@ export default function AirportDetail({ code, onBack }) {
               {myGates} {myGates === 1 ? 'gate' : 'gates'}
             </span>
           )}
+          {/* Randomized-demand world: this airport's traffic roll, and its real
+              tier when the roll moved it (data/demandWorld.js). */}
+          {demandWorldActive() && (() => {
+            const pct = Math.round((demandFactor(code) - 1) * 100);
+            const real = baseTierOf(code);
+            const moved = real && airport?.tier !== real;
+            const up = pct >= 0;
+            return (
+              <span title={`This world rolled ${airport?.city ?? code}'s passenger traffic ${up ? 'up' : 'down'} ${Math.abs(pct)}% against the real world. Every route touching it carries that change.${moved ? ` In the real world it is a ${real} airport.` : ''}`}
+                style={{ background: up ? 'rgba(63,185,80,0.12)' : 'rgba(220,53,69,0.10)', color: up ? 'var(--green)' : 'var(--red)', border: `1px solid ${up ? 'rgba(63,185,80,0.35)' : 'rgba(220,53,69,0.3)'}`, borderRadius: 4, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'help' }}>
+                <Glyph e="🎲" /> {up ? '+' : '−'}{Math.abs(pct)}% traffic{moved ? ` · ${real === 'mega' || (real === 'major' && airport?.tier === 'regional') ? 'demoted' : 'promoted'} from ${real}` : ''}
+              </span>
+            );
+          })()}
           {airport?.runwayFt && (
             <span title="Longest runway — aircraft that need more runway than this cannot operate here" style={{ background: 'var(--surface2)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'help' }}>
               <Glyph e="🛬" /> {airport.runwayFt.toLocaleString()} ft runway

@@ -8,6 +8,8 @@ import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
 import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
 import useIsMobile from '../hooks/useIsMobile.js';
+import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE } from '../data/demandWorld.js';
+import { loadAirportMarkets } from './AllAirportsTable.jsx';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
@@ -75,6 +77,12 @@ const ERA_PRESETS = [
   { year: 2000, title: 'Modern',           blurb: 'A320s and 777s, cheap fuel, everything but the neos and Dreamliners.' },
 ];
 
+/** "−20% to +10%" from a [low, high] multiplier pair. */
+function rangeLabel([lo, hi]) {
+  const p = (m) => { const n = Math.round((m - 1) * 100); return `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)}%`; };
+  return `${p(lo)} to ${p(hi)}`;
+}
+
 export default function SetupScreen() {
   const { dispatch } = useGame();
   const [airlineName,       setAirlineName]       = useState('');
@@ -88,6 +96,11 @@ export default function SetupScreen() {
   const [eraSel,            setEraSel]            = useState('');       // '' | preset year (string) | 'custom'
   const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
+  // Demand world: '' = realistic, 'random' = rolled (data/demandWorld.js).
+  const [demandMode,        setDemandMode]        = useState('');
+  const [uncapMegas,        setUncapMegas]        = useState(false);
+  const [demandSeed,        setDemandSeed]        = useState(() => String(newDemandSeed()));
+  const [rolling,           setRolling]           = useState(false);
   const fileInputRef = useRef(null);
   const cardRef = useRef(null);
 
@@ -134,7 +147,10 @@ export default function SetupScreen() {
   const seedCapital      = eraSeedCapital(STARTING_CAPITAL, eraInvalid ? null : startYear);
   const seedCapitalLabel = `$${seedCapital.toLocaleString('en-US')}`;
 
-  function handleStart(e) {
+  const seedValue   = cleanDemandSeed(demandSeed);
+  const seedInvalid = demandMode === 'random' && seedValue == null;
+
+  async function handleStart(e) {
     e.preventDefault();
     // A submit can reach us from any step — Enter in a text field, a mobile
     // keyboard's Go key, a password manager autofilling. Without this guard it
@@ -143,7 +159,20 @@ export default function SetupScreen() {
     // hub. Treat a stray submit as "next step", never as "launch".
     if (step < 3) { if (canContinue) setStep(s => s + 1); return; }
     if (!airlineName.trim()) { setStep(1); return; }
-    if (eraInvalid) return;
+    if (eraInvalid || seedInvalid || rolling) return;
+    // A randomized world is rolled here, not in the reducer: it needs the
+    // generated market table (~200 KB, loaded on demand) to place the tier lines.
+    let demandWorld = null;
+    if (demandMode === 'random') {
+      setRolling(true);
+      try {
+        const { AIRPORT_MARKETS } = await loadAirportMarkets();
+        demandWorld = rollDemandWorld(seedValue, { uncapMegas }, AIRPORT_MARKETS);
+      } catch (_) {
+        setRolling(false);
+        return;   // offline mid-load: stay on the Launch step, the button still works
+      }
+    }
     dispatch({
       type:             'START_GAME',
       airlineName:      airlineName.trim(),
@@ -155,6 +184,7 @@ export default function SetupScreen() {
       customLogo:       usingCustom ? customLogo : null,
       enableObjectives,
       startYear,
+      demandWorld,
     });
   }
 
@@ -620,6 +650,65 @@ export default function SetupScreen() {
             )}
           </div>
 
+          {/* ── Demand world ── */}
+          <div className="form-group">
+            <label className="form-label"><Glyph e="🎲" /> Passenger demand</label>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
+              {[{ id: '', title: 'Realistic', blurb: 'Every airport carries its real-world traffic. The map you know.' },
+                { id: 'random', title: 'Randomized', blurb: 'Every airport\'s traffic is rolled. Some cities boom, others slump, and tiers move with them.' }].map(opt => {
+                const active = demandMode === opt.id;
+                return (
+                  <button key={opt.id || 'realistic'} type="button" onClick={() => setDemandMode(opt.id)}
+                    style={{
+                      display: 'block', textAlign: 'left', padding: '10px 12px',
+                      background: 'var(--surface2)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius)', cursor: 'pointer',
+                    }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{opt.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{opt.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {demandMode === 'random' && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Traffic rolls by airport size: mega airports {rangeLabel(DEMAND_ROLL_RANGE.mega)},
+                  majors {rangeLabel(DEMAND_ROLL_RANGE.major)}, regional airports {rangeLabel(DEMAND_ROLL_RANGE.regional)}.
+                  A multi-airport city rolls once for all its airports. The world's total passengers stay at
+                  their real-world level, so demand moves between cities rather than appearing from nowhere.
+                  Airports that boom or slump far enough change tier, which moves their gate and landing fees.
+                  Your hub's roll is revealed when you launch.
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={uncapMegas} onChange={e => setUncapMegas(e.target.checked)} />
+                  Allow more mega airports than the real world has
+                </label>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+                  {uncapMegas
+                    ? 'Every major that booms past the line becomes a mega.'
+                    : 'Off: a major can only become a mega when a mega slumps out.'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text)' }}>World #</span>
+                  <input type="text" inputMode="numeric" value={demandSeed}
+                    onChange={e => setDemandSeed(e.target.value.replace(/[^0-9]/g, ''))}
+                    style={{ width: 120 }} aria-label="World seed" />
+                  <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setDemandSeed(String(newDemandSeed()))}>
+                    <Glyph e="🎲" /> Reroll
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: seedInvalid ? 'var(--danger, #e5484d)' : 'var(--text-muted)', marginTop: 4 }}>
+                  {seedInvalid
+                    ? 'Enter a world number of 1 or more.'
+                    : 'Share the number to let a friend play the same world. Same number and mega setting, same world.'}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── How to play ── */}
           <div style={{
             padding: 14,
@@ -673,10 +762,11 @@ export default function SetupScreen() {
                 key="wizard-launch"
                 type="button"
                 className="btn btn-primary"
-                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700 }}
+                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: rolling ? 0.6 : 1 }}
+                disabled={rolling}
                 onClick={handleStart}
               >
-                Launch Airline →
+                {rolling ? 'Rolling the world…' : 'Launch Airline →'}
               </button>
             )}
           </div>

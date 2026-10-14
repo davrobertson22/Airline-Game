@@ -12,6 +12,7 @@
 
 import { getAirport, getAirportScores, getAirportCargoScore } from '../data/airports.js';
 import { eraDemandGrowthFactor } from '../data/era.js';
+import { demandFactor, onDemandWorldChange } from '../data/demandWorld.js';
 import {
   METROS,
   metroOf,
@@ -655,6 +656,9 @@ const PAIR_DEMAND_MEMO_CAP = 200_000;
 
 /** Test seam — the suite asserts the memo does not change any answer. */
 export function clearPairDemandMemo() { PAIR_DEMAND_MEMO.clear(); }
+// A randomized-demand world (data/demandWorld.js) is the one input that can
+// change under the memo — on a new game or a load — so it clears it.
+onDemandWorldChange(clearPairDemandMemo);
 
 export function baseCityPairDemand(originCode, destCode) {
   // Symmetric: every endpoint term enters as a product under the same sqrt and
@@ -748,8 +752,13 @@ function computeBaseCityPairDemand(originCode, destCode) {
   //   DAC-DEL  (1,426 km, low propensity + IN-BD 0.45)   →   ~3,500  (real ~2,400)
   const lift = Math.sqrt((mO?.lift ?? 1) * (mD?.lift ?? 1));
 
+  // Randomized-demand world: each endpoint's traffic roll (1 in a realistic
+  // game). Keyed on the primaries, so every member pair of a metro pair still
+  // returns one total. See data/demandWorld.js.
+  const world = demandFactor(po.code) * demandFactor(pd.code);
+
   return Math.round(
-    (Math.sqrt(popO * multO * pO * popD * multD * pD) * 1900 * border * captive * ground * lift)
+    (Math.sqrt(popO * multO * pO * popD * multD * pD) * 1900 * border * captive * ground * lift * world)
       / Math.pow(1 + dist / 3000, 1.1)
   );
 }

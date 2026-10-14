@@ -16,6 +16,7 @@ import {
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
          setFareIndex, setEraStartYear, setEraCalendarYear } from '../utils/market.js';
+import { applyDemandWorld, isDemandWorld, summarizeDemandWorld, demandFactor } from '../data/demandWorld.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
@@ -935,6 +936,28 @@ export function charterOpRecord(offer, aircraftId, extra = {}) {
 const STARTING_CASH = 10_000_000;
 const LEGACY_STARTING_CASH = 15_000_000;
 
+/**
+ * The launch toast for a randomized-demand world: how the player's own hub
+ * rolled, the headline booms and busts, and every mega-tier change.
+ */
+function demandWorldToasts(world, hub) {
+  const sum = summarizeDemandWorld(world);
+  if (!sum) return [];
+  const pct = (n) => `${n > 0 ? '+' : ''}${n}%`;
+  const hubPct = Math.round((demandFactor(hub) - 1) * 100);
+  const parts = [`Your home market, ${hub}, rolled ${pct(hubPct)}.`];
+  if (sum.booms.length) parts.push(`Booming: ${sum.booms.map(b => `${b.code} ${pct(b.pct)}`).join(', ')}.`);
+  if (sum.busts.length) parts.push(`Slumping: ${sum.busts.map(b => `${b.code} ${pct(b.pct)}`).join(', ')}.`);
+  if (sum.promotedToMega.length) parts.push(`New mega airports: ${sum.promotedToMega.join(', ')}.`);
+  if (sum.demotedFromMega.length) parts.push(`No longer mega: ${sum.demotedFromMega.join(', ')}.`);
+  return [{
+    type: 'info',
+    title: `🎲 Randomized world #${world.seed}`,
+    message: parts.join(' ') + ' Every airport\'s roll is on its Airports page.',
+    duration: 20000,
+  }];
+}
+
 function freshState() {
   return {
     airlineName: '',
@@ -1416,6 +1439,8 @@ function withAutoReplace(prev, next) {
 
 function reducer(state, action) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
+  // Randomized-demand world (data/demandWorld.js): idempotent, cheap when unchanged.
+  applyDemandWorld(state?.demandWorld ?? null);
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
   setFuelStationDiscounts(fuelStationsOn(state)    // this airline's fuel farms (§8)
     ? farmDiscountsOf(state, absoluteWeek(state?.year ?? 1, state?.week ?? 1)) : null);
@@ -1433,6 +1458,11 @@ function reducer(state, action) {
       const _startYear = isLegalEraStartYear(action.startYear) && action.startYear != null
         ? action.startYear : null;
       setEraModuleState(_startYear, _startYear);
+      // Demand world (Realistic unless the player rolled one). Applied BEFORE
+      // freshState() for the same reason as the era: the rival sample it builds
+      // sizes networks and picks starter routes off tiers and demand.
+      const _demandWorld = isDemandWorld(action.demandWorld) ? action.demandWorld : null;
+      applyDemandWorld(_demandWorld);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
       const _fresh = freshState();
       return {
@@ -1462,6 +1492,7 @@ function reducer(state, action) {
         hubs:        { [action.hub]: { tier: 1 } },
         loans:       [],
         phase:             'playing',
+        ...(_demandWorld ? { demandWorld: _demandWorld, pendingToasts: demandWorldToasts(_demandWorld, action.hub) } : {}),
         objectives:        action.enableObjectives !== false ? initialObjectives() : [],
         objectivesEnabled: action.enableObjectives !== false,
         // Crew pipeline (A7) is the model for NEW games: crew are hired and
@@ -5804,6 +5835,9 @@ function reducer(state, action) {
     }
 
     case 'LOAD_STATE': {
+      // The incoming save's demand world, not the outgoing game's, must be live
+      // while reconcileState re-derives anything from demand or tiers.
+      applyDemandWorld(action.payload?.demandWorld ?? null);
       return reconcileState(action.payload);
     }
 
@@ -5949,6 +5983,13 @@ function reconcileState(parsed) {
   // after it existed. Once set the flag persists, so this is decided once.
   const horizonExempt = parsed.horizonExempt ?? pastHorizon(healedStartYear, parsed.year ?? 1);
 
+  // A randomized-demand world survives a load only well-formed; anything else is
+  // a realistic world (the field is absent in every save that predates it).
+  if (parsed.demandWorld != null && !isDemandWorld(parsed.demandWorld)) {
+    parsed = { ...parsed };
+    delete parsed.demandWorld;
+  }
+  applyDemandWorld(parsed.demandWorld ?? null);
   const reconciled = {
     ...parsed,
     horizonExempt,
@@ -6180,6 +6221,7 @@ export function GameProvider({ children }) {
   // reducer, so a reloaded era save rendered the Marketplace on classic prices
   // until the first click. Idempotent; the reducer re-sets the same values.
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
+  applyDemandWorld(state?.demandWorld ?? null);
 
   // ── Hydrate ────────────────────────────────────────────────────────────────
   // StrictMode double-invokes effects in development. A latch rather than a

@@ -2411,8 +2411,10 @@ export const AIRPORTS = [
 // for every pair of spokes at every hub, so a 279-route network scanned the
 // array roughly 600,000 times a week. Profiled at 279 routes (2026-09-08), the
 // scan was 7% of tick self-time on its own and a large share of the demand
-// function's 38%. AIRPORTS is a frozen-in-practice module constant — nothing in
-// src mutates it — so one Map serves every lookup for the life of the tab.
+// function's 38%. The set of records never changes, so one Map serves every
+// lookup for the life of the tab. (The one field that does change is `tier`, in
+// a randomized-demand world — see setTierOverrides below. Records are the same
+// objects either way, so the index is unaffected.)
 let _airportIndex = null;
 export function getAirport(code) {
   if (_airportIndex === null) {
@@ -2420,6 +2422,36 @@ export function getAirport(code) {
     for (const a of AIRPORTS) _airportIndex.set(a.code, a);
   }
   return _airportIndex.get(code);
+}
+
+// ─── Tier overrides (randomized demand worlds) ─────────────────────────────────
+// A randomized world (src/data/demandWorld.js) promotes and demotes airports
+// whose traffic rolled across a tier line. `tier` is read directly in ~150
+// places — gate and landing fees, fuel, AI start hubs, the UI — so the override
+// is applied to the records themselves, with the real tier kept here so a
+// realistic game (or the next save loaded in the same tab) gets it back.
+// Only applyDemandWorld() calls the setter.
+let _baseTier = null;
+function baseTiers() {
+  if (_baseTier === null) {
+    _baseTier = new Map();
+    for (const a of AIRPORTS) _baseTier.set(a.code, a.tier);
+  }
+  return _baseTier;
+}
+
+/** The airport's tier in the REAL world, whatever the active game has made it. */
+export function baseTierOf(code) {
+  return baseTiers().get(code);
+}
+
+/** Apply { CODE: tier } over the real tiers (null / {} = the real world). */
+export function setTierOverrides(overrides) {
+  const base = baseTiers();
+  for (const a of AIRPORTS) {
+    const t = overrides?.[a.code];
+    a.tier = (t === 'mega' || t === 'major' || t === 'regional') ? t : base.get(a.code);
+  }
 }
 
 // ─── Gate pricing ──────────────────────────────────────────────────────────────
@@ -3091,7 +3123,9 @@ export function getAirportScores(code) {
     major:    { businessScore: 50, leisureScore: 52 },
     regional: { businessScore: 32, leisureScore: 55 },
   };
-  return defaults[ap?.tier] ?? { businessScore: 40, leisureScore: 55 };
+  // Real tier, not a randomized world's: the world's demand roll already moves
+  // this airport's traffic, and a promotion must not count it twice.
+  return defaults[ap ? baseTierOf(code) : undefined] ?? { businessScore: 40, leisureScore: 55 };
 }
 
 // ─── Per-airport cargo scores ──────────────────────────────────────────────────
