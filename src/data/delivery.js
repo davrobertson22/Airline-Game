@@ -15,15 +15,15 @@
 // than 4" — Discord, 2026-10-03). One table, one schedule function, read by
 // every screen and by the reducer, so the quote is the delivery.
 //
-// Freighters are sized by payload through the same banding landing fees use
+// Freighters are sized by payload on the same bands landing fees use
 // (freighterLandingCategory), so an ATR 72F delivers like a turboprop and an
-// An-225 like the outsize aircraft it is.
+// An-225 like the outsize aircraft it is. The bands are repeated here rather
+// than imported so this module is a leaf, identical in Tailwinds and Headwinds
+// (where that helper lives in the much heavier simulation.js).
 //
 // Worlds with the order book switch this off for slots (see order-book-design);
 // classic saves keep it forever.
 // ─────────────────────────────────────────────────────────────────────────────
-
-import { freighterLandingCategory } from './overhead.js';
 
 export const DELIVERY_LEAD = {
   'Turboprop':    1,
@@ -37,10 +37,18 @@ export const DELIVERY_LEAD = {
 
 const FALLBACK_CLASS = 'Narrow Body';
 
+function freighterClass(payloadTonnes = 0) {
+  if (payloadTonnes >= 150) return 'Outsize';
+  if (payloadTonnes >= 50) return 'Wide Body';
+  if (payloadTonnes >= 20) return 'Narrow Body';
+  if (payloadTonnes >= 10) return 'Regional Jet';
+  return 'Turboprop';
+}
+
 /** The lead-time class a type delivers under. */
 export function deliveryClass(type) {
   if (!type) return FALLBACK_CLASS;
-  if (type.freighter) return freighterLandingCategory(type.payloadTonnes ?? 0);
+  if (type.freighter) return freighterClass(type.payloadTonnes ?? 0);
   if (type.category === 'Supersonic' || type.supersonic) return 'Supersonic';
   if (type.category === 'Double Deck') return 'Double Deck';
   return DELIVERY_LEAD[type.category] != null ? type.category : FALLBACK_CLASS;
