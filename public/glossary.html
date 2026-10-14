@@ -55,7 +55,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/glossary.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-04",
-    "dateModified": "2026-07-12",
+    "dateModified": "2026-10-13",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -106,7 +106,7 @@
       <dd>A scheduled service between two airports. Routes are the building blocks of your airline: each one has its own demand, competition, fare, and operating cost, and each either makes or loses money on its own. Your network is simply the sum of the routes you choose to fly.</dd>
 
       <dt>Hub</dt>
-      <dd>An airport you build your network around, where many of your routes begin, end, or connect. A strong hub lets passengers flow from lots of small cities onto shared trunk routes, filling seats you couldn't fill point-to-point. Concentrating operations at a hub also lowers per-flight overhead, but it puts a lot of eggs in one basket.</dd>
+      <dd>An airport you build your network around, where many of your routes begin, end, or connect. A strong hub lets passengers flow from lots of small cities onto shared trunk routes, filling seats you couldn't fill point-to-point. Concentrating operations at a hub also lowers per-flight overhead, but it puts a lot of eggs in one basket. In Tailwinds you designate hubs yourself and invest to move them up through four tiers, from Focus City to International Gateway; each step adds quality points to routes through the hub and cheaper handling, catering and crew layovers there.</dd>
 
       <dt>Spoke</dt>
       <dd>A smaller destination connected to a hub in a "hub-and-spoke" network. Spokes feed passengers into the hub, where they connect onward. The opposite model is <em>point-to-point</em>, flying passengers directly between two cities without a connection.</dd>
@@ -115,25 +115,34 @@
       <dd>A network style where routes connect two cities directly rather than routing traffic through a central hub. It's simpler and avoids connection hassle, but it only works where there's enough direct demand between the two cities to fill an aircraft.</dd>
 
       <dt>Slot</dt>
-      <dd>Permission to take off or land at a congested airport in a specific time window. At the busiest airports, slots are scarce and valuable — you can't just add a flight because you want to. Slot limits are a real constraint on how much you can grow at a mega-hub.</dd>
+      <dd>Permission to operate a departure at an airport. In the real world slots matter at congested airports; in Tailwinds they matter everywhere, because they come from gates. Each gate you lease gives you 50 departure slots a week at that airport, and a route uses a slot at both ends for every weekly flight. When an airport runs out, you lease another gate before you can add flights there.</dd>
+
+      <dt>Gate</dt>
+      <dd>The basic unit of airport capacity in Tailwinds. You lease gates at an airport for a monthly fee, and they supply the weekly slots your flights use. Gates also carry other things you build, such as a jet base hangar or a ground handling station. Hubs have minimum gate counts for each tier, and a hub that uses its gates too intensively gets congested.</dd>
 
       <dt>Load factor</dt>
       <dd>The percentage of available seats you actually sell. An 80% load factor means four of every five seats flew with a paying passenger. It's the single fastest read on a route's health: high load means your capacity and fare are well matched to demand; persistently low load means you're flying too many seats, charging too much, or serving a market that isn't there.</dd>
 
       <dt>Frequency</dt>
-      <dd>How many times you fly a route in a given period — say, three flights a day versus one. Higher frequency makes a route more attractive to travellers (especially business travellers who value flexibility) and can win you share, but only add it when demand supports the extra seats.</dd>
+      <dd>How many times you fly a route in a given period. Tailwinds counts it in flights per week. Higher frequency makes a route more attractive to travellers (especially business travellers who value flexibility) and can win you share, but only add it when demand supports the extra seats. How high you can go is limited by your aircraft's weekly block hours and the gate slots at both ends.</dd>
 
       <dt>Turnaround</dt>
-      <dd>The time an aircraft spends on the ground between flights — unloading, cleaning, boarding, and preparing to depart again. Fast, reliable turnarounds keep your aircraft in the air earning money; slow ones waste your most expensive asset.</dd>
+      <dd>The time an aircraft spends on the ground between flights — unloading, cleaning, boarding, and preparing to depart again. In Tailwinds it is fixed by aircraft size, from about 30 minutes for a turboprop to two hours for a double-decker, and it counts against the aircraft's weekly block hours. That is why an aircraft flying many short sectors runs out of hours sooner than its distance flown suggests.</dd>
 
       <dt>Block time</dt>
-      <dd>The total time a flight takes from leaving the departure gate to arriving at the destination gate, including taxi time on the ground. Block time drives how many rotations an aircraft can fly in a day and feeds directly into crew and cost planning.</dd>
+      <dd>The total time a flight takes from leaving the departure gate to arriving at the destination gate, including taxi time on the ground. In Tailwinds each sector's block time is its flying time at the aircraft's cruise speed plus the turnaround, and no aircraft can fly more than 140 block hours a week. Block time therefore sets how many flights a week an aircraft can fly on a route.</dd>
+
+      <dt>On-time rate</dt>
+      <dd>The share of your flights that operate on schedule. In Tailwinds it is set mainly by the morale of your pilots, ground staff and cabin crew and by how hard you fly the fleet, and it is pulled down by crew shortages and disruption events. It is a large part of your quality score, and the more of your flights run late, the bigger your passenger compensation bill. The <a href="/on-time-performance.html">on-time performance guide</a> covers it in full.</dd>
+
+      <dt>Crew hiring</dt>
+      <dd>In new Tailwinds games your pilots, cabin crew, ground staff and maintenance team are hired and trained rather than appearing with each new aircraft. Recruits must complete training before they work (ten weeks for pilots, two for ground staff), and how quickly a large hire fills depends on how well you pay. A shortage hurts punctuality, and a big enough shortage of pilots or cabin crew parks aircraft. You set each group's pay in Operations; a pay premium slowly drifts back toward market rate unless you hold it there.</dd>
 
       <dt>Codeshare</dt>
-      <dd>An arrangement where two airlines sell seats on the same flight under their own names. Codeshares let you offer destinations you don't fly yourself and feed extra passengers onto your aircraft — a low-cost way to widen your network.</dd>
+      <dd>An arrangement where two airlines sell seats on the same flight under their own names. Codeshares let you offer destinations you don't fly yourself and feed extra passengers onto your aircraft — a low-cost way to widen your network. In Tailwinds you sign codeshares with individual rival airlines for a weekly fee that depends on the partner's tier, and they earn interline revenue from the traffic you share. In historical-era games, codeshares become available around 1990.</dd>
 
       <dt>Alliance</dt>
-      <dd>A partnership between airlines to coordinate routes, share passengers, and extend each other's reach. Joining or forming an alliance can lift load factors and open markets you couldn't serve alone, in exchange for cooperating rather than competing with your partners.</dd>
+      <dd>A partnership between airlines to coordinate routes, share passengers, and extend each other's reach. Joining an alliance can lift load factors and open markets you couldn't serve alone, in exchange for an initiation fee, weekly dues and cooperating rather than competing with your partners. In historical-era games, alliances only appear from 1997.</dd>
     </dl>
 
     <h2 id="fleet">Fleet &amp; equipment</h2>
@@ -157,13 +166,16 @@
       <dd>The number of seats an aircraft offers. Capacity interacts with demand and fare: too many seats on a thin route drags your load factor down; too few on a busy route leaves money on the table.</dd>
 
       <dt>Lease vs. purchase</dt>
-      <dd>Two ways to get an aircraft. Leasing spreads the cost into regular payments and keeps cash free for routes and expansion — usually the smart early-game choice. Purchasing ties up a lot of capital up front but avoids ongoing lease payments, which can be cheaper over the long run once you're established.</dd>
+      <dd>Two ways to get an aircraft. Leasing spreads the cost into regular payments and keeps cash free for routes and expansion — usually the smart early-game choice. Purchasing ties up a lot of capital up front but avoids ongoing lease payments, which can be cheaper over the long run once you're established. Leases run for a fixed term: you can extend one, set your leases to renew automatically for one, two or five years at a time, or buy a leased aircraft out.</dd>
 
       <dt>Utilisation</dt>
-      <dd>How many hours a day your aircraft actually spend flying. An aircraft parked at a gate still costs you money, so keeping utilisation high — through good scheduling and fast turnarounds — is one of the clearest levers on profitability.</dd>
+      <dd>How many hours your aircraft actually spend flying. Tailwinds measures it as weekly block hours against a cap of 140. An aircraft parked at a gate still costs you money, so keeping utilisation high is one of the clearest levers on profitability. Push it too far, though, and punctuality suffers: once your fleet averages more than about 60% of the cap, delays start to cascade and your <a href="/on-time-performance.html">on-time rate</a> falls.</dd>
 
       <dt>Maintenance</dt>
-      <dd>The scheduled and unscheduled upkeep that keeps aircraft airworthy. Maintenance is an unavoidable operating cost, and a larger or more varied fleet costs more to keep flying — a reason to avoid collecting too many different aircraft types too early.</dd>
+      <dd>The scheduled and unscheduled upkeep that keeps aircraft airworthy. Maintenance is an unavoidable operating cost, and a larger or more varied fleet costs more to keep flying — a reason to avoid collecting too many different aircraft types too early. In Tailwinds it comes as a weekly line-maintenance bill, unplanned breakdowns that ground an aircraft, and heavy checks that take it out of service for weeks. Building your own jet bases makes checks and repairs cheaper for the aircraft families they are certified for.</dd>
+
+      <dt>Heavy check (C check / D check)</dt>
+      <dd>A major maintenance visit that takes an aircraft out of service. In Tailwinds a C check is due every 4,500 block hours or two years, whichever comes first, and a D check every 24,000 block hours or six years. Booking them ahead is cheaper than waiting: an aircraft left too long past due is grounded by the regulator, for longer and at a higher price. A reserve aircraft of the same type stationed at a hub can fly an absent aircraft's routes from that hub while it is away.</dd>
 
       <dt>Fleet commonality</dt>
       <dd>The advantage of operating fewer, similar aircraft types. A simple fleet shares crews, spare parts, and maintenance procedures, cutting overhead. Every extra aircraft family you add raises your training and maintenance costs, so there's a real penalty for a scattered fleet.</dd>
@@ -186,11 +198,14 @@
       <dt>Loyalty program</dt>
       <dd>A frequent-flyer scheme that rewards repeat passengers and encourages them to keep choosing your airline over competitors. A good loyalty program lifts repeat bookings and makes your load factors steadier and less price-sensitive.</dd>
 
+      <dt>Quality score</dt>
+      <dd>Tailwinds rates every route you fly from 0 to 100 for what passengers actually experience: punctuality, customer rating, cabin seats and service, fleet age, cabin space, catering, extras, ground staff and hub investment. Business travellers weigh it far more heavily than leisure travellers. The <a href="/demand-and-quality.html">demand and quality guide</a> breaks down every component.</dd>
+
       <dt>Reputation / brand</dt>
       <dd>How travellers perceive your airline. A stronger brand wins passengers at the margin and lets you hold fares a little higher. Reputation is built slowly through reliable operations and eroded quickly by problems.</dd>
 
       <dt>Cargo / freight</dt>
-      <dd>Revenue from carrying goods rather than passengers, either in the hold of a passenger flight or on a dedicated freighter. Cargo can turn an otherwise marginal route profitable and smooths out the ups and downs of passenger demand.</dd>
+      <dd>Revenue from carrying goods rather than passengers. Real airlines carry it in the hold of passenger flights and on dedicated freighters; in Tailwinds it is carried by dedicated freighters flying their own cargo routes, which use gates and slots just like passenger flights. Cargo can diversify your revenue and smooths out the ups and downs of passenger demand.</dd>
     </dl>
 
     <h2 id="finance">Finance &amp; metrics</h2>
@@ -217,10 +232,13 @@
       <dd>Money you borrow to fund growth faster than cash alone allows. Used well, debt lets you seize opportunities and scale; used carelessly, its repayments become a fixed cost that can sink you in a downturn. Borrow against a plan, not a hope.</dd>
 
       <dt>Bankruptcy</dt>
-      <dd>What happens when you run out of cash and can't meet your obligations — the end of a run. Avoiding bankruptcy is the one hard constraint of the game: you can grow slowly or boldly, but you cannot run out of money.</dd>
+      <dd>What happens when you run out of cash and can't meet your obligations — the end of a run. In Tailwinds your airline is declared bankrupt after six weeks in a row with negative cash, or after missing three loan payments. Avoiding it is the one hard constraint of the game: you can grow slowly or boldly, but you cannot run out of money.</dd>
 
       <dt>Fuel price</dt>
-      <dd>The cost of jet fuel, one of the largest and most variable operating costs an airline faces. When fuel rises, thin and long routes feel it first, and efficient aircraft and full planes matter more than ever.</dd>
+      <dd>The cost of jet fuel, one of the largest and most variable operating costs an airline faces. When fuel rises, thin and long routes feel it first, and efficient aircraft and full planes matter more than ever. In Tailwinds the world price moves every week and drifts back toward normal, and in new games each airport also has its own local price.</dd>
+
+      <dt>Fuel hedge</dt>
+      <dd>A contract that fixes the price of part of your fuel bill for a set number of weeks, so a price spike can't ambush you. In Tailwinds hedges cover 25%, 50% or 75% of your fuel at a time, stack up to 100%, and run for 8 to 52 weeks. The locked price is where fuel is expected to average over the term plus a small premium, so a hedge is insurance, not a bet you can't lose. The <a href="/fuel-hedging.html">fuel and hedging guide</a> explains when to use one.</dd>
     </dl>
 
     <a class="cta" href="/">Play Tailwinds — It's Free →</a>

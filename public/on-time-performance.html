@@ -54,7 +54,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/on-time-performance.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-25",
-    "dateModified": "2026-07-25",
+    "dateModified": "2026-10-13",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -95,7 +95,7 @@
     <p>Every airline in Tailwinds has an <strong>on-time rate</strong> — the share of its flights that operate on schedule. Its mirror image is your <strong>delay rate</strong>, which is simply everything that isn't on time. If your on-time rate is 80%, then 20% of your flights are running late or being cancelled. That single figure does two jobs: it feeds your <a href="/demand-and-quality.html">quality score</a> (punctual airlines attract more passengers and can charge more), and it drives the compensation you owe when things go wrong.</p>
 
     <h2>What sets your on-time rate</h2>
-    <p>Your on-time rate is not random and it is not about aircraft age. It is built from two things you control: <strong>staff morale</strong> and <strong>schedule pressure</strong>.</p>
+    <p>Your on-time rate is not random and it is not about aircraft age. Two things you control set most of it: <strong>staff morale</strong> and <strong>schedule pressure</strong>. Crew shortages, your own ground handling stations, world events and one fuel-saving programme then move it up or down from there.</p>
 
     <h3>1. Crew morale</h3>
     <p>Punctuality is a team effort, and the three front-line groups matter in different amounts:</p>
@@ -105,18 +105,27 @@
       <tr><td>Ground staff</td><td>30%</td><td>They turn the aircraft around between flights.</td></tr>
       <tr><td>Cabin crew</td><td>20%</td><td>They board passengers and close the doors on time.</td></tr>
     </table>
-    <p>The higher the blended morale of these groups, the higher your on-time rate. Even a happy, well-paid workforce won't hit a perfect 100% — some disruption is baked in — but strong morale is the single biggest lever you have. You manage all of this in <strong>Operations → Labor</strong>: pay, conditions and staffing levels all feed morale. A fleet run with mediocre morale (say, in the mid-50s) settles around a 20% delay rate; a well-run operation at default morale is closer to 9%, and a genuinely happy airline pushes on-time performance into the low-single-digit delay range.</p>
+    <p>The higher the blended morale of these groups, the higher your on-time rate. Only a workforce at full morale, flying a schedule with plenty of slack, gets close to a perfect 100% — but strong morale is the single biggest lever you have. You manage it in <strong>Operations → Labour &amp; Costs</strong>, where each group's morale drifts week by week toward a target set by its pay: market rate holds it around 80, paying above market lifts it, and paying below drags it down. A fleet run with mediocre morale (say, in the mid-50s) settles around a 20% delay rate; a well-run operation at default morale is closer to 9%, and a genuinely happy airline pushes on-time performance into the low-single-digit delay range.</p>
 
     <h3>2. Schedule pressure (fleet utilization)</h3>
-    <p>The second lever is how hard you fly your aircraft. Each aircraft has a weekly flight-hour cap, and Tailwinds tracks how close your fleet runs to it on average. Below about <strong>60% of the cap</strong>, your schedule has enough slack to absorb a late inbound flight without it cascading through the rest of the day — no penalty. Push the whole fleet toward 100% of the cap and there's no recovery time built in, so delays snowball. Flying flat-out can knock up to <strong>12 percentage points</strong> off your on-time rate on its own.</p>
-    <p class="tip">Idle spare aircraft count as buffer, not waste. A couple of unassigned frames give your network room to recover when a flight slips — and they quietly protect your on-time rate.</p>
+    <p>The second lever is how hard you fly your aircraft. Each aircraft can fly at most 140 block hours a week, and Tailwinds tracks how close your fleet runs to it on average. Below about <strong>60% of the cap</strong>, your schedule has enough slack to absorb a late inbound flight without it cascading through the rest of the day — no penalty. Push the whole fleet toward 100% of the cap and there's no recovery time built in, so delays snowball. Flying flat-out can knock up to <strong>12 percentage points</strong> off your on-time rate on its own.</p>
+    <p class="tip">Idle spare aircraft count as buffer, not waste. A couple of unassigned frames, or a reserve aircraft stationed at a hub, give your network room to recover when a flight slips — and they quietly protect your on-time rate. Aircraft away for a check or grounded by a fault drop out of the average altogether.</p>
+
+    <h3>3. Crew shortages</h3>
+    <p>In new games you hire and train your own crew, and how many you have matters as well as how happy they are. If the fleet needs more pilots, ground staff or cabin crew than you employ, the shortfall comes straight off your on-time rate, weighted the same 50/30/20 way as morale. The penalty grows with the gap, up to <strong>15 percentage points</strong> when the weighted shortfall reaches 15%. At 15% short on pilots or cabin crew, aircraft are also parked outright: their routes earn nothing while lease and maintenance still bill. Recruits take time to arrive and train, so hire ahead of new aircraft rather than after them.</p>
+
+    <h3>4. Ground handling stations</h3>
+    <p>Open your own ground handling station at a busy airport and your ramp crews turn your aircraft first. The on-time bonus is airline-wide and scales with the share of your weekly departures that are self-handled: worth up to <strong>3 percentage points</strong> if every departure were covered at full efficiency. A new station starts at reduced efficiency and takes a few months to bed in. One station at a big hub moves the number; one at a two-route outstation barely does.</p>
+
+    <h3>5. Things outside your control (mostly)</h3>
+    <p>Disruption events, such as a volcanic ash cloud, a severe winter storm, a natural disaster, an industry-wide IT outage or a ground staff strike at a major airport, knock points off your on-time rate while they last: from 10 to 18 points each, and no more than 25 points combined. The <em>reduced cruise speed</em> fuel programme also costs 1.5 points, because longer block times leave the schedule less slack. However bad things get, your on-time rate never falls below 35%.</p>
 
     <h2>Why delays cost you money</h2>
     <p>When flights are badly delayed or cancelled, real airlines owe passengers compensation under rules like the EU's EU261 and the US DOT framework. Tailwinds models the same thing, and it's the "delay &amp; cancellation payouts" line you see in Finance. The calculation is straightforward:</p>
     <ul>
       <li>Start with your <strong>delay rate</strong> (1 − on-time rate).</li>
       <li>Only the worst delays and cancellations are compensable — roughly <strong>1 in 10</strong> of your delayed flights escalates that far. So at a 20% delay rate, about <strong>2% of your passengers</strong> trigger a payout.</li>
-      <li>Each of those passengers is owed an amount that scales with how far they were flying:</li>
+      <li>Each of those passengers is owed an amount that scales with how far they were flying (in historical-era games the amounts are scaled down to period money):</li>
     </ul>
     <table class="data">
       <tr><th>Route distance</th><th>Compensation per affected passenger</th></tr>
@@ -127,13 +136,15 @@
     <p>Put together, your weekly bill is roughly <em>passengers carried × 2% × the per-passenger rate</em> at a 20% delay rate. That's why a big carrier can see a very large number here: it isn't a penalty for being big, it's the sum of a small per-passenger cost across a lot of people. An airline flying tens of thousands of passengers a week at a 20% delay rate can easily run a six-figure weekly compensation bill.</p>
 
     <h2>The key insight: it scales with your delay rate</h2>
-    <p>Because the payout is directly proportional to your delay rate, cutting delays cuts the bill by the same amount. Take an airline paying $270k a week at an 80% on-time rate. Lift on-time performance to 90% — halving the delay rate from 20% to 10% — and that line roughly <strong>halves to about $135k</strong>. Get punctual and the compensation problem largely solves itself. And remember it pays off twice: a higher on-time rate also lifts your quality score, so you carry more passengers and can price higher at the same time.</p>
+    <p>Because the payout is directly proportional to your delay rate, cutting delays cuts the bill by the same amount. Take an airline paying $270k a week at an 80% on-time rate. Lift on-time performance to 90% — halving the delay rate from 20% to 10% — and that line roughly <strong>halves to about $135k</strong>. Get punctual and the compensation problem largely solves itself. And remember it pays off more than once: a higher on-time rate lifts your quality score directly, and punctuality is also the biggest single part of the passenger satisfaction that sets your customer rating. You carry more passengers and can price higher at the same time.</p>
 
     <h2>How to fix a high delay rate</h2>
     <ol>
-      <li><strong>Raise crew morale first.</strong> In Operations → Labor, improve pay and conditions for pilots and ground staff especially — they carry 80% of the on-time weighting between them.</li>
+      <li><strong>Raise crew morale first.</strong> In Operations → Labour &amp; Costs, raise pay for pilots and ground staff especially — they carry 80% of the on-time weighting between them. Pay above market slowly drifts back toward it unless you hold the rate.</li>
+      <li><strong>Make sure you have enough crew.</strong> If Operations shows a group short-handed, hire now. Better pay also fills a large hire faster.</li>
       <li><strong>Build in schedule slack.</strong> If your fleet is averaging well above 60% of its weekly hour cap, you're buying delays. Add a spare aircraft, or trim a few frequencies on routes where the metal is maxed out.</li>
       <li><strong>Grow into capacity, not past it.</strong> When you add routes or frequencies, add the aircraft to fly them comfortably rather than stretching the existing fleet thinner.</li>
+      <li><strong>Self-handle at your hub.</strong> Once a hub carries a big share of your departures, a ground handling station there adds punctuality as well as cutting handling costs.</li>
       <li><strong>Watch the trend after changes.</strong> Morale moves over several weeks, so give a pay rise or a new spare aircraft a little time before judging the effect.</li>
     </ol>
 

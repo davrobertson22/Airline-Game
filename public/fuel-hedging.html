@@ -54,7 +54,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/fuel-hedging.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-19",
-    "dateModified": "2026-07-19",
+    "dateModified": "2026-10-13",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -92,52 +92,56 @@
     <p class="lede">For most airlines in Tailwinds, fuel is the single largest operating cost — which makes the fuel market the single largest thing you don't control. Except that you can, partially. This guide explains exactly how fuel pricing works under the hood, how hedge contracts are priced, and a simple routine that takes the drama out of spikes.</p>
 
     <h2>How the fuel market works</h2>
-    <p>Tailwinds prices jet fuel from a base of <strong>$1.20 per litre</strong>, multiplied by a market index that starts at 1.00 and moves every week. The index wanders between roughly <strong>0.55</strong> (a cheap-oil glut) and <strong>1.90</strong> (a full-blown crisis spike), so the real price you pay ranges from about $0.66 to about $2.28 per litre.</p>
+    <p>Tailwinds prices jet fuel from a base of <strong>$1.45 per litre</strong>, multiplied by a market index that starts at 1.00 and moves every week. The index wanders between roughly <strong>0.55</strong> (a cheap-oil glut) and <strong>1.90</strong> (a full-blown crisis spike), so the world price ranges from about $0.80 to about $2.76 per litre before the local station price (below) is applied.</p>
     <p>The index is <em>mean-reverting</em>: wherever it is, it gets pulled gently back toward 1.00 each week, with random shocks layered on top. Two practical consequences fall out of that design:</p>
     <ul>
       <li><strong>Extremes don't last.</strong> An index at 1.60 is being dragged downward even while the headlines feel apocalyptic. An index at 0.70 is quietly climbing back. The further from normal, the stronger the pull.</li>
       <li><strong>But extremes do happen, and they arrive fast.</strong> The weekly shocks can stack in one direction for a while. An airline with thin margins and zero protection can go from comfortable to cash-negative inside a month.</li>
     </ul>
-    <p>You can watch the current index and its recent history on the Finance screen — it's worth a glance every week, the way a real CFO glances at Brent crude.</p>
+    <p>Historical-era games work the same way, except that the index is pulled toward that year's real price level rather than 1.00 (cheap through the 1950s and 60s, then the 1970s oil shocks and so on, until 2026) and may fall as low as 0.35. Past 2026 it reverts to 1.00 like a classic game.</p>
+    <p>You can watch the current index and its recent history in Finance → Fuel — it's worth a glance every week, the way a real CFO glances at Brent crude.</p>
 
     <h2>What fuel actually costs your airline</h2>
-    <p>Each aircraft type has a fixed physical burn rate in litres per 100&nbsp;km — that's a property of the airframe and never changes. Your cost per kilometre is burn × price per litre. At the base index of 1.00:</p>
+    <p>Each aircraft type has a physical burn rate in litres per 100&nbsp;km. Engine choice and wingtip devices adjust it for an individual aircraft, and efficiency programmes trim it across the fleet (both covered below). Your cost per kilometre is burn × price per litre. At the base index of 1.00, before station prices:</p>
     <table>
       <tr><th>Aircraft</th><th>Burn (L/100km)</th><th>Fuel cost per km</th></tr>
-      <tr><td>ATR 72-600 (turboprop, 78 seats)</td><td>122.75</td><td>≈ $1.47</td></tr>
-      <tr><td>Boeing 737-800 (narrow-body, 189 seats)</td><td>400.25</td><td>≈ $4.80</td></tr>
-      <tr><td>Airbus A320neo (narrow-body, 194 seats)</td><td>388.25</td><td>≈ $4.66</td></tr>
-      <tr><td>Boeing 787-9 (wide-body, 420 seats)</td><td>717.50</td><td>≈ $8.61</td></tr>
+      <tr><td>ATR 72-600 (turboprop, 78 seats)</td><td>177.46</td><td>≈ $2.57</td></tr>
+      <tr><td>Boeing 737-800 (narrow-body, 189 seats)</td><td>400.25</td><td>≈ $5.80</td></tr>
+      <tr><td>Airbus A320neo (narrow-body, 194 seats)</td><td>352.25</td><td>≈ $5.11</td></tr>
+      <tr><td>Boeing 787-9 (wide-body, 420 seats)</td><td>717.50</td><td>≈ $10.40</td></tr>
     </table>
-    <p>Multiply by route distance and weekly frequency and the sums get large quickly: a single 737-800 flying fourteen 1,100&nbsp;km round trips a week burns roughly $148,000 of fuel at index 1.00 — and roughly $214,000 if the index spikes to 1.45. Same aircraft, same schedule, same passengers: $66,000 a week of difference you didn't choose. The <a href="/aircraft.html">aircraft guides</a> list burn rates for every type in the game, and per-seat fuel efficiency is one of the biggest reasons newer types justify their higher leases.</p>
+    <p>Multiply by route distance and weekly frequency and the sums get large quickly: a single 737-800 flying fourteen 1,100&nbsp;km round trips a week burns roughly $179,000 of fuel at index 1.00 — and roughly $259,000 if the index spikes to 1.45. Same aircraft, same schedule, same passengers: $80,000 a week of difference you didn't choose. The <a href="/aircraft.html">aircraft guides</a> list burn rates for every type in the game, and per-seat fuel efficiency is one of the biggest reasons newer types justify their higher leases.</p>
 
     <h2>How hedge contracts work</h2>
-    <p>A hedge contract locks today's market index, plus a premium, for a fixed share of your fleet's total fuel bill over a fixed number of weeks. Three duration options are available:</p>
+    <p>A hedge contract fixes the price of a set share of your fleet's total fuel bill for a fixed number of weeks. The price it locks is <em>not</em> today's index. It is where the index is expected to average over the contract's term, plus a premium for the certainty. Because the market mean-reverts, that expected average sits between today's index and 1.00, and the longer the term, the closer to 1.00 it gets. Buying a hedge costs no cash up front; the premium is built into the locked price. Four durations are available:</p>
     <table>
-      <tr><th>Contract</th><th>Length</th><th>Premium on locked price</th></tr>
-      <tr><td>Short</td><td>8 weeks</td><td>+3%</td></tr>
-      <tr><td>Medium</td><td>13 weeks</td><td>+6%</td></tr>
-      <tr><td>Long</td><td>26 weeks</td><td>+10%</td></tr>
+      <tr><th>Contract</th><th>Length</th><th>Premium on expected average</th></tr>
+      <tr><td>8-week</td><td>8 weeks</td><td>+1.5%</td></tr>
+      <tr><td>13-week</td><td>13 weeks</td><td>+2.5%</td></tr>
+      <tr><td>26-week</td><td>26 weeks</td><td>+4%</td></tr>
+      <tr><td>52-week</td><td>52 weeks</td><td>+6%</td></tr>
     </table>
     <p>Coverage comes in steps of 25%, 50%, or 75% of your fuel bill, and contracts stack — you can layer several at once up to a total of 100% coverage. While a contract runs, its share of your fuel is charged at the locked price no matter what the market does; the unhedged remainder floats. Your effective price is simply the blend:</p>
     <p class="tip">effective index = hedged share × locked price + unhedged share × market index</p>
-    <p>Worked example: the market index sits at 0.97. You buy a 13-week hedge at 50% coverage. Your locked price is 0.97 × 1.025 ≈ 0.99. Six weeks later a spike drives the market to 1.45 — but you pay 0.5 × 0.99 + 0.5 × 1.45 = <strong>1.22</strong>. On the 737-800 schedule above, that's about $34,000 a week you didn't spend, for a premium that cost you a few thousand a week while prices were calm.</p>
+    <p>Worked example: the market index sits at 0.97. You buy a 13-week hedge at 50% coverage. The expected average over 13 weeks is about 0.98, so your locked price is 0.98 × 1.025 ≈ 1.005. Six weeks later a spike drives the market to 1.45 — but you pay 0.5 × 1.005 + 0.5 × 1.45 ≈ <strong>1.23</strong>. On the 737-800 schedule above, that's about $40,000 a week you didn't spend, for a premium that cost you a few thousand a week while prices were calm. The Fuel tab previews every contract before you buy: the expected average, the locked price, what it covers in dollars, and the average index it needs to beat to pay off.</p>
     <h3>Closing a contract early</h3>
-    <p>A live contract can be unwound before it expires. You are quoted what it is worth today — the gap between the locked price and the market, across the weeks still to run — less a small haircut for exiting early. In the money, that pays you cash; underwater, it costs you, and the game will not let you unwind into a position you cannot afford. The practical use is taking the win: if you hedged at 0.99 and the market is at 1.45 with twenty weeks left, you can bank most of that now instead of waiting to see whether the spike holds. The Fuel tab also keeps a running scoreboard of every contract you have closed, so you can see whether your hedging has actually made money rather than guessing.</p>
+    <p>A live contract can be unwound before it expires. You are quoted what it is worth today — the gap between the locked price and where the market is expected to average over the weeks still to run — less a 1.5% haircut for exiting early. In the money, that pays you cash; underwater, it costs you, and the game will not let you unwind into a position you cannot afford. The practical use is taking the win: if you hedged at 0.99 and the market is at 1.45 with twenty weeks left, you can bank the contract's value now instead of waiting to see whether the spike holds. Expect less than the spike itself suggests: the quote assumes the market will fall back over those twenty weeks, so it values the rest of the contract at about 1.25, not 1.45. The Fuel tab also keeps a running scoreboard of every contract you have closed, so you can see whether your hedging has actually made money rather than guessing.</p>
 
     <h2>When to hedge — and when not to</h2>
-    <h3>Hedge when prices are normal or cheap</h3>
-    <p>The whole trade is buying certainty at a small markup. That markup is only worth paying when the price you're locking is a price you'd be happy to pay for months. An index at or below 1.00 is exactly that. Think of it as insurance shopping on a sunny day.</p>
-    <h3>Don't hedge into a spike</h3>
-    <p>The instinct when fuel hits 1.50 is to panic-lock before it gets worse. Resist it. Mean reversion means the expected path from 1.50 is <em>down</em>, and a hedge locks the bad price plus a premium — the game-mechanics equivalent of buying flood insurance while standing in the flood. During a spike, the better levers are operational: nudge fares up (your competitors' costs spiked too), trim marginal frequency, and let the index fall back before writing new contracts.</p>
+    <h3>Know what you're betting on</h3>
+    <p>Because every contract is priced off the expected path, there is no free money in hedging at any particular index. A hedge pays off when fuel ends up averaging <em>above</em> the locked price over the term, which means the market came back down more slowly than the model expected, or spiked again. It loses a little when the market behaves as expected or better. The premium is what you pay to stop caring which happens.</p>
+    <h3>Cheap fuel: lock in a good level</h3>
+    <p>When the index is low, the locked price sits above today's index, because the market is expected to climb back toward 1.00. That is normal, not a bad deal: you are buying a price you'd be happy to pay for months, at a small markup. Think of it as insurance shopping on a sunny day.</p>
+    <h3>During a spike: hedging is no longer a trap</h3>
+    <p>At an index of 1.50 the market is expected to come back down, so a hedge locks <em>below</em> today's index: about 1.40 for 8 weeks, 1.29 for 26 weeks and 1.21 for 52 weeks. You are not locking the bad price. You are protecting yourself against the spike lasting longer than it should. That is worth doing if a long spike would really hurt you. Alongside it, the operational levers still work: nudge fares up (your competitors' costs spiked too) and trim marginal frequency.</p>
     <h3>Ladder your contracts</h3>
-    <p>Rather than one all-or-nothing decision, keep a rolling ladder: for example, a 26-week contract at 25% coverage as your long-term floor, plus a 13-week contract at 25–50% renewed whenever prices dip below normal. Expirations then arrive staggered, no single renewal date can ambush you, and you always retain some floating share to benefit when fuel gets genuinely cheap.</p>
+    <p>Rather than one all-or-nothing decision, keep a rolling ladder: for example, a 52-week or 26-week contract at 25% coverage as your long-term floor, plus a 13-week contract at 25–50% renewed as each one expires. Expirations then arrive staggered, no single renewal date can ambush you, and you always retain some floating share to benefit when fuel gets genuinely cheap.</p>
     <h3>Match coverage to your fragility</h3>
-    <p>Hedging matters most when a spike could actually hurt you. A young airline running thin margins and big lease commitments should carry more coverage — 50–75% — because a bad quarter is existential. A mature airline with fat margins and a cash cushion can run 25% or even none, treating fuel swings as noise. And note which fleets care: a turboprop regional network at $1.47/km of fuel has far less at stake than a widebody long-haul operation at $8.61/km.</p>
+    <p>Hedging matters most when a spike could actually hurt you. A young airline running thin margins and big lease commitments should carry more coverage — 50–75% — because a bad quarter is existential. A mature airline with fat margins and a cash cushion can run 25% or even none, treating fuel swings as noise. And note which fleets care: a turboprop regional network at $2.57/km of fuel has far less at stake than a widebody long-haul operation at $10.40/km.</p>
 
     <h2>Burning less: the efficiency programmes</h2>
-    <p>Hedging fixes the price you pay. It does nothing about the litres. Seven airline-wide efficiency programmes attack the other half: single-engine taxi, reduced APU use, cost-index flying, regular engine washes, lighter cabin loading, tighter contingency fuel planning and continuous-descent arrivals. Each costs a one-off sum to set up and a modest amount every week to run, and each shaves a fraction of a percent off the burn of every aircraft you own. Run all of them and the fleet burns roughly 8% less fuel — permanently, in every market condition, which is more than most hedging will ever earn you.</p>
-    <p>None of them is free of consequence. Single-engine taxi and continuous-descent arrivals cost you a little punctuality. Tighter contingency fuel slightly raises the chance of a technical problem. Engine washes raise your maintenance bill. The programmes are worth having anyway, but read what each one gives up before switching it on — the Fuel tab states the trade-off next to the saving.</p>
+    <p>Hedging fixes the price you pay. It does nothing about the litres. Seven airline-wide efficiency programmes attack the other half: single-engine taxi, reduced cruise speed, weight reduction, optimised flight planning, ground power at hubs, statistical contingency fuel and an engine wash programme. Each takes between 0.5% and 2% off the burn of every aircraft you own. Run all of them and the fleet burns roughly 8% less fuel — permanently, in every market condition, which is more than most hedging will ever earn you.</p>
+    <p>None of them is free. Single-engine taxi costs a one-off sum and adds a little to maintenance. Reduced cruise speed is the biggest saving, paid for in punctuality: it takes 1.5 points off your <a href="/on-time-performance.html">on-time rate</a>. Weight reduction is a one-off cost per aircraft. Optimised flight planning has no side effect but charges every week. Ground power only works if you have a designated hub. Statistical contingency fuel raises the odds of a breakdown by 10%. The engine wash programme charges per aircraft every week, but slightly lowers your maintenance bill. Read what each one gives up before switching it on — the Fuel tab states the cost and the trade-off next to the saving.</p>
     <p>Individual aircraft can also be fitted with wingtip devices, from the fleet page or in bulk from a multi-select. A retrofit costs more than ordering the device with a new aircraft, and it permanently lowers that tail's burn and extends its range a little. There is no weekly cost.</p>
 
     <h2>Where you buy it: station prices and tankering</h2>
@@ -155,7 +159,7 @@
     <h2>Reading fuel in your route P&amp;L</h2>
     <p>Fuel flows through every route's weekly profit line, so a market move shows up as your whole network getting better or worse at once — distinct from a single route souring, which points to competition or pricing instead. When your P&amp;L dips across the board, check the fuel index before touching your fares; the fix for expensive fuel is rarely a fare cut. The <a href="/route-economics.html">route economics guide</a> covers how to decompose a route's profit change into its causes, and the <a href="/route-case-study.html">route case study</a> shows a fuel spike hitting a live route — with and without the hedge.</p>
 
-    <div class="tip">Rule of thumb: below 0.90, hedge generously and long. Between 0.90 and 1.10, keep the ladder rolling. Above 1.20, stop writing new contracts and ride your existing ones. Above 1.40, be glad you laddered.</div>
+    <div class="tip">Rule of thumb: hedge to the level of risk you can stomach, not to the index. Keep the ladder rolling in any market, carry more cover when a long spike would hurt you, and when fuel is well above normal, remember a new contract locks below today's price. Above 1.40, be glad you laddered.</div>
 
     <a class="cta" href="/">Play Tailwinds Now →</a>
   </main>

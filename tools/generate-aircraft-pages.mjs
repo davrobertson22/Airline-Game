@@ -44,7 +44,7 @@ const PAGES = [
       <p>Narrow-body jets are the backbone of almost every successful Tailwinds airline. They cover the busiest segment of the route map — short and medium-haul city pairs with strong, repeatable demand — and they do it with economics that widebodies simply cannot match on those stage lengths. If your airline only ever mastered one aircraft category, it should be this one.</p>
       <p>The core trade-off inside the category is capacity versus cost. Smaller types like the A318 or 737-700 are cheap to lease and easy to fill, which makes them forgiving while you learn a market. Larger types like the A321neo or 737 MAX 10 carry far more passengers for only modestly higher trip cost — brilliant on proven routes, punishing on speculative ones. The table and per-type notes below use each aircraft's actual in-game numbers, including fuel cost per seat-kilometre, the single best measure of how cheaply a jet moves one passenger one kilometre.</p>
       <h2>How to choose</h2>
-      <p>Match seats to demand first, then range to mission, and only then look at price. A jet that is 30% too big for its route flies half-empty and loses money regardless of how efficient it is on paper. New-generation types (neo, MAX, A220, E2) burn noticeably less fuel per seat than the classics they replaced, but lease for more — they reward busy networks that keep them in the air. Older classics are the value play for cash-strapped early airlines: higher burn, far lower weekly lease.</p>`,
+      <p>Match seats to demand first, then range to mission, and only then look at price. A jet that is 30% too big for its route flies half-empty and loses money regardless of how efficient it is on paper. New-generation types (neo, MAX, A220, E2) burn noticeably less fuel per seat than the classics they replaced, but lease for more — they reward busy networks that keep them in the air. Older classics are the value play for cash-strapped early airlines: far lower weekly lease, but higher burn, and they arrive second-hand with a maintenance bill already inflated by age. The oldest jets here, whose lines closed in 1976 or earlier, are buy-only, because no lessor stocks them. The Comet 1 is listed for history: its certificate was withdrawn in 1955, so it can only be bought in an era game, between 1952 and 1954.</p>`,
   },
   {
     file: 'aircraft-wide-body.html',
@@ -57,7 +57,7 @@ const PAGES = [
       <p>Widebodies are how a Tailwinds airline goes intercontinental — and how plenty of them go bankrupt. A twin-aisle jet carries two to three times the passengers of a narrow-body, costs several times as much to lease, and burns fuel accordingly. On a dense long-haul trunk route it prints money; on a thin route it is the fastest way to destroy a healthy balance sheet.</p>
       <p>Fill rate is everything at this scale. A 300-seat jet at 85% load is a triumph; the same jet at 45% is a weekly six-figure loss. Before leasing any aircraft on this page, be confident the city pair can actually fill it — big populations at both ends, ideally with hub feed behind one of them.</p>
       <h2>How to choose</h2>
-      <p>Modern twins (787, A350, 777) dominate the efficiency table and should be your default for new long-haul flying. Older types — A340s, early 777s, the 767 family — lease for dramatically less and remain sensible on routes you have already proven, or as a bridge while you build cash. Watch range carefully: ultra-long-range variants carry a lease premium you only earn back on routes that actually need it.</p>`,
+      <p>Modern twins (the 777X, A330neo, 787 and A350 families, plus the 777-300ER) fill the top of the efficiency table and should be your default for new long-haul flying. Older types — A340s, early 777s, the 767 family — lease for dramatically less and remain sensible on routes you have already proven, or as a bridge while you build cash. They arrive second-hand, though, so budget for maintenance well above the base figure. Watch range carefully: ultra-long-range variants carry a lease premium you only earn back on routes that actually need it.</p>`,
   },
   {
     file: 'aircraft-regional-jets.html',
@@ -70,9 +70,9 @@ const PAGES = [
       <p>Regional jets solve a specific problem: routes with real demand, but not enough of it to fill a 150-seat narrow-body. In Tailwinds that describes a huge share of the map — secondary cities, short cross-border hops, and above all <em>hub feed</em>, the short flights that funnel connecting passengers into your hub for onward long-haul travel.</p>
       <p>Per-seat costs run higher than larger jets; that is the price of right-sizing. A regional jet is not competing with an A320 on cost per seat — it is competing with the empty seats the A320 would fly on a thin route. Judged that way, the category is one of the most reliably profitable in the game.</p>
       <h2>How to choose</h2>
-      <p>The E-Jet and CRJ families cover the 70–130 seat band; the E2 generation offers materially better burn for a higher lease. At the small end, 50-seaters only make sense on very thin or very short missions where nothing bigger could break even. As always: pick the seat count the route can fill, not the one with the prettiest efficiency number.</p>
+      <p>The E-Jets and the larger CRJs cover the 78–146 seat band, from the CRJ-700 up to the E195-E2; the E2 generation offers materially better burn for a higher lease. At the small end, the 37–52 seat jets (the ERJ-135, ERJ-145 and CRJ-200) only make sense on very thin or very short missions where nothing bigger could break even. As always: pick the seat count the route can fill, not the one with the prettiest efficiency number.</p>
       <h2>Business jets</h2>
-      <p>Four business jets sit in this table too — the Citation CJ4, Phenom 300E, Challenger 350 and Gulfstream G650ER. They are not regional jets in any commercial sense: ten seats on a jet engine is the worst per-seat fuel figure in the game, and none of them will ever pay on a scheduled route. They exist for the <a href="/devlog.html">charter board</a>, where executive contracts demand a business jet and price against one, and where a light jet parked at the right airport can turn a fixed fee into a profit that no airliner could. Treat them as a sideline, not a fleet.</p>`,
+      <p>Four business jets sit in this table too — the Citation CJ4, Phenom 300E, Challenger 350 and Gulfstream G650ER. They are not regional jets in any commercial sense: ten or nineteen seats behind jet engines make for some of the worst per-seat fuel figures in the game (the Challenger 350's is the worst of all, and only Concorde separates it from the G650ER), and none of them will ever pay on a scheduled route. They exist for the <a href="/devlog.html">charter board</a>, where executive contracts demand a business jet and price against one, and where a light jet parked at the right airport can turn a fixed fee into a profit that no airliner could. Treat them as a sideline, not a fleet.</p>`,
   },
   {
     file: 'aircraft-turboprops.html',
@@ -85,7 +85,7 @@ const PAGES = [
       <p>Turboprops are the most misunderstood aircraft in Tailwinds. New players skip them because they look slow and small; experienced players quietly build entire profitable sub-networks on them. Below roughly 800 kilometres, nothing else in the game touches their trip costs — the fuel table below makes the point better than any argument.</p>
       <p>Their weekly leases are the lowest in the game, which also makes them the lowest-risk way to experiment. A failed turboprop route costs you pocket change; a failed widebody route can cost you the company.</p>
       <h2>How to choose</h2>
-      <p>The ATR 72 and Q400 are the modern workhorses — the ATR cheaper to run, the Q400 faster and better over longer regional sectors. Smaller 19–40 seat types unlock genuinely tiny markets (island hops, mountain fields, remote communities) that no jet can serve economically. Range is rarely the constraint; matching seats to a thin market is the whole art.</p>`,
+      <p>The ATR 72 and Q400 are the modern workhorses — the ATR cheaper per trip, the Q400 bigger, longer-legged and cheaper per seat. Both cruise at the same turboprop speed. Many of the older types in this table are 1940s–60s propliners whose lines closed in 1976 or earlier: no lessor stocks those, so they are buy-only, and they arrive decades old. Smaller 19–40 seat types unlock genuinely tiny markets (island hops, mountain fields, remote communities) that no jet can serve economically. Range is rarely the constraint; matching seats to a thin market is the whole art.</p>`,
   },
   {
     file: 'aircraft-freighters.html',
@@ -95,7 +95,7 @@ const PAGES = [
     description:
       'Every cargo aircraft in Tailwinds compared: payload, range, lease cost and fuel burn. Build a profitable cargo network alongside your passenger airline.',
     intro: `
-      <p>Cargo is a different business with different rules. Freighters fly payload, not passengers: no catering, no loyalty points, no reputation dance — just tonnes, lanes, and yield. A well-built cargo network is steady, high-margin income that keeps earning even when passenger demand wobbles.</p>
+      <p>Cargo is a different business with different rules. Freighters fly payload, not passengers: no catering, no loyalty points, no reputation dance — just tonnes, lanes, and yield. There are no AI rivals in the hold, either: the computer airlines fly passengers only, so a lane's freight is shared out among your own freighters. A well-built cargo network is steady, high-margin income that keeps earning even when passenger demand wobbles.</p>
       <p>Because these aircraft carry no seats, the comparison metric changes: what matters is payload tonnes against trip cost over the lanes you actually fly. Small feeders move parcels into your hub; big intercontinental freighters move serious tonnage between major economies.</p>
       <h2>How to choose</h2>
       <p>Start small. A regional freighter on a short, proven lane teaches you cargo pricing at minimal risk. Converted passenger jets (BCF/P2F types) are the mid-market value play — cheap to lease, decent payload. Purpose-built giants like the 747F only pay off on dense long-haul trade lanes with tonnage to fill them, but when they work, nothing else comes close.</p>`,
@@ -109,7 +109,7 @@ const PAGES = [
       'The A380, 747 family and Concorde in Tailwinds: seats, range, lease cost and economics of the game’s biggest and fastest aircraft — and when they actually pay.',
     intro: `
       <p>These are the trophy aircraft of Tailwinds — the double-deck giants and the supersonic Concorde. Every player wants to fly them. Most players lose money the first time they try. This page is about flying them profitably.</p>
-      <p>Double-deckers live or die on one question: can the route fill 400–550 seats week after week? That only happens on the world's great trunk routes, usually between mega-hubs with strong feed on both ends. When it works, per-seat costs are excellent. When it doesn't, the weekly lease alone erases the profit of half your network.</p>
+      <p>Double-deckers live or die on one question: can the route fill 400 to 853 seats week after week? That only happens on the world's great trunk routes, usually between mega-hubs with strong feed on both ends. When it works, per-seat costs are excellent. When it doesn't, the weekly lease alone erases the profit of half your network.</p>
       <p>Concorde is its own economy. Its fuel burn is extraordinary, but supersonic prestige commands a large ticket premium in-game, and on the right premium transatlantic-style pairing it can work as a halo aircraft — brand first, margin second.</p>
       <h2>How to choose</h2>
       <p>Honestly? Wait. Flagships belong in a mature network with established mega-hubs, deep cash reserves, and proven trunk routes bursting past the capacity of your largest twins. Then, and only then, they are glorious.</p>`,
@@ -306,11 +306,11 @@ for (const page of PAGES) {
   const body = [
     page.intro,
     `<h2>All ${group.length} aircraft at a glance</h2>`,
-    `<p>Figures are the game's actual values. Fuel cost assumes the base fuel price of $1.20/litre — the live market price in your save drifts between roughly half and nearly double that, which is why <a href="/route-economics.html">fuel hedging</a> matters.</p>`,
+    `<p>Figures are the game's actual values. Fuel cost assumes the base fuel price of $1.45/litre — the live market price in your save drifts between roughly half and nearly double that, which is why <a href="/route-economics.html">fuel hedging</a> matters. Lease and price are the classic-game market rates. Any type whose production line closed in 1976 or earlier is buy-only, because no lessor stocks it, so ignore its lease column. In an era game the calendar takes over: a type appears the year it entered service, lessors only take it from ten years after that (the war-surplus C-46, C-47 and DC-4 excepted), and prices shift with the year.</p>`,
     statsTable(group, isFreight),
     picksFor(page.file),
     `<h2>Every type in the category</h2>`,
-    `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, cruise speed, lease, price and fuel; these add the runway each type needs and its weekly maintenance bill.</p>`,
+    `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, cruise speed, lease, price and fuel; these add the runway each type needs and its base weekly maintenance bill. That base is for a factory-fresh frame: out-of-production types arrive second-hand, already years old, and their maintenance starts higher (the market screen in the game quotes the delivered figure).</p>`,
     group.map((t) => aircraftCard(t, isFreight)).join('\n'),
   ].join('\n');
 
@@ -334,7 +334,7 @@ const catCounts = PAGES.map((p) => ({
 }));
 
 const indexBody = `
-      <p>Tailwinds ships with <strong>${all.length} real-world aircraft types</strong>, from 19-seat island hoppers to the Airbus A380 — every one modelled with its own seats or payload, range, lease and purchase price, fuel burn, crew cost, and maintenance bill. Which ones you fly, and where, is most of the game.</p>
+      <p>Tailwinds ships with <strong>${all.length} real-world aircraft types</strong>, from 9-seat island hoppers to the Airbus A380 — every one modelled with its own seats or payload, range, lease and purchase price, fuel burn, crew cost, and maintenance bill. Which ones you fly, and where, is most of the game.</p>
       <p>The guides below cover every type in each category, with full stat tables, per-seat economics computed from the game's actual data, and honest notes on when each aircraft earns its keep. If you're new, start with the <a href="/fleet-planning.html">fleet planning guide</a> to learn how to think about aircraft selection, then dive into a category.</p>
 
       <h2>Browse by category</h2>
@@ -349,7 +349,7 @@ ${catCounts
   .join('\n')}
 
       <h2>How aircraft economics work in Tailwinds</h2>
-      <p>Every aircraft in the game charges you in four ways: a <strong>weekly lease</strong> (or capital tied up in a purchase), <strong>fuel</strong> burned per kilometre flown, <strong>crew</strong> cost per kilometre, and a weekly <strong>maintenance</strong> bill that grows as the airframe ages. Revenue comes from the seats (or cargo tonnes) you fill. The art of fleet planning is matching capacity and range to each route so you pay for exactly the aircraft the mission needs — and nothing more.</p>
+      <p>Every aircraft in the game charges you in four ways: a <strong>weekly lease</strong> (or capital tied up in a purchase), <strong>fuel</strong> burned per kilometre flown, <strong>crew</strong> cost per kilometre, and a weekly <strong>maintenance</strong> bill that grows as the airframe ages. Revenue comes from the seats (or cargo tonnes) you fill. The art of fleet planning is matching capacity and range to each route so you pay for exactly the aircraft the mission needs — and nothing more. Orders are not instant, either: the first frame of a type arrives after twice its class's lead time (two weeks for a turboprop, up to ten for a double-decker), and each further frame of the same type follows one lead time behind the last.</p>
       <p>Two derived numbers appear throughout these guides. <strong>Fuel per seat-km</strong> is the fuel cost of moving one seat one kilometre — the cleanest efficiency comparison between types. <strong>Lease per seat</strong> spreads the weekly lease across capacity, showing how expensive each seat is before it ever leaves the gate. Together they explain most of why one aircraft makes money on a route and another loses it.</p>`;
 
 writeFileSync(

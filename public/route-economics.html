@@ -51,7 +51,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/route-economics.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-06",
-    "dateModified": "2026-07-12",
+    "dateModified": "2026-10-13",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -89,28 +89,30 @@
     <p class="lede">Every decision in Tailwinds eventually shows up in a route's profit line. This guide breaks down where demand comes from, what each flight really costs, how to set fares, and how to protect yourself when fuel prices spike.</p>
 
     <h2>Where demand comes from</h2>
-    <p>Tailwinds uses a gravity-style demand model: the bigger the populations at both ends of a route and the shorter the distance between them, the more people want to fly it. On top of raw population, three modifiers matter:</p>
+    <p>Tailwinds uses a gravity-style demand model: the bigger the populations at both ends of a route and the shorter the distance between them, the more people want to fly it. On top of raw population, four modifiers matter:</p>
     <ul>
       <li><strong>Tourism.</strong> Destinations with heavy visitor traffic generate demand far beyond their resident population — island resorts and tourist capitals behave much bigger than they look.</li>
       <li><strong>Gateway effects.</strong> A country's primary international airport pulls demand from the whole nation, not just its metro area.</li>
+      <li><strong>One city, one market.</strong> All the airports in a metro area share that city's demand. New York to London is one pool of passengers whether you fly it from JFK or Newark, and secondary airports draw a smaller share of it than the main one — how much smaller depends on the airport and on whether the trip is domestic or international.</li>
       <li><strong>Connections.</strong> Routes into your hub carry connecting passengers in addition to local traffic — see the <a href="/hub-strategy.html">hub strategy guide</a>. This is why the same city pair can be mediocre as an isolated route and excellent as a spoke.</li>
     </ul>
-    <p>Demand is shared among every airline flying the pair, weighted by fares, frequency, quality, and reputation. You're never pricing in a vacuum — you're competing for a finite pool.</p>
+    <p>Demand also swings with the seasons and grows year by year. It is shared among every airline flying the pair, weighted by fares, frequency, quality, and brand and reputation. You're never pricing in a vacuum — you're competing for a finite pool.</p>
 
     <h2>What a flight actually costs</h2>
-    <p>Four cost lines hit every route, and they behave differently:</p>
+    <p>A route's costs fall into four groups, and they behave differently:</p>
     <ul>
-      <li><strong>Lease (fixed weekly).</strong> Charged whether the aircraft flies full, empty, or not at all. This is why an idle aircraft is a slow leak and a half-used one is worse — the lease is spread over too few flights. Leasing costs roughly 8–12% of an aircraft's purchase price per year.</li>
-      <li><strong>Fuel (per km, variable).</strong> Each type burns a fixed number of litres per 100 km; your dollar cost is that burn times the world fuel price. Fuel is usually the biggest single cost on long routes.</li>
-      <li><strong>Crew (per km).</strong> Scales with distance and aircraft size. Small but never zero.</li>
-      <li><strong>Maintenance (weekly, age-based).</strong> Grows as airframes get older. A cheap old jet's lease saving is partly an illusion — some of it comes back as maintenance.</li>
+      <li><strong>Per flight, full or empty.</strong> <em>Fuel</em>: each type burns a fixed number of litres per 100 km, and your dollar cost is that burn times the fuel price. Fuel is usually the biggest single cost. <em>Crew flying pay</em> scales with distance and aircraft size. <em>Landing and navigation fees</em> are charged at both ends on every flight, by aircraft size and airport tier: a narrow-body pays $3,800 a landing at a mega airport, $2,400 at a major one and $950 at a regional one. Sectors longer than four block hours also pay for crew hotel nights.</li>
+      <li><strong>Per passenger.</strong> Ground handling, catering at the service level you choose, lounge access for premium cabins, and delay compensation when your punctuality slips. These shrink when the cabin is empty, which is why a full aircraft costs more to fly than an empty one but earns far more.</li>
+      <li><strong>Per aircraft, every week.</strong> <em>Lease</em> is charged whether the aircraft flies full, empty, or not at all — an idle aircraft is a slow leak, and a half-used one spreads the lease over too few flights. Leasing costs roughly 9–14% of an aircraft's purchase price per year. <em>Maintenance</em> grows as airframes get older, so a cheap old jet's lease saving is partly an illusion — some of it comes back as maintenance. A route's <em>True profit</em> line charges both.</li>
+      <li><strong>Airline overheads.</strong> Some costs never appear on a route line: staff payroll for every aircraft in the fleet, gate rent, head office, insurance, booking and distribution fees (about 2.5% of revenue), marketing, your loyalty programme and hub investment. Routes have to earn enough True profit to pay for all of them.</li>
     </ul>
-    <p>Divide total weekly route cost by seats flown and you get <strong>cost per seat</strong> — the number your average fare must beat. Do this mentally before opening any route: seats × realistic load factor × fare vs. the four lines above. If the margin only works at 95% load, it doesn't work.</p>
+    <p>Divide total weekly route cost by seats flown and you get <strong>cost per seat</strong> — the number your average fare must beat. Do this mentally before opening any route: seats × realistic load factor × fare against the per-flight and per-aircraft lines, with something left over for overheads. If the margin only works at 95% load, it doesn't work.</p>
 
     <h2>Setting fares</h2>
     <p>Fares steer demand share and yield simultaneously. Cut fares and you fill more seats at lower revenue each; raise them and you earn more per passenger but push travellers to competitors — or out of the market entirely. Practical rules:</p>
     <ol>
-      <li><strong>Start near the suggested fare, then iterate weekly.</strong> The simulation gives you feedback every tick. Load factor above ~85% with no competitor? You're probably underpriced — nudge up. Load below ~60%? You're overpriced for the market or flying too much capacity.</li>
+      <li><strong>Start at the reference fare, then iterate weekly.</strong> The Route Planner fills every cabin in at its market reference fare, and the fare editor's <em>Reset to ref</em> button puts you back there. The simulation gives you feedback every tick. Load factor above ~85% with no competitor? You're probably underpriced — nudge up, but remember that a route running nearly full at 10% or more over the reference fare is the first place rival airlines look to enter. Load below ~60%? You're overpriced for the market or flying too much capacity.</li>
+      <li><strong>Respect the cliff.</strong> Leisure passengers are the most price-sensitive, and every cabin's demand falls away faster the further you price above its reference, reaching zero at around three times the reference fare — which is also the highest fare the game lets you set. A blanket fare rise across your network can empty it.</li>
       <li><strong>Price against the route's role.</strong> A spoke that exists to feed your long-haul can run thinner margins — its passengers earn again on the connecting flight. A standalone route must justify itself alone.</li>
       <li><strong>Don't chase load factor for its own sake.</strong> 95% load at a loss-making fare is just a very popular way to lose money. Route profit is the score; load factor is a diagnostic.</li>
       <li><strong>Mind quality effects.</strong> Cabin configuration, catering, reputation and loyalty shift how demand splits at a given fare. A better product lets you sustain a fare premium — see <a href="/demand-and-quality.html">how demand &amp; quality work</a> for the full scoring model, and <a href="/competition-and-alliances.html">competition &amp; alliances</a> for using it defensively.</li>
@@ -118,12 +120,12 @@
     <div class="tip">Tip: when a route underperforms, try frequency and capacity changes before fare cuts. Swapping a half-empty narrow-body for a regional jet at the same fare often fixes the P&amp;L instantly — same revenue, much lower cost.</div>
 
     <h2>Fuel prices and hedging</h2>
-    <p>The world fuel price in Tailwinds is not static. It follows a mean-reverting random walk around a base of $1.20/litre, drifting anywhere from roughly 0.55× in a glut to 1.90× in a crisis before being pulled back toward normal. A fuel spike can turn your whole long-haul network unprofitable for weeks — long, fuel-heavy routes are hit hardest.</p>
-    <p>Your defence is <strong>hedging</strong>: locking in today's price for a share of your fleet's fuel bill. Hedges come in three durations — 8, 13, or 26 weeks — at premiums of 3%, 6%, and 10% over the current market price, and in coverage bands of 25%, 50%, or 75% of consumption. Contracts stack up to 100% coverage.</p>
+    <p>The world fuel price in Tailwinds is not static. It follows a mean-reverting random walk around a base of $1.45/litre, drifting anywhere from roughly 0.55× in a glut to 1.90× in a crisis before being pulled back toward normal. On top of that, fuel-spike events push prices up by 15–30% for a few weeks at a time. In games that start in a historical year, the price reverts to that period's level instead. In new games every airport also sells fuel at its own price, cheaper near refining hubs and dearer at remote islands, so where your routes start and end matters. A fuel spike can turn your whole long-haul network unprofitable for weeks — long, fuel-heavy routes are hit hardest.</p>
+    <p>Your defence is <strong>hedging</strong>: locking a price for a share of your fleet's fuel bill. Hedges come in four durations — 8, 13, 26 or 52 weeks — and in coverage bands of 25%, 50%, or 75% of consumption. Contracts stack up to 100% coverage. The locked price is where fuel is expected to average over the term, plus a premium of 1.5%, 2.5%, 4% or 6% depending on length. A live contract can be unwound early for what it is worth that day, less a small haircut.</p>
     <ul>
-      <li><strong>Hedge when fuel is cheap, not when it's scary.</strong> The time to buy 26-week coverage is when the index is well below 1.0 and the premium locks in a bargain. Hedging at the top of a spike locks in pain.</li>
+      <li><strong>Don't try to time the market.</strong> Because the lock is priced off the expected average, a cheap spot price only partly carries into a long contract and an expensive one is partly forgiven. There is no bargain to grab and no trap to dodge. What hedging buys is protection from the swings, including sudden spikes.</li>
       <li><strong>Size coverage to your exposure.</strong> A turboprop-heavy regional airline can shrug at fuel swings; a widebody long-haul network should rarely fly unhedged.</li>
-      <li><strong>Treat the premium as insurance.</strong> Hedges won't always pay off — that's fine. You're buying predictable costs, which is what lets you price routes with confidence.</li>
+      <li><strong>Treat the premium as insurance.</strong> Hedges won't always pay off — that's fine. You're buying predictable costs, which is what lets you price routes with confidence. To cut the bill itself rather than steady it, look at fuel-efficiency programmes, winglet retrofits, fuel farms at your busiest airports and, for the very largest airlines, a refinery — all covered in the <a href="/fuel-hedging.html">fuel hedging guide</a>.</li>
     </ul>
 
     <h2>Diagnosing a losing route</h2>
@@ -131,7 +133,7 @@
     <ol>
       <li><strong>Is the aircraft wrong?</strong> Oversized capacity is the most common cause. Check load factor first.</li>
       <li><strong>Is the fare wrong?</strong> Compare your fare to cost per seat and to competitors on the pair.</li>
-      <li><strong>Is it new?</strong> Routes take weeks to mature as awareness and connections build. Judge trends, not single weeks.</li>
+      <li><strong>Is it new?</strong> A new route opens at a little over half its eventual demand and takes about 16 weeks to reach full strength as awareness and connections build. Judge trends, not single weeks.</li>
       <li><strong>Is it strategic?</strong> A slightly negative spoke that feeds a very profitable trunk may be earning its keep invisibly.</li>
       <li><strong>Is it just a bad market?</strong> Some pairs are too thin, too far, or too contested. Redeploying the aircraft to a better market is not failure — it's the job.</li>
     </ol>
