@@ -134,7 +134,7 @@ const NAV = `
       <a class="link" href="/aircraft.html">Aircraft</a>
       <a class="link" href="/glossary.html">Glossary</a>
       <a class="link" href="/faq.html">FAQ</a>
-      <a class="link" href="/support.html">Support</a>
+      <a class="link" href="/support.html" style="color:var(--gold-light);border:1px solid var(--gold);border-radius:999px;padding:2px 12px;font-weight:600;">&#9829; Support</a>
       <a class="link" href="/">Play</a>
     </nav>
   </header>`;
@@ -154,7 +154,7 @@ const FOOTER = `
       <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>
       <a href="/contact.html">Contact</a>
-      <a href="/support.html">Support</a>
+      <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
       <span style="margin-left:auto;">© Tailwinds — free to play in your browser.</span>
