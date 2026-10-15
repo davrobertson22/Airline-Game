@@ -28,12 +28,13 @@ export const CLOUD_SLOTS = 3;
 // ── Launch switch ─────────────────────────────────────────────────────────────
 // Cloud saves stay hidden until launch: database backups verified, and the
 // privacy, terms and support pages updated (docs/cloud-save-design.md §7).
-// Flip this to true to launch.
+// Launched by flipping this to true (the launch commit, alongside the support,
+// privacy, terms, FAQ and devlog copy).
 //
-// Before then, anyone can preview on the live site: open
+// Before launch, anyone could preview on the live site: open
 // https://www.tailwindsairlinegame.com/?cloudpreview=1 once and it sticks in
 // that browser; ?cloudpreview=0 turns it off again.
-export const CLOUD_SAVES_LIVE = false;
+export const CLOUD_SAVES_LIVE = true;
 const PREVIEW_KEY = 'tw.cloud.preview';
 
 export function cloudSavesEnabled(

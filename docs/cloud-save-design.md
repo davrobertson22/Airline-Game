@@ -9,8 +9,14 @@ Status: **server and client BUILT; not launched.**
   window and reachable from the new-game screen; `tools/cloud-saves-test.mjs`,
   `tools/cloud-saves-ui-test.mjs`. Hidden behind **`CLOUD_SAVES_LIVE = false`**
   in `src/cloud/cloudConfig.js`; preview on the live site with `?cloudpreview=1`.
-- To launch: §7 (backups, privacy, terms, support page), then flip
-  `CLOUD_SAVES_LIVE` to true, devlog entry, Discord post.
+- Launch commit (2026-10-15): `CLOUD_SAVES_LIVE = true`; support page ("In
+  Tailwinds" → cloud saves; perks framed as thank-yous), privacy (new "Cloud
+  saves" section: Supabase sign-in, what is stored, deletion, ~1-week backup
+  tail), terms §2 (best effort, not a paid service, may end with notice), FAQ,
+  devlog, sitemap (support.html added — it was missing). Backups: Supabase's
+  daily physical backups, ~7 days visible; restore cloud saves via "Restore to
+  new project" and copy `TailwindsCloudSave` rows, never an in-place restore
+  (that would rewind every Headwinds world).
 
 File export / import (Package 0) is built in Tailwinds but **parked** — Dave
 decided on 2026-10-14 not to let players download their saves for now (see
