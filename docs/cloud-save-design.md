@@ -1,10 +1,16 @@
 # Supporter Cloud Saves — Design
 
-Status: **Package 1 (server storage + API) BUILT in Headwinds, 2026-10-14** —
-`apps/headwinds-server/src/lib/cloudSaves.mjs`, `routes/tailwindsSaves.mjs`, the
-`TailwindsCloudSave` table and its migration, covered by
-`tools/tailwinds-cloud-saves-test.mjs`. The Tailwinds client (Package 2) and the
-launch copy (Package 3) are still to build.
+Status: **server and client BUILT; not launched.**
+- Server (Headwinds, 2026-10-14): `apps/headwinds-server/src/lib/cloudSaves.mjs`,
+  `routes/tailwindsSaves.mjs`, the `TailwindsCloudSave` table and migration;
+  `tools/tailwinds-cloud-saves-test.mjs`.
+- Client (Tailwinds, 2026-10-15): `src/cloud/` (config, sign-in, API client,
+  sign-in-return hook) and `src/components/CloudSaves.jsx`, in the Save / Load
+  window and reachable from the new-game screen; `tools/cloud-saves-test.mjs`,
+  `tools/cloud-saves-ui-test.mjs`. Hidden behind **`CLOUD_SAVES_LIVE = false`**
+  in `src/cloud/cloudConfig.js`; preview on the live site with `?cloudpreview=1`.
+- To launch: §7 (backups, privacy, terms, support page), then flip
+  `CLOUD_SAVES_LIVE` to true, devlog entry, Discord post.
 
 File export / import (Package 0) is built in Tailwinds but **parked** — Dave
 decided on 2026-10-14 not to let players download their saves for now (see
@@ -225,9 +231,12 @@ saves go with it (cascade). Revisit only if storage ever matters.
    runs under the real one. 32 cases in `tools/tailwinds-cloud-saves-test.mjs`.
 2. ~~Server — sign-in handoff~~ — **not needed**: Tailwinds uses the Headwinds
    Supabase login directly (§2). Replaced by Dave's two settings in §2.
-3. **Client** (Tailwinds): lazy Supabase sign-in, the Cloud section, the shared
-   load path, the conflict dialog. Render tests in the style of
-   `tools/save-file-ui-test.mjs`.
+3. ✅ **Client** (Tailwinds, 2026-10-15): lazy Supabase sign-in (PKCE; its
+   own 59 KB gz chunk, fetched only when cloud saves are used), the Cloud
+   section, the shared confirm-and-load path, the conflict dialog, the
+   new-game-screen entry, index.html skipping the landing page on
+   `/?cloud=return`. Checked against the real server plugin over HTTP and in
+   Chromium against the production build. Behind the launch switch.
 4. **Copy and launch:** privacy, terms, support page, devlog, Discord post.
    Database backups verified before the support page changes.
 

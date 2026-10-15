@@ -1,9 +1,13 @@
 // Export / import of .twsave files — the player's own copy of their airline.
 //
-// NOT WIRED IN (2026-10-14): Dave held export / import back before shipping.
-// Nothing imports this file. To ship it, re-add the "Back up to a file" section
-// to SaveLoadModal.jsx and the import link to SetupScreen.jsx, and remove the
-// @not-a-test marker from tools/save-file-ui-test.mjs, which checks both.
+// The export / import BUTTONS are NOT WIRED IN (2026-10-14): Dave held file
+// downloads back before shipping. To ship them, re-add the "Back up to a file"
+// section to SaveLoadModal.jsx and the import link to SetupScreen.jsx, and
+// remove the @not-a-test marker from tools/save-file-ui-test.mjs.
+//
+// confirmAndLoadSave() below IS live: cloud saves (CloudSaves.jsx) load through
+// it, so a file and a cloud slot will always ask the same question and load
+// through the same LOAD_STATE path.
 //
 // Saves live in one browser profile (store/saveStore.js). A file is the only
 // copy that survives clearing site data, a new device, or Safari's 7-day
@@ -42,6 +46,34 @@ export async function exportGameToFile(state) {
 }
 
 /**
+ * Ask "Load <airline>?" for a decoded save, and load it if the player agrees.
+ *
+ * `replacing` says whether a game is running that the load would replace, so
+ * the question can say so — on the new-game screen there is nothing to lose.
+ * `when` is an optional extra line (when it was exported or uploaded).
+ *
+ * @returns {Promise<boolean>} whether the save was loaded
+ */
+export async function confirmAndLoadSave({ result, confirm, dispatch, replacing, when = null }) {
+  const { meta } = result;
+  const facts = [meta.hub, saveFileDateLabel(meta), Number.isFinite(meta.cash) ? `${formatMoney(meta.cash)} cash` : null]
+    .filter(Boolean).join(' · ');
+  const warning = replacing
+    ? '\n\nThis replaces the game you are playing now. Save it to a slot first if you want to keep it.'
+    : '';
+  const opts = {
+    title: `Load ${meta.airlineName}?`,
+    body: facts + (when ? `\n${when}` : '') + warning,
+    confirmLabel: 'Load this airline',
+  };
+  const ok = confirm ? await confirm(opts) : window.confirm(`${opts.title}\n\n${opts.body}`);
+  if (!ok) return false;
+  dispatch({ type: 'LOAD_STATE', payload: result.state });
+  void requestPersistence();
+  return true;
+}
+
+/**
  * A button that opens a file picker, reads a .twsave, confirms, and loads it.
  *
  * `replacing` says whether a game is running that the load would replace, so
@@ -63,22 +95,12 @@ export function ImportSaveButton({
     try {
       const result = await decodeSaveFile(file);
       if (!result.ok) { onError?.(result.message); return; }
-      const { meta, exportedAt } = result;
-      const facts = [meta.hub, saveFileDateLabel(meta), Number.isFinite(meta.cash) ? `${formatMoney(meta.cash)} cash` : null]
-        .filter(Boolean).join(' · ');
-      const exported = exportedAt
-        ? `\nExported ${new Date(exportedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`
-        : '';
-      const warning = replacing
-        ? '\n\nThis replaces the game you are playing now. Save it to a slot or export it first if you want to keep it.'
-        : '';
-      const opts = { title: `Load ${meta.airlineName}?`, body: facts + exported + warning, confirmLabel: 'Load this airline' };
-      const ok = confirm ? await confirm(opts) : window.confirm(`${opts.title}\n\n${opts.body}`);
-      if (!ok) return;
-      dispatch({ type: 'LOAD_STATE', payload: result.state });
-      void requestPersistence();
+      const when = result.exportedAt
+        ? `Exported ${new Date(result.exportedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`
+        : null;
+      if (!(await confirmAndLoadSave({ result, confirm, dispatch, replacing, when }))) return;
       onError?.(null);
-      onDone?.(meta);
+      onDone?.(result.meta);
     } finally {
       setBusy(false);
     }

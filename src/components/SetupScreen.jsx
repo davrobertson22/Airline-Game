@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getCountryName } from '../data/airports.js';
 import { STARTING_CAPITAL } from '../data/credit.js';
@@ -6,6 +6,9 @@ import { eraSeedCapital, ERA_MIN_START_YEAR,
          ERA_MAX_NEW_START_YEAR, HORIZON_YEAR, runLengthYears } from '../data/era.js';
 import AirlineLogo, { AIRLINE_LOGOS } from './AirlineLogo.jsx';
 import { Glyph } from './Icons.jsx';
+import SaveLoadModal from './SaveLoadModal.jsx';
+import { useCloudSignInReturn } from '../cloud/useCloudSignInReturn.js';
+import { cloudSavesEnabled } from '../cloud/cloudConfig.js';
 import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE } from '../data/demandWorld.js';
@@ -92,10 +95,18 @@ export default function SetupScreen() {
   const [accentColor,       setAccentColor]       = useState(ACCENT_COLORS[0].hex);
   const [customLogo,        setCustomLogo]        = useState(null);   // data URL or null
   const [logoError,         setLogoError]         = useState('');
+  // Continuing an airline from a local slot or a cloud save, on a device that
+  // has no game running — the new-game screen is where such a player lands.
+  const [showLoad,          setShowLoad]          = useState(false);
+  const [cloudNotice,       setCloudNotice]       = useState(null);
   const [enableObjectives,  setEnableObjectives]  = useState(true);
   const [eraSel,            setEraSel]            = useState('');       // '' | preset year (string) | 'custom'
   const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
+  // Back from a cloud-save sign-in on a device with no airline yet: reopen the
+  // Load window here (App does the same once a game is running).
+  const openFromCloudSignIn = useCallback((mode, error) => { setCloudNotice(error); setShowLoad(true); }, []);
+  useCloudSignInReturn(true, openFromCloudSignIn);
   // Demand world: '' = realistic, 'random' = rolled (data/demandWorld.js).
   const [demandMode,        setDemandMode]        = useState('');
   const [uncapMegas,        setUncapMegas]        = useState(false);
@@ -771,7 +782,25 @@ export default function SetupScreen() {
             )}
           </div>
         </form>
+
+        {/* A player on a new device lands here with no game, so no header and
+            no Load button. Step 1 only: once they are building a new airline
+            the offer is just noise. */}
+        {step === 1 && (
+          <div className="setup-continue">
+            Continuing an airline?{' '}
+            <button type="button" className="setup-continue-link" onClick={() => setShowLoad(true)}>
+              {cloudSavesEnabled() ? 'Load from a save slot or the cloud' : 'Load from a save slot'}
+            </button>
+          </div>
+        )}
       </div>
+      {showLoad && (
+        <SaveLoadModal
+          mode="load" cloudNotice={cloudNotice}
+          onClose={() => { setShowLoad(false); setCloudNotice(null); }}
+        />
+      )}
     </div>
   );
 }

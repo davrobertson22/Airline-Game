@@ -27,6 +27,12 @@
           if (wantPlay && (localStorage.getItem('bbae_has_save') || localStorage.getItem('bbae_save_v2'))) {
             document.documentElement.setAttribute('data-skip-landing', '1');
           }
+          // Back from a cloud-save sign-in (Google, Discord or an emailed link):
+          // the player was in the game a moment ago, so put them straight back
+          // there, save or no save. src/cloud/useCloudSignInReturn.js finishes it.
+          if (/[?&]cloud=return(&|$)/.test(location.search)) {
+            document.documentElement.setAttribute('data-skip-landing', '1');
+          }
         } catch (e) { /* show landing on any error */ }
       })();
     </script>

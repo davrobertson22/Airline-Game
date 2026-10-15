@@ -5,6 +5,7 @@ import { formatMoney, weekToGameDate } from '../utils/simulation.js';
 import { makeRecord, SLOT_KEYS, requestPersistence, isPersisted } from '../store/saveStore.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { SaveIcon, FolderOpenIcon, CloseIcon } from './Icons.jsx';
+import CloudSaves from './CloudSaves.jsx';
 
 const NUM_SLOTS = SLOT_KEYS.length;
 
@@ -114,7 +115,9 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
   );
 }
 
-export default function SaveLoadModal({ mode, onClose }) {
+// `cloudNotice` is an error carried back from a cloud sign-in round trip
+// (useCloudSignInReturn), shown in the cloud section.
+export default function SaveLoadModal({ mode, onClose, cloudNotice = null }) {
   const { state, dispatch, saveStore } = useGame();
   const confirm = useConfirm();
   // null while the list is still being read — IndexedDB cannot answer
@@ -232,6 +235,8 @@ export default function SaveLoadModal({ mode, onClose }) {
           ))}
         </div>
         )}
+
+        <CloudSaves mode={mode} canUpload={state.phase !== 'setup'} onLoaded={onClose} notice={cloudNotice} />
       </div>
     </div>
   );

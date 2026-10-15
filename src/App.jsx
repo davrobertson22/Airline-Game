@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useGame } from './store/GameContext.jsx';
 import { ToastProvider, useToast } from './components/ToastSystem.jsx';
@@ -6,6 +6,7 @@ import { ConfirmProvider } from './components/ConfirmModal.jsx';
 import WeeklyDebrief from './components/WeeklyDebrief.jsx';
 import AwayDigest from './components/AwayDigest.jsx';
 import SaveLoadModal from './components/SaveLoadModal.jsx';
+import { useCloudSignInReturn } from './cloud/useCloudSignInReturn.js';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
 import SetupScreen from './components/SetupScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -186,6 +187,8 @@ function AppInner() {
   const [menuPos, setMenuPos] = useState(null);
   const [showTour, setShowTour] = useState(false);
   const [saveLoadMode, setSaveLoadMode] = useState(null); // 'save' | 'load' | null
+  // An error carried back from a cloud-save sign-in, shown in the Save / Load window.
+  const [cloudNotice, setCloudNotice] = useState(null);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const [showBranding, setShowBranding] = useState(false);
   const isMobile = useIsMobile();
@@ -307,6 +310,15 @@ function AppInner() {
   // "Play Free Now" is clicked, so for most visits nothing is on screen yet
   // anyway. `hydrated` is false server-side, where no effect runs — nothing
   // server-renders App.
+  // Back from a cloud-save sign-in: reopen Save / Load where the player left it.
+  // On the new-game screen SetupScreen does the same; exactly one is mounted.
+  // Above the early returns, like every hook here.
+  const openFromCloudSignIn = useCallback((mode, error) => {
+    setCloudNotice(error);
+    setSaveLoadMode(mode);
+  }, []);
+  useCloudSignInReturn(hydrated && !remote && state.phase !== 'setup', openFromCloudSignIn);
+
   if (!hydrated) return null;
 
   if (state.phase === 'setup') return <SetupScreen />;
@@ -741,7 +753,10 @@ function AppInner() {
 
       {/* Save / Load modal */}
       {saveLoadMode && (
-        <SaveLoadModal mode={saveLoadMode} onClose={() => setSaveLoadMode(null)} />
+        <SaveLoadModal
+          mode={saveLoadMode} cloudNotice={cloudNotice}
+          onClose={() => { setSaveLoadMode(null); setCloudNotice(null); }}
+        />
       )}
 
       {/* Edit branding modal */}

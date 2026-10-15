@@ -1382,6 +1382,150 @@ input[type="range"].hw-range:focus-visible { outline: 2px solid var(--accent-dim
   padding: 5px 0;
 }
 
+/* Cloud saves — supporter perk section of the Save / Load window */
+.cloud-saves {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.cloud-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--gold, #e3b341);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 8px;
+  opacity: 0.85;
+}
+
+.cloud-who {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.cloud-text {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.cloud-sent {
+  color: var(--green);
+}
+
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cloud-actions .btn,
+.cloud-email .btn {
+  font-size: 12.5px;
+}
+
+.cloud-email {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cloud-email input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.cloud-link,
+.cloud-linkbtn {
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cloud-linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cloud-link:hover,
+.cloud-linkbtn:hover {
+  text-decoration: underline;
+}
+
+.cloud-fine {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.cloud-note {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.cloud-note-ok {
+  background: rgba(63, 185, 80, 0.10);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  color: var(--green);
+}
+
+.cloud-note-error {
+  background: rgba(248, 81, 73, 0.10);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  color: var(--red);
+}
+
+.setup-continue {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.setup-continue-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.setup-continue-link:hover {
+  text-decoration: underline;
+}
+
 /* ─────────────────────────────────────────────
    New Game confirm dialog
 ───────────────────────────────────────────── */
