@@ -479,3 +479,37 @@ export async function migrateLocalToIdb(idb, local, setBreadcrumb = () => {}) {
   if (migrated.length) setBreadcrumb(true);
   return migrated;
 }
+
+// ── Persistent storage ────────────────────────────────────────────────────────
+
+/**
+ * Ask the browser to stop treating this game's saves as clearable cache.
+ *
+ * By default every origin's storage is "best effort": the browser may evict it
+ * under disk pressure. A granted persist() opts out of that eviction. Whether
+ * it also exempts the site from Safari's 7-day clearing of script-written
+ * storage has varied between WebKit versions, so do not promise players it
+ * does. Chrome and Safari decide silently from engagement; Firefox shows a
+ * prompt, which is why this is only ever called from a player's own click
+ * (saving to a slot) and never on load.
+ *
+ * It is a request, not a guarantee, so a refusal is reported, never treated
+ * as an error.
+ *
+ * @returns {Promise<boolean|null>} true granted, false refused, null unsupported
+ */
+export async function requestPersistence(nav = (typeof navigator !== 'undefined' ? navigator : null)) {
+  try {
+    if (!nav?.storage?.persist) return null;
+    if (nav.storage.persisted && await nav.storage.persisted()) return true;
+    return !!(await nav.storage.persist());
+  } catch { return null; }
+}
+
+/** @returns {Promise<boolean|null>} whether saves are already protected; null where unknown */
+export async function isPersisted(nav = (typeof navigator !== 'undefined' ? navigator : null)) {
+  try {
+    if (!nav?.storage?.persisted) return null;
+    return !!(await nav.storage.persisted());
+  } catch { return null; }
+}

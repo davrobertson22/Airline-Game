@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useConfirm } from './ConfirmModal.jsx';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, weekToGameDate } from '../utils/simulation.js';
-import { makeRecord, SLOT_KEYS } from '../store/saveStore.js';
+import { makeRecord, SLOT_KEYS, requestPersistence, isPersisted } from '../store/saveStore.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { SaveIcon, FolderOpenIcon, CloseIcon } from './Icons.jsx';
 
@@ -128,6 +128,10 @@ export default function SaveLoadModal({ mode, onClose }) {
   // slots on screen). A number on the screen is something they can act on, and
   // something they can put in a bug report.
   const [usage, setUsage] = useState(null);
+  // Whether the browser has agreed not to clear this site's storage on its own
+  // (navigator.storage.persist). Only shown when true: "not protected" is the
+  // normal state of every website and would read as an alarm.
+  const [persisted, setPersisted] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!saveStore) { setSlots(Array(NUM_SLOTS).fill(null)); return; }
@@ -146,9 +150,22 @@ export default function SaveLoadModal({ mode, onClose }) {
     return () => { live = false; };
   }, [saveStore]);
 
+  useEffect(() => {
+    let live = true;
+    (async () => { const p = await isPersisted(); if (live) setPersisted(p); })();
+    return () => { live = false; };
+  }, []);
+
+  // Asked only from a click (Firefox shows a prompt for it), and re-read after.
+  async function askPersistence() {
+    const p = await requestPersistence();
+    if (p !== null) setPersisted(p);
+  }
+
   async function handleSave(i) {
     const result = await writeSlot(i, state, saveStore);
     setSaveError(result.ok ? null : { slot: i, message: result.message });
+    if (result.ok) void askPersistence();
     await refresh();
   }
 
@@ -183,6 +200,7 @@ export default function SaveLoadModal({ mode, onClose }) {
         {usage && (
           <p className="saveload-hint" style={{ marginTop: -6, opacity: 0.75, fontSize: '0.82rem' }}>
             Saves are using {formatBytes(usage.usage)} of {formatBytes(usage.quota)} this browser allows.
+            {persisted === true && ' This browser has agreed not to clear them on its own.'}
           </p>
         )}
         {saveError && (

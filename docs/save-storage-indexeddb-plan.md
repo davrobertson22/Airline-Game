@@ -1,6 +1,6 @@
 # Save storage — moving Tailwinds off the 5 MB localStorage wall
 
-Status: **Phases 1 + 2 BUILT 2026-09-08.** Phases 3 and 4 are still open.
+Status: **Phases 1 + 2 BUILT 2026-09-08. Phase 3 BUILT 2026-10-14. Phase 4 built but PARKED** — not wired in, by Dave's call.
 
 Written 2026-08-27 after a player (Nick) reported autosave had stopped because
 browser storage was full, and deleting save slots only bought him a little time.
@@ -19,9 +19,22 @@ correction below). Covered by `tools/save-store-test.mjs` (23 cases, injected
 backends) and `tools/save-store-browser-check.mjs` (21 cases, real Chromium and
 real IndexedDB — the manual pass §11 asks for, automated).
 
-**Not built:** `navigator.storage.persist()` (rest of Phase 3), and export /
-import (Phase 4) — still the only mitigation that survives our own mistakes,
-and still recommended regardless.
+**Phase 3, 2026-10-14 (shipped):** `requestPersistence()` / `isPersisted()` in
+`saveStore.js`, asked only from a click (a slot save — Firefox prompts for it),
+and the Save/Load usage line now says when the browser has agreed.
+
+**Phase 4, 2026-10-14 (built, PARKED):** Dave decided not to let players
+download their saves for now, so export / import was backed out of the UI and
+the site copy before shipping (and the terms page's pre-existing claim of an
+export feature was removed). The code is kept on disk, unwired:
+`src/store/saveFile.js` (gzip'd JSON envelope, `.twsave`, sniffed not trusted,
+legacy localStorage shapes accepted, capped streaming decompression; covered by
+`tools/save-file-test.mjs`, which still runs) and
+`src/components/SaveFileControls.jsx` (picker, confirm, download; its render
+check `tools/save-file-ui-test.mjs` is marked `@not-a-test` until it is wired
+back in). With Phase 4 parked, §8 stands: nothing protects a save from cleared
+site data, a new device, or Safari's 7-day eviction. The `.twsave` format is
+still the planned unit for supporter cloud sync — see `docs/cloud-save-design.md`.
 
 > ### Correction to §1, measured 2026-09-08
 >
