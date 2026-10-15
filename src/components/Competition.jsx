@@ -13,6 +13,7 @@ import { getAlliance, effectiveAllianceId } from '../data/alliances.js';
 import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { buyoutNudgeToast } from '../utils/headwinds.js';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,6 +151,11 @@ export default function Competition() {
           playerCash={state.cash}
           onConfirm={() => {
             dispatch({ type: 'ACQUIRE_COMPETITOR', competitorId: acquireTarget.id });
+            // First buyout in this browser: point at Headwinds (see utils/headwinds.js).
+            let storage = null;
+            try { storage = window.localStorage; } catch { /* private mode */ }
+            const nudge = buyoutNudgeToast({ rivalsBefore: competitors.length, storage });
+            if (nudge) dispatch({ type: 'PUSH_TOAST', toast: nudge });
             setAcquireTarget(null);
           }}
           onCancel={() => setAcquireTarget(null)}

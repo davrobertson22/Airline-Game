@@ -67,7 +67,7 @@ const TYPE_CONFIG = {
   info:    { color: 'var(--accent)', icon: 'ℹ' },
 };
 
-function Toast({ toast, onDismiss }) {
+export function Toast({ toast, onDismiss }) {
   const dur = toast.duration ?? (toast.type === 'event' ? 6000 : 4000);
 
   useEffect(() => {
@@ -101,6 +101,12 @@ function Toast({ toast, onDismiss }) {
           <div style={{ fontWeight: 600, fontSize: 13, color, marginBottom: 2 }}>{toast.title}</div>
         )}
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{toast.message}</div>
+        {toast.link?.href && (
+          <a
+            href={toast.link.href} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', marginTop: 4, fontSize: 12, fontWeight: 600, color, textDecoration: 'none' }}
+          >{toast.link.label ?? 'Open →'}</a>
+        )}
       </div>
       <button
         onClick={onDismiss}

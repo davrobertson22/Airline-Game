@@ -9,7 +9,7 @@ import SaveLoadModal from './components/SaveLoadModal.jsx';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
 import SetupScreen from './components/SetupScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
-import SupportCard from './components/SupportCard.jsx';
+import SupportCard, { KOFI_URL } from './components/SupportCard.jsx';
 import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
@@ -35,6 +35,7 @@ import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 import BrandingModal from './components/BrandingModal.jsx';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
+import HeadwindsPitch from './components/HeadwindsPitch.jsx';
 
 // Build stamp — injected by vite.config.js `define`. Guarded so non-Vite contexts
 // (e.g. node test harnesses that don't import App) never trip over the globals.
@@ -438,6 +439,20 @@ function AppInner() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
           Discord
         </a>
+        {/* Always-visible ask: one quiet button in the top bar, never a popup. */}
+        <a
+          className="btn btn-ghost"
+          style={{
+            fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 5,
+            textDecoration: 'none', color: 'var(--accent-bright)', borderColor: 'var(--accent)', fontWeight: 600,
+          }}
+          href={KOFI_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Tailwinds is free and built by one person. Chip in on Ko-fi to help cover the servers."
+        >
+          <span aria-hidden="true" style={{ color: '#ff5e5b' }}>♥</span> Support
+        </a>
         {!remote && (
         <button
           className="btn btn-ghost"
@@ -485,6 +500,16 @@ function AppInner() {
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
                     Discord
+                  </a>
+                  <a
+                    role="menuitem"
+                    href={KOFI_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setShowMobileMenu(false)}
+                    style={{ color: 'var(--accent-bright)', fontWeight: 600 }}
+                  >
+                    <span aria-hidden="true" style={{ width: 14, textAlign: 'center', color: '#ff5e5b' }}>♥</span> Support Tailwinds
                   </a>
                   {!remote && (
                   <button role="menuitem" className="topbar-menu-danger" onClick={() => { setShowMobileMenu(false); handleReset(); }}>
@@ -587,7 +612,7 @@ function AppInner() {
               ['Glossary', '/glossary.html'],
               ['Devlog', '/devlog.html'],
               ['About', '/about.html'],
-              ['Support', '/support.html'],
+              ['♥ Support', '/support.html'],
               ['Privacy', '/privacy.html'],
             ].map(([label, href]) => (
               <a
@@ -595,7 +620,11 @@ function AppInner() {
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: 'var(--accent)', textDecoration: 'none', marginRight: 16, fontSize: 12, fontWeight: 500 }}
+                style={{
+                  color: href === '/support.html' ? 'var(--accent-bright)' : 'var(--accent)',
+                  textDecoration: 'none', marginRight: 16, fontSize: 12,
+                  fontWeight: href === '/support.html' ? 700 : 500,
+                }}
               >
                 {label}
               </a>
@@ -746,7 +775,7 @@ function AppInner() {
 // playing — the run is the unit, and "Review the board" leaves the final week
 // on screen with the clock stopped.
 
-function FinalCallOverlay({ stats, airlineName, logoId, logoColor, customLogo, onReview, onNewGame }) {
+export function FinalCallOverlay({ stats, airlineName, logoId, logoColor, customLogo, onReview, onNewGame }) {
   const s = stats ?? {};
   const rank  = s.rank ?? 1;
   const field = s.fieldSize ?? 1;
@@ -846,6 +875,8 @@ function FinalCallOverlay({ stats, airlineName, logoId, logoColor, customLogo, o
             Review the Board
           </button>
         </div>
+
+        <HeadwindsPitch campaign="final-call" lead="Play the next era against people" />
       </div>
     </div>
   );
@@ -864,7 +895,7 @@ function VictoryStat({ label, value }) {
   );
 }
 
-function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLogo, onContinue, onNewGame }) {
+export function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLogo, onContinue, onNewGame }) {
   const s = stats ?? {};
   return (
     <div style={{
@@ -918,6 +949,8 @@ function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLogo, onC
             New Game
           </button>
         </div>
+
+        <HeadwindsPitch campaign="victory" lead="Out of AI rivals?" />
       </div>
     </div>
   );
