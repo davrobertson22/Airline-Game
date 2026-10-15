@@ -7,6 +7,7 @@ import { cargoCityPairDemand, cargoReferenceYield, cargoBackhaulFactor } from '.
 import { Glyph } from './Icons.jsx';
 import InfoTip from './InfoTip.jsx';
 import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
+import { useRememberedState, finderMemoryKey } from '../utils/finderMemory.js';
 
 const PAGE_SIZE = 25;
 const ACCENT    = '#e8833a';
@@ -31,14 +32,17 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
   const slotPosition = useSlotPosition();
 
   const [open, setOpen]         = useState(!!standalone);
-  const [origin, setOrigin]     = useState(state.hub || '');
+  // Kept across the trip to the planner and back, like the passenger finder
+  // (utils/finderMemory.js).
+  const mem = finderMemoryKey(state, 'freight');
+  const [origin, setOrigin]     = useRememberedState(mem, 'origin', state.hub || '', c => !c || !!getAirport(c));
   const [query, setQuery]       = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [minDist, setMinDist]   = useState('');
-  const [maxDist, setMaxDist]   = useState('');
-  const [rangeTypeId, setRangeTypeId] = useState('');
-  const [sortBy, setSortBy]     = useState('demand');
-  const [limit, setLimit]       = useState(PAGE_SIZE);
+  const [minDist, setMinDist]   = useRememberedState(mem, 'minDist', '');
+  const [maxDist, setMaxDist]   = useRememberedState(mem, 'maxDist', '');
+  const [rangeTypeId, setRangeTypeId] = useRememberedState(mem, 'rangeTypeId', '', id => id === '' || !!getAircraftType(id));
+  const [sortBy, setSortBy]     = useRememberedState(mem, 'sortBy', 'demand', v => typeof v === 'string');
+  const [limit, setLimit]       = useRememberedState(mem, 'limit', PAGE_SIZE, v => Number.isFinite(v) && v > 0);
 
   const originAirport = getAirport(origin);
   // Freight has a season (see CARGO_SEASONAL_PROFILE) — scan on the month the
