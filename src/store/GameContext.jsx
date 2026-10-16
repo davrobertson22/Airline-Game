@@ -12,7 +12,7 @@ import {
   blockHourFit, blockTimeHours, activeCharterOps,
   applyScheduleTrimMigration, rangeStrandedRoutes,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
-  calcReconfCost, refitWeeks, calendarYear, shortYearLabel,
+  calcReconfCost, refitWeeks, calendarYear, shortYearLabel, buildEventDemandModel,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
          setFareIndex, setEraStartYear, setEraCalendarYear } from '../utils/market.js';
@@ -103,7 +103,7 @@ import {
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote } from '../models/competitorAI.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
-import { rollEvents, tickEvents, rollMechanicalFailures } from '../data/events.js';
+import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import { leaseAutoRenewSetting, leaseWillAutoRenew, leaseWarnWeeks, LEASE_AUTO_RENEW_TERMS, LEASE_AUTO_RENEW_AT_WEEKS } from '../models/leaseRenewal.js';
@@ -4996,6 +4996,14 @@ function reducer(state, action) {
       );
       const weekNumber = (state.year - 1) * 52 + state.week;
 
+      // World events reach the AI as well as the player: the same demand model
+      // the player's routes book against, and the event fuel shock (the AI has
+      // no hedges and never read the fuel index, so only the shock is applied).
+      const aiWorld = {
+        demandMultFor: buildEventDemandModel(allEvents).multFor,
+        fuelMult: clampImpact(allEvents.reduce((m, ev) => m * (ev.effects?.fuelMult ?? 1), 1)),
+      };
+
       // Adaptive competitor AI: expansion, cuts, capacity responses, pricing
       // reactions, distress/fire sales, bankruptcies, mergers, and startups.
       const aiPlayerRoutes = state.routes.map(r => ({
@@ -5014,6 +5022,7 @@ function reducer(state, action) {
           playerMarketCap: state.marketCap ?? 0,
           playerCampaignSpend: state.targetedMarketing ?? {},
           calendarYear:    calendarYear(state),
+          world:           aiWorld,
         });
 
       // Simulate competitor networks, accumulate cash, and track profit history
@@ -5023,8 +5032,7 @@ function reducer(state, action) {
       const approxMonth = gameMonth;
       const compPairCounts = buildPairIncumbents(aiCompetitors, state.routes);
       const updatedCompetitors = aiCompetitors.map(c => {
-        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts,
-          absoluteWeek(state.year ?? 1, state.week ?? 1));
+        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts, aiWorld);
         const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =

@@ -59,26 +59,25 @@ function makeState(over = {}) {
   const fleet = [1, 2, 3].map(i => ({ id: `t${i}`, typeId: TYPE.id, config: { ...cabin }, ageWeeks: 52 }));
   const routes = fleet.map(a => ({
     origin: 'JFK', destination: 'YYZ', aircraftId: a.id,
-    weeklyFrequency: 7, ticketPrice: 140, weeksOpen: 30,
+    weeklyFrequency: 28, ticketPrice: 140, weeksOpen: 30,
   }));
   const base = freshState();
   return {
     ...base,
     phase: 'playing', week: 30, year: 1, hub: 'YYZ', cash: 10_000_000,
     awareness: 5,
-    // Shrink the pool so nobody is capacity-capped and share differences show.
-    // Shrink the pool so nobody sells out. Headwinds does this with
-    // worldDemandMult; Tailwinds has no such knob — its only demand multiplier
-    // is the world-event model — so the same 0.05 rides in as an active event.
-    // Without it JFK–YYZ is oversubscribed 3.7x, every carrier is full, and the
-    // share shown is (correctly) capacity share, which awareness cannot move.
-    activeEvents: [{ id: 'fixture-shrink', effects: { globalDemandMult: 0.05 } }],
+    // Nobody may sell out, or the share shown is (correctly) capacity share,
+    // which awareness cannot move. At 7x/wk a tail JFK–YYZ is oversubscribed
+    // 3.7x. This used to shrink the pool with a ×0.05 world event, but world
+    // events are now capped at ±30% combined (data/events.js), so the fixture
+    // takes the deepest allowed downturn and flies 4x the capacity instead.
+    activeEvents: [{ id: 'fixture-shrink', effects: { globalDemandMult: 0.70 } }],
     fleet, routes, cargoRoutes: [],
     competitors: [{
       id: 'continentalx', name: 'Continental Express', homeHub: 'JFK',
       tier: 'legacy', logoId: 'eagle', baseQualityScore: 82, cash: 45_000_000,
       weeklyStats: null,
-      routes: { 'JFK-YYZ': { frequency: 21, priceMultiplier: 1.02 } },
+      routes: { 'JFK-YYZ': { frequency: 84, priceMultiplier: 1.02 } },
     }],
     ...over,
   };

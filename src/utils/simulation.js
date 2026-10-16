@@ -1,6 +1,7 @@
 import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { getAircraftType, fuelCostPerKm } from '../data/aircraft.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
+import { clampImpact, MAX_EVENT_IMPACT, MAX_LOCALIZED_IMPACT } from '../data/events.js';
 import {
   resolveBaseFor, mroFactorsFor, familyContractOffsets, totalBaseWeeklyCost,
   contractOffsetSavings, isBaseOpen, RESERVE_AT_BASE_READINESS_DISCOUNT,
@@ -3269,17 +3270,25 @@ export function simulateCharter(contract, aircraft, fuelMultiplier = 1.0) {
  * @returns {{ globalMult: number, multFor: (a: string, b: string) => number }}
  */
 export function buildEventDemandModel(activeEvents) {
-  let   globalMult  = 1.0;
-  const regionMults = [];   // [{ codes:Set<country>, mult }]
+  let   rawGlobal    = 1.0;
+  const regionMults  = [];   // [{ codes:Set<country>, mult }]
+  const airportMults = [];   // [{ code, mult }] — airport-local events (a hub strike)
   for (const ev of activeEvents ?? []) {
     const fx = ev.effects ?? {};
-    if (fx.globalDemandMult) globalMult *= fx.globalDemandMult;
-    if (fx.regionCodes && fx.regionDemandMult) {
+    if (fx.globalDemandMult) rawGlobal *= fx.globalDemandMult;
+    if (fx.regionDemandMult && fx.airportCode) {
+      airportMults.push({ code: fx.airportCode, mult: fx.regionDemandMult });
+    } else if (fx.regionCodes && fx.regionDemandMult) {
       regionMults.push({ codes: new Set(fx.regionCodes), mult: fx.regionDemandMult });
     }
   }
+  // The ±30% (broad) and ±50% (airport-local) caps hold for the COMBINED
+  // effect on a route, not just each event on its own — see clampImpact in
+  // data/events.js. Without this, overlapping shocks multiplied straight
+  // through to roughly half demand.
+  const globalMult = clampImpact(rawGlobal, MAX_EVENT_IMPACT);
   const multFor = (a, b) => {
-    let m = globalMult;
+    let m = rawGlobal;
     if (regionMults.length) {
       const ca = getAirport(a)?.country;
       const cb = getAirport(b)?.country;
@@ -3287,7 +3296,12 @@ export function buildEventDemandModel(activeEvents) {
         if (r.codes.has(ca) || r.codes.has(cb)) m *= r.mult;
       }
     }
-    return m;
+    m = clampImpact(m, MAX_EVENT_IMPACT);
+    let local = false;
+    for (const r of airportMults) {
+      if (a === r.code || b === r.code) { m *= r.mult; local = true; }
+    }
+    return local ? clampImpact(m, MAX_LOCALIZED_IMPACT) : m;
   };
   return { globalMult, multFor };
 }

@@ -38,7 +38,13 @@ export const MAX_LOCALIZED_IMPACT = 0.50;
 export const EVENT_FREQUENCY = 0.5;
 
 // Clamp a multiplier so it can never move more than `cap` from 1.0.
-function clampImpact(mult, cap = MAX_EVENT_IMPACT) {
+//
+// Exported because the caps are a promise about the COMBINED effect, not each
+// event on its own: two downturns used to multiply straight through (recession
+// ×0.72 on top of a pandemic scare ×0.70 ≈ ×0.50), so a route could lose half
+// its market for a quarter under a ±30% rule. buildEventDemandModel
+// (utils/simulation.js) and prepareWeek (utils/tickPrep.js) clamp the product.
+export function clampImpact(mult, cap = MAX_EVENT_IMPACT) {
   const lo = 1 - cap;
   const hi = 1 + cap;
   return Math.min(hi, Math.max(lo, mult));
@@ -214,6 +220,8 @@ export const EVENT_TEMPLATES = [
     generate() {
       // Single-airport disruption — allowed the higher localized cap.
       const mult = clampImpact(0.35 + Math.random() * 0.25, MAX_LOCALIZED_IMPACT);
+      // airportCode makes this airport-local: only routes through LHR lose
+      // demand (it used to hit every UK route at the localized cap).
       return {
         effects: {
           regionCodes: ['GB'],
@@ -587,6 +595,12 @@ export const EVENT_AXES = {
  *   2. Opposite demand directions conflict when EITHER event is global in
  *      scope (a global swing can't coexist with the reverse anywhere; two
  *      independent regional swings in different regions are fine).
+ *   3. Two DOWNTURNS conflict when either is global: one recession-class shock
+ *      at a time. Stacked downturns (recession + pandemic scare, recession +
+ *      US slowdown, fare war + recession) were where the half-demand quarters
+ *      came from, and they landed on established airlines — the ones whose
+ *      capacity is sized to the market and so feel a shock in full. Two
+ *      regional slumps in different regions may still overlap.
  */
 export function eventsConflict(idA, idB) {
   const a = EVENT_AXES[idA];
@@ -594,6 +608,8 @@ export function eventsConflict(idA, idB) {
   if (!a || !b) return false;
   if (a.fuel && b.fuel && a.fuel !== b.fuel) return true;
   if (a.demand && b.demand && a.demand !== b.demand &&
+      (a.scope === 'global' || b.scope === 'global')) return true;
+  if (a.demand === 'down' && b.demand === 'down' &&
       (a.scope === 'global' || b.scope === 'global')) return true;
   return false;
 }
@@ -764,12 +780,16 @@ export function computeEventEffects(activeEvents, route, getAirport) {
     const fx = ev.effects ?? {};
     if (fx.fuelMult)         fuelMult         *= fx.fuelMult;
     if (fx.globalDemandMult) globalDemandMult *= fx.globalDemandMult;
-    if (fx.regionCodes && fx.regionDemandMult && route) {
-      // Check if this route touches an affected region
+    if (fx.regionDemandMult && route) {
+      // Airport-local events (a hub strike) touch only routes through that
+      // airport; broader regional events touch any route with an endpoint in
+      // one of their countries.
       const originAp  = getAirport(route.origin);
       const destAp    = getAirport(route.destination);
-      const affected  = fx.regionCodes.includes(originAp?.country) ||
-                        fx.regionCodes.includes(destAp?.country);
+      const affected  = fx.airportCode
+        ? (route.origin === fx.airportCode || route.destination === fx.airportCode)
+        : !!fx.regionCodes && (fx.regionCodes.includes(originAp?.country) ||
+                               fx.regionCodes.includes(destAp?.country));
       if (affected) {
         const code = route.origin + '-' + route.destination;
         regionMults[code] = (regionMults[code] ?? 1.0) * fx.regionDemandMult;
@@ -777,5 +797,10 @@ export function computeEventEffects(activeEvents, route, getAirport) {
     }
   }
 
-  return { fuelMult, globalDemandMult, regionMults };
+  // Same combined caps as buildEventDemandModel.
+  return {
+    fuelMult: clampImpact(fuelMult),
+    globalDemandMult: clampImpact(globalDemandMult),
+    regionMults,
+  };
 }

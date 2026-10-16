@@ -51,7 +51,7 @@ import {
 import { completeCheck } from '../data/maintenance.js';
 import { crewShortfall, unstaffedCrewScale, unstaffedAircraftIds } from '../data/labor.js';
 import { getAircraftType } from '../data/aircraft.js';
-import { rollEvents, tickEvents } from '../data/events.js';
+import { rollEvents, tickEvents, clampImpact } from '../data/events.js';
 import { tickBaseConstruction } from '../data/mroBase.js';
 import { tickLoungeConstruction } from '../data/lounges.js';
 import {
@@ -129,6 +129,7 @@ export function prepareWeek(state, {
     if (fx.fuelMult) fuelMult *= fx.fuelMult;
     if (fx.otpDelta) eventOtpDelta += fx.otpDelta;
   }
+  fuelMult = clampImpact(fuelMult);   // combined cap, same as demand (data/events.js)
   eventOtpDelta = Math.min(0.25, eventOtpDelta);
   // The fuel-efficiency programme (data/fuelProgrammes.js) gives up
   // punctuality for burn. It rides the same transient channel as event

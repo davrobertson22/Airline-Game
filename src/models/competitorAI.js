@@ -208,8 +208,42 @@ const MERGER_PROB = 0.025;
 
 // ── Fare wars ────────────────────────────────────────────────────────────────
 
-/** Chance (per action week) a provoked carrier declares a fare war. */
+/**
+ * Chance (per action week) a provoked carrier declares a fare war — at FULL
+ * player notice. It scales with playerNotice, so a mid-sized airline draws
+ * the occasional war and a giant draws them at the old rate.
+ */
 const FARE_WAR_PROB = 0.30;
+/** Player notice at which fare wars become possible at all (≈$25M market cap). */
+const FARE_WAR_MIN_NOTICE = 0.30;
+
+// ── Player notice (how much attention the AI pays the player) ───────────────
+
+/** Market cap at or below which the player is barely on the radar. */
+export const NOTICE_FLOOR_CAP = 15_000_000;
+/** Market cap at which the AI's attention is total. */
+export const NOTICE_FULL_CAP  = 250_000_000;
+const NOTICE_MIN = 0.15;
+
+/**
+ * How much attention the AI pays the player, 0.15 → 1, from market cap.
+ *
+ * It used to be a cliff: 0.15 below $25M, 0.5 from $25M, 1.0 from $100M. A
+ * growing airline crosses $100M around years 2–3 and overnight every
+ * aggressive rival scored the player's routes ×3.4 as expansion targets,
+ * defenders boosted against it and fare wars switched on — the same stretch
+ * in which the player's own network is sized to its markets and every world
+ * downturn bites in full. Now it climbs smoothly in log(market cap), so
+ * attention grows with the airline instead of arriving in one week:
+ *   $15M 0.15 · $25M 0.30 · $50M 0.51 · $100M 0.72 · $250M+ 1.0
+ */
+export function playerNoticeFor(marketCap) {
+  const mc = Number(marketCap);
+  if (!Number.isFinite(mc) || mc <= NOTICE_FLOOR_CAP) return NOTICE_MIN;
+  if (mc >= NOTICE_FULL_CAP) return 1;
+  const t = Math.log(mc / NOTICE_FLOOR_CAP) / Math.log(NOTICE_FULL_CAP / NOTICE_FLOOR_CAP);
+  return NOTICE_MIN + (1 - NOTICE_MIN) * t;
+}
 /** How far below the player's fare ratio a warring carrier prices. */
 const FARE_WAR_UNDERCUT = 0.15;
 /** Absolute fare-ratio floors during a war — below normal tier floors (that's the point). */
@@ -377,6 +411,7 @@ export function tickCompetitorAI(competitors, ctx) {
     playerMarketCap = 0,
     playerCampaignSpend = {},   // { [airportCode]: $/wk } — player's targeted marketing
     calendarYear = null,        // era worlds: real year (null = classic)
+    world = null,               // this week's world events { demandMultFor, fuelMult } — see computeCompetitorRoutePnL
   } = ctx ?? {};
 
   const events = [];
@@ -410,7 +445,7 @@ export function tickCompetitorAI(competitors, ctx) {
   const incumbents = buildPairIncumbents(competitors, playerRoutes);
 
   // Player is "on the radar" once established — AI attention scales with size.
-  const playerNotice = playerMarketCap >= 100_000_000 ? 1 : playerMarketCap >= 25_000_000 ? 0.5 : 0.15;
+  const playerNotice = playerNoticeFor(playerMarketCap);
 
   // ── Per-carrier network management ────────────────────────────────────────
   let updated = competitors.map(airline => {
@@ -517,11 +552,13 @@ export function tickCompetitorAI(competitors, ctx) {
 
     // Per-route P&L (only on action weeks — keeps the tick cheap).
     const pnl = {};
-    for (const key of routeKeys) pnl[key] = computeCompetitorRoutePnL(c, key, routes[key], month, incumbents);
+    // World events reach the AI's books too: in a recession a rival sees thin
+    // loads and trims like anyone would, which is the player's opening.
+    for (const key of routeKeys) pnl[key] = computeCompetitorRoutePnL(c, key, routes[key], month, incumbents, world);
     const inWar = (k) => !!(c._fareWars && c._fareWars[k]);   // war losses are deliberate — don't cut/trim
     // What a route would earn under a different schedule/type — every capacity
     // move below has to pay: no growth that loses money, no trim that earns less.
-    const projected = (key, cfg) => computeCompetitorRoutePnL(c, key, cfg, month, incumbents)?.profit ?? -Infinity;
+    const projected = (key, cfg) => computeCompetitorRoutePnL(c, key, cfg, month, incumbents, world)?.profit ?? -Infinity;
 
     // 1a. Capacity right-sizing: fit the schedule to the loads it carries.
     //     Trims run first (they free cash and can save a route from the loss
@@ -756,8 +793,8 @@ export function tickCompetitorAI(competitors, ctx) {
     const warCapable = (c._archetype === 'aggressive' || c._archetype === 'fortress')
       && !(c._fareWars && Object.keys(c._fareWars).length)
       && cash > reserve * 2
-      && playerNotice >= 0.5;
-    if (warCapable && Math.random() < FARE_WAR_PROB) {
+      && playerNotice >= FARE_WAR_MIN_NOTICE;
+    if (warCapable && Math.random() < FARE_WAR_PROB * playerNotice) {
       let warKey = null;
       for (const key of Object.keys(routes)) {
         const pInfo = playerPairs.get(key);

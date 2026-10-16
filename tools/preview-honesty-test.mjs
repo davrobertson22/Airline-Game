@@ -186,7 +186,8 @@ test('an offer that omits brandReach is scored as an established carrier', () =>
 // state when no caller passes it, and does not double-apply it when one does.
 console.log('\n── 2. Previews apply the world-event demand multiplier ─────────');
 
-const PANDEMIC = { id: 'ev-test', title: 'Test shock', effects: { globalDemandMult: 0.6 } };
+// Inside the ±30% combined event cap (data/events.js) so the pool sees it whole.
+const PANDEMIC = { id: 'ev-test', title: 'Test shock', effects: { globalDemandMult: 0.75 } };
 
 test('an ordinary world (no events) is unchanged', () => {
   const { state, spare } = fixture();
@@ -207,7 +208,7 @@ test('the event multiplier reaches the pair POOL, not only simulateRoute', () =>
   const shock = pairMarketShare(state, O, D);
   const ratio = (shock.market.leisureDemand + shock.market.businessDemand)
     / (plain.market.leisureDemand + plain.market.businessDemand);
-  assert.ok(Math.abs(ratio - 0.6) < 0.02, `pool ratio ${ratio.toFixed(3)}, expected 0.60`);
+  assert.ok(Math.abs(ratio - 0.75) < 0.02, `pool ratio ${ratio.toFixed(3)}, expected 0.75`);
 });
 
 // RoutePlanner.jsx and Routes.jsx pass `eventDemandMult: eventDemand.multFor(o,d)`

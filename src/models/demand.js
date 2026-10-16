@@ -3515,12 +3515,22 @@ export function buildPairIncumbents(competitors, playerRoutes = []) {
  * @param {object} cfg              route config { frequency, priceMultiplier, aircraftType?, tails? }
  * @param {number} [month=1]
  * @param {Map<string,number>|null} [pairCounts]  from buildPairIncumbents (null = monopoly)
+ * @param {object|null} [world]  this week's world events, so rivals live through
+ *   the same recessions, booms and fuel spikes the player does:
+ *   { demandMultFor(a, b) → number, fuelMult: number }. Omitted (null) = calm
+ *   week, identical to before. AI carriers used to be immune — a pandemic scare
+ *   or fuel spike drained only the player's cash while every rival kept its
+ *   capacity and its bank intact.
  * @returns {{ revenue, cost, profit, pax, flights, loadFactor, demandOneWay, capOneWay, seats }|null}
  *   demandOneWay is what the carrier COULD have sold one-way (before the 88%
  *   cap) and capOneWay the seats it flew — the adaptive AI reads the gap
  *   between them when right-sizing a route's capacity (competitorAI.js).
  */
-export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, pairCounts = null) {
+// Share of the untyped tier cost-per-km (TIER_AIRCRAFT.costPerKm) that is fuel,
+// for applying a fuel shock to a carrier route with no aircraft type on file.
+const AI_FUEL_SHARE_OF_OP_COST = 0.5;
+
+export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, pairCounts = null, world = null) {
   const ac      = TIER_AIRCRAFT[competitor.tier]        ?? TIER_AIRCRAFT.legacy;
   const fixedPR = TIER_FIXED_PER_ROUTE[competitor.tier] ?? 200_000;
 
@@ -3530,9 +3540,16 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const baseD = baseCityPairDemand(a, b);
   if (!dist || !refP || !baseD) return null;
 
+  const evDemand = world?.demandMultFor ? Number(world.demandMultFor(a, b)) : 1;
+  const evMult   = Number.isFinite(evDemand) && evDemand > 0 ? evDemand : 1;
+  const fuelRaw  = Number(world?.fuelMult);
+  const fuelMult = Number.isFinite(fuelRaw) && fuelRaw > 0 ? fuelRaw : 1;
+
   const type    = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
   const seats   = type?.seats ?? ac.seats;
-  const opPerKm = type ? (fuelCostPerKm(type) + (type.crewCostPerKm ?? 0)) : ac.costPerKm;
+  const opPerKm = type
+    ? (fuelCostPerKm(type) * fuelMult + (type.crewCostPerKm ?? 0))
+    : ac.costPerKm * (1 + AI_FUEL_SHARE_OF_OP_COST * (fuelMult - 1));
   const tails   = cfg.tails ?? 1;
 
   const seasonal     = getSeasonalProfile(a, b)[month] ?? 1;
@@ -3547,7 +3564,7 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const nCarriers = Math.max(1, pairCounts?.get(routeKey) ?? 1);
   const shareOfPool = Math.pow(nCarriers, 0.15) / nCarriers;
 
-  const demandOneWay = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal * shareOfPool);
+  const demandOneWay = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal * shareOfPool * evMult);
   const paxOneWay    = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
   const weeklyPax    = paxOneWay * 2;
 
@@ -3581,9 +3598,13 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
  * @param {number} [month=1]  current game month (1-12) for seasonality
  * @param {Map<string,number>|null} [pairCounts]  from buildPairIncumbents;
  *   when provided, demand splits across carriers sharing each pair.
+ * @param {object|null} [world]  this week's world events — see
+ *   computeCompetitorRoutePnL. A non-object (older callers passed the absolute
+ *   week here, which was never read) is treated as a calm week.
  * @returns {{ weeklyFlights, weeklyPax, weeklyRevenue, weeklyCost, weeklyProfit }}
  */
-export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts = null) {
+export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts = null, world = null) {
+  const worldFx = world && typeof world === 'object' ? world : null;
   let totalFlights = 0;
   let totalPax     = 0;
   let totalRevenue = 0;
@@ -3591,7 +3612,7 @@ export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts =
   let routeCount   = 0;
 
   for (const [routeKey, cfg] of Object.entries(competitor.routes)) {
-    const p = computeCompetitorRoutePnL(competitor, routeKey, cfg, month, pairCounts);
+    const p = computeCompetitorRoutePnL(competitor, routeKey, cfg, month, pairCounts, worldFx);
     if (!p) continue;
     routeCount   += 1;
     totalFlights += p.flights;
