@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
+import { useGame, slotUsageFor } from '../store/GameContext.jsx';
 import AirportDetail from './AirportDetail.jsx';
 import { AIRPORTS, getAirport, gateMonthlyFee, totalGateMonthlyFee, REGIONS, getRegion, getCountryName } from '../data/airports.js';
-import { SLOTS_PER_GATE, cargoSlotsUsedAt } from '../utils/simulation.js';
+import { SLOTS_PER_GATE } from '../utils/simulation.js';
 import { formatMoney } from '../utils/simulation.js';
 import { Glyph } from './Icons.jsx';
 import FuelBasisChip from './FuelBasisChip.jsx';
@@ -88,10 +88,30 @@ function utilColor(usagePct) {
        : 'var(--green)';
 }
 
+// Rows drawn per page — the Routes table's paging (Discord, Barca 2026-10-16:
+// the gates tab is laggy, "maybe make it click to show more like the route
+// finder"). Sorting acts on every row; paging only changes how many are drawn.
+export const GATE_PAGE_SIZE = 25;
+// Airports shown per country when browsing a region, before "show all".
+const BROWSE_PER_COUNTRY = 5;
+const EMPTY_SET = new Set();
+
+function ShowMore({ shown, total, page, onMore, label = 'more' }) {
+  if (total <= shown) return null;
+  return (
+    <div style={{ padding: '10px 14px', textAlign: 'center' }}>
+      <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onMore}>
+        Show {Math.min(page, total - shown)} {label} ({shown} of {total})
+      </button>
+    </div>
+  );
+}
+
 function GateTable({ rows, onAdd, onRemove, onDetails }) {
   const { state } = useGame();
   const [sortCol, setSortCol] = useState(null);   // null = default order (region → hub → congestion)
   const [sortDir, setSortDir] = useState('desc');
+  const [shown, setShown]     = useState(GATE_PAGE_SIZE);
   const columns = fuelStationsOn(state) ? GATE_COLUMNS : GATE_COLUMNS.filter(c => !c.fuel);
 
   const sorted = (() => {
@@ -132,7 +152,7 @@ function GateTable({ rows, onAdd, onRemove, onDetails }) {
             </tr>
           </thead>
           <tbody>
-            {sorted.map(r => {
+            {sorted.slice(0, shown).map(r => {
               const barColor = utilColor(r.usagePct);
               return (
                 <tr key={r.code}>
@@ -200,6 +220,7 @@ function GateTable({ rows, onAdd, onRemove, onDetails }) {
           </tbody>
         </table>
       </div>
+      <ShowMore shown={shown} total={sorted.length} page={GATE_PAGE_SIZE} onMore={() => setShown(n => n + GATE_PAGE_SIZE)} />
     </div>
   );
 }
@@ -234,6 +255,15 @@ export default function Airports() {
     setBrowseViewState(v);
     try { localStorage.setItem('airports_browse_view', v); } catch { /* private mode */ }
   }
+  // Paging for the long lists on this tab (ported from Headwinds, Discord 2026-10-16).
+  const [cardsShown, setCardsShown] = useState(GATE_PAGE_SIZE);
+  // Browse: each country shows its first few airports (held first, then the
+  // biggest) and expands on request. Kept as {key, open} so a new region or
+  // search starts folded again without an effect.
+  const browseKey = `${regionFilter}|${search.trim().toLowerCase()}`;
+  const [browseOpen, setBrowseOpen] = useState({ key: browseKey, open: new Set() });
+  const openCountries = browseOpen.key === browseKey ? browseOpen.open : EMPTY_SET;
+  const expandCountry = (name) => setBrowseOpen({ key: browseKey, open: new Set([...openCountries, name]) });
 
   if (selectedAirport) {
     return <AirportDetail code={selectedAirport} onBack={() => setSelectedAirport(null)} />;
@@ -243,8 +273,11 @@ export default function Airports() {
   // the engine's own helper, so a multi-stop rotation calling here shows the two
   // movements it actually makes — the endpoint-only reading under-reported this
   // page against the guards that refuse flights on the strength of it.
+  // One walk of the schedule for every airport (slotUsageFor), not one per
+  // airport — and never one per sort comparison, which is what this was.
+  const slotUsage = slotUsageFor(state);
   function slotsUsedAt(code) {
-    return slotsUsedAtEngine(routes, code) + cargoSlotsUsedAt(code, cargoRoutes);
+    return slotUsage.get(code) ?? 0;
   }
 
   const myGateEntries = Object.entries(gates)
@@ -321,6 +354,16 @@ export default function Airports() {
       })
       .map(([name, g]) => ({ name, region: g.region, airports: g.airports }));
   })();
+
+  // A region is hundreds of airports (Europe and North America are ~600 each):
+  // drawn whole it was most of this tab's page. Every country stays listed,
+  // folded to its first BROWSE_PER_COUNTRY airports — the ones you hold and the
+  // biggest — with a button for the rest, so nothing is more than one click away.
+  const pagedBrowseGroups = browseGroups.map(g => ({
+    ...g,
+    total: g.airports.length,
+    airports: openCountries.has(g.name) ? g.airports : g.airports.slice(0, BROWSE_PER_COUNTRY),
+  }));
 
   return (
     <div>
@@ -469,7 +512,7 @@ export default function Airports() {
                   return (
                     <button
                       key={r}
-                      onClick={() => setMyGatesRegion(r)}
+                      onClick={() => { setMyGatesRegion(r); setCardsShown(GATE_PAGE_SIZE); }}
                       style={{
                         padding: '3px 10px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
                         fontWeight: active ? 700 : 400,
@@ -492,10 +535,11 @@ export default function Airports() {
             // With multiple regions, only ever render the active one. A single
             // region renders directly (no filtering needed).
             const activeRegion = myGatesRegion ?? heldRegions[0];
-            const visibleEntries = heldRegions.length > 1
+            const regionEntries = heldRegions.length > 1
               ? myGateEntries.filter(({ airport }) => getRegion(airport.country) === activeRegion)
               : myGateEntries;
-            return visibleEntries.map(({ code, count, airport }) => {
+            const visibleEntries = regionEntries.slice(0, cardsShown);
+            return (<>{visibleEntries.map(({ code, count, airport }) => {
             const used       = slotsUsedAt(code);
             const capacity   = count * SLOTS_PER_GATE;
             const usagePct   = capacity > 0 ? used / capacity : 0;
@@ -576,7 +620,10 @@ export default function Airports() {
                 </div>
               </div>
             );
-          });
+          })}
+          <ShowMore shown={Math.min(cardsShown, regionEntries.length)} total={regionEntries.length} page={GATE_PAGE_SIZE}
+            onMore={() => setCardsShown(n => n + GATE_PAGE_SIZE)} />
+          </>);
           })()}
 
         </section>
@@ -714,7 +761,7 @@ export default function Airports() {
               <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
                 No airports match "{search}"
               </div>
-            ) : browseGroups.map(({ name, airports: groupAirports }) => (
+            ) : pagedBrowseGroups.map(({ name, airports: groupAirports, total: countryTotal }) => (
           <div key={name} style={{ marginBottom: 4 }}>
             {/* Country subheading */}
             <div style={{
@@ -785,6 +832,16 @@ export default function Airports() {
                   </div>
                 );
               })}
+              {countryTotal > groupAirports.length && (
+                <button
+                  className="btn btn-ghost"
+                  data-country-more={name}
+                  style={{ fontSize: 12, padding: '4px 10px', alignSelf: 'flex-start' }}
+                  onClick={() => expandCountry(name)}
+                >
+                  Show all {countryTotal} in {name}
+                </button>
+              )}
             </div>
           </div>
             ))}

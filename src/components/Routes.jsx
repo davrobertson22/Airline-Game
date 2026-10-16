@@ -2,7 +2,7 @@ import { Glyph, GlyphLabel } from './Icons.jsx';
 import OutOfRangeBadge from './OutOfRangeBadge.jsx';
 import { useConfirm } from './ConfirmModal.jsx';
 import { useState, useMemo, useEffect } from 'react';
-import { useGame, frequencyChangeBlockReason, peakSlotsUsedAt } from '../store/GameContext.jsx';
+import { useGame, frequencyChangeBlockReason, peakSlotsUsedAt, planBulkFrequency } from '../store/GameContext.jsx';
 import RouteDetail from './RouteDetail.jsx';
 import AirportLink from './AirportLink.jsx';
 import CargoRoutesList, { FreightBadge, PassengerBadge } from './CargoRoutesList.jsx';
@@ -54,8 +54,8 @@ import { rivalIndexFor } from '../models/network.js';
 // 2026-10-13). On a phone a backgrounded tab is often discarded too, which
 // loses everything that isn't stored. Ported from Headwinds.
 const ROUTES_VIEW_KEY  = 'routes_view_prefs_v1';
-const CARD_SORTS       = ['profit', 'revenue', 'load', 'quality', 'distance'];
-const TABLE_SORT_COLS  = ['route', 'dist', 'freq', 'load', 'quality', 'pax', 'rev', 'profit', 'margin'];
+const CARD_SORTS       = ['profit', 'revenue', 'load', 'quality', 'distance', 'hours', 'runway'];
+const TABLE_SORT_COLS  = ['route', 'dist', 'hours', 'runway', 'freq', 'load', 'quality', 'pax', 'rev', 'profit', 'margin'];
 
 export function loadRoutesViewPrefs() {
   try {
@@ -85,12 +85,20 @@ const SEASON_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 
 // Stable empty-hub reference so the airport-filter memo doesn't re-run every
 // render on saves that predate hubs.
 const EMPTY_HUBS = {};
+const NO_CARGO = [];
 
 const SEASON_PRESETS = [
   { id: 'year',   label: 'Year-round', months: null },
   { id: 'summer', label: 'Summer', months: [6, 7, 8, 9] },
   { id: 'winter', label: 'Winter', months: [12, 1, 2, 3] },
 ];
+
+// 2.75 → "2h 45m" — the Hours column and its tooltip.
+function formatHours(h) {
+  const mins = Math.round((h ?? 0) * 60);
+  const hh = Math.floor(mins / 60), mm = mins % 60;
+  return hh > 0 ? `${hh}h ${String(mm).padStart(2, '0')}m` : `${mm}m`;
+}
 
 // Month-window picker used in the add-route form (counter-seasonal reassignment path).
 function FormSeasonPicker({ value, onChange, currentMonth }) {
@@ -191,7 +199,10 @@ export default function Routes() {
   const { state, dispatch } = useGame();
   const confirm = useConfirm();
   const addToast = useToast();
-  const { fleet, routes, hub, pendingOrders = [], cargoRoutes = [] } = state;
+  // NO_CARGO, not `= []`: a fresh empty array every render is a new dependency
+  // every render, and fixedByRoute → groupsWithStats (every pair's economics)
+  // used to recompute on every keystroke for any airline without freight.
+  const { fleet, routes, hub, pendingOrders = [], cargoRoutes = NO_CARGO } = state;
 
   // Bulk pricing: explicit card selection + the occupancy-filter modal
   const [selectedKeys, setSelectedKeys] = useState(() => new Set());
@@ -242,6 +253,10 @@ export default function Routes() {
   // formMode; a rotation is a chain, not a pair, so it needs its own.
   const [tagAddStops, setTagAddStops] = useState(null);
 
+  // Bulk frequency modal (header button). Declared after tagAddStops: a test
+  // seeds the useState slots above by position.
+  const [showFreqModal, setShowFreqModal] = useState(false);
+
   // View mode: 'table' (default — scales to hundreds of routes) | 'cards'
   const [viewMode, setViewModeState] = useState(() => {
     // A Table/Cards choice the player has made wins over the default.
@@ -257,24 +272,34 @@ export default function Routes() {
   // Hours committed to a tail at its BUSIEST month — the quantity the cap
   // governs — including any routes a reserve is currently covering for it.
   // Counting only what it flies today made an out-of-service tail read as free.
-  const usedHrsFor = (a) =>
-    committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? [], state.charters ?? []);
-  const availableFleet = fleet.filter(a => usedHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS);
+  //
+  // Each tail's committed hours is a walk of the whole schedule, so asking it
+  // per tail on every render was O(fleet × routes) — paid on every keystroke
+  // in the search box and every tick of the next-week countdown. Computed once
+  // per network instead.
+  const { availableFleet, spareFleet } = useMemo(() => {
+    const used = new Map(fleet.map(a => [a.id,
+      committedPeakBlockHours(a.id, getAircraftType(a.typeId), routes, state.cargoRoutes ?? [], state.charters ?? [])]));
+    return {
+      availableFleet: fleet.filter(a => used.get(a.id) < MAX_WEEKLY_BLOCK_HOURS),
+      // An airframe only counts as having "spare hours" if there's enough left to
+      // actually absorb another sector — 1h free is not spare capacity in any
+      // meaningful sense (see MIN_SPARE_BLOCK_HOURS in simulation.js).
+      spareFleet: fleet.filter(a => a.status !== 'idle' && (MAX_WEEKLY_BLOCK_HOURS - used.get(a.id)) > MIN_SPARE_BLOCK_HOURS),
+    };
+  }, [fleet, routes, state.cargoRoutes, state.charters]);
   // Reserves stand by on purpose — they aren't part of the "idle, earning
   // nothing" nudge (Fleet tab has a Reserve chip for them).
   const idleCount      = fleet.filter(a => a.status === 'idle' && !isReserve(a)).length;
   const reserveCount   = fleet.filter(a => isReserve(a)).length;
-  // An airframe only counts as having "spare hours" if there's enough left to
-  // actually absorb another sector — 1h free is not spare capacity in any
-  // meaningful sense (see MIN_SPARE_BLOCK_HOURS in simulation.js).
-  const spareFleet     = fleet.filter(a => a.status !== 'idle' &&
-    (MAX_WEEKLY_BLOCK_HOURS - usedHrsFor(a)) > MIN_SPARE_BLOCK_HOURS);
 
   // Tag (multi-stop) routes are rendered in their own section; single-leg routes
-  // collapse into direction-agnostic city-pair groups as before.
-  const tagRoutes   = routes.filter(isMultiStop);
-  const flatRoutes  = routes.filter(r => !isMultiStop(r));
-  const routeGroups = groupRoutes(flatRoutes);
+  // collapse into direction-agnostic city-pair groups as before. Memoised on the
+  // routes array so the memos below keyed on them hold still between renders.
+  const { tagRoutes, routeGroups } = useMemo(() => ({
+    tagRoutes:   routes.filter(isMultiStop),
+    routeGroups: groupRoutes(routes.filter(r => !isMultiStop(r))),
+  }), [routes]);
 
   // ── Single source of truth ──────────────────────────────────────────────────
   // Every per-route number on this screen (cards, filters, detail page) must come
@@ -388,6 +413,24 @@ export default function Routes() {
     const margin    = econ.marginFor(profitBasis);
     const totalFreq = group.routes.reduce((s, r) => s + r.weeklyFrequency, 0);
 
+    // Hours (Discord, Barca 2026-10-16: "sortable hours and runway length").
+    // Block time of one flight — flying plus the turnaround, the unit the weekly
+    // block-hour cap counts — on the slowest type flying the pair, and the week's
+    // total across every tail on it.
+    const pairKm = routeDistanceKm(group.origin, group.destination);
+    let blockHrs = null, weeklyBlockHrs = 0;
+    for (const r of group.routes) {
+      const t = getAircraftType(fleet.find(a => a.id === r.aircraftId)?.typeId);
+      if (!t) continue;
+      const one = blockTimeHours(pairKm, t);
+      if (blockHrs == null || one > blockHrs) blockHrs = one;
+      weeklyBlockHrs += routeBlockHours(r, t, r.weeklyFrequency);
+    }
+    // Runway: the SHORTER of the two ends — the one that decides what can fly it.
+    const rwO = getAirport(group.origin)?.runwayFt, rwD = getAirport(group.destination)?.runwayFt;
+    const runwayFt = rwO && rwD ? Math.min(rwO, rwD) : (rwO || rwD || null);
+    const runwayAt = rwO && rwD ? (rwO <= rwD ? group.origin : group.destination) : (rwO ? group.origin : rwD ? group.destination : null);
+
     // Seat-weighted engine quality score across the aircraft on this pair —
     // same number the demand model competes with (null if no result carries one,
     // e.g. every aircraft grounded).
@@ -400,7 +443,7 @@ export default function Routes() {
     return {
       ...group, totalProfit, totalRevenue, totalPax, avgLoad, distance, classLoads,
       hasDisrupted, hasOutOfRange, hasNoCrew, hasDormant, regions, typeIds, margin, totalFreq, quality,
-      totalOpCost, totalFixed, econ,
+      totalOpCost, totalFixed, econ, blockHrs, weeklyBlockHrs, runwayFt, runwayAt,
     };
   }), [routes, fleet, rrById, fixedByRoute, profitBasis, noCrew]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -516,6 +559,9 @@ export default function Routes() {
     if (sortBy === 'load')     return b.avgLoad      - a.avgLoad;
     if (sortBy === 'quality')  return (b.quality ?? -1) - (a.quality ?? -1);
     if (sortBy === 'distance') return b.distance     - a.distance;
+    if (sortBy === 'hours')    return (b.blockHrs ?? -1) - (a.blockHrs ?? -1);
+    // Shortest runway first: the question is "which of my routes need a short-field jet?"
+    if (sortBy === 'runway')   return (a.runwayFt ?? Infinity) - (b.runwayFt ?? Infinity);
     return b.totalProfit - a.totalProfit; // default
   });
 
@@ -574,6 +620,21 @@ export default function Routes() {
       message: `${n} route${n !== 1 ? 's' : ''} back to reference fares`,
     });
     clearSelection();
+  }
+
+  // Bulk: flights/wk on many routes — one action, previewed by the same plan.
+  function applyFrequencyPlan(plan, { routeIds, mode, value }) {
+    if (!plan || plan.changed === 0) return;
+    dispatch({ type: 'BULK_ADJUST_FREQUENCY', routeIds, mode, value });
+    const parts = [];
+    if (plan.added > 0) parts.push(`+${plan.added}`);
+    if (plan.removed > 0) parts.push(`−${plan.removed}`);
+    addToast({
+      type: 'success',
+      title: 'Frequencies updated',
+      message: `${plan.changed} aircraft: ${parts.join(' / ')} flight${plan.added + plan.removed !== 1 ? 's' : ''} a week`
+        + (plan.capped > 0 ? ` · ${plan.capped} capped at what fits` : ''),
+    });
   }
 
   // Bulk: set catering level on every selected pair at once.
@@ -865,6 +926,16 @@ export default function Routes() {
               <GlyphLabel size={12} text="⚖️ Bulk Pricing" />
             </button>
           )}
+          {routeGroups.length > 0 && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              onClick={() => setShowFreqModal(true)}
+              title="Add or remove flights across many routes at once, filtered by load factor"
+            >
+              <GlyphLabel size={12} text="⏱ Bulk Frequency" />
+            </button>
+          )}
           <button
             className="btn btn-primary"
             onClick={showForm && !isAddingFlights ? closeForm : openNewRoute}
@@ -989,6 +1060,8 @@ export default function Routes() {
                 <option value="load">Sort: Load ↓</option>
                 <option value="quality">Sort: Quality ↓</option>
                 <option value="distance">Sort: Distance ↓</option>
+                <option value="hours">Sort: Hours ↓</option>
+                <option value="runway">Sort: Runway ↑ (shortest first)</option>
               </select>
             )}
           </div>
@@ -1012,6 +1085,7 @@ export default function Routes() {
           onApplyToGroups={(g, pct) => { applyPctToGroups(g, pct); clearSelection(); }}
           onResetToRef={bulkResetToRef}
           onSetCatering={bulkSetCatering}
+          onApplyFrequency={(plan, spec) => { applyFrequencyPlan(plan, spec); clearSelection(); }}
           onCloseGroups={bulkCloseGroups}
           onClear={clearSelection}
         />
@@ -1163,6 +1237,15 @@ export default function Routes() {
             }}
           />
         </div>
+      )}
+
+      {/* Filter-based bulk frequency modal */}
+      {showFreqModal && (
+        <BulkFrequencyModal
+          allGroups={groupsWithStats}
+          onApply={applyFrequencyPlan}
+          onClose={() => setShowFreqModal(false)}
+        />
       )}
 
       {/* Filter-based bulk pricing modal */}
@@ -1338,11 +1421,20 @@ function NetworkHealthStrip({ groups, activeTab, onSelectTab, basis = BASIS_FULL
 // Dense, sortable, selectable table built to handle hundreds of city pairs:
 // click a column header to sort, tick rows for bulk pricing, click a row to
 // expand its per-aircraft detail inline (pricing, catering, actions).
-const TABLE_PAGE_SIZE = 100;
+//
+// 25 rows a page, like the Route Finder (Discord, Barca 2026-10-16: "routes tab
+// is very laggy for me, maybe make it click to show more like the route
+// finder"). Sorting, filters, select-all and the bulk bar still act on the
+// whole filtered list — paging changes what is DRAWN, never what is acted on.
+const TABLE_PAGE_SIZE = 25;
 
 const TABLE_COLUMNS = [
   { id: 'route',  label: 'Route',        align: 'left'  },
   { id: 'dist',   label: 'Dist',         align: 'right' },
+  { id: 'hours',  label: 'Hours',        align: 'right',
+    tip: 'Block time of one flight — flying plus turnaround, the hours the weekly block-hour cap counts. Hover a row for the week\'s total across every aircraft on the pair.' },
+  { id: 'runway', label: 'Runway',       align: 'right',
+    tip: 'The shorter runway of the two airports — the one that decides which aircraft can fly the route.' },
   { id: 'freq',   label: 'Freq',         align: 'right' },
   { id: 'load',   label: 'Load',         align: 'right' },
   { id: 'quality', label: 'Quality',     align: 'right' },
@@ -1355,6 +1447,8 @@ const TABLE_COLUMNS = [
 const TABLE_SORTERS = {
   route:  (a, b) => `${a.origin}${a.destination}`.localeCompare(`${b.origin}${b.destination}`),
   dist:   (a, b) => a.distance     - b.distance,
+  hours:  (a, b) => (a.blockHrs ?? -1) - (b.blockHrs ?? -1),
+  runway: (a, b) => (a.runwayFt ?? -1) - (b.runwayFt ?? -1),
   freq:   (a, b) => a.totalFreq    - b.totalFreq,
   load:   (a, b) => a.avgLoad      - b.avgLoad,
   quality: (a, b) => (a.quality ?? -1) - (b.quality ?? -1),
@@ -1390,7 +1484,7 @@ function RouteTable({ groups, getResult, selectedKeys, onToggleSelect, onSelectM
     const col = colId;
     const dir = sortCol === colId
       ? (sortDir === 'desc' ? 'asc' : 'desc')
-      : (colId === 'route' ? 'asc' : 'desc');
+      : (colId === 'route' || colId === 'runway' ? 'asc' : 'desc');
     setSortCol(col);
     setSortDir(dir);
     saveRoutesViewPrefs({ tableCol: col, tableDir: dir });
@@ -1466,7 +1560,7 @@ function RouteTable({ groups, getResult, selectedKeys, onToggleSelect, onSelectM
                   key={c.id}
                   style={{ ...COL_HEADER, textAlign: c.align }}
                   onClick={() => clickHeader(c.id)}
-                  title="Click to sort"
+                  title={c.tip ? `${c.tip} Click to sort.` : 'Click to sort'}
                 >
                   {c.id === 'profit' ? PROFIT_SHORT[basis] : c.label}
                   {sortCol === c.id && (
@@ -1575,6 +1669,18 @@ function RouteTableRow({ group: g, zebra, selected, expanded, onToggleSelect, on
         </td>
         <td style={{ ...RIGHT, color: 'var(--text-muted)' }}>
           {g.distance ? `${g.distance.toLocaleString()} km` : '—'}
+        </td>
+        <td
+          style={{ ...RIGHT, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+          title={g.blockHrs != null ? `${formatHours(g.blockHrs)} block per flight · ${Math.round(g.weeklyBlockHrs)} block hrs/wk across ${g.routes.length} aircraft` : undefined}
+        >
+          {g.blockHrs != null ? formatHours(g.blockHrs) : '—'}
+        </td>
+        <td
+          style={{ ...RIGHT, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+          title={g.runwayAt ? `Shorter runway: ${g.runwayAt}` : undefined}
+        >
+          {g.runwayFt ? `${g.runwayFt.toLocaleString()} ft` : '—'}
         </td>
         <td style={RIGHT}>
           {g.totalFreq}×
@@ -2142,7 +2248,7 @@ function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
 // Appears when the player has ticked one or more route cards. Offers the same
 // per-class % adjustment, applied only to the explicitly selected routes, plus a
 // one-click reset of every cabin back to its reference fare.
-function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onCloseGroups, onClear }) {
+function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onApplyFrequency, onCloseGroups, onClear }) {
   const [pct, setPct] = useState({});
   const [catering, setCatering] = useState('');
   const classes = classesPresentIn(groups);
@@ -2227,6 +2333,285 @@ function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCateri
           Close routes
         </button>
         <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={onClear}>Clear</button>
+      </div>
+
+      {/* Bulk frequency — its own row: the plan summary needs the width. */}
+      {onApplyFrequency && <BulkFrequencyControls groups={groups} onApply={onApplyFrequency} />}
+    </div>
+  );
+}
+
+// ─── Bulk frequency ───────────────────────────────────────────────────────────
+//
+// Discord, Barca 2026-10-16: "Bulk pricing but instead it adjusts route
+// frequency." Same two doors as bulk pricing — the header button opens a modal
+// that matches routes by how full they are, and the selection bar applies to
+// the ticked rows — and both preview and apply through planBulkFrequency, the
+// engine's own plan, so the summary under the controls is what Apply does.
+//
+// Frequency is per AIRCRAFT (each tail on a pair is its own route), so "+2"
+// means two more flights a week on every aircraft on the matching pairs.
+const MAX_FREQ_UI = 99;   // the per-route stepper's ceiling (MAX_ROUTE_FREQUENCY in the engine)
+const FREQ_MODES = [
+  { id: 'delta', label: 'Add / remove' },
+  { id: 'set',   label: 'Set to' },
+  { id: 'max',   label: 'Fill spare hours' },
+];
+
+function routeIdsOf(groups) {
+  return groups.flatMap(g => g.routes.map(r => r.id));
+}
+
+/** One line per reason a route got less than it asked for: "Aircraft's weekly block-hour limit ×3". */
+function cappedReasons(plan) {
+  const counts = new Map();
+  for (const e of plan.plan) {
+    const why = e.reason ?? null;
+    if (!why) continue;
+    // "No free gate slots at LHR" → group by the sentence, airports included:
+    // that names exactly which gate to lease.
+    counts.set(why, (counts.get(why) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]);
+}
+
+function FrequencyPlanSummary({ plan, mode }) {
+  if (!plan) return null;
+  const reasons = cappedReasons(plan);
+  const none = plan.changed === 0;
+  return (
+    <div data-freq-plan="" style={{
+      padding: '8px 12px', borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+      background: none ? 'var(--surface2)' : 'rgba(56,139,253,0.10)',
+      border: `1px solid ${none ? 'var(--border)' : 'rgba(56,139,253,0.3)'}`,
+    }}>
+      {none ? (
+        <span style={{ color: 'var(--text-muted)' }}>
+          {mode === 'max' || plan.capped > 0 ? 'None of these aircraft has room for another flight.' : 'Nothing would change.'}
+        </span>
+      ) : (
+        <span>
+          <b>{plan.changed}</b> aircraft change
+          {plan.added > 0 && <> · <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{plan.added}</span> flight{plan.added !== 1 ? 's' : ''}/wk</>}
+          {plan.removed > 0 && <> · <span style={{ color: 'var(--red)', fontWeight: 700 }}>−{plan.removed}</span> flight{plan.removed !== 1 ? 's' : ''}/wk</>}
+        </span>
+      )}
+      {plan.capped > 0 && (
+        <div style={{ color: 'var(--yellow)', marginTop: 4 }}>
+          {none ? 'What stops them:' : `${plan.capped} got less than asked — each takes the most that fits:`}
+          {reasons.slice(0, 4).map(([why, n]) => (
+            <div key={why} style={{ color: 'var(--text-muted)', paddingLeft: 10 }}>· {why}{n > 1 ? ` ×${n}` : ''}</div>
+          ))}
+          {reasons.length > 4 && <div style={{ color: 'var(--text-dim)', paddingLeft: 10 }}>· and {reasons.length - 4} more reasons</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The selection bar's frequency row: mode + value and the live plan for the
+ * ticked `groups`. `onApply(plan, spec)` receives the plan the player was shown.
+ */
+function BulkFrequencyControls({ groups, onApply }) {
+  const { state } = useGame();
+  const [mode, setMode]   = useState('delta');
+  const [delta, setDelta] = useState(1);
+  const [target, setTarget] = useState(7);
+  const value = mode === 'delta' ? delta : mode === 'set' ? target : 0;
+  // The selection is rebuilt every render; key the plan on the ids it holds.
+  const idsKey = routeIdsOf(groups).join(',');
+  const routeIds = useMemo(() => (idsKey ? idsKey.split(',') : []), [idsKey]);
+  const ready = routeIds.length > 0 && (mode !== 'delta' || delta !== 0);
+  // The engine's plan — the same call BULK_ADJUST_FREQUENCY makes. Keyed on
+  // what the guard reads rather than the whole state, so a rival re-pricing
+  // somewhere in the world doesn't re-plan a big selection.
+  const plan = useMemo(
+    () => (ready ? planBulkFrequency(state, routeIds, { mode, value }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.routes, state.fleet, state.cargoRoutes, state.gates, state.allianceSlotPool, routeIds, mode, value, ready]);
+
+  const modeButtons = (
+    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', width: 'fit-content' }}>
+      {FREQ_MODES.map(m => (
+        <button
+          key={m.id}
+          type="button"
+          data-freq-mode={m.id}
+          onClick={() => setMode(m.id)}
+          style={{
+            padding: '4px 8px', fontSize: 11, fontWeight: 600,
+            cursor: 'pointer', border: 'none',
+            background: mode === m.id ? 'var(--accent)' : 'transparent',
+            color: mode === m.id ? '#fff' : 'var(--text-muted)',
+          }}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const valueControl = mode === 'delta' ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+      <NumberStepper size="sm" live value={delta} min={-98} max={98} onChange={setDelta}
+        ariaLabel="flights per week to add or remove on each aircraft"
+        decTitle="One fewer" incTitle="One more" />
+      <span style={{ color: 'var(--text-muted)' }}>flights/wk per aircraft</span>
+    </span>
+  ) : mode === 'set' ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+      <NumberStepper size="sm" live value={target} min={1} max={MAX_FREQ_UI} onChange={setTarget}
+        ariaLabel="flights per week on each aircraft"
+        decTitle="One fewer" incTitle="One more" />
+      <span style={{ color: 'var(--text-muted)' }}>flights/wk on each aircraft</span>
+    </span>
+  ) : (
+    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+      as many flights as each aircraft's hours and the gate slots allow
+    </span>
+  );
+
+  const button = (
+    <button
+      className="btn btn-primary"
+      style={{ fontSize: 13 }}
+      disabled={!plan || plan.changed === 0}
+      onClick={() => onApply(plan, { routeIds, mode, value })}
+    >
+      Apply
+    </button>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexBasis: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Flights/wk</span>
+        {modeButtons}
+        {valueControl}
+        {button}
+      </div>
+      {plan && <FrequencyPlanSummary plan={plan} mode={mode} />}
+    </div>
+  );
+}
+function BulkFrequencyModal({ allGroups, onApply, onClose }) {
+  const { state } = useGame();
+  const [useLoad, setUseLoad] = useState(false);
+  const [minLoad, setMinLoad] = useState(85);
+  const [maxLoad, setMaxLoad] = useState(100);
+  const [mode, setMode]     = useState('delta');
+  const [delta, setDelta]   = useState(1);
+  const [target, setTarget] = useState(7);
+  const value = mode === 'delta' ? delta : mode === 'set' ? target : 0;
+
+  const matching = useMemo(() => allGroups.filter(g => {
+    if (!useLoad) return true;
+    const lf = (g.avgLoad ?? 0) * 100;
+    return lf >= minLoad && lf <= maxLoad;
+  }), [allGroups, useLoad, minLoad, maxLoad]);
+  const routeIds = useMemo(() => routeIdsOf(matching), [matching]);
+  const ready = routeIds.length > 0 && (mode !== 'delta' || delta !== 0);
+  const plan = useMemo(
+    () => (ready ? planBulkFrequency(state, routeIds, { mode, value }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.routes, state.fleet, state.cargoRoutes, state.gates, state.allianceSlotPool, routeIds, mode, value, ready]);
+
+  const label = { fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 };
+  const numIn = { width: 56, padding: '4px 6px', textAlign: 'right', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6 };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2500,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto',
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: 560, maxWidth: '100%', maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}><Glyph e="⏱" /> Bulk Frequency</div>
+          <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+          Change flights per week on many routes at once — add flights where aircraft run full, trim
+          them where they don't. Every change is checked exactly like the route's + button (aircraft
+          hours, gate slots, frequency caps); a route that can't take the whole change gets as much as fits.
+        </div>
+
+        <div style={{ ...label, marginBottom: 8 }}>1 · Match by load factor</div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12,
+          padding: '8px 10px', borderRadius: 8,
+          background: useLoad ? 'var(--surface2)' : 'transparent',
+          border: `1px solid ${useLoad ? 'var(--accent)' : 'var(--border)'}`, opacity: useLoad ? 1 : 0.75,
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <input type="checkbox" checked={useLoad} onChange={e => setUseLoad(e.target.checked)} />
+            Only pairs running
+          </label>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, opacity: useLoad ? 1 : 0.5 }}>
+            <input type="number" min="0" max="100" value={minLoad} disabled={!useLoad} style={numIn}
+              onChange={e => setMinLoad(Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))} />
+            <span style={{ color: 'var(--text-muted)' }}>%–</span>
+            <input type="number" min="0" max="100" value={maxLoad} disabled={!useLoad} style={numIn}
+              onChange={e => setMaxLoad(Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))} />
+            <span style={{ color: 'var(--text-muted)' }}>% full</span>
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 18 }}>
+          <b style={{ color: 'var(--text)' }}>{matching.length}</b> city pair{matching.length !== 1 ? 's' : ''} ({aircraftCountIn(matching)} aircraft)
+          {useLoad ? ' match.' : ' — all routes, no load filter set.'}
+        </div>
+
+        <div style={{ ...label, marginBottom: 8 }}>2 · Change flights per week</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', width: 'fit-content' }}>
+            {FREQ_MODES.map(m => (
+              <button key={m.id} type="button" data-freq-mode={m.id} onClick={() => setMode(m.id)}
+                style={{
+                  padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
+                  background: mode === m.id ? 'var(--accent)' : 'transparent',
+                  color: mode === m.id ? '#fff' : 'var(--text-muted)',
+                }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {mode === 'delta' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+              <NumberStepper size="sm" live value={delta} min={-98} max={98} onChange={setDelta}
+                ariaLabel="flights per week to add or remove on each aircraft" decTitle="One fewer" incTitle="One more" />
+              <span style={{ color: 'var(--text-muted)' }}>flights/wk on each aircraft (negative removes; never below 1/wk)</span>
+            </span>
+          )}
+          {mode === 'set' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+              <NumberStepper size="sm" live value={target} min={1} max={MAX_FREQ_UI} onChange={setTarget}
+                ariaLabel="flights per week on each aircraft" decTitle="One fewer" incTitle="One more" />
+              <span style={{ color: 'var(--text-muted)' }}>flights/wk on each aircraft</span>
+            </span>
+          )}
+          {mode === 'max' && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Adds flights one at a time, round the matching routes, until each aircraft is out of hours
+              or an airport is out of slots — an aircraft flying two of these routes shares its spare hours between them.
+            </span>
+          )}
+          {plan && <FrequencyPlanSummary plan={plan} mode={mode} />}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            disabled={!plan || plan.changed === 0}
+            title={!plan ? 'Match at least one route and set a change' : plan.changed === 0 ? 'Nothing would change' : ''}
+            onClick={() => { onApply(plan, { routeIds, mode, value }); onClose(); }}
+          >
+            Apply to {plan?.changed ?? 0} aircraft
+          </button>
+        </div>
       </div>
     </div>
   );
