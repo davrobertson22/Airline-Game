@@ -318,6 +318,91 @@ export function reassignCompatibility(state, routeId, toAircraftId) {
 }
 
 // ─────────────────────────────────────────────
+// FLEET RENEWAL (an order that replaces an ageing tail on delivery)
+// ─────────────────────────────────────────────
+// Re-equipping the same routes with newer metal was always possible by hand:
+// order, wait for delivery, TRANSFER_ROUTES, then sell or hand back the old
+// tail. Done eighty times over it is a chore, not a decision (Discord,
+// 2026-10-16), so an order can now name the tail it replaces and the engine
+// runs that exact sequence when the aircraft arrives — the TRANSFER_ROUTES
+// fold, then the SELL_AIRCRAFT / RETIRE_AIRCRAFT fold. No new rules: every
+// guard is the one a player clicking through by hand would meet.
+//
+//   order.replacesAircraftId / replacesName / replaceDisposal   (on the queue)
+//   aircraft.replacing = { aircraftId, name, disposal, waiting? } (delivered,
+//                                                    swap not yet done)
+// Both are absent on anything that is not replacing something, so a game
+// that never uses the feature delivers byte-for-byte as before.
+export const REPLACE_DISPOSALS = ['dispose', 'keep'];
+const replaceDisposalOf = (d) => (d === 'keep' ? 'keep' : 'dispose');
+
+// The tail an order will become, close enough for the swap checks: its type,
+// the range modifier its wingtips bring, and its cabin (density moves range).
+function tailFromOrder(order) {
+  return {
+    id: `order:${order.id}`, typeId: order.typeId, name: order.name, status: 'idle',
+    ownershipType: order.ownershipType, rangeMod: order.rangeMod ?? 1.0,
+    ...(order.config ? { config: order.config } : {}),
+  };
+}
+
+// Routes as they will stand once any reserve cover involving this tail ends:
+// its own routes home, anything it is covering handed back. A cover is a
+// temporary arrangement, so a replacement is judged against the permanent
+// network — and the delivery-time swap waits for the cover to end.
+function withCoversHome(state, aircraftId) {
+  const home = (list) => (list ?? []).map(r => {
+    if (r.coverForAircraftId === aircraftId) return { ...r, aircraftId, coverForAircraftId: null };
+    if (r.aircraftId === aircraftId && r.coverForAircraftId) {
+      return { ...r, aircraftId: r.coverForAircraftId, coverForAircraftId: null };
+    }
+    return r;
+  });
+  return { ...state, routes: home(state.routes), cargoRoutes: home(state.cargoRoutes) };
+}
+
+/**
+ * Can this order replace this tail? { ok, reason?, idle? } — `idle` when the
+ * tail flies nothing and replacing it simply means disposing of it. Shared by
+ * the reducer and every picker, so a greyed-out row and a refused action
+ * always give the same reason. Charters are left out: a contract is
+ * temporary, and the swap waits for it to finish.
+ */
+export function replacementCompatibility(state, order, aircraftId) {
+  if (!order) return { ok: false, reason: 'Order not found' };
+  const old = (state.fleet ?? []).find(a => a.id === aircraftId);
+  if (!old || old.status === 'retired') return { ok: false, reason: 'No longer in your fleet' };
+  const byOrder = (state.pendingOrders ?? []).find(o => o.id !== order.id && o.replacesAircraftId === aircraftId);
+  const byTail  = (state.fleet ?? []).find(a => a.replacing?.aircraftId === aircraftId);
+  const taken   = byOrder ?? byTail;
+  if (taken) return { ok: false, reason: `Already being replaced by ${taken.name}` };
+  const hypo  = tailFromOrder(order);
+  const probe = withCoversHome({
+    ...state,
+    fleet:    [...(state.fleet ?? []), hypo],
+    charters: (state.charters ?? []).filter(c => c.aircraftId !== aircraftId),
+  }, aircraftId);
+  const c = transferCompatibility(probe, aircraftId, hypo.id);
+  if (c.ok) return c;
+  if (c.reason === 'No routes to transfer') return { ok: true, idle: true };
+  return c;
+}
+
+/** Why the swap must wait this week, or null. Every reason is temporary. */
+export function replacementWait(state, oldTail) {
+  if (!oldTail) return null;
+  const id = oldTail.id;
+  if (isOutOfService(oldTail)) {
+    return oldTail.status === 'maintenance' ? `${oldTail.name} is in a maintenance check` : `${oldTail.name} is grounded`;
+  }
+  const ops = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])];
+  if (ops.some(r => r.coverForAircraftId === id)) return `a reserve is covering ${oldTail.name}'s routes`;
+  if (ops.some(r => r.aircraftId === id && r.coverForAircraftId)) return `${oldTail.name} is covering for another aircraft`;
+  if (activeCharterOps(state.charters ?? []).some(c => c.aircraftId === id)) return `${oldTail.name} is flying a charter`;
+  return null;
+}
+
+// ─────────────────────────────────────────────
 // RESERVE COVER SETTLEMENT (on sell / retire)
 // ─────────────────────────────────────────────
 // Removing an aircraft that is part of a live cover must not delete routes or
@@ -1412,7 +1497,109 @@ function withStarterCrew(prev, next) {
 
 function rootReducer(state, action) {
   const next = withStarterCrew(state, reducer(state, action));
-  return action?.type === 'ADVANCE_WEEK' ? withAutoReplace(state, next) : next;
+  // Fleet renewal before crew auto-replace, so the crew plan sees the fleet
+  // after any old tail has been sold.
+  return action?.type === 'ADVANCE_WEEK' ? withAutoReplace(state, withFleetRenewal(state, next)) : next;
+}
+
+// Delivered tails carrying `replacing` take over their predecessor's routes
+// right after the tick — an ordinary TRANSFER_ROUTES, then an ordinary sale or
+// lease return. Outside the tick it needs no P&L row of its own: it is exactly
+// what the player would have clicked the moment the week closed.
+function withFleetRenewal(prev, next) {
+  if (!next || next === prev || !(next.fleet ?? []).some(a => a?.replacing)) return next;
+  const toasts = [];
+  let s = next;
+  for (const id of next.fleet.filter(a => a?.replacing).map(a => a.id)) s = renewOne(s, id, toasts);
+  return toasts.length ? { ...s, pendingToasts: [...(s.pendingToasts ?? []), ...toasts] } : s;
+}
+
+function renewOne(state, newId, toasts) {
+  const nu = state.fleet.find(a => a.id === newId);
+  if (!nu?.replacing) return state;
+  const tag = nu.replacing;
+  const setTag = (st, t) => ({
+    ...st,
+    fleet: st.fleet.map(a => {
+      if (a.id !== newId) return a;
+      if (t) return { ...a, replacing: t };
+      const { replacing: _done, ...rest } = a;
+      return rest;
+    }),
+  });
+  const old = state.fleet.find(a => a.id === tag.aircraftId && a.status !== 'retired');
+  const oldName = old?.name ?? tag.name ?? 'the aircraft it was replacing';
+  if (!old) {
+    toasts.push({
+      type: 'info', icon: '✈', duration: 9000,
+      title: `${nu.name}: nothing to replace`,
+      message: `${oldName} has already left your fleet, so ${nu.name} is idle and ready for routes.`,
+    });
+    return setTag(state, null);
+  }
+  const wait = replacementWait(state, old);
+  if (wait) {
+    if (tag.waiting !== wait) {
+      toasts.push({
+        type: 'info', icon: '⏳', duration: 9000,
+        title: `${nu.name} is waiting to replace ${oldName}`,
+        message: `${wait}. ${nu.name} will take over its routes as soon as it is free.`,
+      });
+    }
+    return setTag(state, { ...tag, waiting: wait });
+  }
+
+  let s = state;
+  // Scheduled routes only — no charter can be on it (replacementWait above).
+  const moving = [...(s.routes ?? []), ...(s.cargoRoutes ?? [])].filter(r => r.aircraftId === old.id).length;
+  if (moving > 0) {
+    const c = transferCompatibility(s, old.id, nu.id);
+    if (!c.ok) {
+      toasts.push({
+        type: 'warning', icon: '⚠', duration: 12000,
+        title: `${nu.name} can't take over from ${oldName}`,
+        message: `${c.reason}. ${nu.name} is idle and ${oldName} keeps its routes — move them by hand from the Fleet page.`,
+      });
+      return setTag(s, null);
+    }
+    s = reducer(s, { type: 'TRANSFER_ROUTES', fromAircraftId: old.id, toAircraftId: nu.id });
+  }
+  s = setTag(s, null);
+
+  let fate;
+  if (tag.disposal === 'keep') {
+    fate = `${oldName} is idle as a spare.`;
+  } else if (old.ownershipType === 'owned') {
+    if (isPledged(s, old.id)) {
+      fate = `${oldName} is pledged against an aircraft loan, so it was not sold and is idle as a spare.`;
+    } else {
+      const sold = reducer(s, { type: 'SELL_AIRCRAFT', aircraftId: old.id });
+      if (sold !== s && !(sold.error && sold.error !== s.error)) {
+        fate = `${oldName} was sold for ${formatMoney(sold.cash - s.cash)}.`;
+        s = sold;
+      } else {
+        fate = `${oldName} could not be sold and is idle.`;
+      }
+    }
+  } else {
+    const back = reducer(s, { type: 'RETIRE_AIRCRAFT', aircraftId: old.id });
+    if (back !== s && !(back.error && back.error !== s.error)) {
+      const net = back.cash - s.cash;
+      fate = `${oldName} went back to the lessor`
+        + (net < 0 ? ` (early return: ${formatMoney(-net)} net of deposit).` : net > 0 ? ` (deposit back: ${formatMoney(net)}).` : '.');
+      s = back;
+    } else {
+      fate = `${oldName} could not be returned and is idle.`;
+    }
+  }
+  toasts.push({
+    type: 'success', icon: '✈', duration: 9000,
+    title: `${nu.name} replaces ${oldName}`,
+    message: (moving > 0
+      ? `${nu.name} takes over ${moving} route${moving !== 1 ? 's' : ''} from ${oldName}. `
+      : `${oldName} was flying nothing, so there were no routes to move. `) + fate,
+  });
+  return s;
 }
 
 // Groups with "replace leavers automatically" on rehire the week's leavers as
@@ -1741,11 +1928,58 @@ function reducer(state, action) {
 
       if (newOrders.length === 0) return state;
 
+      // Fleet renewal: `replaces` names the tails these frames take over from,
+      // in delivery order. Each frame takes the first listed tail it can fly;
+      // one it cannot fly is skipped (the frame is still bought) — the same
+      // check the picker uses, so the form already showed which would fit.
+      const replaces = Array.isArray(action.replaces) ? [...new Set(action.replaces.filter(Boolean))] : [];
+      if (replaces.length > 0) {
+        const disposal = replaceDisposalOf(action.replaceDisposal);
+        let probe = { ...state, pendingOrders: runningPending };
+        for (const o of newOrders) {
+          const idx = replaces.findIndex(id => replacementCompatibility(probe, o, id).ok);
+          if (idx < 0) continue;
+          const [oldId] = replaces.splice(idx, 1);
+          const oldName = probe.fleet.find(a => a.id === oldId)?.name ?? null;
+          probe = { ...probe, pendingOrders: probe.pendingOrders.map(p => p.id === o.id
+            ? { ...p, replacesAircraftId: oldId, replacesName: oldName, replaceDisposal: disposal } : p) };
+        }
+        runningPending = probe.pendingOrders;
+      }
+
       return {
         ...state,
         cash:          cashBalance,
         pendingOrders: runningPending,
       };
+    }
+
+    case 'SET_ORDER_REPLACEMENT': {
+      // action: { orderId, aircraftId | null, disposal: 'dispose' | 'keep' }
+      // Name (or clear) the tail an order on the queue will replace on delivery.
+      const ord = (state.pendingOrders ?? []).find(o => o.id === action.orderId);
+      if (!ord) return state;
+      if (!action.aircraftId) {
+        if (!('replacesAircraftId' in ord)) return state;
+        const { replacesAircraftId: _a, replacesName: _n, replaceDisposal: _d, ...rest } = ord;
+        return { ...state, pendingOrders: state.pendingOrders.map(o => (o.id === ord.id ? rest : o)) };
+      }
+      if (!replacementCompatibility(state, ord, action.aircraftId).ok) return state;
+      const oldName = state.fleet.find(a => a.id === action.aircraftId)?.name ?? null;
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.map(o => (o.id === ord.id
+          ? { ...o, replacesAircraftId: action.aircraftId, replacesName: oldName, replaceDisposal: replaceDisposalOf(action.disposal) }
+          : o)),
+      };
+    }
+
+    case 'CLEAR_FLEET_REPLACEMENT': {
+      // action: { aircraftId } — a delivered tail stops waiting to take over.
+      const a = state.fleet.find(x => x.id === action.aircraftId);
+      if (!a?.replacing) return state;
+      const { replacing: _r, ...rest } = a;
+      return { ...state, fleet: state.fleet.map(x => (x.id === a.id ? rest : x)) };
     }
 
     case 'CANCEL_ORDER': {
@@ -5429,6 +5663,13 @@ function reducer(state, action) {
           // pre-change order arrives fitted and pays WIFI_WEEKLY_OPEX forever
           // on a tail the fleet page says can never be fitted.
           hasWifi:       (order.hasWifi ?? false) && canFitWifi(ordType),
+          // Fleet renewal: the swap itself runs right after the tick
+          // (withFleetRenewal). Absent on an ordinary delivery.
+          ...(order.replacesAircraftId ? { replacing: {
+            aircraftId: order.replacesAircraftId,
+            name:       agedFleet.find(a => a.id === order.replacesAircraftId)?.name ?? order.replacesName ?? null,
+            disposal:   replaceDisposalOf(order.replaceDisposal),
+          } } : {}),
         });
         newToasts.push({
           type:     'success',

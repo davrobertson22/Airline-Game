@@ -18,6 +18,7 @@ import { absoluteWeek } from '../utils/fuel.js';
 import { deliverySchedule, deliveryLead } from '../data/delivery.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
+import { ReplacesSection, replacesForDispatch } from './FleetRenewal.jsx';
 import {
   buildPaymentSchedule, preDeliveryTotal, signingAmount, committedPreDelivery,
 } from '../models/orderPayments.js';
@@ -134,7 +135,9 @@ function ClassRow({ label, color, fareLabel, spaceLabel, value, max, onChange })
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function AircraftCheckout({ typeId, mode, onClose }) {
+// `replaceIds` presets the "Replaces" block (Fleet ▸ bulk replace); `onOrdered`
+// runs after a successful dispatch, before onClose.
+export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = null, onOrdered = null }) {
   const { state, dispatch } = useGame();
   const { cash, fleet, pendingOrders = [], year, week } = state;
 
@@ -164,7 +167,11 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
   const [hasWifi, setHasWifi]                    = useState(false);
 
   // ── Quantity ──────────────────────────────────────────────────────────────
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(Math.max(1, Math.min(100, replaceIds?.length || 1)));
+
+  // ── Fleet renewal: which existing tails these frames take over from ──────
+  const [replaceSel, setReplaceSel]           = useState(replaceIds ?? []);
+  const [replaceDisposal, setReplaceDisposal] = useState('dispose');
 
   // ── Custom name (optional) ────────────────────────────────────────────────
   const [customName, setCustomName] = useState('');
@@ -349,7 +356,17 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
 
   function setQty(n) { setQuantity(Math.max(1, Math.min(100, n))); }
 
+  // The order as configured, for the replacement checks: range comes from the
+  // wingtips and the cabin, exactly as it will on the delivered tail.
+  const replaceDraft = {
+    id: '__checkout-draft', typeId, name: type.name,
+    ownershipType: mode === 'buy' ? 'owned' : 'lease',
+    rangeMod: Math.round(wingtipRangeMod * 10000) / 10000,
+    ...(cabinConfig ? { config: cabinConfig } : {}),
+  };
+
   function handleConfirm() {
+    const replaces = replaceSel.length ? replacesForDispatch(state, replaceSel, replaceDraft, quantity) : [];
     dispatch({
       type:          'ORDER_AIRCRAFT',
       typeId,
@@ -360,7 +377,9 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
       quantity,
       config:        cabinConfig,
       name:          customName.trim() || null,
+      ...(replaces.length ? { replaces, replaceDisposal } : {}),
     });
+    onOrdered?.();
     onClose();
   }
 
@@ -714,6 +733,19 @@ export default function AircraftCheckout({ typeId, mode, onClose }) {
             </div>
           </section>
           )}
+
+          {/* ── Replaces (fleet renewal) ─────────────────────────────────── */}
+          <ReplacesSection
+            draft={replaceDraft}
+            quantity={quantity}
+            setQuantity={setQty}
+            selected={replaceSel}
+            setSelected={setReplaceSel}
+            disposal={replaceDisposal}
+            setDisposal={setReplaceDisposal}
+            deliveryWeeks={deliveryWeeks}
+            defaultOpen={!!replaceIds?.length}
+          />
 
           {/* ── Order summary ────────────────────────────────────────────── */}
           <section style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginBottom: 14 }}>

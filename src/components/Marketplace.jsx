@@ -20,6 +20,7 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { nextDeliveryWeeks, orderProgress } from '../data/delivery.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
+import { OrderReplacementLine } from './FleetRenewal.jsx';
 import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import InfoTip from './InfoTip.jsx';
 import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS } from '../utils/marketFilters.js';
@@ -445,6 +446,8 @@ export function OrderCard({ order, currentAbsWeek, onCancel, onRename }) {
             </div>
           </div>
         </div>
+
+        <OrderReplacementLine order={order} />
 
         {/* Delivery progress */}
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
