@@ -9,6 +9,7 @@ import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, c
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import OutOfRangeBadge from './OutOfRangeBadge.jsx';
 import { useToast } from './ToastSystem.jsx';
+import NumberStepper from './NumberStepper.jsx';
 
 const ACCENT = '#e8833a';
 const CARGO_PAGE_SIZE = 60;
@@ -103,14 +104,13 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
     );
   }
 
-  function adjFreq(route, delta) {
-    // Increases run through the exact reducer guard so a blocked bump explains
-    // itself (block-hours / gate slots) instead of silently no-opping.
-    if (delta > 0) {
-      const reason = cargoFrequencyChangeBlockReason(state, route.id, route.weeklyFrequency + delta);
-      if (reason) { addToast({ type: 'warning', title: 'Can’t add a flight', message: reason }); return; }
-    }
-    dispatch({ type: 'UPDATE_CARGO_FREQUENCY', routeId: route.id, weeklyFrequency: Math.max(1, route.weeklyFrequency + delta) });
+  // Typed or stepped values from the NumberStepper — already clamped and
+  // run through the engine guard, so these just dispatch.
+  function setFreq(route, n) {
+    dispatch({ type: 'UPDATE_CARGO_FREQUENCY', routeId: route.id, weeklyFrequency: n });
+  }
+  function setYield(route, y) {
+    dispatch({ type: 'UPDATE_CARGO_YIELD', routeId: route.id, yieldPrice: Math.max(0.01, +y.toFixed(3)) });
   }
   function adjYield(route, delta) {
     dispatch({ type: 'UPDATE_CARGO_YIELD', routeId: route.id, yieldPrice: Math.max(0.01, +(route.yieldPrice + delta).toFixed(3)) });
@@ -121,7 +121,7 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
     }
   }
 
-  const controls = { adjFreq, adjYield, close, state, onAddFreighter };
+  const controls = { setFreq, setYield, adjYield, close, state, onAddFreighter };
 
   const totalRev    = rows.reduce((s, r) => s + (r.sim?.revenue ?? 0), 0);
   const totalProfit = rows.reduce((s, r) => s + (r.sim?.profit ?? 0), 0);
@@ -356,34 +356,40 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
 // ─── Shared controls (used by both the expanded table row and the card view) ────
 
 function CargoRouteControls({ route, sim, controls }) {
-  const { adjFreq, adjYield, close, state, onAddFreighter } = controls;
+  const { setFreq, setYield, close, state, onAddFreighter } = controls;
   const perKg = (route.yieldPrice * (sim?.distance ?? 0) / 1000);
-  const upBlock = cargoFrequencyChangeBlockReason(state, route.id, route.weeklyFrequency + 1);
 
   return (
     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Flights/wk</span>
-        <button
-          className="btn btn-ghost"
-          style={{ padding: '2px 9px', opacity: route.weeklyFrequency > 1 ? 1 : 0.4, cursor: route.weeklyFrequency > 1 ? 'pointer' : 'not-allowed' }}
-          disabled={route.weeklyFrequency <= 1}
-          title={route.weeklyFrequency > 1 ? 'One fewer flight per week' : 'At the minimum. Use Close route to stand the freighter down'}
-          onClick={() => adjFreq(route, -1)}
-        >−</button>
-        <span style={{ fontWeight: 700, minWidth: 22, textAlign: 'center' }}>{route.weeklyFrequency}</span>
-        <button
-          className="btn btn-ghost"
-          style={{ padding: '2px 9px', opacity: upBlock ? 0.4 : 1, cursor: upBlock ? 'not-allowed' : 'pointer' }}
-          title={upBlock || 'One more flight per week'}
-          onClick={() => adjFreq(route, +1)}
-        >+</button>
+        <NumberStepper
+          size="sm"
+          value={route.weeklyFrequency}
+          min={1}
+          max={99}
+          onChange={n => setFreq(route, n)}
+          blockReason={n => cargoFrequencyChangeBlockReason(state, route.id, n)}
+          blockedTitle="Can’t add a flight"
+          ariaLabel={`flights per week, ${route.origin} to ${route.destination}`}
+          decTitle={route.weeklyFrequency > 1 ? 'One fewer flight per week' : 'At the minimum. Use Close route to stand the freighter down'}
+          incTitle="One more flight per week"
+        />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Yield $/t-km</span>
-        <button className="btn btn-ghost" style={{ padding: '2px 9px' }} onClick={() => adjYield(route, -0.02)}>−</button>
-        <span style={{ fontWeight: 700, minWidth: 48, textAlign: 'center' }}>${route.yieldPrice.toFixed(3)}</span>
-        <button className="btn btn-ghost" style={{ padding: '2px 9px' }} onClick={() => adjYield(route, +0.02)}>+</button>
+        <NumberStepper
+          size="sm"
+          value={+route.yieldPrice.toFixed(3)}
+          min={0.01}
+          step={0.02}
+          decimals={3}
+          inputWidth={50}
+          onChange={y => setYield(route, y)}
+          ariaLabel={`yield, ${route.origin} to ${route.destination}`}
+          decTitle="Lower by $0.02"
+          incTitle="Raise by $0.02"
+        />
         <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>≈ ${perKg.toFixed(2)}/kg</span>
       </div>
       {/* One freighter is one freighter. The only way to put a second one on a

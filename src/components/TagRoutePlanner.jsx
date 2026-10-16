@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import NumberStepper from './NumberStepper.jsx';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import { getAircraftType, AIRCRAFT_TYPES } from '../data/aircraft.js';
@@ -293,7 +294,16 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
                     onChange={e => setFrequency(Number(e.target.value))}
                     draggable={false} onDragStart={e => e.preventDefault()}
                     style={{ width: 120 }} />
-                  <span style={{ fontWeight: 700, minWidth: 24 }}>{frequency}×</span>
+                  <NumberStepper
+                    live
+                    value={frequency}
+                    min={1}
+                    max={14}
+                    onChange={setFrequency}
+                    ariaLabel="flights per week"
+                    decTitle="One fewer flight per week"
+                    incTitle="One more flight per week"
+                  />
                 </div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

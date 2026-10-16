@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import NumberStepper from './NumberStepper.jsx';
 import { useGame, slotsUsedAt as slotsUsedAtEngine, cargoRouteDenial } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
@@ -427,8 +428,17 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                   <div>
                     <div className="form-label" style={{ marginBottom: 6 }}>Flights / week</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={frequency} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: frequencySliderWidth(freqCap), maxWidth: '62vw', accentColor: ACCENT }} />
-                      <span style={{ fontWeight: 700, minWidth: 22 }}>{frequency}×</span>
+                      <input type="range" className="hw-range" min="1" max={freqCap} step="1" value={frequency} onChange={e => setFrequency(Number(e.target.value))} draggable={false} onDragStart={e => e.preventDefault()} style={{ width: frequencySliderWidth(freqCap), maxWidth: '50vw', accentColor: ACCENT }} />
+                      <NumberStepper
+                        live
+                        value={Math.min(frequency, freqCap)}
+                        min={1}
+                        max={Math.max(1, freqCap)}
+                        onChange={setFrequency}
+                        ariaLabel="flights per week"
+                        decTitle="One fewer flight per week"
+                        incTitle="One more flight per week"
+                      />
                     </div>
                     {ready && selectedTypeId && (
                       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 5, maxWidth: 190, lineHeight: 1.4 }}>
@@ -442,7 +452,16 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input type="range" className="hw-range" min={+(routeData.refYield * 0.4).toFixed(3)} max={+(routeData.refYield * 2).toFixed(3)} step="0.005" draggable={false} onDragStart={e => e.preventDefault()}
                         value={effectiveYield} onChange={e => setYieldPrice(Number(e.target.value))} style={{ width: 110, accentColor: ACCENT }} />
-                      <span style={{ fontWeight: 700, minWidth: 46 }}>${effectiveYield.toFixed(3)}</span>
+                      <NumberStepper
+                        live
+                        value={+effectiveYield.toFixed(3)}
+                        min={0.01}
+                        step={0.005}
+                        decimals={3}
+                        inputWidth={58}
+                        onChange={setYieldPrice}
+                        ariaLabel="yield, dollars per tonne-km"
+                      />
                       <span style={{ fontSize: 11, minWidth: 90, color: yieldPct > 10 ? 'var(--red)' : yieldPct < -10 ? 'var(--green)' : 'var(--text-muted)' }}>
                         {yieldPct >= 0 ? `+${yieldPct}` : yieldPct}% · ${perKg.toFixed(2)}/kg
                       </span>
