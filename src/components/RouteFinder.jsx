@@ -12,6 +12,8 @@ import { Glyph } from './Icons.jsx';
 import InfoTip from './InfoTip.jsx';
 import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
 import BatchOpenReview from './BatchOpenReview.jsx';
+import FinderDestination, { finderCellPad } from './FinderDestination.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 import { useRememberedState, finderMemoryKey } from '../utils/finderMemory.js';
 import { idleTailsOfType, pickKey, MAX_BATCH } from '../models/routeBatch.js';
 
@@ -40,6 +42,9 @@ export default function RouteFinder({ onPick, standalone = false }) {
   const { state } = useGame();
   // Free gate slots per airport, counted the way the engine's guards count them.
   const slotPosition = useSlotPosition();
+  // Phones get a narrower table: code-first destinations, tighter cells.
+  const isMobile = useIsMobile();
+  const pad = finderCellPad(isMobile);
 
   const [open, setOpen]         = useState(!!standalone);
   // The search survives the trip to the planner and back (utils/finderMemory.js):
@@ -428,7 +433,7 @@ export default function RouteFinder({ onPick, standalone = false }) {
                   <thead>
                     <tr style={{ background: 'var(--surface2)' }}>
                       {canPick && (
-                        <th style={{ padding: '7px 4px 7px 12px', width: 1 }}>
+                        <th style={{ padding: isMobile ? '6px 2px 6px 8px' : '7px 4px 7px 12px', width: 1 }}>
                           <InfoTip text={`Tick the routes you want and open them together, one idle ${selectedType.name} each. Nothing opens until you review the list — every pick is checked and forecast after the ones above it, so they can't double-book a plane, a slot or your cash.`} />
                         </th>
                       )}
@@ -443,7 +448,7 @@ export default function RouteFinder({ onPick, standalone = false }) {
                         { h: 'Your slots',  right: true, tip: 'Weekly gate slots you have free at the destination. A route at 7 flights a week needs 7 at each end — lease a gate here without leaving the finder.' },
                         { h: '',            right: true  },
                       ].map((c, i) => (
-                        <th key={i} style={{ padding: '7px 12px', textAlign: c.right ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <th key={i} style={{ padding: pad, textAlign: c.right ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                           {c.h}{c.tip && <InfoTip text={c.tip} />}
                         </th>
                       ))}
@@ -458,7 +463,7 @@ export default function RouteFinder({ onPick, standalone = false }) {
                       return (
                         <tr key={r.code} style={{ borderTop: '1px solid var(--border-subtle)', opacity: r.block ? 0.55 : 1, background: picked ? 'rgba(56,139,253,0.08)' : undefined }}>
                           {canPick && (
-                            <td style={{ padding: '7px 4px 7px 12px', width: 1 }}>
+                            <td style={{ padding: isMobile ? '6px 2px 6px 8px' : '7px 4px 7px 12px', width: 1 }}>
                               {!r.block && (
                                 <input
                                   type="checkbox"
@@ -475,34 +480,30 @@ export default function RouteFinder({ onPick, standalone = false }) {
                               )}
                             </td>
                           )}
-                          <td style={{ padding: '7px 12px' }}>
-                            <span style={{ fontWeight: 700 }}>{a.code}</span>
-                            <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>{a.city}, {a.country}</span>
-                            <span style={{ color: 'var(--text-dim)', marginLeft: 6, fontSize: 11 }}>{regionLabel(r.region)}</span>
-                            {r.block && (
-                              <span title={r.block.reason} style={{ marginLeft: 8, fontSize: 10, color: 'var(--red)', border: '1px solid rgba(220,53,69,0.4)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
-                                {r.block.short}
-                              </span>
-                            )}
-                            {r.altCodes.length > 0 && (
-                              <span
-                                title={`Same market, other airports: ${r.altCodes.join(', ')}. They share one pool of travellers with ${r.code}, so this is one opportunity, not ${r.altCodes.length + 1}. Shown at ${r.code} because that is the field this city's travellers prefer for a route like this.`}
-                                style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}
-                              >
-                                +{r.altCodes.length} airport{r.altCodes.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                            {r.servesLane && (
-                              <span
-                                title={`You already fly this market as ${r.yourLanePairs.join(', ')} — the airports share one pool of travellers, so a second route here splits it rather than adding to it.`}
-                                style={{ marginLeft: 8, fontSize: 10, color: 'var(--yellow)', border: '1px solid rgba(210,153,34,0.4)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}
-                              >
-                                you fly {r.yourLanePairs[0]}
-                              </span>
-                            )}
+                          <td style={{ padding: pad }}>
+                            <FinderDestination
+                              airport={a}
+                              compact={isMobile}
+                              region={regionLabel(r.region)}
+                              badges={[
+                                r.block && { text: r.block.short, title: r.block.reason, tone: 'red' },
+                                r.altCodes.length > 0 && {
+                                  text: `+${r.altCodes.length} airport${r.altCodes.length !== 1 ? 's' : ''}`,
+                                  short: `+${r.altCodes.length}`,
+                                  title: `Same market, other airports: ${r.altCodes.join(', ')}. They share one pool of travellers with ${r.code}, so this is one opportunity, not ${r.altCodes.length + 1}. Shown at ${r.code} because that is the field this city's travellers prefer for a route like this.`,
+                                  tone: 'dim',
+                                },
+                                r.servesLane && {
+                                  text: `you fly ${r.yourLanePairs[0]}`,
+                                  short: 'flown',
+                                  title: `You already fly this market as ${r.yourLanePairs.join(', ')} — the airports share one pool of travellers, so a second route here splits it rather than adding to it.`,
+                                  tone: 'yellow',
+                                },
+                              ]}
+                            />
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.distKm.toLocaleString()} km</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.distKm.toLocaleString()} km</td>
+                          <td style={{ padding: pad, textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <div style={{ fontWeight: 700, color: 'var(--accent)' }}>
                               {r.demand.toLocaleString()}<span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-dim)' }}> /wk</span>
                             </div>
@@ -510,30 +511,30 @@ export default function RouteFinder({ onPick, standalone = false }) {
                               ×{seasonal.toFixed(2)} season
                             </div>
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>${r.refPrice}</td>
-                          <td style={{ padding: '7px 12px' }}>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)' }}>${r.refPrice}</td>
+                          <td style={{ padding: pad }}>
                             {r.laneRivalCount === 0
                               ? <span style={{ fontSize: 12, color: 'var(--green)' }}>None</span>
                               : <span style={{ fontSize: 12, color: 'var(--yellow)' }}>{r.laneRivalCount} airline{r.laneRivalCount !== 1 ? 's' : ''}</span>}
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: pad, textAlign: 'right', whiteSpace: 'nowrap' }}>
                             {proj
                               ? <span style={{ color: proj.loadFactor >= 0.75 ? 'var(--green)' : proj.loadFactor >= 0.45 ? 'var(--yellow)' : 'var(--red)' }}>
                                   {Math.round(proj.loadFactor * 100)}%
                                 </span>
                               : <span style={{ color: 'var(--text-dim)' }} title={r.block ? 'This aircraft cannot fly here' : forecastReady ? `Outside the ${DEFAULT_SCORE_LIMIT} markets forecast — narrow the search to price it` : 'Pick an aircraft to forecast this market'}>–</span>}
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                          <td style={{ padding: pad, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
                             {proj
                               ? <span style={{ color: proj.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                   {proj.netProfit >= 0 ? '+' : ''}{formatMoney(proj.netProfit)}
                                 </span>
                               : <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>–</span>}
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: pad, textAlign: 'right' }}>
                             <SlotCell code={a.code} freq={7} position={slotPosition} />
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: pad, textAlign: 'right' }}>
                             {onPick && !r.block && (
                               <button
                                 className="btn btn-ghost"

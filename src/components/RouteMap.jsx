@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { getAirport } from '../data/airports.js';
+import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
   simulateRoute, simulateCargoRoute, cargoLaneAllocations, formatMoney, currentGameDate,
@@ -14,6 +14,7 @@ import { Glyph } from './Icons.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { TILE_URL, TILE_OPTS } from './basemap.js';
 import { rivalIndexFor } from '../models/network.js';
+import { AirportDetailModal } from './AirportLink.jsx';
 
 // ── Polar softening ──────────────────────────────────────────────────────────
 // Reported on Discord 2026-10-02 (Headwinds, Gulf hub, 500+ routes): the true
@@ -352,6 +353,72 @@ export function mapAirportCodes(hubCodes = [], ...routeDataSets) {
   return [...codes];
 }
 
+
+// ── Every airport, as a way to find your way around ─────────────────────────
+// Asked for on Discord (Oct 2026): the map drew only the airports you already
+// fly to, so a player looking to start somewhere unfamiliar had no idea where
+// anything was. Every airport in the game now sits under the network as a dim
+// dot. The big ones show at every zoom; the 2,000-odd regional fields fill in
+// as you zoom toward them, and codes appear once there is room to read them.
+// Only what is on screen is drawn, and labels are capped, so the map stays
+// readable and cheap at any zoom.
+
+/** Zoom at which each class of airport gets a dot, and a code label. */
+export const WORLD_DOT_ZOOM   = { major: 0, regional: 4 };
+export const WORLD_LABEL_ZOOM = { major: 4, regional: 6 };
+/** Most code labels drawn at once — past this the map is a wall of text. */
+export const WORLD_LABEL_CAP  = 250;
+
+const worldClass = (a) => (a.tier === 'regional' ? 'regional' : 'major');
+
+/**
+ * The background airports to draw for a view.
+ *
+ * `view` is { south, north, west, east } in degrees; west/east may run past
+ * ±180 when the player has panned into a neighbouring world copy, and each
+ * returned dot carries the longitude of the copy that is on screen. Omit it to
+ * get every airport the zoom allows. `skip` holds the codes the network already
+ * pins, which keep their own markers.
+ *
+ * Labels go to the biggest airports first, so when the cap bites it drops the
+ * smallest fields rather than an arbitrary corner of the screen.
+ */
+export function worldAirportsInView(airports = AIRPORTS, zoom = 2, view = null, skip = new Set()) {
+  const dots = [];
+  for (const a of airports) {
+    if (!a || skip.has(a.code)) continue;
+    const cls = worldClass(a);
+    if (zoom < WORLD_DOT_ZOOM[cls]) continue;
+    let lon = a.lon;
+    if (view) {
+      if (a.lat < view.south || a.lat > view.north) continue;
+      lon = null;
+      for (const k of [0, 360, -360, 720, -720]) {
+        const l = a.lon + k;
+        if (l >= view.west && l <= view.east) { lon = l; break; }
+      }
+      if (lon == null) continue;
+    }
+    dots.push({ a, lat: a.lat, lon, major: cls === 'major' });
+  }
+  const labels = dots
+    .filter(d => zoom >= WORLD_LABEL_ZOOM[d.major ? 'major' : 'regional'])
+    .sort((x, y) => (y.major - x.major) || ((y.a.population ?? 0) - (x.a.population ?? 0)))
+    .slice(0, WORLD_LABEL_CAP);
+  return { dots, labels };
+}
+
+const TIER_WORD = { mega: 'Major hub', major: 'Major airport', regional: 'Regional airport' };
+
+/** Hover card for a background airport. */
+export function worldAirportTip(a) {
+  return `<div class="map-tip"><div class="map-tip-title">${a.code} · ${a.name}</div>`
+    + `<div class="map-tip-sub">${a.city}, ${a.country} · ${TIER_WORD[a.tier] ?? 'Airport'}</div>`
+    + `<div class="map-tip-hint">Click for the airport's details</div></div>`;
+}
+
+const WORLD_AIRPORTS_KEY = 'tw_map_world_airports';
+
 export default function RouteMap() {
   const { state } = useGame();
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
@@ -386,6 +453,16 @@ export default function RouteMap() {
   const [showCharters,  setShowCharters]  = useState(true);
   const [acTypeFilter,  setAcTypeFilter]  = useState('all');  // 'all' | aircraft typeId
   const [airportFilter, setAirportFilter] = useState('all');  // 'all' | IATA code
+  // Every airport under the network — on unless the player has switched it off.
+  const [showAirports, setShowAirports] = useState(() => {
+    try { return localStorage.getItem(WORLD_AIRPORTS_KEY) !== '0'; } catch { return true; }
+  });
+  const toggleAirports = () => setShowAirports(v => {
+    try { localStorage.setItem(WORLD_AIRPORTS_KEY, v ? '0' : '1'); } catch { /* per-browser nicety only */ }
+    return !v;
+  });
+  const [detailCode, setDetailCode] = useState(null);   // airport detail opened from a dot
+  const worldRendererRef = useRef(null);
   const cargoLayersRef = useRef([]);   // amber cargo route overlay layers
   const charterLayersRef = useRef([]); // yellow charter contract overlay layers
 
@@ -447,6 +524,7 @@ export default function RouteMap() {
       // draw must frame the network even if nothing about it changed.
       fittedExtentRef.current = null;
       flownToRef.current = null;
+      worldRendererRef.current = null;   // its canvas belonged to the old map
       setMapReady(false);
     };
   }, [ready]);
@@ -1113,6 +1191,71 @@ export default function RouteMap() {
     applyStyles();
   }, [routeGroups, airportSet, hubs, mapReady, applyStyles]); // mapReady ensures this re-runs after L.map() finishes
 
+  // 5. Every airport in the game, dim, under the network. Redrawn for the view
+  // on every pan and zoom (see worldAirportsInView). Lives in its own panes so
+  // it always sits beneath your lines and your own airports' markers.
+  const pinnedCodes = useMemo(() => new Set(airportSet.map(a => a.code)), [airportSet]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L || !showAirports) return;
+    const L = window.L;
+    if (!map.getPane('worldAirports')) {
+      map.createPane('worldAirports').style.zIndex = 350;        // under route lines (400)
+      map.createPane('worldAirportLabels').style.zIndex = 450;   // under your own labels (600)
+      map.getPane('worldAirportLabels').style.pointerEvents = 'none';
+    }
+    // One canvas for every dot: a few hundred SVG circles per pan is what
+    // makes a map stutter. A generous hit tolerance, because a 3px dot is
+    // hard to land a finger on.
+    if (!worldRendererRef.current) {
+      worldRendererRef.current = L.canvas({ pane: 'worldAirports', padding: 0.2, tolerance: isMobile ? 10 : 5 });
+    }
+    const renderer = worldRendererRef.current;
+    const group = L.layerGroup().addTo(map);
+
+    const draw = () => {
+      group.clearLayers();
+      const b = map.getBounds().pad(0.15);
+      const { dots, labels } = worldAirportsInView(AIRPORTS, map.getZoom(), {
+        south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast(),
+      }, pinnedCodes);
+      for (const d of dots) {
+        const m = L.circleMarker([d.lat, d.lon], {
+          renderer, pane: 'worldAirports',
+          radius: d.major ? 3.5 : 2.5,
+          color: '#0a1020', weight: 1,
+          fillColor: d.major ? '#b4c2d4' : '#7f8ca0', fillOpacity: 0.9,
+        });
+        m.bindTooltip(worldAirportTip(d.a), { className: 'game-tooltip', offset: [8, 0] });
+        m.on('click', (e) => { L.DomEvent.stopPropagation(e); setDetailCode(d.a.code); });
+        group.addLayer(m);
+      }
+      for (const d of labels) {
+        group.addLayer(L.marker([d.lat, d.lon], {
+          icon: L.divIcon({
+            className: 'airport-label airport-label-world',
+            // Same type as your own airports' codes, quieter, so the network still reads first.
+            html: `<span style="color:#8d9bb0;font-weight:600;font-size:9px;opacity:.85">${d.a.code}</span>`,
+            iconAnchor: [-6, 5],
+          }),
+          pane: 'worldAirportLabels',
+          interactive: false,
+          keyboard: false,
+        }));
+      }
+    };
+
+    draw();
+    map.on('moveend', draw);   // fires after a zoom too
+    return () => {
+      // On unmount the map is torn down first (mapRef already cleared), and
+      // its layers go with it.
+      if (mapRef.current !== map) return;
+      map.off('moveend', draw);
+      map.removeLayer(group);
+    };
+  }, [mapReady, showAirports, pinnedCodes, isMobile]);
+
   // Re-style when hover changes
   useEffect(() => {
     hoveredIdRef.current = hoveredId;
@@ -1138,17 +1281,10 @@ export default function RouteMap() {
     map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
   }, [selectedId, routeGroups, applyStyles]);
 
-  // A carrier can hold a contract before it opens a single scheduled route, and
-  // being told the map is empty while flying a 12-week series is a lie.
-  if (routes.length === 0 && cargoRoutes.length === 0 && charterData.length === 0) {
-    return (
-      <div className="empty-state" style={{ paddingTop: 80 }}>
-        <div className="empty-state-icon"><Glyph e="🗺️" /></div>
-        <div className="empty-state-text">No routes yet.</div>
-        <div style={{ marginTop: 8, fontSize: 13 }}>Open routes to see your network on the map.</div>
-      </div>
-    );
-  }
+  // A carrier can hold a contract before it opens a single scheduled route, so
+  // "nothing flying" means none of the three. With no network the map still
+  // earns its place: it is where a new airline looks for somewhere to go.
+  const noNetwork = routes.length === 0 && cargoRoutes.length === 0 && charterData.length === 0;
 
   const selectedData = selectedId != null ? routeGroups.find(x => x.key === selectedId) : null;
 
@@ -1163,6 +1299,11 @@ export default function RouteMap() {
         }}>
           <div>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Route Network</span>
+            {noNetwork ? (
+              <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+                No routes yet{showAirports ? ' — every airport you can fly to is on the map; click one for its details' : ''}
+              </span>
+            ) : (
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
               {routeGroups.length} route{routeGroups.length !== 1 ? 's' : ''} · {airportSet.length} airports{
                 filteredCharterData.length > 0 && ` · ${filteredCharterData.length} charter${filteredCharterData.length !== 1 ? 's' : ''}`
@@ -1171,6 +1312,7 @@ export default function RouteMap() {
                 <span style={{ color: 'var(--accent)' }}> · focused {(selectedData.chain ?? [selectedData.origin, selectedData.dest]).map(a => a.code).join('→')}</span>
               )}
             </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Filters: aircraft type + airport */}
@@ -1237,6 +1379,23 @@ export default function RouteMap() {
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: HUB_COLOR, display: 'inline-block' }} />
               {hubCodes.length > 1 ? 'Hubs' : 'Hub'}
             </span>
+
+            {/* Every-airport layer. On by default; remembered per browser. */}
+            <button
+              onClick={toggleAirports}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                opacity: showAirports ? 1 : 0.4, transition: 'opacity 0.15s',
+                color: 'var(--text-muted)', fontSize: 11,
+              }}
+              title={showAirports
+                ? 'Hide the other airports'
+                : 'Show every airport in the game — the big ones always, smaller fields as you zoom in'}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#b4c2d4', display: 'inline-block' }} />
+              All airports
+            </button>
 
             {/* Cargo toggle — only when cargo routes exist */}
             {cargoRoutes.length > 0 && (
@@ -1360,7 +1519,10 @@ export default function RouteMap() {
         )}
       </div>
 
+      {detailCode && <AirportDetailModal code={detailCode} onClose={() => setDetailCode(null)} />}
+
       {/* Route summary table */}
+      {!noNetwork && (
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--text-muted)' }}>
@@ -1447,6 +1609,7 @@ export default function RouteMap() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

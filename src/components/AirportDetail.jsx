@@ -354,7 +354,7 @@ function LoungeCard({ code }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AirportDetail({ code, onBack }) {
+export default function AirportDetail({ code, onBack, backLabel = '← Back to Airports' }) {
   const { state } = useGame();
   const airport   = getAirport(code);
   const gates     = state.gates ?? {};
@@ -537,7 +537,7 @@ export default function AirportDetail({ code, onBack }) {
     <div>
       {/* Back + header */}
       <button className="btn btn-ghost" style={{ fontSize: 13, marginBottom: 14 }} onClick={onBack}>
-        ← Back to Airports
+        {backLabel}
       </button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>

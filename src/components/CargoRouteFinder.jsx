@@ -5,6 +5,8 @@ import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/airc
 import { distanceKm, formatMoney, currentGameDate, calendarYear } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, cargoBackhaulFactor } from '../utils/market.js';
 import { Glyph } from './Icons.jsx';
+import FinderDestination, { finderCellPad } from './FinderDestination.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 import InfoTip from './InfoTip.jsx';
 import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
 import { useRememberedState, finderMemoryKey } from '../utils/finderMemory.js';
@@ -27,6 +29,9 @@ const SORT_OPTIONS = [
  * trade, not tourism, so the results look very different from passenger ones.
  */
 export default function CargoRouteFinder({ onPick, standalone = false }) {
+  // Phones get a narrower table: code-first destinations, tighter cells.
+  const isMobile = useIsMobile();
+  const pad = finderCellPad(isMobile);
   const { state } = useGame();
   // Free gate slots per airport, counted the way the engine's guards count them.
   const slotPosition = useSlotPosition();
@@ -279,7 +284,7 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
                   <thead>
                     <tr style={{ background: 'var(--surface2)' }}>
                       {['Destination', 'Distance', 'Cargo Demand', 'Ref Yield', '≈ Rate', 'Rev Potential', 'Your slots', ''].map((h, i) => (
-                        <th key={i} style={{ padding: '7px 12px', textAlign: i >= 1 && i <= 6 ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={i} style={{ padding: pad, textAlign: i >= 1 && i <= 6 ? 'right' : 'left', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -288,22 +293,22 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
                       const inRange = maxFleetRange >= dist;
                       return (
                         <tr key={a.code} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                          <td style={{ padding: '7px 12px' }}>
-                            <span style={{ fontWeight: 700 }}>{a.code}</span>
-                            <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>{a.city}, {a.country}</span>
-                            {inRange && maxFleetRange > 0 && (
-                              <span title="Within range of a freighter in your fleet" style={{ marginLeft: 6, fontSize: 11, color: 'var(--green)' }}><Glyph e="✈" /></span>
-                            )}
+                          <td style={{ padding: pad }}>
+                            <FinderDestination airport={a} compact={isMobile}>
+                              {inRange && maxFleetRange > 0 && (
+                                <span title="Within range of a freighter in your fleet" style={{ marginLeft: 6, fontSize: 11, color: 'var(--green)' }}><Glyph e="✈" /></span>
+                              )}
+                            </FinderDestination>
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dist.toLocaleString()} km</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: ACCENT, whiteSpace: 'nowrap' }}>{demand.toLocaleString()} t<span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-dim)' }}> /wk</span></td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>${refYield.toFixed(3)}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>${(refYield * dist / 1000).toFixed(2)}/kg</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--green)', whiteSpace: 'nowrap' }} title="Weekly lane revenue at reference yield IF you carried the whole pool — a comparison scale, not a promise">{formatMoney(revPotential)}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dist.toLocaleString()} km</td>
+                          <td style={{ padding: pad, textAlign: 'right', fontWeight: 700, color: ACCENT, whiteSpace: 'nowrap' }}>{demand.toLocaleString()} t<span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-dim)' }}> /wk</span></td>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)' }}>${refYield.toFixed(3)}</td>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>${(refYield * dist / 1000).toFixed(2)}/kg</td>
+                          <td style={{ padding: pad, textAlign: 'right', color: 'var(--green)', whiteSpace: 'nowrap' }} title="Weekly lane revenue at reference yield IF you carried the whole pool — a comparison scale, not a promise">{formatMoney(revPotential)}</td>
+                          <td style={{ padding: pad, textAlign: 'right' }}>
                             <SlotCell code={a.code} freq={7} position={slotPosition} />
                           </td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: pad, textAlign: 'right' }}>
                             {onPick && (
                               <button
                                 className="btn btn-ghost"
