@@ -290,7 +290,7 @@ function CloudSavesPanel({ mode, canUpload, onLoaded, notice = null }) {
         api, slot: i, bytes, baseUploadedAt: slot?.uploadedAt ?? null, device: deviceLabel(),
         confirmReplace: (current) => ask(conflictQuestion(i, current, state.airlineName)),
       });
-      if (r.ok) setNote({ kind: 'ok', text: `${state.airlineName} is in Cloud ${i + 1}. Sign in on any device to load it.` });
+      if (r.ok) setNote({ kind: 'ok', text: `${state.airlineName} is in Cloud ${i + 1}. To carry on elsewhere, sign in the same way on that device and load it. It is a copy, not live sync: upload again from whichever device you played on last.` });
       else if (r.conflict) setNote({ kind: 'error', text: `Cloud ${i + 1} changed again while you were deciding, so nothing was uploaded. Have another look and try again.` });
       await refresh();
     } catch (e) {
