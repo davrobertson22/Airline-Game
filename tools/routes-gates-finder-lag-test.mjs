@@ -186,5 +186,76 @@ test('a small airline: every forecast lands in the first slice, and matches scor
   }
 });
 
+// ── 6. a gate lease does not reset a profit sort ────────────────────────────
+// Discord, 2026-10-17 (Kadicuss): "+ Gate" on a Route Finder row reset the
+// table to most-demand and restarted "forecasting 2 of 150…". The lease is a
+// network change, so the forecasts are re-priced, but the previous figures now
+// stand in while that happens and the ranking holds.
+//
+// Rendered straight into GameContext with an in-memory state, as a running
+// solo game is: renderRemote boots from a JSON save, so every render would get
+// fresh arrays and nothing could stay cached between renders.
+console.log('\n── 6. a gate lease keeps the finder\'s ranking ──────────────────');
+
+const finderEl = () => React.createElement(RouteFinder, { standalone: true, onPick: () => {} });
+const renderLive = (st) => clean(renderToString(React.createElement(GC.GameContext.Provider,
+  { value: { state: GC.hydrateState(st), dispatch: () => {}, saveStore: null, hydrated: true } }, finderEl())));
+// Destination codes in table order, from each row's "Plan →" tooltip.
+const rowCodes = (html) => [...html.matchAll(/Take [A-Z0-9]{3} → ([A-Z0-9]{3}) to the Route Planner/g)].map(m => m[1]);
+// Render until the progress line is gone (SSR runs no effects: one slice a render).
+function settle(st) {
+  let html = '';
+  for (let i = 0; i < 600; i++) {
+    html = renderLive(st);
+    if (!/(forecasting|updating forecasts) \d+ of/.test(html)) return { html, renders: i + 1 };
+  }
+  return { html, renders: Infinity };
+}
+const finderWorld = () => buildWorld({ routes: 40, rivals: 3, rivalRoutes: 5, gateAirports: 60 });
+
+test('leasing a gate from a profit-sorted finder keeps the profit order while it re-prices', () => {
+  clearFinderMemory();
+  const st = finderWorld();
+  rememberFinder(finderMemoryKey(st, 'passenger'), { typeId: 'a320neo', sortBy: 'profit', origin: 'JFK' });
+  const before = settle(st);
+  assert.ok(before.renders < Infinity, 'fixture: the profit sort never finished pricing (the cache does not survive a remount)');
+  const ranked = rowCodes(before.html);
+  assert.ok(ranked.length >= 10, `fixture: only ${ranked.length} rows`);
+
+  // The lease, as ADD_GATE leaves it: a new state with one more gate.
+  const dest = ranked.find(c => (st.gates[c] ?? 0) === 0) ?? ranked[3];
+  const after = { ...st, gates: { ...st.gates, [dest]: (st.gates[dest] ?? 0) + 1 } };
+  const html = renderLive(after);
+
+  assert.ok(!/once all are in/.test(html), 'the table fell back to demand order ("ranked … once all are in") after a gate lease');
+  const now = rowCodes(html);
+  const held = ranked.slice(0, 10).filter((c, i) => now[i] === c).length;
+  assert.ok(held >= 8, `only ${held}/10 of the top rows held their place — before ${ranked.slice(0, 10)} after ${now.slice(0, 10)}`);
+});
+
+test('…and once re-priced it says nothing more, with figures from the new network', () => {
+  clearFinderMemory();
+  const st = finderWorld();
+  rememberFinder(finderMemoryKey(st, 'passenger'), { typeId: 'a320neo', sortBy: 'profit', origin: 'JFK' });
+  settle(st);
+  const after = { ...st, gates: { ...st.gates, JFK: st.gates.JFK + 1 } };
+  const first = renderLive(after);
+  if (/\d+ of \d+…/.test(first)) assert.match(first, /updating forecasts \d+ of \d+…/, 'a re-price over known figures should say "updating", not start over');
+  const done = settle(after);
+  assert.ok(done.renders < Infinity);
+  assert.ok(!/Updating — your network changed/.test(done.html), 'stale figures still shown after the re-price finished');
+});
+
+test('a different aircraft does not borrow the last one\'s figures', () => {
+  clearFinderMemory();
+  const st = finderWorld();
+  const key = finderMemoryKey(st, 'passenger');
+  rememberFinder(key, { typeId: 'a320neo', sortBy: 'profit', origin: 'JFK' });
+  settle(st);
+  rememberFinder(key, { typeId: 'b7879' });
+  const html = renderLive(st);
+  assert.ok(!/Updating — your network changed/.test(html), 'a 787 search showed A320 forecasts as stale stand-ins');
+});
+
 console.log(`\n${failed === 0 ? '✓' : '✗'} routes-gates-finder-lag: ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);
