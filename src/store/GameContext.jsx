@@ -1,4 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { normalizeLivery, isLiveryShaped } from '../data/livery.js';
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
@@ -3029,6 +3030,14 @@ function reducer(state, action) {
       if (typeof action.logoId === 'string')   next.logoId    = action.logoId;
       if (typeof action.logoColor === 'string') next.logoColor = action.logoColor;
       if ('customLogo' in action)              next.customLogo = action.customLogo ?? null;
+      // Livery (data/livery.js): a whole paint scheme at a time, normalised so
+      // the save only ever holds valid colours/styles. `livery: null` clears it
+      // back to the default derived from the logo colour (liveryFor). Absent →
+      // untouched, so a name-only rebrand keeps the paint.
+      if ('livery' in action) {
+        if (action.livery === null) delete next.livery;
+        else if (isLiveryShaped(action.livery)) next.livery = normalizeLivery(action.livery, next.logoColor);
+      }
       return next;
     }
 
