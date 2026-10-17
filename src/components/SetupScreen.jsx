@@ -13,6 +13,7 @@ import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE } from '../data/demandWorld.js';
 import { loadAirportMarkets } from './AllAirportsTable.jsx';
+import { parseRivalSet, splitRivalSet, exampleRivalSet, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Ordered as a continuous rainbow spectrum (red → violet), then a neutral set.
@@ -114,6 +115,18 @@ export default function SetupScreen() {
   const [uncapMegas,        setUncapMegas]        = useState(false);
   const [demandSeed,        setDemandSeed]        = useState(() => String(newDemandSeed()));
   const [rolling,           setRolling]           = useState(false);
+  // Rivals (models/rivalSets.js): the random field, or a pasted custom set.
+  const [rivalSource,       setRivalSource]       = useState('random');   // 'random' | 'custom'
+  const [rivalText,         setRivalTextRaw]      = useState(() => {
+    try { return localStorage.getItem('tw_rival_set_draft') ?? ''; } catch { return ''; }
+  });
+  function setRivalText(t) {
+    setRivalTextRaw(t);
+    try { localStorage.setItem('tw_rival_set_draft', t); } catch { /* private mode */ }
+  }
+  const [rivalMode,         setRivalMode]         = useState('replace');  // 'replace' | 'add'
+  const [noRandomStartups,  setNoRandomStartups]  = useState(false);
+  const [emptyHub,          setEmptyHub]          = useState(false);
   const fileInputRef = useRef(null);
   const cardRef = useRef(null);
 
@@ -163,6 +176,11 @@ export default function SetupScreen() {
   const seedValue   = cleanDemandSeed(demandSeed);
   const seedInvalid = demandMode === 'random' && seedValue == null;
 
+  // Custom rival set: checked as the player types, the same check START_GAME runs.
+  const rivalParse   = rivalSource === 'custom' ? parseRivalSet(rivalText) : null;
+  const rivalInvalid = rivalSource === 'custom' && !rivalParse?.ok;
+  const rivalSplit   = rivalParse?.ok ? splitRivalSet(rivalParse.set, eraInvalid ? null : startYear) : null;
+
   async function handleStart(e) {
     e.preventDefault();
     // A submit can reach us from any step — Enter in a text field, a mobile
@@ -172,7 +190,7 @@ export default function SetupScreen() {
     // hub. Treat a stray submit as "next step", never as "launch".
     if (step < 3) { if (canContinue) setStep(s => s + 1); return; }
     if (!airlineName.trim()) { setStep(1); return; }
-    if (eraInvalid || seedInvalid || rolling) return;
+    if (eraInvalid || seedInvalid || rivalInvalid || rolling) return;
     // A randomized world is rolled here, not in the reducer: it needs the
     // generated market table (~200 KB, loaded on demand) to place the tier lines.
     let demandWorld = null;
@@ -199,6 +217,9 @@ export default function SetupScreen() {
       productionLines,
       startYear,
       demandWorld,
+      ...(rivalSource === 'custom' && rivalParse?.ok ? { rivalSet: rivalParse.set, rivalMode } : {}),
+      ...(noRandomStartups ? { noRandomStartups: true } : {}),
+      ...(emptyHub ? { emptyHub: true } : {}),
     });
   }
 
@@ -696,6 +717,103 @@ export default function SetupScreen() {
             )}
           </div>
 
+          {/* ── Rivals ── */}
+          <div className="form-group">
+            <label className="form-label"><Glyph e="⚔️" /> Rivals</label>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
+              {[{ id: 'random', title: 'Random rivals', blurb: 'About 25 airlines drawn from the game\'s own roster, different every game.' },
+                { id: 'custom', title: 'Custom set', blurb: 'Paste a set of rivals: your own, or one shared on Discord. You can copy any game\'s rivals out from the Competition screen.' }].map(opt => {
+                const active = rivalSource === opt.id;
+                return (
+                  <button key={opt.id} type="button" onClick={() => setRivalSource(opt.id)}
+                    style={{
+                      display: 'block', textAlign: 'left', padding: '10px 12px',
+                      background: 'var(--surface2)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius)', cursor: 'pointer',
+                    }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{opt.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{opt.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {rivalSource === 'custom' && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <textarea
+                  value={rivalText}
+                  onChange={e => setRivalText(e.target.value)}
+                  rows={isMobile ? 7 : 9}
+                  spellCheck={false}
+                  aria-label="Rival set"
+                  placeholder='{ "tailwindsRivals": 1, "rivals": [ { "name": "…", "hub": "LHR", "tier": "legacy", "size": "large" } ] }'
+                  style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5, lineHeight: 1.4 }}
+                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setRivalText(exampleRivalSet(eraInvalid ? null : startYear))}>
+                    Load an example
+                  </button>
+                  {rivalText && (
+                    <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                      onClick={() => setRivalText('')}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.5, color: rivalParse?.ok ? 'var(--green)' : 'var(--danger, #e5484d)' }}>
+                  {rivalParse?.ok ? (
+                    <>
+                      <Glyph e="✓" /> {rivalSplit.starters.length} rival{rivalSplit.starters.length === 1 ? '' : 's'} on day one
+                      {rivalSplit.entrants.length > 0 && <>, {rivalSplit.entrants.length} founded later (from {rivalSplit.entrants[0].founded})</>}
+                      {rivalSplit.dropped > 0 && <span style={{ color: 'var(--yellow)' }}> · only the first {RIVAL_SET_MAX_START} start; {rivalSplit.dropped} left out</span>}
+                      {eraInvalid || startYear == null
+                        ? rivalParse.set.rivals.some(r => r.founded != null) && <span style={{ color: 'var(--text-muted)' }}> · founding years only count in era games</span>
+                        : null}
+                    </>
+                  ) : (
+                    <>{(rivalParse?.errors ?? []).slice(0, 4).map((e, i) => <div key={i}>{e}</div>)}
+                      {(rivalParse?.errors?.length ?? 0) > 4 && <div>…and {rivalParse.errors.length - 4} more.</div>}</>
+                  )}
+                </div>
+                {rivalParse?.ok && rivalParse.warnings.length > 0 && (
+                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--yellow)', lineHeight: 1.5 }}>
+                    {rivalParse.warnings.slice(0, 3).map((w, i) => <div key={i}>{w}</div>)}
+                    {rivalParse.warnings.length > 3 && <div>…and {rivalParse.warnings.length - 3} more.</div>}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--text)' }}>
+                  {[{ id: 'replace', label: 'Only these rivals' }, { id: 'add', label: 'These plus the random field' }].map(o => (
+                    <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <input type="radio" name="rival-mode" checked={rivalMode === o.id} onChange={() => setRivalMode(o.id)} />
+                      {o.label}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+                  Each rival needs a name, a home airport code and a tier (budget, legacy or premium). Optional: size (small, medium or large),
+                  founded (a year: in era games the airline appears that year if the field has room), logo, style and quality.
+                </div>
+              </div>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />
+              No rival based at my hub
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              Rivals still fly in, and airlines founded later may still base there.
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={noRandomStartups} onChange={e => setNoRandomStartups(e.target.checked)} />
+              No random new airlines during the game
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {rivalSource === 'custom'
+                ? 'Only your set\'s own airlines ever join, so the game plays exactly as written.'
+                : 'The field only shrinks: no startups appear to replace airlines that fail or are bought.'}
+            </div>
+          </div>
+
           {/* ── Demand world ── */}
           <div className="form-group">
             <label className="form-label"><Glyph e="🎲" /> Passenger demand</label>
@@ -808,8 +926,9 @@ export default function SetupScreen() {
                 key="wizard-launch"
                 type="button"
                 className="btn btn-primary"
-                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: rolling ? 0.6 : 1 }}
-                disabled={rolling}
+                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: rolling || rivalInvalid ? 0.6 : 1 }}
+                disabled={rolling || rivalInvalid}
+                title={rivalInvalid ? 'Fix the rival set, or switch back to random rivals' : undefined}
                 onClick={handleStart}
               >
                 {rolling ? 'Rolling the world…' : 'Launch Airline →'}

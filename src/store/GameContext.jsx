@@ -82,6 +82,7 @@ import { checkRouteRestrictions, runwayShortfall } from '../data/airportRestrict
 import { deliverySchedule } from '../data/delivery.js';
 import { makeSlotAllocator, slotPremiumPct, launchWindow, launchOrderDiscount } from '../data/productionLines.js';
 import { withLineBook, makeTickLedger, orderCancelTerms, SOLO_LINE_SCALE } from '../models/lineBook.js';
+import { parseRivalSet, splitRivalSet, buildRivalFromSpec, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
 import {
   generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
   quoteCharterForAircraft,
@@ -1864,11 +1865,45 @@ function reducer(state, action) {
       applyDemandWorld(_demandWorld);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
       const _fresh = freshState();
+      // Custom rival set (models/rivalSets.js), pasted in at setup. Re-checked
+      // here: a set with any error is ignored and the game gets the random
+      // field. Built AFTER the era module state is set, like the random field,
+      // so its carriers fly era-appropriate aircraft. In an era game a rival
+      // founded after the start year waits as an entrant (the weekly AI tick
+      // founds it when its year comes, if the field has room).
+      const _setParse = action.rivalSet ? parseRivalSet(action.rivalSet) : null;
+      const _rivalSet = _setParse?.ok ? _setParse.set : null;
+      let _competitors = _fresh.competitors;
+      let _entrants = null;
+      if (_rivalSet) {
+        const { starters, entrants } = splitRivalSet(_rivalSet, _startYear);
+        const built = starters.map((r, i) => buildRivalFromSpec(r, { idSeed: i }));
+        if (action.rivalMode === 'add') {
+          const taken = new Set(built.map(c => c.name.toLowerCase()));
+          const room  = Math.max(0, RIVAL_SET_MAX_START - built.length);
+          _competitors = [..._fresh.competitors.filter(c => !taken.has(c.name.toLowerCase())).slice(0, room), ...built];
+        } else {
+          _competitors = built;
+        }
+        _entrants = entrants;
+      }
+      // "No rival based at my hub": the starting field only. Rivals still fly
+      // in, and later startups and entrants may still base there.
+      if (action.emptyHub === true) _competitors = _competitors.filter(c => c.homeHub !== action.hub);
       return {
         ..._fresh,
         startYear:   _startYear,
         // Era: no global alliances before 1997 — AI carriers start unallied.
-        competitors: applyAllianceEra(_fresh.competitors, _startYear).competitors,
+        competitors: applyAllianceEra(_competitors, _startYear).competitors,
+        ...(_rivalSet ? {
+          rivalSetName:   _rivalSet.name || 'Custom rivals',
+          // A custom field may start bigger than the usual roster; entrants
+          // can refill it to its starting size.
+          rivalRosterCap: _competitors.length,
+          rivalEntrants:  _entrants,
+        } : {}),
+        ...(action.noRandomStartups === true ? { noRandomStartups: true } : {}),
+        ...(action.emptyHub === true ? { emptyHubStart: true } : {}),
         // Era: the fuel walk opens at the decade's scripted mean (0.43 in 1950),
         // not the modern 1.0 it would otherwise take years to drift down from.
         ...(_startYear != null && eraFuelMean(_startYear) != null
@@ -5578,7 +5613,7 @@ function reducer(state, action) {
         ticketPrice:     state.routePricing?.[routePairKey(r.origin, r.destination)]?.economy
                            ?? r.ticketPrice,
       }));
-      const { competitors: aiCompetitors, events: competitorEvents } =
+      const { competitors: aiCompetitors, events: competitorEvents, entrants: aiEntrants } =
         tickCompetitorAI(currentCompetitors, {
           weekNumber,
           month:           gameMonth,
@@ -5588,6 +5623,9 @@ function reducer(state, action) {
           playerCampaignSpend: state.targetedMarketing ?? {},
           calendarYear:    calendarYear(state),
           world:           aiWorld,
+          // Rival set (era games): rivals waiting for their founding year.
+          ...(state.rivalEntrants ? { entrants: state.rivalEntrants, rosterCap: state.rivalRosterCap ?? 0 } : {}),
+          noRandomStartups: state.noRandomStartups === true,
           // Production-line games: rivals order aircraft off the shared lines
           // and wait for them. The ledger starts at the week being entered —
           // the week this tick's deliveries land.
@@ -6150,6 +6188,7 @@ function reducer(state, action) {
           ...(aircraftPayments ? { aircraftPayments } : {}),
           loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
+        ...(state.rivalEntrants ? { rivalEntrants: aiEntrants ?? state.rivalEntrants } : {}),
         encroachments:     updatedEncroachments,
         hubs:              hubsAfterBuild,
         hubConstruction:   newHubConstruction,

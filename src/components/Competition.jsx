@@ -14,6 +14,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { buyoutNudgeToast } from '../utils/headwinds.js';
+import { exportRivalSet } from '../models/rivalSets.js';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -209,7 +210,51 @@ export default function Competition() {
           />
         ))}
       </div>
+
+      <RivalSetShare state={state} />
     </div>
+  );
+}
+
+// ─── Share this field (models/rivalSets.js) ──────────────────────────────────
+// Copies the rivals flying now, plus any a custom set has still to found, as a
+// rival set someone can paste into a new game's setup screen.
+export function RivalSetShare({ state }) {
+  const [open, setOpen]     = useState(false);
+  const [copied, setCopied] = useState(false);
+  const entrants = state.rivalEntrants ?? [];
+  const text = useMemo(() => exportRivalSet({
+    competitors: state.competitors ?? [], entrants,
+    name: state.rivalSetName ?? `${state.airlineName || 'My'} game rivals`,
+    startYear: state.startYear ?? null,
+  }), [state.competitors, entrants, state.rivalSetName, state.airlineName, state.startYear]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function copy() {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500); }
+    catch { setOpen(true); }   // no clipboard access: show the text to copy by hand
+  }
+  return (
+    <>
+      <SectionHeader>Share this field</SectionHeader>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 8px', lineHeight: 1.5 }}>
+        Copy these rivals as a rival set{entrants.length > 0 ? `, with the ${entrants.length} airline${entrants.length === 1 ? '' : 's'} your set has still to found` : ''}.
+        Anyone can paste it into <strong>Rivals → Custom set</strong> when they start a new game.
+        {state.rivalSetName && <> This game was started with <strong>{state.rivalSetName}</strong>.</>}
+      </div>
+      {entrants.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+          <Glyph e="🕰" /> Still to be founded: {entrants.slice(0, 8).map(r => `${r.name} (${r.founded})`).join(', ')}{entrants.length > 8 ? `, and ${entrants.length - 8} more` : ''}.
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginBottom: open ? 8 : 24 }}>
+        <button type="button" className="btn" onClick={copy}>{copied ? '✓ Copied' : 'Copy rival set'}</button>
+        <button type="button" className="btn btn-ghost" onClick={() => setOpen(o => !o)}>{open ? 'Hide' : 'Show'} text</button>
+      </div>
+      {open && (
+        <textarea readOnly value={text} rows={10} aria-label="Rival set to copy"
+          onFocus={e => e.target.select()}
+          style={{ width: '100%', boxSizing: 'border-box', marginBottom: 24, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5 }} />
+      )}
+    </>
   );
 }
 

@@ -42,6 +42,7 @@ import {
   pickLargerCompetitorAircraftType,
 } from './demand.js';
 import { quotePlan } from './lineBook.js';
+import { buildRivalFromSpec } from './rivalSets.js';
 
 // ─── Personality archetypes ──────────────────────────────────────────────────
 
@@ -485,6 +486,9 @@ export function tickCompetitorAI(competitors, ctx) {
     calendarYear = null,        // era worlds: real year (null = classic)
     world = null,               // this week's world events { demandMultFor, fuelMult } — see computeCompetitorRoutePnL
     lines = null,               // production-line worlds: the tick's booking ledger (lineBook.makeTickLedger)
+    entrants = null,            // rival set (era games): rivals waiting for their founding year — models/rivalSets.js
+    noRandomStartups = false,   // setup option: only the set's own entrants ever join mid-game
+    rosterCap = 0,              // a custom field may start larger than MAX_ROSTER; entrants may refill it to its start size
   } = ctx ?? {};
 
   const events = [];
@@ -1118,8 +1122,28 @@ export function tickCompetitorAI(competitors, ctx) {
     }
   }
 
+  // ── Lifecycle: rival-set entrants (era games) ────────────────────────────
+  // A rival a set founds after the start year joins once the calendar reaches
+  // its year — if the field has room. Otherwise it waits and tries again every
+  // week ("if circumstances permit"). Founded with its own starter network, the
+  // way a random startup is.
+  let entrantsLeft = entrants;
+  if (entrants?.length) {
+    const cap = Math.max(MAX_ROSTER, rosterCap ?? 0);
+    const wait = [];
+    for (const r of entrants) {
+      const due = calendarYear != null && r.founded != null && r.founded <= calendarYear;
+      if (!due || updated.length >= cap || updated.some(c => c.name === r.name)) { wait.push(r); continue; }
+      const newbie = { ...buildRivalFromSpec(r, { idSeed: weekNumber }), isStartup: true, foundedWeek: weekNumber };
+      updated = [...updated, newbie];
+      events.push({ type: 'startup', airlineId: newbie.id, name: newbie.name,
+        description: `${newbie.name} has been founded and launched operations out of ${newbie.homeHub}.` });
+    }
+    entrantsLeft = wait;
+  }
+
   // ── Lifecycle: startup airlines ────────────────────────────────────────────
-  if (weekNumber >= STARTUP_MIN_WEEK
+  if (!noRandomStartups && weekNumber >= STARTUP_MIN_WEEK
       && updated.length < MAX_ROSTER
       && updated.length > ENDGAME_ROSTER
       && Math.random() < STARTUP_PROB) {
@@ -1178,7 +1202,7 @@ export function tickCompetitorAI(competitors, ctx) {
     return changed ? { ...c, routes } : c;
   });
 
-  return { competitors: updated, events };
+  return { competitors: updated, events, ...(entrants ? { entrants: entrantsLeft } : {}) };
 }
 
 // ─── Expansion target selection ──────────────────────────────────────────────

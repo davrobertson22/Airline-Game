@@ -3354,7 +3354,7 @@ export function tickCompetitorPricing(competitors, playerRoutes) {
  * Apply per-game personality jitter to a competitor so each run feels different.
  * Mutates a shallow copy — never touches the original COMPETITOR_AIRLINES entry.
  */
-function jitterCompetitor(airline) {
+export function jitterCompetitor(airline) {
   const c = { ...airline };
 
   // Quality perception: ±5 points
