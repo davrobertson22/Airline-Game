@@ -12,6 +12,7 @@ import {
   maxFrequency, SLOTS_PER_GATE, isRouteActive, routeActiveMonths,
   effectiveRangeKm, calendarYear,
   stateCateringCapReport,
+  newAircraftConfig, typicalSeatsOf,
 } from '../utils/simulation.js';
 import {
   buildRouteMarket,
@@ -259,9 +260,12 @@ export function configSummary(cfg) {
 }
 
 /** Build a preset cabin layout sized to a type's total floor units (= type.seats). */
-export function makePreset(kind, seats) {
+// `typical` is the type's typical seating (where its headline range applies): the
+// default all-economy cabin fills to it, and 'dense' packs to the exit limit.
+export function makePreset(kind, seats, typical = seats) {
+  if (kind === 'dense') kind = 'economy', typical = seats;
   const base = {
-    firstClass: 0, businessClass: 0, premiumEconomy: 0, economy: seats,
+    firstClass: 0, businessClass: 0, premiumEconomy: 0, economy: Math.min(seats, typical),
     seatQuality: 'standard', serviceQuality: 'standard',
   };
   if (kind === 'twoClass') {
@@ -286,7 +290,8 @@ export function makePreset(kind, seats) {
 }
 
 const PRESET_OPTIONS = [
-  { id: 'economy',      label: 'All economy (default)' },
+  { id: 'economy',      label: 'All economy, typical seats (default)' },
+  { id: 'dense',        label: 'All economy, packed to the limit (less range)' },
   { id: 'twoClass',     label: 'Two-class (business + economy)' },
   { id: 'threeClass',   label: 'Three-class (business + prem. eco + economy)' },
   { id: 'premiumHeavy', label: 'Premium-heavy (first + business + prem. eco)' },
@@ -707,10 +712,10 @@ export default function RoutePlanner() {
     if (!type) { setCabinConfig(null); return; }
     const seed = fleetOfType.find(a => a.config) ?? null;
     if (seed?.config) {
-      setCabinConfig({ ...defaultConfig(type.seats), ...seed.config });
+      setCabinConfig({ ...newAircraftConfig(type), ...seed.config });
       setConfigSource(seed.id);
     } else {
-      setCabinConfig(makePreset('economy', type.seats));
+      setCabinConfig(makePreset('economy', type.seats, typicalSeatsOf(type)));
       setConfigSource('economy');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -724,9 +729,9 @@ export default function RoutePlanner() {
     if (src === 'custom') return; // keep current edited layout
     const fleetMatch = fleetOfType.find(a => a.id === src);
     if (fleetMatch?.config) {
-      setCabinConfig({ ...defaultConfig(type.seats), ...fleetMatch.config });
+      setCabinConfig({ ...newAircraftConfig(type), ...fleetMatch.config });
     } else {
-      setCabinConfig(makePreset(src, type.seats));
+      setCabinConfig(makePreset(src, type.seats, typicalSeatsOf(type)));
     }
   }
 
@@ -734,7 +739,7 @@ export default function RoutePlanner() {
   const effectiveConfig = useMemo(() => {
     const type = getAircraftType(selectedTypeId);
     if (!type) return null;
-    return cabinConfig ?? defaultConfig(type.seats);
+    return cabinConfig ?? newAircraftConfig(type);
   }, [cabinConfig, selectedTypeId]);
 
 

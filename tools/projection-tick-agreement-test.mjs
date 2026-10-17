@@ -84,7 +84,12 @@ function startedAirline({ seed = 12345, ageWeeks = 500, freq = 21, fare = 1.15 }
     routePricing[['JFK', d].sort().join('-')] =
       defaultClassPrices(Math.round(referencePrice('JFK', d) * fare));
   }
-  const fleet = s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: 'owned' }));
+  // Packed all-economy, as this fixture was calibrated: since the payload-range
+  // model (2026-10-17) a bought 737-800 arrives at its typical 162 seats, and on
+  // these sold-out domestic lanes (all well inside a packed 737-800's reach) a
+  // demand slump would then move nothing.
+  const fleet = s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: 'owned',
+    config: { ...a.config, economy: getAircraftType(a.typeId).seats } }));
   return {
     ...s, routePricing, awareness: 70,
     hubs: { ...(s.hubs ?? {}), JFK: { tier: 2, tierSince: 0 } },

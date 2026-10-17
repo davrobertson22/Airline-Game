@@ -35,6 +35,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import assert from 'node:assert/strict';
+import { newAircraftConfig } from '../src/utils/simulation.js';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import {
@@ -134,7 +135,7 @@ function airline({ hub, dest, tails, freq, weeksOpen = 20, awareness = 70 }) {
     spareId: spare,
     fare,
     fleet: s.fleet.map(a => ({ ...a, ageWeeks: 0, ownershipType: 'owned',
-      config: defaultConfig(TYPE.seats) })),
+      config: newAircraftConfig(TYPE) })),
     routes: s.routes.map(r => ({ ...r, weeksOpen })),
   };
 }
@@ -147,7 +148,7 @@ function withAddedTail(s, hub, dest, freq, weeksOpen) {
   return {
     state: {
       ...t,
-      fleet: t.fleet.map(a => ({ ...a, config: defaultConfig(TYPE.seats) })),
+      fleet: t.fleet.map(a => ({ ...a, config: newAircraftConfig(TYPE) })),
       routes: t.routes.map(r => (r.id === added.id ? { ...r, weeksOpen } : r)),
     },
     addedId: added.id,
@@ -186,7 +187,7 @@ function tickPair(state, hub, dest) {
  *  simulateRoute on a synthetic route, no pooling and no brandReach. Kept here
  *  as the control: every assertion below has to fail against it. */
 function bareForecast(state, origin, dest, freq, price) {
-  const ac = { id: '__bare__', typeId: TYPE_ID, ageWeeks: 0, config: defaultConfig(TYPE.seats) };
+  const ac = { id: '__bare__', typeId: TYPE_ID, ageWeeks: 0, config: newAircraftConfig(TYPE) };
   return simulateRoute(
     { id: '__bare__', origin, destination: dest, aircraftId: '__bare__', weeklyFrequency: freq,
       ticketPrice: price, classPrices: defaultClassPrices(price), hub: state.hub, weeksOpen: 20,
@@ -306,7 +307,10 @@ test('on a SATURATED pair the bare call hands the newcomer the whole pool', () =
     assert.ok(r.bare.passengers > r.tick.passengers * 1.15,
       `${r.sc.label}: bare forecast ${r.bare.passengers} pax vs ${r.tick.passengers} booked — `
       + 'this fixture is not saturated, so it cannot demonstrate the defect');
-    assert.ok(Math.abs(r.bare.profit - r.tick.profit) > 100_000,
+    // $50k, not $100k: since the payload-range model (2026-10-17) a new A320neo
+    // arrives at its typical 165 seats rather than all 194, which shrinks every
+    // number in this fixture by about a sixth. The bug is still ~$75k a week.
+    assert.ok(Math.abs(r.bare.profit - r.tick.profit) > 50_000,
       `${r.sc.label}: the bare forecast is only ${money(r.bare.profit - r.tick.profit)} out — `
       + 'too small to be the reported bug');
   }
@@ -406,7 +410,7 @@ test('brandReach is the WHOLE gap — injecting it alone into the bare call clos
   // Not an assertion about pairShare.js at all: it isolates the mechanism, so a
   // future regression that fixes the pax count by some other route is still
   // caught by section 1 rather than silently accepted here.
-  const ac = { id: '__bare__', typeId: TYPE_ID, ageWeeks: 0, config: defaultConfig(TYPE.seats) };
+  const ac = { id: '__bare__', typeId: TYPE_ID, ageWeeks: 0, config: newAircraftConfig(TYPE) };
   const branded = simulateRoute(
     { id: '__bare__', origin: 'AUS', destination: 'MSY', aircraftId: '__bare__', weeklyFrequency: 14,
       ticketPrice: weekOne.fare, classPrices: defaultClassPrices(weekOne.fare), hub: weekOne.hub,
@@ -632,7 +636,7 @@ const formAddedId = formAdd.routes[formAdd.routes.length - 1].id;
 const formTick = tickRoute({
   ...formAdd,
   routes: formAdd.routes.map(r => ({ ...r, weeksOpen: 20 })),
-  fleet: formAdd.fleet.map(a => ({ ...a, config: defaultConfig(TYPE.seats) })),
+  fleet: formAdd.fleet.map(a => ({ ...a, config: newAircraftConfig(TYPE) })),
 }, formAddedId);
 
 let formHtml;

@@ -9,9 +9,9 @@
 // crewCostPerKm:        crew wages per km flown ($)
 // baseMaintenancePerWk: base maintenance per week at age 0 ($)
 // range:                max range (km)
-// payloadRangeGain:     optional — ultra-long-range types only: range bonus at an empty
-//                       cabin (default 0.15). `range` is then the FULL-cabin figure. See
-//                       payloadRangeGainOf in utils/simulation.js.
+// typicalSeats:         passengers the headline `range` is quoted at (the maker's typical
+//                       cabin). Packing past it costs range; see payloadRangeMod in
+//                       utils/simulation.js. Defaults to `seats`.
 // runwayFt:             minimum runway length required (ft) — both endpoints of a
 //                       route must have airport.runwayFt >= this to operate
 // steepApproach:        true = holds Steep Approach (SAp) certification (may use
@@ -64,6 +64,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1976,
     oop: 1979,   // year the production line closed (era worlds: second-hand only after this)
     seats: 128,
+    typicalSeats: 100,   // seats the headline range is quoted at
     range: 7_250,
     runwayFt: 10800,
     weeklyLease:      463_000,
@@ -85,6 +86,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2016,
     seats: 135,
+    typicalSeats: 110,   // seats the headline range is quoted at
     range: 6_700,
     runwayFt: 4650,
     steepApproach: true,
@@ -104,6 +106,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2003,
     oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 132,
+    typicalSeats: 107,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_700,
     runwayFt: 4500,
@@ -124,6 +127,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1996,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 156,
+    typicalSeats: 124,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_900,
     runwayFt: 5300,
@@ -149,6 +153,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2016,
     seats: 160,
+    typicalSeats: 135,   // seats the headline range is quoted at
     range: 6_300,
     runwayFt: 5000,
     weeklyLease:       77_000,
@@ -166,6 +171,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2022,
     seats: 160,
+    typicalSeats: 135,   // seats the headline range is quoted at
     range: 6_850,
     runwayFt: 5200,
     weeklyLease:       81_000,
@@ -190,6 +196,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1988,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 186,
+    typicalSeats: 150,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 6_150,
     runwayFt: 5700,
@@ -215,6 +222,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2016,
     seats: 194,
+    typicalSeats: 165,   // seats the headline range is quoted at
     range: 6_300,
     runwayFt: 5600,
     weeklyLease:       100_000,
@@ -239,6 +247,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1994,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 220,
+    typicalSeats: 185,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_930,
     runwayFt: 6000,
@@ -264,6 +273,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2017,
     seats: 244,
+    typicalSeats: 206,   // seats the headline range is quoted at
     range: 7_400,
     runwayFt: 5950,
     weeklyLease:       123_000,
@@ -287,6 +297,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2024,
     seats: 244,
+    typicalSeats: 200,   // seats the headline range is quoted at
     range: 8_700,
     runwayFt: 7500,
     weeklyLease:      144_000,
@@ -311,6 +322,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1986,
     oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 280,
+    typicalSeats: 240,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 9_600,
     runwayFt: 7500,
@@ -330,6 +342,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1988,
     oop: 2003,   // year the production line closed (era worlds: second-hand only after this)
     seats: 361,
+    typicalSeats: 266,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 7_700,
     runwayFt: 7700,
@@ -349,6 +362,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1998,
     oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 406,
+    typicalSeats: 247,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_400,
     runwayFt: 8100,
@@ -375,6 +389,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1993,
     oop: 2008,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
+    typicalSeats: 277,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_500,
     runwayFt: 9500,
@@ -394,6 +409,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1994,
     oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
+    typicalSeats: 277,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_750,
     runwayFt: 8200,
@@ -419,6 +435,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2018,
     seats: 460,
+    typicalSeats: 280,   // seats the headline range is quoted at
     range: 13_334,
     runwayFt: 8200,
     weeklyLease:      268_000,
@@ -437,6 +454,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2002,
     oop: 2011,   // year the production line closed (era worlds: second-hand only after this)
     seats: 475,
+    typicalSeats: 380,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 14_600,
     runwayFt: 9800,
@@ -455,6 +473,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2015,
     seats: 440,
+    typicalSeats: 325,   // seats the headline range is quoted at
     range: 15_000,
     runwayFt: 8000,
     weeklyLease:      403_000,
@@ -472,18 +491,17 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2018,
     seats: 440,   // same airframe as the A350-900; carriers configure capacity down
-    // Full cabin: weight-limited to the -900's range, extra tank empty. Each seat
-    // taken out becomes fuel: Singapore's 161-seat cabin reaches ~17,850 km, enough
-    // for SIN-New York. Third of the seats (147) ~18,000 km. tools/ulr-range-test.mjs
-    range: 15_000,
-    payloadRangeGain: 0.30,
+    // Airbus' 18,000 km is quoted with Singapore's 161-seat ULR cabin. Packed to 440
+    // it is weight-limited and flies far less (payloadRangeMod). tools/payload-range-test.mjs
+    range: 18_000,
+    typicalSeats: 161,
     runwayFt: 8900,
     weeklyLease:      423_000,
     purchasePrice: 195000000,
     fuelBurnPer100km: 813,   // heavier than the -900 (extra centre-tank fuel/weight)
     crewCostPerKm: 3.6,      // same crew as the -900
     baseMaintenancePerWk: 255_000,  // marginally higher than the -900
-    description: 'Ultra-long-range A350. With a full cabin it flies no further than a -900; strip it to a premium cabin and its extra fuel reaches 18,000 km.',
+    description: 'Ultra-long-range A350. Flown with a light premium cabin it reaches 18,000 km; pack it with seats and that range is gone.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Singapore_Airlines_Airbus_A350-900_ULR_at_New_York_JFK.jpg/960px-Singapore_Airlines_Airbus_A350-900_ULR_at_New_York_JFK.jpg',
   },
   {
@@ -493,6 +511,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2018,
     seats: 480,
+    typicalSeats: 380,   // seats the headline range is quoted at
     range: 16_100,
     runwayFt: 8500,
     weeklyLease:      463_000,
@@ -510,18 +529,17 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2027,    // Qantas Project Sunrise: first flight June 2026, first delivery April 2027
     seats: 480,   // same airframe as the A350-1000; Qantas configures 238 for 22-hour sectors
-    // Full cabin: weight-limited to the -1000's 16,100 km, extra tank empty. Each
-    // seat taken out becomes fuel: Qantas' 238-seat cabin reaches ~18,500 km
-    // (SYD-London 17,000). Third of the seats (160) ~19,300 km. tools/ulr-range-test.mjs
-    range: 16_100,
-    payloadRangeGain: 0.30,
+    // ~18,000 km with Qantas' 238-seat Project Sunrise cabin (the -1000's 16,100 km +
+    // ~1,000 nm from the rear centre tank). Packed to 480 it flies far less.
+    range: 18_000,
+    typicalSeats: 238,
     runwayFt: 9300, // higher MTOW than the -1000 (8,500), as the -900ULR sits over the -900
     weeklyLease:      486_000,  // -1000 x 1.05, the -900ULR's premium over the -900
     purchasePrice: 222000000,   // -1000 x 1.055, likewise
     fuelBurnPer100km: 883,      // -1000 x 1.042 (heavier: tank structure + fuel), the -900ULR's ratio
     crewCostPerKm: 3.83,        // same crew as the -1000
     baseMaintenancePerWk: 296_000,  // marginally higher than the -1000
-    description: 'Qantas\' Project Sunrise A350. With a full cabin it flies no further than a -1000; with a light premium cabin its extra fuel tank takes it Sydney to London nonstop.',
+    description: 'Qantas\' Project Sunrise A350. With a light premium cabin its extra fuel tank takes it Sydney to London nonstop; pack it with seats and that range is gone.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Airbus_Industrie_F-WULR_Airbus_A350-1041_Melbourne_International_Airport_%28MEL_YMML%29_%2855482809183%29.jpg/960px-Airbus_Industrie_F-WULR_Airbus_A350-1041_Melbourne_International_Airport_%28MEL_YMML%29_%2855482809183%29.jpg',
   },
   {
@@ -532,6 +550,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2007,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 853,
+    typicalSeats: 525,   // seats the headline range is quoted at
     pricedAsNew: true,   // catalogue price is held at new-metal level on purpose (see aircraft-market-audit Addendum 7) — era worlds add no new-build premium on top
     deliveredAgeWeeks: 260,   // line closed 2021 — youngest frame left is ~5y old
     range: 15_200,
@@ -560,6 +579,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1998,
     oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 51,
+    typicalSeats: 44,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 4_355,
     runwayFt: 3900,
@@ -582,6 +602,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1971,
     oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
+    typicalSeats: 19,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_380,
     runwayFt: 2300,
@@ -603,6 +624,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2009,
     oop: 2018,   // year the production line closed (era worlds: second-hand only after this)
     seats: 89,
+    typicalSeats: 75,   // seats the headline range is quoted at
     deliveredAgeWeeks: 416,   // line closed 2018 — youngest frame left is ~8y old
     range: 3_500,
     runwayFt: 6200,
@@ -623,6 +645,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2012,
     seats: 50,
+    typicalSeats: 48,   // seats the headline range is quoted at
     range: 1_326,
     runwayFt: 3600,
     weeklyLease:       40_000,
@@ -640,6 +663,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2011,
     seats: 78,
+    typicalSeats: 70,   // seats the headline range is quoted at
     range: 1_528,
     runwayFt: 4200,
     weeklyLease:       44_000,
@@ -661,6 +685,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1991,
     oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
+    typicalSeats: 19,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_776,
     runwayFt: 3800,
@@ -682,6 +707,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1971,
     oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 136,
+    typicalSeats: 120,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_800,
     runwayFt: 6150,
@@ -701,6 +727,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1999,
     oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 134,
+    typicalSeats: 106,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_645,
     runwayFt: 5300,
@@ -720,6 +747,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1964,
     oop: 1972,   // year the production line closed (era worlds: second-hand only after this)
     seats: 131,
+    typicalSeats: 106,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 4_100,
     runwayFt: 6000,
@@ -739,6 +767,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1967,   // the -200 stretch (Northeast, Dec 1967); the -200 Advanced followed in 1972 on the same line
     oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
+    typicalSeats: 134,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 4_820,
     runwayFt: 6500,
@@ -758,6 +787,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1990,
     oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 140,
+    typicalSeats: 110,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 5_200,
     runwayFt: 5400,
@@ -777,6 +807,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1984,
     oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
+    typicalSeats: 126,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_400,
     runwayFt: 5700,
@@ -796,6 +827,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1998,
     oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
+    typicalSeats: 126,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_370,
     runwayFt: 5150,
@@ -815,6 +847,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1988,
     oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
+    typicalSeats: 147,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_800,
     runwayFt: 6200,
@@ -834,6 +867,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1962,
     oop: 1978,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
+    typicalSeats: 141,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_260,
     runwayFt: 8900,
@@ -852,6 +886,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2027,
     seats: 172,
+    typicalSeats: 148,   // seats the headline range is quoted at
     range: 7_037,
     runwayFt: 5300,
     weeklyLease:       89_000,
@@ -870,6 +905,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1998,
     oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 189,
+    typicalSeats: 162,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 5_765,
     runwayFt: 5700,
@@ -891,6 +927,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2017,
     seats: 189,
+    typicalSeats: 170,   // seats the headline range is quoted at
     range: 6_570,
     runwayFt: 5700,
     weeklyLease:       92_000,
@@ -909,6 +946,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2007,
     oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 220,
+    typicalSeats: 178,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - NG line, out of production since 2019
     bandEis: 1998,            // band with the 737NG cohort it was built alongside, not its own 2007 EIS
     range: 5_925,
@@ -928,6 +966,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2018,
     seats: 220,
+    typicalSeats: 185,   // seats the headline range is quoted at
     range: 6_110,
     runwayFt: 5700,
     weeklyLease:       109_000,
@@ -945,6 +984,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2028,
     seats: 230,
+    typicalSeats: 198,   // seats the headline range is quoted at
     range: 5_740,
     runwayFt: 6050,
     weeklyLease:       115_000,
@@ -963,6 +1003,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1983,
     oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     seats: 239,
+    typicalSeats: 200,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 7_222,
     runwayFt: 5500,
@@ -989,6 +1030,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1999,
     oop: 2004,   // year the production line closed (era worlds: second-hand only after this)
     seats: 295,
+    typicalSeats: 243,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 6_295,
     runwayFt: 6900,
@@ -1015,6 +1057,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1984,
     oop: 1994,   // year the production line closed (era worlds: second-hand only after this)
     seats: 290,
+    typicalSeats: 181,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 12_200,
     runwayFt: 8000,
@@ -1041,6 +1084,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1988,
     oop: 2014,   // year the production line closed (era worlds: second-hand only after this)
     seats: 351,
+    typicalSeats: 218,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_090,
     runwayFt: 8500,
@@ -1068,6 +1112,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2000,
     oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 375,
+    typicalSeats: 245,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 10_415,
     runwayFt: 9200,
@@ -1086,6 +1131,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2011,
     seats: 381,
+    typicalSeats: 242,   // seats the headline range is quoted at
     range: 13_620,
     runwayFt: 8200,
     weeklyLease:      296_000,
@@ -1110,6 +1156,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1997,
     oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
+    typicalSeats: 313,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_080,
     runwayFt: 9500,
@@ -1128,6 +1175,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2014,
     seats: 420,
+    typicalSeats: 290,   // seats the headline range is quoted at
     range: 14_140,
     runwayFt: 9000,
     weeklyLease:      336_000,
@@ -1152,6 +1200,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1971,
     oop: 1991,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
+    typicalSeats: 366,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 12_700,
     runwayFt: 9800,
@@ -1171,6 +1220,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2006,
     oop: 2013,   // year the production line closed (era worlds: second-hand only after this)
     seats: 440,
+    typicalSeats: 317,   // seats the headline range is quoted at
     bandEis: 1997,   // band with the 777-200ER cohort, not its own 2006 EIS (737-900ER precedent)
     deliveredAgeWeeks: 312,   // arrives 6y old — banded with the 777-200ER it was built alongside (same line, closed 2013)
     range: 15_843,
@@ -1190,6 +1240,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2018,
     seats: 440,
+    typicalSeats: 336,   // seats the headline range is quoted at
     range: 11_730,
     runwayFt: 9000,
     weeklyLease:      365_000,
@@ -1214,6 +1265,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1976,
     oop: 1982,   // year the production line closed (era worlds: second-hand only after this)
     seats: 400,
+    typicalSeats: 276,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 15_400,
     runwayFt: 9000,
@@ -1233,6 +1285,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2004,
     oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
+    typicalSeats: 396,   // seats the headline range is quoted at
     pricedAsNew: true,   // catalogue price is held at new-metal level on purpose (see aircraft-market-audit Addendum 7) — era worlds add no new-build premium on top
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 13_650,
@@ -1253,6 +1306,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1989,
     oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
+    typicalSeats: 416,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 13_445,
     runwayFt: 9800,
@@ -1272,6 +1326,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1991,
     oop: 1995,   // year the production line closed (era worlds: second-hand only after this)
     seats: 660,
+    typicalSeats: 568,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_700,
     runwayFt: 7500,
@@ -1290,6 +1345,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2029,
     seats: 445,
+    typicalSeats: 395,   // seats the headline range is quoted at
     range: 16_090,
     runwayFt: 9500,
     weeklyLease:      435_000,
@@ -1307,6 +1363,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2027,
     seats: 550,
+    typicalSeats: 426,   // seats the headline range is quoted at
     range: 13_500,
     runwayFt: 9800,
     weeklyLease:      520_000,
@@ -1325,6 +1382,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2012,
     oop: 2017,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
+    typicalSeats: 467,   // seats the headline range is quoted at
     deliveredAgeWeeks: 468,   // line closed 2017 — youngest frame left is ~9y old
     range: 14_816,
     runwayFt: 9800,
@@ -1346,6 +1404,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1996,
     oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_048,
     runwayFt: 5300,
@@ -1365,6 +1424,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2001,
     oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 78,
+    typicalSeats: 70,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_716,
     runwayFt: 4850,
@@ -1384,6 +1444,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2003,
     oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 90,
+    typicalSeats: 76,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_876,
     runwayFt: 5600,
@@ -1403,6 +1464,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2010,
     oop: 2020,   // year the production line closed (era worlds: second-hand only after this)
     seats: 104,
+    typicalSeats: 100,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // line closed 2020 — youngest frame left is ~6y old
     range: 3_004,
     runwayFt: 6000,
@@ -1422,6 +1484,7 @@ export const AIRCRAFT_TYPES = [
     bizjet: true,
     eis: 2014,
     seats: 10,
+    typicalSeats: 8,   // seats the headline range is quoted at
     range: 5_926,
     runwayFt: 4800,
     weeklyLease:       52_000,
@@ -1442,6 +1505,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1993,
     oop: 2001,   // year the production line closed (era worlds: second-hand only after this)
     seats: 112,
+    typicalSeats: 100,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_300,
     runwayFt: 4000,
@@ -1461,6 +1525,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1983,
     oop: 1993,   // year the production line closed (era worlds: second-hand only after this)
     seats: 112,
+    typicalSeats: 100,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_650,
     runwayFt: 3900,
@@ -1483,6 +1548,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1967,
     oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 9,
+    typicalSeats: 9,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 774,
     runwayFt: 1200,
@@ -1504,6 +1570,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2013,
     seats: 14,
+    typicalSeats: 9,   // seats the headline range is quoted at
     range: 1_982,
     runwayFt: 2400,
     weeklyLease:        6_000,
@@ -1522,6 +1589,7 @@ export const AIRCRAFT_TYPES = [
     bizjet: true,
     eis: 2010,
     seats: 10,
+    typicalSeats: 4,   // seats the headline range is quoted at
     range: 3_710,
     runwayFt: 3400,
     weeklyLease:       21_000,
@@ -1541,6 +1609,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2016,
     seats: 97,
+    typicalSeats: 90,   // seats the headline range is quoted at
     range: 3_700,
     runwayFt: 5450,
     weeklyLease:       43_500,
@@ -1558,6 +1627,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2023,
     seats: 192,
+    typicalSeats: 158,   // seats the headline range is quoted at
     range: 5_555,
     runwayFt: 6600,
     weeklyLease:       92_000,
@@ -1578,6 +1648,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1989,
     oop: 2009,   // year the production line closed (era worlds: second-hand only after this)
     seats: 56,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_558,
     runwayFt: 3500,
@@ -1597,6 +1668,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2000,
     oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 90,
+    typicalSeats: 82,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_040,
     runwayFt: 4300,
@@ -1618,6 +1690,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1999,
     oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 37,
+    typicalSeats: 37,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_241,
     runwayFt: 5000,
@@ -1637,6 +1710,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1996,
     oop: 2011,   // year the production line closed (era worlds: second-hand only after this)
     seats: 50,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_870,
     runwayFt: 5600,
@@ -1656,6 +1730,7 @@ export const AIRCRAFT_TYPES = [
     bizjet: true,
     eis: 2009,
     seats: 10,
+    typicalSeats: 4,   // seats the headline range is quoted at
     range: 3_724,
     runwayFt: 3200,
     weeklyLease:       19_500,
@@ -1674,6 +1749,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2004,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 80,
+    typicalSeats: 70,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_735,
     runwayFt: 4300,
@@ -1692,6 +1768,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2005,
     seats: 88,
+    typicalSeats: 76,   // seats the headline range is quoted at
     range: 3_735,
     runwayFt: 4700,
     weeklyLease:       60_000,
@@ -1709,6 +1786,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2030,
     seats: 90,
+    typicalSeats: 88,   // seats the headline range is quoted at
     range: 3_735,
     runwayFt: 4700,
     weeklyLease:       70_000,
@@ -1727,6 +1805,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2005,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 114,
+    typicalSeats: 100,   // seats the headline range is quoted at
     deliveredAgeWeeks: 260,   // line closed 2021 — youngest frame left is ~5y old
     range: 4_537,
     runwayFt: 5700,
@@ -1748,6 +1827,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2018,
     seats: 114,
+    typicalSeats: 106,   // seats the headline range is quoted at
     range: 5_460,
     runwayFt: 4400,
     weeklyLease:       80_000,
@@ -1766,6 +1846,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2006,
     oop: 2021,   // year the production line closed (era worlds: second-hand only after this)
     seats: 124,
+    typicalSeats: 116,   // seats the headline range is quoted at
     deliveredAgeWeeks: 260,   // line closed 2021 — youngest frame left is ~5y old
     range: 4_260,
     runwayFt: 5900,
@@ -1784,6 +1865,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2019,
     seats: 146,
+    typicalSeats: 132,   // seats the headline range is quoted at
     range: 5_600,
     runwayFt: 4850,
     weeklyLease:       89_000,
@@ -1810,6 +1892,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1994,
     oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 85,
+    typicalSeats: 79,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_410,
     runwayFt: 4100,
@@ -1829,6 +1912,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1988,
     oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 122,
+    typicalSeats: 107,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 3_170,
     runwayFt: 5900,
@@ -1850,6 +1934,7 @@ export const AIRCRAFT_TYPES = [
     bizjet: true,
     eis: 2014,
     seats: 19,
+    typicalSeats: 8,   // seats the headline range is quoted at
     range: 13_890,
     runwayFt: 6000,
     weeklyLease:      135_000,
@@ -1870,6 +1955,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1993,
     oop: 2014,   // year the production line closed (era worlds: second-hand only after this)
     seats: 300,
+    typicalSeats: 262,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 11_000,
     runwayFt: 8500,
@@ -1890,6 +1976,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2025,
     seats: 211,
+    typicalSeats: 163,   // seats the headline range is quoted at
     range: 6_400,
     runwayFt: 7000,
     weeklyLease:       98_000,
@@ -1910,6 +1997,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1972,
     oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 400,
+    typicalSeats: 256,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_670,
     runwayFt: 8500,
@@ -1931,6 +2019,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1965,
     oop: 1968,   // year the production line closed (era worlds: second-hand only after this)
     seats: 90,
+    typicalSeats: 90,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_300,
     runwayFt: 5000,
@@ -1950,6 +2039,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1967,
     oop: 1982,   // year the production line closed (era worlds: second-hand only after this)
     seats: 115,
+    typicalSeats: 115,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_800,
     runwayFt: 5400,
@@ -1969,6 +2059,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1975,
     oop: 1981,   // year the production line closed (era worlds: second-hand only after this)
     seats: 139,
+    typicalSeats: 135,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 3_100,
     runwayFt: 5500,
@@ -1988,6 +2079,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1995,
     oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 172,
+    typicalSeats: 153,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 3_800,
     runwayFt: 5900,
@@ -2007,6 +2099,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1980,
     oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 172,
+    typicalSeats: 155,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_635,
     runwayFt: 5700,
@@ -2026,6 +2119,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1972,
     oop: 1989,   // year the production line closed (era worlds: second-hand only after this)
     seats: 380,
+    typicalSeats: 270,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_700,
     runwayFt: 9700,
@@ -2045,6 +2139,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1990,
     oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 410,
+    typicalSeats: 298,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 12_455,
     runwayFt: 10000,
@@ -2065,6 +2160,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2026,
     seats: 92,
+    typicalSeats: 88,   // seats the headline range is quoted at
     range: 3_770,
     runwayFt: 5550,
     weeklyLease:       80_000,
@@ -2085,6 +2181,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2020,
     seats: 9,
+    typicalSeats: 9,   // seats the headline range is quoted at
     range: 1_846,
     runwayFt: 2600,
     weeklyLease:        10_000,
@@ -2105,6 +2202,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1989,
     oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 37,
+    typicalSeats: 35,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_560,
     runwayFt: 4300,
@@ -2124,6 +2222,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1994,
     oop: 1999,   // year the production line closed (era worlds: second-hand only after this)
     seats: 58,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 2_868,
     runwayFt: 4200,
@@ -2146,6 +2245,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1982,
     oop: 1991,   // year the production line closed (era worlds: second-hand only after this)
     seats: 39,
+    typicalSeats: 36,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_178,
     runwayFt: 4300,
@@ -2167,6 +2267,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2011,
     oop: 2022,   // year the production line closed (era worlds: second-hand only after this)
     seats: 108,
+    typicalSeats: 98,   // seats the headline range is quoted at
     deliveredAgeWeeks: 208,   // line closed 2022 — youngest frame left is ~4y old
     range: 4_578,
     runwayFt: 5900,
@@ -2188,6 +2289,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1996,
     oop: 2017,   // year the production line closed (era worlds: second-hand only after this)
     seats: 210,
+    typicalSeats: 172,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 4_600,
     runwayFt: 5700,
@@ -2209,6 +2311,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2010,
     seats: 19,
+    typicalSeats: 9,   // seats the headline range is quoted at
     range: 1_705,
     runwayFt: 1200,
     weeklyLease:        14_000,
@@ -2462,6 +2565,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1936,
     oop: 1946,   // year the production line closed (era worlds: second-hand only after this)
     seats: 32,
+    typicalSeats: 21,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
     runwayFt: 3000,
@@ -2489,6 +2593,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1942,
     oop: 1945,   // year the production line closed (era worlds: second-hand only after this)
     seats: 28,
+    typicalSeats: 28,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_600,
     runwayFt: 3000,
@@ -2508,6 +2613,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1967,
     oop: 1972,   // year the production line closed (era worlds: second-hand only after this)
     seats: 259,
+    typicalSeats: 259,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 7_400,
     runwayFt: 9300,
@@ -2527,6 +2633,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1959,
     oop: 1972,   // year the production line closed (era worlds: second-hand only after this)
     seats: 140,
+    typicalSeats: 80,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_300,
     runwayFt: 5900,
@@ -2546,6 +2653,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1971,
     oop: 1975,   // year the production line closed (era worlds: second-hand only after this)
     seats: 180,
+    typicalSeats: 180,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
     runwayFt: 8200,
@@ -2565,6 +2673,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1964,
     oop: 1970,   // year the production line closed (era worlds: second-hand only after this)
     seats: 151,
+    typicalSeats: 135,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_400,
     runwayFt: 7000,
@@ -2584,6 +2693,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1962,
     oop: 1963,   // year the production line closed (era worlds: second-hand only after this)
     seats: 149,
+    typicalSeats: 121,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_100,
     runwayFt: 9550,
@@ -2603,6 +2713,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1984,
     oop: 2006,   // year the production line closed (era worlds: second-hand only after this)
     seats: 180,
+    typicalSeats: 164,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_200,
     runwayFt: 7200,
@@ -2622,6 +2733,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1967,
     oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 96,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_000,
     runwayFt: 6200,
@@ -2641,6 +2753,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1974,
     oop: 1995,   // year the production line closed (era worlds: second-hand only after this)
     seats: 186,
+    typicalSeats: 105,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 10_000,
     runwayFt: 10500,
@@ -2660,6 +2773,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1980,
     oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 350,
+    typicalSeats: 300,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_000,
     runwayFt: 8500,
@@ -2679,6 +2793,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1980,
     oop: 2003,   // year the production line closed (era worlds: second-hand only after this)
     seats: 120,
+    typicalSeats: 104,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 4_000,
     runwayFt: 6000,
@@ -2698,6 +2813,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1968,
     oop: 1981,   // year the production line closed (era worlds: second-hand only after this)
     seats: 32,
+    typicalSeats: 27,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_800,
     runwayFt: 3300,
@@ -2717,6 +2833,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1958,
     oop: 1987,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
+    typicalSeats: 44,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
     runwayFt: 5300,
@@ -2736,6 +2853,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1969,
     oop: 1987,   // year the production line closed (era worlds: second-hand only after this)
     seats: 85,
+    typicalSeats: 65,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
     runwayFt: 5350,
@@ -2755,6 +2873,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1961,
     oop: 1967,   // year the production line closed (era worlds: second-hand only after this)
     seats: 165,
+    typicalSeats: 156,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 6_700,
     runwayFt: 6050,
@@ -2774,6 +2893,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1970,
     oop: 1976,   // year the production line closed (era worlds: second-hand only after this)
     seats: 550,
+    typicalSeats: 366,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 9_800,
     runwayFt: 10000,
@@ -2793,6 +2913,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1983,
     oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 605,
+    typicalSeats: 400,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 11_700,
     runwayFt: 10200,
@@ -2812,6 +2933,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1975,
     oop: 1984,   // year the production line closed (era worlds: second-hand only after this)
     seats: 345,
+    typicalSeats: 250,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 5_400,
     runwayFt: 8650,
@@ -2831,6 +2953,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1983,
     oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 280,
+    typicalSeats: 240,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 6_800,
     runwayFt: 7300,
@@ -2850,6 +2973,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1959,
     oop: 1961,   // year the production line closed (era worlds: second-hand only after this)
     seats: 104,
+    typicalSeats: 98,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 3_500,
     runwayFt: 5500,
@@ -2869,6 +2993,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1968,
     oop: 1982,   // year the production line closed (era worlds: second-hand only after this)
     seats: 119,
+    typicalSeats: 99,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_700,
     runwayFt: 6000,
@@ -2888,6 +3013,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1960,
     oop: 1966,   // year the production line closed (era worlds: second-hand only after this)
     seats: 56,
+    typicalSeats: 52,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_900,
     runwayFt: 5000,
@@ -2906,6 +3032,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2021,
     seats: 202,
+    typicalSeats: 197,   // seats the headline range is quoted at
     range: 6_400,
     runwayFt: 5800,
     weeklyLease:    99_000,
@@ -2923,6 +3050,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2020,
     seats: 406,
+    typicalSeats: 240,   // seats the headline range is quoted at
     range: 15_100,
     runwayFt: 8000,
     weeklyLease:    231_000,
@@ -2940,6 +3068,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2026,
     seats: 108,
+    typicalSeats: 98,   // seats the headline range is quoted at
     range: 3_000,
     runwayFt: 5900,
     weeklyLease:    75_000,
@@ -2957,6 +3086,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Narrow Body',
     eis: 2026,
     seats: 211,
+    typicalSeats: 163,   // seats the headline range is quoted at
     range: 3_830,
     runwayFt: 7000,
     weeklyLease:    75_000,
@@ -2974,6 +3104,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Wide Body',
     eis: 2029,
     seats: 440,
+    typicalSeats: 280,   // seats the headline range is quoted at
     range: 12_000,
     runwayFt: 9200,
     weeklyLease:    293_000,
@@ -2992,6 +3123,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1993,
     oop: 2000,   // year the production line closed (era worlds: second-hand only after this)
     seats: 33,
+    typicalSeats: 30,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_850,
     runwayFt: 3400,
@@ -3011,6 +3143,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1999,
     oop: 2002,   // year the production line closed (era worlds: second-hand only after this)
     seats: 34,
+    typicalSeats: 32,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_665,
     runwayFt: 4400,
@@ -3031,6 +3164,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1982,
     oop: 1998,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
+    typicalSeats: 19,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_110,
     runwayFt: 2600,
@@ -3050,6 +3184,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1985,
     oop: 2007,   // year the production line closed (era worlds: second-hand only after this)
     seats: 30,
+    typicalSeats: 30,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_750,
     runwayFt: 5200,
@@ -3070,6 +3205,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1982,
     oop: 1993,   // year the production line closed (era worlds: second-hand only after this)
     seats: 19,
+    typicalSeats: 19,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_260,
     runwayFt: 4600,
@@ -3089,6 +3225,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1992,
     oop: 1997,   // year the production line closed (era worlds: second-hand only after this)
     seats: 29,
+    typicalSeats: 29,   // seats the headline range is quoted at
     deliveredAgeWeeks: 520,   // arrives 10y old - out of production, bought used
     range: 1_433,
     runwayFt: 4900,
@@ -3108,6 +3245,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1984,
     oop: 1989,   // year the production line closed (era worlds: second-hand only after this)
     seats: 34,
+    typicalSeats: 34,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_430,
     runwayFt: 4300,
@@ -3127,6 +3265,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1984,
     oop: 2005,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
+    typicalSeats: 37,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_890,
     runwayFt: 3100,
@@ -3146,6 +3285,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1995,
     oop: 2009,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
+    typicalSeats: 37,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 2_084,
     runwayFt: 3300,
@@ -3165,6 +3305,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1978,
     oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 54,
+    typicalSeats: 50,   // seats the headline range is quoted at
     deliveredAgeWeeks: 624,   // arrives 12y old - out of production, bought used
     range: 1_300,
     runwayFt: 2300,
@@ -3184,6 +3325,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2000,
     oop: 2016,   // year the production line closed (era worlds: second-hand only after this)
     seats: 60,
+    typicalSeats: 56,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
     range: 1_600,
     runwayFt: 3900,
@@ -3203,6 +3345,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2008,
     oop: 2019,   // year the production line closed (era worlds: second-hand only after this)
     seats: 60,
+    typicalSeats: 56,   // seats the headline range is quoted at
     deliveredAgeWeeks: 364,   // line closed 2019 — youngest frame left is ~7y old
     range: 1_600,
     runwayFt: 4300,
@@ -3222,6 +3365,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Turboprop',
     eis: 2022,
     seats: 19,
+    typicalSeats: 7,   // seats the headline range is quoted at
     range: 1_660,
     runwayFt: 3600,
     weeklyLease:    12_000,
@@ -3240,6 +3384,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1962,
     oop: 1979,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
+    typicalSeats: 36,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 2_400,
     runwayFt: 4300,
@@ -3260,6 +3405,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1973,
     oop: 1990,   // year the production line closed (era worlds: second-hand only after this)
     seats: 21,
+    typicalSeats: 18,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old - out of production, bought used
     range: 1_900,
     runwayFt: 3900,
@@ -3596,6 +3742,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1946,
     oop: 1947,   // year the production line closed (era worlds: second-hand only after this)
     seats: 44,
+    typicalSeats: 44,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 4_000,
     runwayFt: 4500,
@@ -3625,6 +3772,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1947,
     oop: 1950,   // year the production line closed (era worlds: second-hand only after this)
     seats: 55,
+    typicalSeats: 40,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 6_200,
     runwayFt: 4800,
@@ -3645,6 +3793,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1947,
     oop: 1951,   // year the production line closed (era worlds: second-hand only after this)
     seats: 62,
+    typicalSeats: 62,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 4_690,
     runwayFt: 5500,
@@ -3665,6 +3814,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1948,
     oop: 1954,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
+    typicalSeats: 40,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 1_930,
     runwayFt: 4500,
@@ -3685,6 +3835,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1949,
     oop: 1950,   // year the production line closed (era worlds: second-hand only after this)
     seats: 114,
+    typicalSeats: 63,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 6_760,
     runwayFt: 6500,
@@ -3706,6 +3857,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1951,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 68,
+    typicalSeats: 68,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 4_835,
     runwayFt: 5200,
@@ -3726,6 +3878,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1951,
     oop: 1953,   // year the production line closed (era worlds: second-hand only after this)
     seats: 40,
+    typicalSeats: 40,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 1_738,
     runwayFt: 4300,
@@ -3752,6 +3905,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1951,
     oop: 1954,   // year the production line closed (era worlds: second-hand only after this)
     seats: 88,
+    typicalSeats: 64,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 4_300,
     runwayFt: 5800,
@@ -3773,6 +3927,7 @@ export const AIRCRAFT_TYPES = [
     oop: 1954,   // year the production line closed (era worlds: second-hand only after this)
     withdrawnYear: 1955,   // certificate pulled after the 1954 groundings - no used market ever
     seats: 44,
+    typicalSeats: 36,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_410,
     runwayFt: 6500,
@@ -3793,6 +3948,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1953,
     oop: 1959,   // year the production line closed (era worlds: second-hand only after this)
     seats: 53,
+    typicalSeats: 47,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_830,
     runwayFt: 4800,
@@ -3814,6 +3970,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1954,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 32,
+    typicalSeats: 26,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 1_500,
     runwayFt: 3300,
@@ -3834,6 +3991,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1955,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 95,
+    typicalSeats: 71,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 5_840,
     runwayFt: 6000,
@@ -3854,6 +4012,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1956,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 52,
+    typicalSeats: 44,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_100,
     runwayFt: 4600,
@@ -3874,6 +4033,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1956,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 105,
+    typicalSeats: 100,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 7_410,
     runwayFt: 6300,
@@ -3894,6 +4054,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1956,
     oop: 1960,   // year the production line closed (era worlds: second-hand only after this)
     seats: 100,
+    typicalSeats: 70,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_650,
     runwayFt: 8200,
@@ -3914,6 +4075,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1957,
     oop: 1960,   // year the production line closed (era worlds: second-hand only after this)
     seats: 139,
+    typicalSeats: 99,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 7_100,
     runwayFt: 6700,
@@ -3934,6 +4096,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1957,
     oop: 1958,   // year the production line closed (era worlds: second-hand only after this)
     seats: 92,
+    typicalSeats: 64,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 9_000,
     runwayFt: 6600,
@@ -3954,6 +4117,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1957,
     oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
     seats: 75,
+    typicalSeats: 65,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_780,
     runwayFt: 5000,
@@ -3974,6 +4138,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1958,
     oop: 1963,   // year the production line closed (era worlds: second-hand only after this)
     seats: 174,
+    typicalSeats: 137,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 5_600,
     runwayFt: 8500,
@@ -3993,6 +4158,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1958,
     oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
     seats: 81,
+    typicalSeats: 78,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 5_190,
     runwayFt: 6900,
@@ -4013,6 +4179,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1959,
     oop: 1978,   // year the production line closed (era worlds: second-hand only after this)
     seats: 110,
+    typicalSeats: 68,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 6_500,
     runwayFt: 5600,
@@ -4033,6 +4200,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1960,
     oop: 1967,   // year the production line closed (era worlds: second-hand only after this)
     seats: 177,
+    typicalSeats: 177,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 8_300,
     runwayFt: 9500,
@@ -4052,6 +4220,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1961,
     oop: 1964,   // year the production line closed (era worlds: second-hand only after this)
     seats: 139,
+    typicalSeats: 139,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 2_945,
     runwayFt: 6000,
@@ -4072,6 +4241,7 @@ export const AIRCRAFT_TYPES = [
     eis: 1962,
     oop: 1988,   // year the production line closed (era worlds: second-hand only after this)
     seats: 58,
+    typicalSeats: 54,   // seats the headline range is quoted at
     deliveredAgeWeeks: 832,   // arrives 16y old in classic worlds - long out of production
     range: 1_700,
     runwayFt: 3500,
@@ -4289,6 +4459,53 @@ export function eraPurchasePrice(type, calYear = _eraPriceYear) {
 /** Catalogue weekly lease at `calYear`. */
 export function eraWeeklyLease(type, calYear = _eraPriceYear) {
   return Math.round((type?.weeklyLease ?? 0) * eraPriceScale(type, calYear));
+}
+
+/**
+ * Seats a type's headline range is quoted at (its typical cabin). Falls back to the
+ * exit-limit maximum. The payload-range model (utils/simulation.js) anchors on it,
+ * a new delivery arrives with it, and AI carriers fly it on routes they open.
+ */
+export function typicalSeatsOf(type) {
+  return type?.typicalSeats ?? type?.seats ?? 0;
+}
+
+// ── Payload–range (2026-10-17) — see the block in utils/simulation.js ─────────
+/** A passenger plus checked bags, kg. */
+export const PAX_PAYLOAD_KG = 100;
+/** Jet fuel / avgas, kg per litre. */
+export const FUEL_KG_PER_L = 0.8;
+/** Range gained at an EMPTY cabin over the typical one: tanks are already ~full. */
+export const LIGHT_CABIN_GAIN_MAX = 0.05;
+/** A dense cabin never cuts range below this share of the headline. */
+export const DENSE_RANGE_FLOOR = 0.5;
+
+/** Range multiplier for carrying `bodies` passengers, anchored at typical seats. */
+export function payloadRangeMod(bodies, type) {
+  const typical = typicalSeatsOf(type);
+  if (!typical || !type?.range) return 1;
+  if (bodies <= typical) return 1 + LIGHT_CABIN_GAIN_MAX * (1 - Math.max(0, bodies) / typical);
+  const fuelKgPerKm = (type.fuelBurnPer100km ?? 0) * FUEL_KG_PER_L / 100;
+  if (!(fuelKgPerKm > 0)) return 1;
+  const lostKm = (bodies - typical) * PAX_PAYLOAD_KG / fuelKgPerKm;
+  return Math.max(DENSE_RANGE_FLOOR, 1 - lostKm / type.range);
+}
+
+/**
+ * The most passengers a stock frame of this type can carry over `distKm`: every
+ * seat when the lane is short enough, fewer as it nears the type's range, never
+ * below the typical cabin. AI carriers fly this on routes they open — packed on
+ * short and medium haul as real carriers fly, lighter only where range binds.
+ */
+export function maxSeatsForRange(type, distKm) {
+  const max = type?.seats ?? 0;
+  if (!max || !type?.range || !(distKm > 0)) return max;
+  const reaches = (b) => type.range * payloadRangeMod(b, type) >= distKm;
+  if (reaches(max)) return max;
+  let lo = Math.min(typicalSeatsOf(type), max), hi = max;
+  if (!reaches(lo)) return lo;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (reaches(mid)) lo = mid; else hi = mid; }
+  return lo;
 }
 
 export function getAircraftType(id) {

@@ -574,7 +574,7 @@ export function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet })
         </div>
         {competitors.map(c => {
           const cfg = c.routes[routeKey];
-          const seats = cfg.aircraftType ? getAircraftType(cfg.aircraftType)?.seats ?? null : null;
+          const seats = cfg.seats ?? (cfg.aircraftType ? getAircraftType(cfg.aircraftType)?.seats ?? null : null);
           return (
             <div key={c.id} style={{ padding: '7px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>
               {seats != null ? (seats * (cfg.frequency ?? 0)).toLocaleString() : '–'}

@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useS
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
-  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, cabinRangeFix, weekToGameDate,
+  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, cabinRangeFix, newAircraftConfig, grandfatherRouteRanges, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
   routeStops, routeLegs, routeSegments, routeSegmentKey, isMultiStop,
   routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
@@ -1209,6 +1209,9 @@ function demandWorldToasts(world, hub) {
 
 function freshState() {
   return {
+    // Every route in this game is opened under the payload-range model (2026-10-17);
+    // a save without this flag is migrated by grandfatherRouteRanges on load.
+    payloadRangeV2: true,
     airlineName: '',
     logoId: 'horizon',
     logoColor: '#f5a623',
@@ -1890,7 +1893,7 @@ function reducer(state, action) {
         tailNumber,
         status:             'idle',
         ageWeeks:           eraDeliveredAgeWeeks(type, calendarYear(state)),
-        config:             defaultConfig(type?.seats ?? 100),
+        config:             type ? newAircraftConfig(type) : defaultConfig(100),
         ownershipType:      'lease',
         // Lock the rate at signing. Without this the tail carried no weeklyLease
         // at all, so every cost site fell through to `type.weeklyLease` — which
@@ -1929,7 +1932,7 @@ function reducer(state, action) {
         tailNumber,
         status:        'idle',
         ageWeeks:      eraDeliveredAgeWeeks(type, calendarYear(state)),
-        config:        defaultConfig(type.seats),
+        config:        newAircraftConfig(type),
         ownershipType: 'owned',
       };
       return {
@@ -4338,7 +4341,7 @@ function reducer(state, action) {
           tailNumber,
           status:        'idle',   // set to 'assigned' below if it takes a route
           ageWeeks:      tail.ageWeeks ?? 0,
-          config:        defaultConfig(type?.seats ?? 150),
+          config:        type ? newAircraftConfig(type) : defaultConfig(150),
           ownershipType: 'owned',
           acquired:      true,
         };
@@ -4503,6 +4506,8 @@ function reducer(state, action) {
       // the player BEFORE the tick (which will not fly them). Same identity when
       // nothing changed, so this re-enters at most once per week.
       {
+        const migrated = grandfatherRouteRanges(state);   // no-op once the flag is set
+        if (migrated !== state) return reducer(migrated, action);
         const stranded = applyRangeStranding(state, { toast: false });
         if (stranded !== state) return reducer(stranded, action);
       }
@@ -5819,7 +5824,7 @@ function reducer(state, action) {
           tailNumber,
           status:        'idle',
           ageWeeks:      eraDeliveredAgeWeeks(ordType, calendarYear(state)),
-          config:        order.config ?? defaultConfig(ordType?.seats ?? 100),
+          config:        order.config ?? (ordType ? newAircraftConfig(ordType) : defaultConfig(100)),
           ownershipType: order.ownershipType,
           weeklyLease:        order.weeklyLease ?? 0,
           // Carry the security deposit onto the tail. Without this the money
@@ -6579,7 +6584,9 @@ function reconcileState(parsed) {
   // rather than after the route has already sat idle. Idempotent: a route that
   // is already flagged is not reported twice. News only here; the schedule-trim
   // precedent found a toast on load does not survive the first screen.
-  return applyRangeStranding(loaded, { toast: false });
+  // Saves from before the payload-range model: routes flying then keep the old
+  // range rule on their aircraft (before the stranding pass measures them).
+  return applyRangeStranding(grandfatherRouteRanges(loaded), { toast: false });
 }
 
 // The autosave used to be written here, by a `persistAutosave(state, storage)`

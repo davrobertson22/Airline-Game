@@ -25,6 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import assert from 'node:assert/strict';
+import { getAircraftType } from '../src/data/aircraft.js';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { projectWeek } from '../src/utils/financeProjection.js';
@@ -241,7 +242,11 @@ function startedAirline({ seed = 1001, ownership = 'owned', ageWeeks = 500, freq
     // vacuous for a reason that has nothing to do with the P&L card.
     crewPipeline: false,
     hubs: { ...(s.hubs ?? {}), JFK: { tier: 2, tierSince: 0 } },
-    fleet: s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: ownership })),
+    // Packed all-economy, as this fixture was seeded: a bought 737-800 now arrives
+    // at its typical 162 seats (payload-range model, 2026-10-17); these domestic
+    // lanes are well inside a packed 737-800's reach.
+    fleet: s.fleet.map(a => ({ ...a, ageWeeks, ownershipType: ownership,
+      config: { ...a.config, economy: getAircraftType(a.typeId).seats } })),
   };
 }
 

@@ -38,6 +38,7 @@
 //     (1,292 contested vs 1,292 alone) — the tick never saw it.
 
 import assert from 'node:assert/strict';
+import { newAircraftConfig } from '../src/utils/simulation.js';
 import {
   weeklyTick, defaultConfig, defaultClassPrices,
 } from '../src/utils/simulation.js';
@@ -72,7 +73,7 @@ function run(routeSpecs, { competitors = [], encroachments = {}, priceMult = 1 }
   const state = {
     fleet: routeSpecs.map(([, , id]) => ({
       id, typeId: TYPE.id, status: 'assigned', ageWeeks: 52,
-      config: defaultConfig(TYPE.seats), ownershipType: 'owned',
+      config: newAircraftConfig(TYPE), ownershipType: 'owned',
     })),
     routes: routeSpecs.map(([o, d, id]) => ({
       id: `r-${id}`, origin: o, destination: d, aircraftId: id,
@@ -261,7 +262,7 @@ test('pairMarketShare previews the SAME pooled lane the tick books', async () =>
   const state = {
     fleet: specs.map(([, , id]) => ({
       id, typeId: TYPE.id, status: 'assigned', ageWeeks: 52,
-      config: defaultConfig(TYPE.seats), ownershipType: 'owned',
+      config: newAircraftConfig(TYPE), ownershipType: 'owned',
     })),
     routes: specs.map(([o, d, id]) => ({
       id: `r-${id}`, origin: o, destination: d, aircraftId: id,
