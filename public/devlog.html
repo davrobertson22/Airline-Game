@@ -67,6 +67,14 @@
 
     <div class="entry">
       <p class="date">October 17, 2026</p>
+      <h2>Fix: long routes near an aircraft&rsquo;s range wouldn&rsquo;t open</h2>
+      <ul>
+        <li><strong>The Route Planner counted your cabin twice.</strong> Since range started depending on seats, the planner took an aircraft&rsquo;s range with its cabin already counted, then counted the cabin&rsquo;s weight again for the forecast. A route your aircraft could reach, but only with a few hundred kilometres to spare, showed no forecast and no Open Route button. For example, an A340-300 with 362 seats reaches 12,351 km, but the planner treated it as about 11,300 km and wouldn&rsquo;t open LA&ndash;Sydney (12,061 km). The planner, the cargo planner and the &ldquo;Best aircraft for this route&rdquo; table now use the range your aircraft really has.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <p class="date">October 17, 2026</p>
       <h2>Runway length now counts when you move routes</h2>
       <p>Moving a route to another aircraft no longer lets you put it on a plane that cannot use the runway. Thanks to Barca for the report on Discord.</p>
       <ul>
