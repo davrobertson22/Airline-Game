@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useS
 import {
   weeklyTick, defaultConfig,
   weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
-  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, weekToGameDate,
+  CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, cabinRangeFix, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
   routeStops, routeLegs, routeSegments, routeSegmentKey, isMultiStop,
   routeMaxLegKm, routeBlockHours, referencePrice as routeReferencePrice,
@@ -1595,6 +1595,7 @@ export function applyRangeStranding(state, { toast = true } = {}) {
           from: hit.from, to: hit.to,
           sectorKm: Math.round(hit.sectorKm), rangeKm: Math.round(hit.rangeKm),
           since: absWeek,
+          ...(hit.cargo ? {} : (cabinRangeFix(aircraft, type, hit.sectorKm) ?? {})),
         },
       };
     }
