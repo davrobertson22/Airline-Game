@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import NumberStepper from './NumberStepper.jsx';
 import { useGame } from '../store/GameContext.jsx';
-import { getAircraftType, effectivePurchasePrice, eraWeeklyLease, orderDiscount, canFitWifi, wifiAirframeDenial } from '../data/aircraft.js';
+import { getAircraftType, effectivePurchasePrice, eraPurchasePrice, eraWeeklyLease, orderDiscount, canFitWifi, wifiAirframeDenial } from '../data/aircraft.js';
 import {
   formatMoney,
   CLASS_FARE_MULTIPLIERS,
@@ -16,6 +16,8 @@ import {
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { deliverySchedule, deliveryLead } from '../data/delivery.js';
+import { makeSlotAllocator, slotPremiumPct, slotCalendar, launchWindow, launchOrderDiscount, lineInfo, lineOf } from '../data/productionLines.js';
+import { withLineBook } from '../models/lineBook.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
 import { ReplacesSection, replacesForDispatch } from './FleetRenewal.jsx';
@@ -166,8 +168,22 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   // the Fleet page.
   const [hasWifi, setHasWifi]                    = useState(false);
 
+  // ── Production lines (data/productionLines.js) ───────────────────────────
+  // A factory line per family shared with every rival, your frames a class gap
+  // apart, earlier slots at a premium. An announced, not-yet-flying type is a
+  // launch order.
+  const linesWorld  = state.productionLinesWorld === true;
+  const launchTerms = (() => {
+    if (!linesWorld || mode !== 'buy' || !type) return null;
+    const lw = launchWindow(state, type);
+    return lw?.open ? lw : null;
+  })();
+  const isLaunch = !!launchTerms;
+  // null = the standard week (no premium); an absWeek = start looking there.
+  const [slotFrom, setSlotFrom] = useState(null);
+
   // ── Quantity ──────────────────────────────────────────────────────────────
-  const [quantity, setQuantity] = useState(Math.max(1, Math.min(100, replaceIds?.length || 1)));
+  const [quantity, setQuantity] = useState(Math.max(launchTerms?.minQty ?? 1, Math.min(100, replaceIds?.length || 1)));
 
   // ── Fleet renewal: which existing tails these frames take over from ──────
   const [replaceSel, setReplaceSel]           = useState(replaceIds ?? []);
@@ -285,7 +301,17 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const lead           = deliveryLead(type);
   const currentAbsWeek = absoluteWeek(year, week);
   const pendingOfType  = pendingOrders.filter(o => o.typeId === typeId);
-  const deliveryWeeks  = deliverySchedule(type, pendingOrders, currentAbsWeek, quantity);
+  // Production lines: the allocator ORDER_AIRCRAFT uses, over the same line
+  // (your orders and every rival's), so the weeks on screen are the weeks you get.
+  const lineState = linesWorld ? withLineBook(state, currentAbsWeek) : null;
+  const lineAlloc = lineState ? makeSlotAllocator(lineState, type, {
+    absWeek:   currentAbsWeek,
+    fromWeek:  isLaunch ? null : slotFrom,
+    notBefore: isLaunch ? launchTerms.eisAbs : null,
+  }) : null;
+  const deliveryWeeks  = lineAlloc
+    ? Array.from({ length: quantity }, () => lineAlloc.take())
+    : deliverySchedule(type, pendingOrders, currentAbsWeek, quantity);
   const firstDelivery = deliveryWeeks[0];
   const lastDelivery  = deliveryWeeks[deliveryWeeks.length - 1];
   const { displayYear: firstYear, monthName: firstMon, weekInMonth: firstWIM } = absWeekToDisplay(firstDelivery);
@@ -295,13 +321,24 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const fleetCountNow   = fleet.filter(a => a.typeId === typeId).length;
   const pendingCountNow = pendingOfType.length;
   const alreadyOwned    = fleetCountNow + pendingCountNow;
-  const discount        = mode === 'buy' ? orderDiscount(quantity) : 0;
+  const discount        = mode === 'buy'
+    ? (isLaunch ? launchOrderDiscount(state, type, quantity) : orderDiscount(quantity))
+    : 0;
   const discPct         = Math.round(discount * 100);
   const calYear         = calendarYear(state);   // era new-build premium while the line is open (null = classic)
-  const baseUnitPrice   = effectivePurchasePrice(type, mode === 'buy' ? quantity : 1, calYear);
+  const baseUnitPrice   = isLaunch
+    ? Math.round(eraPurchasePrice(type, calYear) * (1 - discount))
+    : effectivePurchasePrice(type, mode === 'buy' ? quantity : 1, calYear);
   const enginePriceAdj  = Math.round(baseUnitPrice * (enginePriceMod - 1));
   const unitBuyPrice    = Math.round(baseUnitPrice * enginePriceMod) + wingtipCost;
-  const totalBuyPrice   = unitBuyPrice * quantity;
+  // Early-slot premium per frame, on list price — the reducer's exact formula.
+  // Bought: part of the price. Leased: a one-off fee alongside the deposit.
+  const framePremiums    = deliveryWeeks.map(w => lineAlloc
+    ? Math.round(eraPurchasePrice(type, calYear) * enginePriceMod * slotPremiumPct(type, w, currentAbsWeek))
+    : 0);
+  const totalSlotPremium = framePremiums.reduce((a, b) => a + b, 0);
+  const premiumFrames    = framePremiums.filter(x => x > 0).length;
+  const totalBuyPrice   = unitBuyPrice * quantity + (mode === 'buy' ? totalSlotPremium : 0);
   // Owned: connectivity capex falls due up front, on top of the airframe price.
   // Leased: the lessor amortises it into the rate instead (wifiLeaseAdj below),
   // so charging it here too would bill for the same antenna twice. Both mirror
@@ -327,6 +364,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const totalWeeklyLease = unitWeeklyLease * quantity;
   const unitLeaseDeposit  = unitWeeklyLease * 12;   // 3 months (12 weeks) upfront
   const totalLeaseDeposit = unitLeaseDeposit * quantity;
+  const leaseDueNow       = totalLeaseDeposit + (mode === 'lease' ? totalSlotPremium : 0);
 
   // ── Staged payments (order book §2) ──────────────────────────────────────
   // Under the `orderBook` flag an owned order pays a deposit now, instalments
@@ -334,28 +372,33 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   // for the deposit and every pre-delivery instalment — this order's and the
   // unpaid ones already on the book. Same helpers ORDER_AIRCRAFT uses, so the
   // quote and the charge cannot disagree.
-  const staged          = mode === 'buy' && state.orderBook === true;
+  // Launch orders are bought outright (no staged payments), as the reducer does.
+  const staged          = mode === 'buy' && state.orderBook === true && !isLaunch;
   const unitContract    = unitBuyPrice + unitWifiFee;
   const unitPreDelivery = preDeliveryTotal(unitContract);
   const committedPdp    = staged ? committedPreDelivery(pendingOrders) : 0;
+  // Each frame's contract carries its own early-slot premium.
+  const frameContract   = (i) => unitContract + framePremiums[i];
   const stagedSigning   = staged
-    ? deliveryWeeks.reduce((s, w) => s + signingAmount(buildPaymentSchedule(unitContract, currentAbsWeek, w), currentAbsWeek), 0)
+    ? deliveryWeeks.reduce((s, w, i) => s + signingAmount(buildPaymentSchedule(frameContract(i), currentAbsWeek, w), currentAbsWeek), 0)
     : 0;
-  const stagedPreDelivery = unitPreDelivery * quantity;
+  const stagedPreDelivery = staged
+    ? deliveryWeeks.reduce((s, _w, i) => s + preDeliveryTotal(frameContract(i)), 0)
+    : unitPreDelivery * quantity;
   const stagedLater       = stagedPreDelivery - stagedSigning;          // instalments still to come
   const stagedBalance     = buyTotalDue - stagedPreDelivery;            // always cash, on delivery
   const stagedNeed        = committedPdp + stagedPreDelivery;
 
   const canAfford     = staged
     ? cash >= stagedNeed
-    : mode === 'buy' ? cash >= buyTotalDue : cash >= totalLeaseDeposit;
+    : mode === 'buy' ? cash >= buyTotalDue : cash >= leaseDueNow;
   const maxAffordable = staged
     ? Math.max(0, Math.floor((cash - committedPdp) / Math.max(1, unitPreDelivery)))
     : mode === 'buy'
       ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitWifiFee)))
       : Math.max(0, Math.floor(cash / unitLeaseDeposit));
 
-  function setQty(n) { setQuantity(Math.max(1, Math.min(100, n))); }
+  function setQty(n) { setQuantity(Math.max(isLaunch ? launchTerms.minQty : 1, Math.min(100, n))); }
 
   // The order as configured, for the replacement checks: range comes from the
   // wingtips and the cabin, exactly as it will on the delivered tail.
@@ -378,7 +421,10 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
       quantity,
       config:        cabinConfig,
       name:          customName.trim() || null,
-      ...(replaces.length ? { replaces, replaceDisposal } : {}),
+      // Production lines: where to start looking for slots (the reducer does
+      // the rest). Omitted = the standard week, no premium.
+      slotFromWeek:  linesWorld && !isLaunch && slotFrom != null ? slotFrom : undefined,
+      ...(replaces.length && !isLaunch ? { replaces, replaceDisposal } : {}),
     });
     onOrdered?.();
     onClose();
@@ -431,7 +477,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                 {quantity === 1 ? (
                   <>First delivery in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear})</>
                 ) : (
-                  <><strong>{quantity} aircraft</strong> · first in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear}), last in <strong>{lastDelivery - currentAbsWeek}w</strong> (Wk {lastWIM} {lastMon} Y{lastYear}) · every {lead}w</>
+                  <><strong>{quantity} aircraft</strong> · first in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear}), last in <strong>{lastDelivery - currentAbsWeek}w</strong> (Wk {lastWIM} {lastMon} Y{lastYear}) · {lineAlloc ? `at least ${lineAlloc.gap}w apart` : `every ${lead}w`}</>
                 )}
                 {pendingOfType.length > 0 && (
                   <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {pendingOfType.length} already queued</span>
@@ -447,12 +493,68 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                       fontSize: 11, padding: '2px 7px', borderRadius: 4,
                       background: 'rgba(56,139,253,0.15)', color: 'var(--accent)',
                       border: '1px solid rgba(56,139,253,0.25)',
-                    }}>#{i+1} — {absW - currentAbsWeek}w (Wk {wim} {mn} Y{dy})</span>
+                    }}>#{i+1} — {absW - currentAbsWeek}w (Wk {wim} {mn} Y{dy}){framePremiums[i] > 0 ? ` · +${formatMoney(framePremiums[i])}` : ''}</span>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* Launch-customer terms */}
+          {isLaunch && (
+            <div style={{
+              marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
+              background: 'rgba(163,113,247,0.12)', border: '1px solid rgba(163,113,247,0.35)', color: 'var(--text)',
+            }}>
+              <Glyph e="🚀" /> <strong>Launch order.</strong> The {type.name} enters service in {type.eis}. As a launch customer
+              you take the first slots on the line from January {type.eis}, one every {lineAlloc?.gap ?? lead} week{(lineAlloc?.gap ?? lead) === 1 ? '' : 's'}, at {Math.round(discount * 100)}% off list
+              (bulk + launch{(launchTerms.discount > 0.08) ? ' + loyalty' : ''}). Minimum {launchTerms.minQty} aircraft, paid in full now.{' '}
+              <strong>Launch orders are firm: they cannot be cancelled.</strong>
+            </div>
+          )}
+
+          {/* Production line: pick a start week (early slots cost extra) */}
+          {lineAlloc && !isLaunch && (() => {
+            const cal  = slotCalendar(lineState, type, currentAbsWeek, 12);
+            const info = lineInfo(lineOf(type));
+            const chosen = slotFrom ?? lineAlloc.standard;
+            return (
+              <div style={{ marginTop: 10, fontSize: 12 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+                  <Glyph e="🏭" /> <strong style={{ color: 'var(--text)' }}>{info.name}</strong> line · {cal.capacity} aircraft a week for you and every rival,
+                  and yours arrive at least {cal.gap} week{cal.gap === 1 ? '' : 's'} apart. Start from:
+                </div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {cal.rows.map(r => {
+                    const full = r.free <= 0 || r.gapBlocked;
+                    const on   = r.week === chosen;
+                    const std  = r.premiumPct === 0;
+                    return (
+                      <button
+                        key={r.week}
+                        type="button"
+                        disabled={full}
+                        onClick={() => setSlotFrom(std && r.week === lineAlloc.standard ? null : r.week)}
+                        title={r.mine ? 'You already take an aircraft this week' : r.gapBlocked ? `Within ${cal.gap} weeks of another of your aircraft on this line` : full ? 'Line full this week' : `${r.free} of ${cal.capacity} slots open`}
+                        style={{
+                          padding: '3px 7px', borderRadius: 5, fontSize: 11, lineHeight: 1.3,
+                          cursor: full ? 'not-allowed' : 'pointer', opacity: full ? 0.4 : 1,
+                          border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'rgba(56,139,253,0.15)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                        }}
+                      >
+                        {r.week - currentAbsWeek}w
+                        <span style={{ display: 'block', fontSize: 10, color: std ? 'var(--green)' : 'var(--yellow)' }}>
+                          {full ? (r.mine ? 'yours' : r.gapBlocked ? 'gap' : 'full') : std ? 'list' : `+${Math.round(r.premiumPct * 100)}%`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div style={{ padding: '14px 20px' }}>
@@ -465,15 +567,15 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                 <NumberStepper
                   live
                   value={quantity}
-                  min={1}
-                  max={Math.max(1, mode === 'buy' ? Math.min(100, maxAffordable) : 100)}
+                  min={isLaunch ? launchTerms.minQty : 1}
+                  max={Math.max(isLaunch ? launchTerms.minQty : 1, mode === 'buy' ? Math.min(100, maxAffordable) : 100)}
                   onChange={setQty}
                   ariaLabel="aircraft quantity"
                 />
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>aircraft</div>
               </div>
               <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
-                {[1, 5, 10, 25, 50, 100].filter(n => n <= (mode === 'buy' ? maxAffordable : 100)).map(n => (
+                {[1, 5, 10, 25, 50, 100].filter(n => n <= (mode === 'buy' ? maxAffordable : 100) && (!isLaunch || n >= launchTerms.minQty)).map(n => (
                   <button key={n} onClick={() => setQty(n)} style={{ padding: '4px 9px', borderRadius: 5, border: `1px solid ${quantity === n ? 'var(--accent)' : 'var(--border)'}`, background: quantity === n ? 'rgba(56,139,253,0.15)' : 'var(--surface2)', color: quantity === n ? 'var(--accent)' : 'var(--text-muted)', fontSize: 12, fontWeight: quantity === n ? 600 : 400, cursor: 'pointer' }}>{n}</button>
                 ))}
               </div>
@@ -737,7 +839,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
           )}
 
           {/* ── Replaces (fleet renewal) ─────────────────────────────────── */}
-          <ReplacesSection
+          {!isLaunch && <ReplacesSection
             draft={replaceDraft}
             quantity={quantity}
             setQuantity={setQty}
@@ -747,7 +849,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             setDisposal={setReplaceDisposal}
             deliveryWeeks={deliveryWeeks}
             defaultOpen={!!replaceIds?.length}
-          />
+          />}
 
           {/* ── Order summary ────────────────────────────────────────────── */}
           <section style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginBottom: 14 }}>
@@ -756,7 +858,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             {mode === 'buy' ? (
               <div style={{ fontSize: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }}>
-                  <span>Base price per aircraft{discPct > 0 && <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>(−{discPct}% bulk)</span>}</span>
+                  <span>Base price per aircraft{discPct > 0 && <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>(−{discPct}% {isLaunch ? 'launch + bulk' : 'bulk'})</span>}</span>
                   <span style={{ color: 'var(--text)' }}>{formatMoney(baseUnitPrice)}</span>
                 </div>
                 {enginePriceAdj !== 0 && (
@@ -775,6 +877,12 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                   <span style={{ color: 'var(--text-muted)' }}>Unit price</span>
                   <span>{formatMoney(unitBuyPrice)}</span>
                 </div>
+                {totalSlotPremium > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }}>
+                    <span>Early-slot premium{premiumFrames > 1 ? ` (${premiumFrames} aircraft)` : ''}</span>
+                    <span style={{ color: 'var(--yellow)' }}>+{formatMoney(totalSlotPremium)}</span>
+                  </div>
+                )}
                 {quantity > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }}>
                     <span>× {quantity} aircraft</span>
@@ -817,6 +925,16 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                       ({formatMoney(stagedPreDelivery)}{committedPdp > 0 ? `, plus ${formatMoney(committedPdp)} already owed on other orders` : ''}).
                       The balance is charged in cash the week each aircraft arrives — if the bank can’t cover it, it goes negative.
                     </div>
+                    {canAfford && cash - stagedPreDelivery - committedPdp < stagedBalance && (
+                      <div style={{
+                        fontSize: 11, marginTop: 6, padding: '6px 8px', borderRadius: 4, lineHeight: 1.45,
+                        background: 'rgba(210,153,34,0.12)', border: '1px solid rgba(210,153,34,0.35)', color: 'var(--yellow)',
+                      }}>
+                        <Glyph e="⚠" /> After this order you would have {formatMoney(Math.max(0, cash - stagedPreDelivery - committedPdp))} left,
+                        and the balance{quantity > 1 ? 's come' : ' comes'} to {formatMoney(stagedBalance)}. Unless your routes earn the difference
+                        by delivery, your cash goes negative when {quantity > 1 ? 'they arrive' : 'it arrives'}. Leasing, or an aircraft loan, avoids that.
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -865,9 +983,15 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                   <span>3-month deposit (due now)</span>
                   <span style={{ color: canAfford ? 'var(--green)' : 'var(--red)' }}>{formatMoney(totalLeaseDeposit)}</span>
                 </div>
+                {totalSlotPremium > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontWeight: 700, fontSize: 14 }}>
+                    <span>Early-slot fee, one-off (due now)</span>
+                    <span style={{ color: 'var(--yellow)' }}>{formatMoney(totalSlotPremium)}</span>
+                  </div>
+                )}
                 {!canAfford && (
                   <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
-                    Need {formatMoney(totalLeaseDeposit - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
+                    Need {formatMoney(leaseDueNow - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, textAlign: 'right' }}>
@@ -933,7 +1057,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
               <GlyphLabel size={13} text={over
                 ? '⚠ Fix cabin layout'
                 : mode === 'buy'
-                  ? `🛒 Order ${quantity > 1 ? quantity + '× ' : ''}${type.name}`
+                  ? (isLaunch ? `🚀 Launch order ${quantity}× ${type.name}` : `🛒 Order ${quantity > 1 ? quantity + '× ' : ''}${type.name}`)
                   : `✍️ Sign Lease${quantity > 1 ? ` × ${quantity}` : ''}`} />
             </button>
           </div>

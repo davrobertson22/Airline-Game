@@ -2642,6 +2642,15 @@ function blockTimeOneWay(distKm) { return distKm / 820 + 0.5; }
  * (the route is then simply not served — the range constraint in action).
  */
 export function pickCompetitorAircraftType(distKm, tier) {
+  return rankCompetitorAircraftTypes(distKm, tier)[0] ?? null;
+}
+
+/**
+ * Every type an AI carrier would consider for a lane, best first — the order
+ * pickCompetitorAircraftType takes the head of. Production-line worlds walk
+ * down it when the favourite's line is booked solid (models/competitorAI.js).
+ */
+export function rankCompetitorAircraftTypes(distKm, tier) {
   const target  = TIER_SEAT_TARGET[tier] ?? 200;
   // AI carriers shop the same market as the player. Era games: only types in
   // service and still on the market this calendar year (a 1950 rival flies
@@ -2650,7 +2659,7 @@ export function pickCompetitorAircraftType(distKm, tier) {
   const eraYear = getEraCalendarYear();
   const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm
     && (eraYear != null ? aircraftOrderable(t, eraYear) : aircraftAvailability(t, 2026) !== 'expired'));
-  if (capable.length === 0) return null;
+  if (capable.length === 0) return [];
 
   // Score each capable aircraft: seat misfit vs the tier's preferred size, plus a
   // mild penalty for range far in excess of the mission. This favours a properly
@@ -2663,7 +2672,7 @@ export function pickCompetitorAircraftType(distKm, tier) {
   // haul, fewer near the type's range) — stored on the route by the caller.
   const score = (t) =>
     Math.abs((t.seats ?? 0) - target) + Math.max(0, (t.range ?? 0) - need) * 0.005;
-  return capable.slice().sort((a, b) => score(a) - score(b))[0];
+  return capable.slice().sort((a, b) => score(a) - score(b));
 }
 
 /**

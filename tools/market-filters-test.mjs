@@ -44,9 +44,13 @@ function section(t) { console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 62 -
 const clean = (html) => html.replace(/<!-- -->/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"');
 const get = (id) => AIRCRAFT_TYPES.find(t => t.id === id);
 
+const FIXED_RIVAL = { id: 'fixed', name: 'Fixed Air', homeHub: 'ORD', tier: 'legacy', cash: 1e8, routes: {}, fleet: [{ id: 'fx-t1', typeId: 'a320neo', routeKey: 'ORD-DEN' }] };
 const base = (over = {}) => ({
   ...freshState(), phase: 'playing', week: 1, year: 1, cash: 40_000_000, hub: 'JFK', airlineName: 'Test',
-  routes: [], cargoRoutes: [], competitors: [], fleet: [], pendingOrders: [], objectives: [],
+  // One fixed rival: the market shows every rival's fleet (World fleet), and a
+  // save with NO rivals is given a randomly sampled roster on load, which would
+  // make two renders of the same save differ.
+  routes: [], cargoRoutes: [], competitors: [FIXED_RIVAL], fleet: [], pendingOrders: [], objectives: [],
   objectivesEnabled: false, ...over,
 });
 function render(save, filters = null, layout = 'table') {

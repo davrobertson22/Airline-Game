@@ -41,7 +41,7 @@ const COMPETITOR_TIER = {
   bankrupt: 1, merger: 1, startup: 1, fireSale: 1, fareWar: 1, secondHub: 1,
   fareWarEnd: 2, mktBlitz: 2, launch: 2, cut: 2, recovered: 2,
   allianceJoin: 2, allianceLeave: 2,
-  quality: 3, boost: 3, trim: 3,
+  quality: 3, boost: 3, trim: 3, aircraftOrder: 3,
 };
 
 // High-volume competitor actions. A busy world produces roughly five route
@@ -50,15 +50,15 @@ const COMPETITOR_TIER = {
 // "carriers launched 5 new routes" line you can open, rather than five lines
 // that bury the fare war underneath them. The rarer events (fare wars, mergers,
 // failures, distress) are never rolled — each one matters on its own.
-const ROLLABLE_COMPETITOR = new Set(['launch', 'cut', 'boost', 'trim']);
+const ROLLABLE_COMPETITOR = new Set(['launch', 'cut', 'boost', 'trim', 'aircraftOrder']);
 
-const ROLLUP_VERB = { launch: 'launched', cut: 'withdrew from', boost: 'added capacity on', trim: 'trimmed capacity on' };
+const ROLLUP_VERB = { launch: 'launched', cut: 'withdrew from', boost: 'added capacity on', trim: 'trimmed capacity on', aircraftOrder: 'had new aircraft ordered' };
 
 const COMPETITOR_ICON = {
   bankrupt: '📉', merger: '🤝', startup: '🚀', fireSale: '🏷️', recovered: '📈',
   fareWar: '⚔️', fareWarEnd: '🕊️', mktBlitz: '📣', secondHub: '🏛️',
   launch: '🛫', cut: '🛬', boost: '📈', trim: '📉', quality: '⭐',
-  allianceJoin: '🤝', allianceLeave: '💔',
+  allianceJoin: '🤝', allianceLeave: '💔', aircraftOrder: '🏭',
 };
 
 /**

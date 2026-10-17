@@ -80,6 +80,8 @@ import {
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions, runwayShortfall } from '../data/airportRestrictions.js';
 import { deliverySchedule } from '../data/delivery.js';
+import { makeSlotAllocator, slotPremiumPct, launchWindow, launchOrderDiscount } from '../data/productionLines.js';
+import { withLineBook, makeTickLedger, orderCancelTerms, SOLO_LINE_SCALE } from '../models/lineBook.js';
 import {
   generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
   quoteCharterForAircraft,
@@ -110,7 +112,7 @@ import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
 import { leaseAutoRenewSetting, leaseWillAutoRenew, leaseWarnWeeks, LEASE_AUTO_RENEW_TERMS, LEASE_AUTO_RENEW_AT_WEEKS } from '../models/leaseRenewal.js';
 import {
   buildPaymentSchedule, preDeliveryTotal, signingAmount, markPaidThrough,
-  committedPreDelivery, settleDuePayments, cancellationRefund,
+  committedPreDelivery, settleDuePayments,
 } from '../models/orderPayments.js';
 import {
   tickFuelPrice,
@@ -1460,6 +1462,18 @@ export function orderDenial(state, typeId) {
   }
   const avail = aircraftAvailability(type, cy);
   if (avail === 'future') {
+    // Production-line era games: announced two years before entry into
+    // service, and launch customers may order during the first 26 weeks
+    // (data/productionLines.js). ORDER_AIRCRAFT reads this code as "allowed,
+    // on launch terms".
+    const lw = launchWindow(state, type);
+    if (lw?.open) {
+      return {
+        code: 'launch_only', typeId: type.id, eis: type.eis,
+        minQty: lw.minQty, discount: lw.discount, closesAbs: lw.closesAbs, eisAbs: lw.eisAbs,
+        message: `The ${type.name} is announced for ${type.eis}. Until it flies it is sold only to launch customers: at least ${lw.minQty} aircraft, bought outright, delivering from January ${type.eis}.`,
+      };
+    }
     return {
       code: 'not_yet_flying', typeId: type.id, eis: type.eis,
       message: `The ${type.name} hasn't flown yet — it enters service in ${type.eis}.`,
@@ -1886,6 +1900,17 @@ function reducer(state, action) {
         // ever brought across, reconcileState seeds it fully staffed for the
         // fleet it already flies (see ensureCrewSeeded), never with nobody.
         crewPipeline: true,
+        // Production lines (data/productionLines.js, models/lineBook.js): every
+        // aircraft comes off a factory line shared with the rivals, who order
+        // and wait too; era games add launch customers. Staged purchase
+        // payments (order book package 1, models/orderPayments.js) switch on
+        // with it. Both are fixed for the life of the game: existing saves
+        // carry neither flag and keep private queues and pay-on-order.
+        ...(action.productionLines !== false ? {
+          productionLinesWorld: true,
+          productionLineScale:  SOLO_LINE_SCALE,
+          orderBook:            true,
+        } : {}),
         // Rival one-stop itineraries (HUB_CONNECTIVITY_PLAN.md Phase 1b): every
         // airline in the world sells connections over its hubs, not just you.
         // Always on in Tailwinds — new games here, old saves in reconcileState.
@@ -1980,11 +2005,33 @@ function reducer(state, action) {
       const type = getAircraftType(action.typeId);
       if (!type) return state;
       // Era gate: not yet in service = not orderable, buy or lease. The UI
-      // shows the same denial; this is the authoritative check.
-      if (orderDenial(state, action.typeId)) return state;
-      if (action.ownershipType === 'lease' && leaseDenial(state, action.typeId)) return state;   // vintage: buy-only
+      // shows the same denial; this is the authoritative check. A launch_only
+      // denial is the one refusal that is really a different kind of order: a
+      // not-yet-flying type on launch-customer terms.
+      const eraDenial = orderDenial(state, action.typeId);
+      const isLaunch  = eraDenial?.code === 'launch_only';
+      if (eraDenial && !isLaunch) return state;
+      if (!isLaunch && action.ownershipType === 'lease' && leaseDenial(state, action.typeId)) return state;   // vintage: buy-only
+      // Production-line games: deliveries come off a line shared with every
+      // rival, one of your frames per class gap, priced by how early
+      // (data/productionLines.js; the rivals' orders: models/lineBook.js).
+      const linesWorld = state.productionLinesWorld === true;
 
       const quantity = Math.max(1, Math.min(100, action.quantity ?? 1));
+
+      if (isLaunch) {
+        const refuse = (message) => ({
+          ...state,
+          pendingToasts: [...(state.pendingToasts ?? []),
+            { type: 'warning', icon: '🚀', title: 'Launch order not placed', message }],
+        });
+        if (action.ownershipType !== 'owned') {
+          return refuse(`Launch customers buy outright — no lessor carries the ${type.name} before it has flown.`);
+        }
+        if (quantity < eraDenial.minQty) {
+          return refuse(`A launch order for the ${type.name} is at least ${eraDenial.minQty} aircraft.`);
+        }
+      }
 
       const currentAbsWeek = absoluteWeek(state.year, state.week);
 
@@ -2034,7 +2081,9 @@ function reducer(state, action) {
       // deposit and every pre-delivery instalment, this order's and the unpaid
       // ones already on the book (models/orderPayments.js). Leases, and every
       // world without the flag, take the classic path below unchanged.
-      const staged = action.ownershipType === 'owned' && state.orderBook === true;
+      // Launch orders are bought outright, whatever the world: the deal is cash
+      // up front for the discount and the first slots on the line.
+      const staged = action.ownershipType === 'owned' && state.orderBook === true && !isLaunch;
 
       // Bulk-order discount (owned purchases only) — resolve the affordable quantity
       // first so requesting 100 can't grab the 20% tier on a few affordable frames.
@@ -2042,26 +2091,56 @@ function reducer(state, action) {
       let orderDisc = 0;
       if (action.ownershipType === 'owned') {
         const unitCostAt = (disc) => Math.round(Math.round(eraPurchasePrice(type) * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost;
+        const discountFor = (q) => isLaunch ? launchOrderDiscount(state, type, q) : orderDiscount(q);
         while (orderQty > 0) {
-          orderDisc = orderDiscount(orderQty);
+          orderDisc = discountFor(orderQty);
           const need = staged
             ? committedPreDelivery(runningPending) + preDeliveryTotal(unitCostAt(orderDisc)) * orderQty
             : unitCostAt(orderDisc) * orderQty;
           if (cashBalance >= need) break;
           orderQty--;
         }
+        // A launch order is all-or-nothing: trimming it below the minimum would
+        // make it something the manufacturer never offered.
+        if (isLaunch && orderQty < quantity) {
+          const need = unitCostAt(discountFor(quantity)) * quantity;
+          return {
+            ...state,
+            pendingToasts: [...(state.pendingToasts ?? []), {
+              type: 'warning', icon: '💸', title: 'Not enough cash',
+              message: `A launch order for ${quantity} ${type.name}s costs ${formatMoney(need)}. You have ${formatMoney(cashBalance)}.`,
+            }],
+          };
+        }
         if (orderQty === 0) return state;
       }
 
+      // Production lines: one allocator per order, over the line as it stands
+      // (your orders + every rival's), so each frame lands on its own week and
+      // later frames move on. Default start is the standard week (no premium);
+      // an earlier slotFromWeek buys an early slot. Launch frames start at
+      // entry into service.
+      const allocator = linesWorld ? makeSlotAllocator(withLineBook(state, currentAbsWeek), type, {
+        absWeek:   currentAbsWeek,
+        fromWeek:  isLaunch ? null : (Number.isFinite(action.slotFromWeek) ? action.slotFromWeek : null),
+        notBefore: isLaunch ? eraDenial.eisAbs : null,
+      }) : null;
+
       for (let i = 0; i < orderQty; i++) {
-        const [deliverAbsWeek] = deliverySchedule(type, runningPending, currentAbsWeek, 1);
+        const deliverAbsWeek = allocator
+          ? allocator.peek()
+          : deliverySchedule(type, runningPending, currentAbsWeek, 1)[0];
+        // Early-slot premium on list price: part of an owned frame's price (and
+        // so of a staged contract), or a one-off fee on a lease.
+        const premiumPct  = allocator ? slotPremiumPct(type, deliverAbsWeek, currentAbsWeek) : 0;
+        const slotPremium = premiumPct > 0 ? Math.round(eraPurchasePrice(type) * enginePriceMod * premiumPct) : 0;
 
         // Price: uniform bulk-order discount (orderDisc) applied to every frame.
         const unitBasePrice  = action.ownershipType === 'owned'
           ? Math.round(eraPurchasePrice(type) * (1 - orderDisc))
           : 0;
         const unitTotalPrice = action.ownershipType === 'owned'
-          ? Math.round(unitBasePrice * enginePriceMod) + wingtipCost
+          ? Math.round(unitBasePrice * enginePriceMod) + wingtipCost + slotPremium
           : 0;
 
         // Lease: 3-month (12-week) upfront deposit required at order time
@@ -2086,11 +2165,12 @@ function reducer(state, action) {
           ? signingAmount(schedule, currentAbsWeek)
           : action.ownershipType === 'owned'
             ? contractPrice
-            : leaseDeposit;
+            : leaseDeposit + slotPremium;
         const canSign = staged
           ? cashBalance >= committedPreDelivery(runningPending) + preDeliveryTotal(contractPrice)
           : cashBalance >= unitUpfrontCost;
         if (!canSign) break;
+        if (allocator) allocator.take();
 
         const serialNum = nextAircraftNumber(action.typeId, state.fleet, runningPending);
         const customName = (action.name ?? '').trim();
@@ -2117,6 +2197,10 @@ function reducer(state, action) {
           orderedWeek:   state.week,
           orderedYear:   state.year,
           ...(staged ? { contractPrice, payments: markPaidThrough(schedule, currentAbsWeek) } : {}),
+          // Production lines: the line this slot is on, the premium paid, and
+          // whether this is a firm launch-customer frame.
+          ...(allocator ? { lineId: allocator.lineId, slotPremium } : {}),
+          ...(isLaunch ? { launch: true } : {}),
         };
 
         newOrders.push(order);
@@ -2149,6 +2233,24 @@ function reducer(state, action) {
         ...state,
         cash:          cashBalance,
         pendingOrders: runningPending,
+        // Launch programmes joined, per type: the manufacturer loyalty step
+        // counts this airline's earlier programmes with the same maker.
+        ...(isLaunch ? {
+          launchPrograms: {
+            ...(state.launchPrograms ?? {}),
+            [type.id]: {
+              manufacturer: type.manufacturer,
+              frames: (state.launchPrograms?.[type.id]?.frames ?? 0) + newOrders.length,
+              absWeek: currentAbsWeek,
+            },
+          },
+          pendingToasts: [...(state.pendingToasts ?? []), {
+            type: 'success', icon: '🚀',
+            title: `Launch customer: ${type.name}`,
+            message: `${newOrders.length} ${type.name}s on firm order at ${Math.round(orderDisc * 100)}% off list, delivering from January ${type.eis}. Launch orders cannot be cancelled.`,
+            duration: 9000,
+          }],
+        } : {}),
       };
     }
 
@@ -2192,10 +2294,20 @@ function reducer(state, action) {
       // Under the order book (models/orderPayments.js) the deposit is kept
       // and paid instalments come back at 80%; the screens quote the same
       // function, so the dialog and the refund cannot disagree.
-      const refund = cancellationRefund(order);
+      // Production-line games: the slot goes back on the line, launch frames
+      // are firm, and the forfeit follows models/lineBook.js orderCancelTerms
+      // — the function every cancel dialog quotes.
+      const terms = orderCancelTerms(state, order, absoluteWeek(state.year, state.week));
+      if (!terms.allowed) {
+        return {
+          ...state,
+          pendingToasts: [...(state.pendingToasts ?? []),
+            { type: 'warning', icon: '🔒', title: 'Order is firm', message: terms.reason }],
+        };
+      }
       return {
         ...state,
-        cash:          state.cash + refund,
+        cash:          state.cash + terms.refund,
         pendingOrders: (state.pendingOrders ?? []).filter(o => o.id !== action.orderId),
       };
     }
@@ -5476,6 +5588,15 @@ function reducer(state, action) {
           playerCampaignSpend: state.targetedMarketing ?? {},
           calendarYear:    calendarYear(state),
           world:           aiWorld,
+          // Production-line games: rivals order aircraft off the shared lines
+          // and wait for them. The ledger starts at the week being entered —
+          // the week this tick's deliveries land.
+          lines: state.productionLinesWorld === true ? makeTickLedger({
+            competitors:   currentCompetitors,
+            pendingOrders: state.pendingOrders ?? [],
+            absWeek:       weekNumber + 1,
+            scale:         state.productionLineScale ?? SOLO_LINE_SCALE,
+          }) : null,
         });
 
       // Simulate competitor networks, accumulate cash, and track profit history

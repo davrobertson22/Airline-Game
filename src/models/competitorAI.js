@@ -22,13 +22,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/market.js';
-import { getAircraftType, maxSeatsForRange } from '../data/aircraft.js';
+import { getAircraftType, maxSeatsForRange, eraPurchasePrice } from '../data/aircraft.js';
 import { valueRemaining } from '../data/overhead.js';
 import { ALLIANCES, applyAllianceEra } from '../data/alliances.js';
 import { featureLive } from '../data/eraFeatures.js';
 import { AIRPORTS } from '../data/airports.js';
 import {
   pickCompetitorAircraftType,
+  rankCompetitorAircraftTypes,
   tailsForRoute,
   makeCompetitorTail,
   generateStarterRoutes,
@@ -40,6 +41,7 @@ import {
   buildPairIncumbents,
   pickLargerCompetitorAircraftType,
 } from './demand.js';
+import { quotePlan } from './lineBook.js';
 
 // ─── Personality archetypes ──────────────────────────────────────────────────
 
@@ -385,6 +387,76 @@ function tailSalvage(type, count) {
 
 let _startupSeq = 0;
 
+// ─── Production lines ────────────────────────────────────────────────────────
+// Production-line worlds (state.productionLinesWorld): rivals buy aircraft off
+// the same shared lines as the player (models/lineBook.js). A move that needs
+// new aircraft — a new route, more flights, a bigger type — is placed as an
+// ORDER and happens when the last frame arrives. The cash is committed at
+// ordering, exactly as it was when the frames arrived the same week.
+/** A new route tries another type when its favourite's line holds it up longer than this. */
+export const AI_LINE_PATIENCE_WEEKS = 13;
+/** A move that would wait this much longer than on an empty line is not placed. */
+export const AI_LINE_GIVE_UP_WEEKS = 39;
+/** Weeks between one rival's frames off a line (null = the player's class gap). */
+export const AI_LINE_GAP_WEEKS = null;
+/**
+ * A carrier this far above its cash reserve buys early slots when the line is
+ * busy: it pays the same early-slot fee a player's lease does (a share of list
+ * price per frame) to get ahead of the queue — rivals can snag early slots too.
+ */
+export const AI_EARLY_SLOT_RESERVE_MULT = 6;
+/** How far down its list of types a carrier looks for a less busy line. */
+const AI_LINE_ALTERNATIVES = 4;
+
+let _planSeq = 0;
+function newPlanId(airlineId) { return `${airlineId}-p${(++_planSeq).toString(36)}`; }
+
+/**
+ * Plans whose last frame has arrived by `absWeek` take effect: the route move
+ * they were ordered for happens now, and the move's own news goes out.
+ * Returns { carrier, events }.
+ */
+export function deliverLinePlans(c, absWeek) {
+  const plans = c.linePlans ?? [];
+  if (!plans.length) return { carrier: c, events: [] };
+  const done = plans.filter(p => (p.weeks ?? []).every(w => w <= absWeek));
+  if (!done.length) return { carrier: c, events: [] };
+  const routes  = { ...c.routes };
+  let   fleet   = [...(c.fleet ?? [])];
+  const loadMap = { ...(c._routeLoad ?? {}) };
+  const events  = [];
+  for (const p of done) {
+    const n   = (p.weeks ?? []).length;
+    const cur = routes[p.routeKey];
+    if (p.kind === 'launch') {
+      if (cur) continue;   // already flying it some other way: nothing to open
+      routes[p.routeKey] = { ...p.cfg, tails: n };
+      for (let i = 0; i < n; i++) fleet.push(makeCompetitorTail(c.id, p.typeId, p.routeKey, false));
+    } else if (p.kind === 'upgauge') {
+      if (!cur) continue;
+      routes[p.routeKey] = { ...cur, aircraftType: p.typeId, seats: p.cfg.seats };
+      fleet = fleet.map(f => f.routeKey === p.routeKey ? { ...f, typeId: p.typeId, ageWeeks: 0 } : f);
+    } else {
+      if (!cur) continue;  // route withdrawn while waiting (cut drops the plan too)
+      routes[p.routeKey] = {
+        ...cur,
+        frequency:    p.cfg.frequency,
+        aircraftType: p.cfg.aircraftType ?? cur.aircraftType,
+        ...(cur.seats == null && p.cfg.seats != null ? { seats: p.cfg.seats } : {}),
+        tails:        (cur.tails ?? 1) + n,
+      };
+      for (let i = 0; i < n; i++) fleet.push(makeCompetitorTail(c.id, p.typeId, p.routeKey, false));
+    }
+    loadMap[p.routeKey] = 0;
+    if (p.event) events.push(p.event);
+  }
+  const doneIds = new Set(done.map(p => p.id));
+  return {
+    carrier: { ...c, routes, fleet, _routeLoad: loadMap, linePlans: plans.filter(p => !doneIds.has(p.id)) },
+    events,
+  };
+}
+
 // ─── Main weekly tick ────────────────────────────────────────────────────────
 
 /**
@@ -412,6 +484,7 @@ export function tickCompetitorAI(competitors, ctx) {
     playerCampaignSpend = {},   // { [airportCode]: $/wk } — player's targeted marketing
     calendarYear = null,        // era worlds: real year (null = classic)
     world = null,               // this week's world events { demandMultFor, fuelMult } — see computeCompetitorRoutePnL
+    lines = null,               // production-line worlds: the tick's booking ledger (lineBook.makeTickLedger)
   } = ctx ?? {};
 
   const events = [];
@@ -540,6 +613,13 @@ export function tickCompetitorAI(competitors, ctx) {
         description: `${c.name} has stabilised its finances and is no longer seeking a buyer.` });
     }
 
+    // ── Production lines: deliveries, every week ─────────────────────────────
+    if (lines) {
+      const delivered = deliverLinePlans(c, lines.absWeek);
+      c = delivered.carrier;
+      events.push(...delivered.events);
+    }
+
     // ── Decision cadence: each carrier acts every `actEvery` weeks, staggered ─
     const acts = ((weekNumber + hashId(c.id)) % arch.actEvery) === 0;
     if (!acts) return c;
@@ -549,6 +629,38 @@ export function tickCompetitorAI(competitors, ctx) {
     let   cash    = c.cash ?? 0;
     const lossMap = { ...(c._routeLoss ?? {}) };
     const routeKeys = Object.keys(routes);
+
+    // Production lines: aircraft on order, one plan per route at a time. A
+    // route waiting on frames is left alone until they arrive.
+    let   plans   = [...(c.linePlans ?? [])];
+    const planned = (k) => plans.some(p => p.routeKey === k);
+    // The standard slots, or — for a cash-rich carrier facing a busy line —
+    // earlier ones at the early-slot fee. `fee` is extra cash on top of the
+    // deposit; the caller still checks the deposit against its own reserve.
+    const quote   = (type, n) => {
+      const std = quotePlan(lines, plans, type, n, { gap: AI_LINE_GAP_WEEKS });
+      if (std.delay <= 0) return { ...std, fee: 0 };
+      const early = quotePlan(lines, plans, type, n, { gap: AI_LINE_GAP_WEEKS, early: true });
+      const fee = Math.round(early.premiumPct * eraPurchasePrice(type));
+      if (early.weeks[n - 1] >= std.weeks[n - 1] || cash - fee < reserve * AI_EARLY_SLOT_RESERVE_MULT) return { ...std, fee: 0 };
+      return { ...early, fee };
+    };
+    // Book the frames, take the cash, say what was ordered. The move itself
+    // (and its own news) happens on delivery — deliverLinePlans.
+    const placeOrder = (kind, key, type, q, cfg, event) => {
+      cash -= q.fee ?? 0;
+      const plan = { id: newPlanId(c.id), kind, routeKey: key, typeId: type.id, lineId: q.lineId,
+                     weeks: q.weeks, cfg, orderedAbs: lines.absWeek, event };
+      plans = [...plans, plan];
+      lines.add(q.lineId, q.weeks);
+      const [a, b] = key.split('-');
+      const n = q.weeks.length;
+      const first = q.weeks[0] - lines.absWeek;
+      const last  = q.weeks[n - 1] - lines.absWeek;
+      events.push({ type: 'aircraftOrder', airlineId: c.id, name: c.name, routeKey: key, typeId: type.id, count: n,
+        description: `${c.name} ordered ${n} ${type.name}${n === 1 ? '' : 's'} for ${a} → ${b}`
+          + (n === 1 ? `, delivering in ${first} weeks.` : `, delivering in ${first}–${last} weeks.`) });
+    };
 
     // Per-route P&L (only on action weeks — keeps the tick cheap).
     const pnl = {};
@@ -583,7 +695,7 @@ export function tickCompetitorAI(competitors, ctx) {
         && (lossMap[k] ?? 0) >= arch.actEvery;
       const thin = routeKeys
         .filter(k => ((loadMap[k] ?? 0) <= -THIN_WEEKS_TO_TRIM || losingUnfull(k))
-          && !inWar(k) && routes[k].frequency > MIN_FREQUENCY)
+          && !inWar(k) && routes[k].frequency > MIN_FREQUENCY && !planned(k))
         .sort((x, y) => (pnl[x]?.loadFactor ?? 0) - (pnl[y]?.loadFactor ?? 0));
       for (const key of thin) {
         if (movesLeft <= 0) break;
@@ -615,7 +727,7 @@ export function tickCompetitorAI(competitors, ctx) {
 
       const canGrow = !c.fireSale && (lastProfit > 0 || cash > reserve * 2);
       const full = routeKeys
-        .filter(k => canGrow && (loadMap[k] ?? 0) >= FULL_WEEKS_TO_GROW && (pnl[k]?.profit ?? 0) > 0)
+        .filter(k => canGrow && (loadMap[k] ?? 0) >= FULL_WEEKS_TO_GROW && (pnl[k]?.profit ?? 0) > 0 && !planned(k))
         .sort((x, y) => (pnl[y]?.profit ?? 0) - (pnl[x]?.profit ?? 0));
       for (const key of full) {
         if (movesLeft <= 0) break;
@@ -636,6 +748,18 @@ export function tickCompetitorAI(competitors, ctx) {
           if (bigger && projected(key, { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails }) > p.profit) {
             const cost = tailDeposit(bigger, tails) - tailSalvage(type, tails);
             if (cash - cost < reserve) continue;
+            if (lines) {
+              // Production lines: the bigger frames are ordered; the swap
+              // happens when the last one arrives.
+              const q = quote(bigger, tails);
+              if (q.delay > AI_LINE_GIVE_UP_WEEKS) continue;
+              cash -= cost;
+              placeOrder('upgauge', key, bigger, q, { seats: maxSeatsForRange(bigger, dist) },
+                { type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
+                  description: `${c.name} up-gauged ${a} → ${b} to the larger ${bigger.name ?? bigger.id} — the route keeps selling out.` });
+              movesLeft--;
+              continue;
+            }
             cash -= cost;
             fleet = fleet.map(f => f.routeKey === key ? { ...f, typeId: bigger.id, ageWeeks: 0 } : f);
             routes[key] = { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails };
@@ -660,6 +784,16 @@ export function tickCompetitorAI(competitors, ctx) {
         if (cash - cost < reserve) continue;
         const seatsOf = cfg.aircraftType ? {} : { seats: maxSeatsForRange(type, dist) };   // a newly picked type flies what the lane allows
         if (projected(key, { ...cfg, ...seatsOf, frequency: newFreq, aircraftType: type.id, tails: Math.max(tails, newTails) }) <= p.profit) continue;
+        if (lines && addTails > 0) {
+          const q = quote(type, addTails);
+          if (q.delay > AI_LINE_GIVE_UP_WEEKS) continue;
+          cash -= cost;
+          placeOrder('grow', key, type, q, { ...seatsOf, frequency: newFreq, aircraftType: type.id },
+            { type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
+              description: `${c.name} added flights on ${a} → ${b} (${cfg.frequency} → ${newFreq}×/wk) — the route keeps selling out.` });
+          movesLeft--;
+          continue;
+        }
         cash -= cost;
         for (let i = 0; i < addTails; i++) fleet.push(makeCompetitorTail(c.id, type.id, key, false));
         routes[key] = { ...cfg, ...seatsOf, frequency: newFreq, aircraftType: type.id, tails: Math.max(tails, newTails) };
@@ -694,6 +828,12 @@ export function tickCompetitorAI(competitors, ctx) {
       const type = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
       cash += tailSalvage(type, cfg.tails ?? 1);
       fleet = fleet.filter(f => f.routeKey !== key);
+      if (lines && planned(key)) {
+        // Frames on order for a route being withdrawn: the order is cancelled
+        // and the slots go back on the line.
+        for (const pl of plans) if (pl.routeKey === key) lines.remove(pl.lineId, pl.weeks.filter(w => w >= lines.absWeek));
+        plans = plans.filter(pl => pl.routeKey !== key);
+      }
       delete routes[key];
       delete lossMap[key];
       delete loadMap[key];
@@ -710,6 +850,7 @@ export function tickCompetitorAI(competitors, ctx) {
       if (boostsAllowed <= 0) break;
       const pInfo = playerPairs.get(key);
       if (!pInfo) continue;
+      if (planned(key)) continue;
       const cfg = routes[key];
       const p   = pnl[key];
       if (!p || p.profit <= 0) continue;
@@ -727,6 +868,17 @@ export function tickCompetitorAI(competitors, ctx) {
         const addTails  = Math.max(0, needTails - (cfg.tails ?? 1));
         const cost      = tailDeposit(type, addTails);
         if (cash - cost < reserve * 0.5) continue;
+        if (lines && addTails > 0) {
+          const q = quote(type, addTails);
+          if (q.delay > AI_LINE_GIVE_UP_WEEKS) continue;
+          cash -= cost;
+          placeOrder('defend', key, type, q,
+            { ...(cfg.aircraftType ? {} : { seats: maxSeatsForRange(type, dist) }), frequency: targetFreq, aircraftType: type.id },
+            { type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
+              description: `${c.name} added capacity on ${a} → ${b}, matching your schedule.` });
+          boostsAllowed--;
+          continue;
+        }
         cash -= cost;
         for (let i = 0; i < addTails; i++) fleet.push(makeCompetitorTail(c.id, type.id, key, false));
         routes[key] = { ...cfg, ...(cfg.aircraftType ? {} : { seats: maxSeatsForRange(type, dist) }), frequency: targetFreq, aircraftType: type.id, tails: needTails };
@@ -836,11 +988,46 @@ export function tickCompetitorAI(competitors, ctx) {
     }
 
     // 7. Expansion: one new route per action week, if healthy and funded.
-    const roomToGrow = Object.keys(routes).length < carrierMaxRoutes(c);
+    const launchesOnOrder = plans.filter(p => p.kind === 'launch').length;
+    const roomToGrow = Object.keys(routes).length + launchesOnOrder < carrierMaxRoutes(c);
     const healthy    = lastProfit > 0 || cash > reserve * 2;
     if (roomToGrow && healthy && cash > reserve) {
-      const cand = pickExpansionTarget(c, routes, { incumbents, playerPairs, playerHubs, playerNotice });
-      if (cand) {
+      // Routes already on order count as taken, or the best target would be
+      // the one the carrier is still waiting to open, every act until it does.
+      const network = lines && launchesOnOrder > 0
+        ? { ...routes, ...Object.fromEntries(plans.filter(p => p.kind === 'launch').map(p => [p.routeKey, p.cfg])) }
+        : routes;
+      const cand = pickExpansionTarget(c, network, { incumbents, playerPairs, playerHubs, playerNotice });
+      if (cand && lines) {
+        // Production lines: order the frames; the route opens when they
+        // arrive. A favourite whose line is booked solid gives way to the next
+        // type down the list that can still be had in reasonable time.
+        if (!planned(cand.key)) {
+          const tails = tailsForRoute(cand.dist, cand.frequency);
+          let best = null;
+          for (const t of rankCompetitorAircraftTypes(cand.dist, c.tier).slice(0, AI_LINE_ALTERNATIVES)) {
+            if (cash - tailDeposit(t, tails) < reserve) continue;
+            const q = quote(t, tails);
+            if (!best || q.weeks[tails - 1] < best.q.weeks[tails - 1]) best = { t, q };
+            if (q.delay <= AI_LINE_PATIENCE_WEEKS) { best = { t, q }; break; }
+          }
+          if (best && best.q.delay <= AI_LINE_GIVE_UP_WEEKS) {
+            const { t: type, q } = best;
+            cash -= tailDeposit(type, tails);
+            const [a, b] = cand.key.split('-');
+            placeOrder('launch', cand.key, type, q, {
+              frequency:       cand.frequency,
+              priceMultiplier: cand.priceMultiplier,
+              aircraftType:    type.id,
+              seats:           maxSeatsForRange(type, cand.dist),
+            }, { type: 'launch', airlineId: c.id, name: c.name, routeKey: cand.key,
+              attackedPlayer: cand.onPlayerPair,
+              description: cand.onPlayerPair
+                ? `${c.name} launched ${a} → ${b} — moving in on your market.`
+                : `${c.name} launched new service on ${a} → ${b}.` });
+          }
+        }
+      } else if (cand) {
         const type = pickCompetitorAircraftType(cand.dist, c.tier);
         if (type) {
           const tails = tailsForRoute(cand.dist, cand.frequency);
@@ -866,7 +1053,8 @@ export function tickCompetitorAI(competitors, ctx) {
       }
     }
 
-    return { ...c, routes, fleet, cash, _routeLoss: lossMap, _routeLoad: loadMap };
+    return { ...c, routes, fleet, cash, _routeLoss: lossMap, _routeLoad: loadMap,
+             ...((lines || c.linePlans) ? { linePlans: plans } : {}) };
   });
 
   // ── Lifecycle: bankruptcies ────────────────────────────────────────────────

@@ -17,6 +17,8 @@ import { getAircraftType, AIRCRAFT_TYPES, effectivePurchasePrice, eraWeeklyLease
 import { formatMoney, ageLabel, calendarYear, routeMaxLegKm } from '../utils/simulation.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { deliverySchedule } from '../data/delivery.js';
+import { lineStatus } from '../data/productionLines.js';
+import { withLineBook } from '../models/lineBook.js';
 import { leaseWillAutoRenew } from '../models/leaseRenewal.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
 import { Glyph } from './Icons.jsx';
@@ -370,6 +372,7 @@ export function BulkReplaceModal({ aircraftIds, onClose, onOrdered }) {
     // and no wingtips, so its range is exactly the catalogue range, and a
     // freighter can never take passenger routes (or the reverse).
     const cargoIds = new Set((state.cargoRoutes ?? []).map(r => r.id));
+    const lineView = state.productionLinesWorld === true ? withLineBook(state, nowAbs) : null;
     const need = new Map(tails.map(a => {
       const mine = ownRoutes(state, a.id);
       return [a.id, {
@@ -393,7 +396,10 @@ export function BulkReplaceModal({ aircraftIds, onClose, onOrdered }) {
         price: effectivePurchasePrice(t, 1, calYear),
         lease: eraWeeklyLease(t, calYear),
         leaseBlock: leaseDenial(state, t.id)?.message ?? null,
-        firstIn: deliverySchedule(t, state.pendingOrders ?? [], nowAbs, 1)[0] - nowAbs,
+        // Production lines: the next slot at list price on the shared line.
+        firstIn: (lineView
+          ? lineStatus(lineView, t, nowAbs).nextStandard
+          : deliverySchedule(t, state.pendingOrders ?? [], nowAbs, 1)[0]) - nowAbs,
       });
     }
     return out.sort((x, y) => y.fit.length - x.fit.length

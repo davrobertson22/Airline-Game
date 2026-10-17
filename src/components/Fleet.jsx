@@ -6,7 +6,8 @@ import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, transferCompatibility } from '../store/GameContext.jsx';
 import { getAircraftType, LEASE_BUYOUT_PREMIUM, AIRCRAFT_CATEGORIES } from '../data/aircraft.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
-import { cancellationRefund, hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
+import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
+import { orderCancelTerms } from '../models/lineBook.js';
 import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
@@ -1765,13 +1766,19 @@ export default function Fleet() {
   }
 
   async function handleCancelOrder(order) {
-    // One refund function for the dialog and the reducer (models/orderPayments.js).
+    // One refund function for the dialog and the reducer (models/lineBook.js).
+    const terms     = orderCancelTerms(state, order, absoluteWeek(state.year, state.week));
+    if (!terms.allowed) return;   // launch frames are firm; the button says so
     const staged    = hasPaymentSchedule(order);
     const hasRefund = order.ownershipType === 'owned' && order.totalPrice > 0;
-    const refund    = cancellationRefund(order);
+    const refund    = terms.refund;
     const deposit = order.ownershipType === 'lease' ? (order.leaseDeposit ?? 0) : 0;
-    const body = staged
-      ? `You've paid ${formatMoney(amountPaid(order))} on this aircraft so far. The deposit is not refundable and paid instalments come back at 80%, so you'll be refunded ${formatMoney(refund)}. Nothing further will be charged.`
+    const body = terms.rule === 'line'
+      ? (terms.forfeit > 0
+        ? `The slot is ${terms.weeksOut} week${terms.weeksOut === 1 ? '' : 's'} away, so ${order.ownershipType === 'lease' ? 'the deposit is forfeit' : `${Math.round(terms.forfeitPct * 100)}% is forfeit`}: you get ${formatMoney(terms.refund)} back and lose ${formatMoney(terms.forfeit)}. The slot goes back on the line for anyone to take.`
+        : `You get ${formatMoney(terms.refund)} back in full. The slot goes back on the line for anyone to take.`)
+      : staged
+      ? `You've paid ${formatMoney(amountPaid(order))} on this aircraft so far. The deposit is not refundable and paid instalments come back at 80%, so you'll be refunded ${formatMoney(refund)}. Nothing further will be charged.${terms.rule === 'staged' ? ' The slot goes back on the line for anyone to take.' : ''}`
       : hasRefund
       ? `You'll be refunded ${formatMoney(refund)} (a 5% cancellation fee applies).`
       : deposit > 0
@@ -2511,8 +2518,10 @@ export default function Fleet() {
                           border: '1px solid rgba(248,81,73,0.3)',
                         }}
                         onClick={() => handleCancelOrder(order)}
+                        disabled={!!order.launch}
+                        title={order.launch ? 'Launch-customer orders are firm and cannot be cancelled.' : undefined}
                       >
-                        Cancel
+                        {order.launch ? 'Firm' : 'Cancel'}
                       </button>
                     </td>
                   </tr>

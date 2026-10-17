@@ -100,6 +100,8 @@ export default function SetupScreen() {
   const [showLoad,          setShowLoad]          = useState(false);
   const [cloudNotice,       setCloudNotice]       = useState(null);
   const [enableObjectives,  setEnableObjectives]  = useState(true);
+  // Production lines (data/productionLines.js): on for new games; fixed for the game's life.
+  const [productionLines,   setProductionLines]   = useState(true);
   const [eraSel,            setEraSel]            = useState('');       // '' | preset year (string) | 'custom'
   const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
@@ -194,6 +196,7 @@ export default function SetupScreen() {
       logoColor:        accentColor,
       customLogo:       usingCustom ? customLogo : null,
       enableObjectives,
+      productionLines,
       startYear,
       demandWorld,
     });
@@ -615,6 +618,38 @@ export default function SetupScreen() {
                   {enableObjectives
                     ? 'Earn cash rewards by hitting strategic milestones and financial targets'
                     : 'Sandbox mode, no objectives, play freely'}
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              aria-pressed={productionLines}
+              onClick={() => setProductionLines(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                marginTop: 8, padding: '12px 14px',
+                background: 'var(--surface2)',
+                border: `1px solid ${productionLines ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0,
+                background: productionLines ? 'var(--accent)' : 'var(--surface3)', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: 2, left: productionLines ? 18 : 2, width: 16, height: 16,
+                  borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                  <Glyph e="🏭" /> Production lines
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {productionLines
+                    ? 'Aircraft come off factory lines you share with your rivals, and they order and wait too. Pay extra for an early slot, pay for purchases in stages, and sign up as a launch customer in era games'
+                    : 'Classic ordering: a private delivery queue, paid in full when you order'}
                 </div>
               </div>
             </button>

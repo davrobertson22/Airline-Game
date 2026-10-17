@@ -93,7 +93,9 @@ export default function WeeklyDebrief() {
 
   const newEvents          = lastReport.newEvents          ?? [];
   const expiredEvents      = lastReport.expiredEvents      ?? [];
-  const compEvents         = lastReport.competitorEvents   ?? [];
+  // Rivals' aircraft orders (production-line games) are many a week and live
+  // in the News tab; the debrief keeps the moves that change the market now.
+  const compEvents         = (lastReport.competitorEvents   ?? []).filter(ev => ev?.type !== 'aircraftOrder');
   const mechanicalFailures = lastReport.mechanicalFailures ?? [];
   const maintChecks        = lastReport.maintenanceChecks ?? { started: [], forced: [], completed: [], spend: 0 };
   const coverage           = lastReport.coverage ?? { started: [], ended: [], permanent: [], gaps: [] };

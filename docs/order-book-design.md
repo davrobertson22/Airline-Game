@@ -1,8 +1,17 @@
 # Aircraft Order Book — Design
 
-Status: **Package 1 (pre-delivery payments) built in Tailwinds, 2026-09-21** —
-behind the `orderBook` flag, which new games do NOT yet set: it switches on
-together with Package 2. Everything else is proposal. Intended for both repos (Tailwinds first,
+Status: **Package 1 (pre-delivery payments) built in Tailwinds, 2026-09-21**, and
+**switched on for new games 2026-10-17** together with **production lines** — the
+Headwinds shared-slot system (`src/data/productionLines.js`, copied verbatim),
+which stands in for Package 2 here. A new game sets `productionLinesWorld`,
+`productionLineScale` (0.4, `SOLO_LINE_SCALE`) and `orderBook`; the setup screen
+can switch all three off; existing saves carry none and stay classic. The locked
+"AI buys through the book" decision is built: rivals place plans on the same
+lines (`src/models/lineBook.js`, `deliverLinePlans` in `competitorAI.js`), wait
+for delivery, take early slots when cash-rich, and switch type when a line is
+booked solid. Launch orders are paid in full (no staged schedule) and firm.
+Tests: `tools/production-lines-test.mjs`, `tools/production-lines-ui-test.mjs`.
+The rest of this document (lessor pool, used board, options…) is still proposal. Intended for both repos (Tailwinds first,
 Headwinds port in the same shape — see §13).
 
 ## Goal
