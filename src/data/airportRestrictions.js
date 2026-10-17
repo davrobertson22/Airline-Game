@@ -326,6 +326,20 @@ function runwayViolation(code, type) {
   };
 }
 
+/**
+ * The first airport in `codes` whose longest runway is too short for `type`,
+ * as { code, needFt, haveFt }, or null when every one of them can take it.
+ * The same test checkRouteRestrictions runs first (runwayViolation), exposed so
+ * the equipment-change guards can name the runway in their refusal.
+ */
+export function runwayShortfall(codes, type) {
+  for (const code of codes ?? []) {
+    if (!runwayViolation(code, type)) continue;
+    return { code, needFt: type.runwayFt, haveFt: getAirport(code).runwayFt };
+  }
+  return null;
+}
+
 export function checkRouteRestrictions(originCode, destCode, distKm, weeklyFreq, aircraftCategory, context = {}) {
   const acType = context.aircraftType ?? null;
   if (acType) {

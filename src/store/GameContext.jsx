@@ -78,7 +78,7 @@ import {
   STRIKE_COOLDOWN_WEEKS,
 } from '../data/laborRelations.js';
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
-import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import { checkRouteRestrictions, runwayShortfall } from '../data/airportRestrictions.js';
 import { deliverySchedule } from '../data/delivery.js';
 import {
   generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
@@ -178,6 +178,28 @@ function withRouteStatus(a, next, extra = {}) {
 }
 
 // ─────────────────────────────────────────────
+// RUNWAY ON AN EQUIPMENT CHANGE
+// ─────────────────────────────────────────────
+// ADD_ROUTE meets the runway rule through checkRouteRestrictions, but
+// reassignCompatibility only re-ran that check when the new type's CATEGORY
+// differed — so an A320neo route into SNA (5,700 ft) moved onto an A321neo
+// (5,950 ft) unchallenged (Discord, Barca 2026-10-17; ported from Headwinds).
+// Every stop of the route is checked against the new type, and the refusal
+// names the runway rather than "Not permitted".
+//
+// Grandfathering: routes opened before the runway rule exist and keep flying
+// (airportRestrictions.js). A tail that needs no more runway than the one
+// already on the route is let through, or a like-for-like renewal of such a
+// route would be refused.
+function runwayRefusal(route, toType, fromType) {
+  const short = runwayShortfall(routeStops(route), toType);
+  if (!short) return null;
+  if (fromType?.runwayFt && toType.runwayFt <= fromType.runwayFt) return null;
+  return `Runway too short at ${short.code}: the ${toType.name} needs `
+    + `${short.needFt.toLocaleString()} ft, ${short.code} has ${short.haveFt.toLocaleString()} ft`;
+}
+
+// ─────────────────────────────────────────────
 // ROUTE TRANSFER (Fleet: move every route from one tail to another)
 // ─────────────────────────────────────────────
 // Returns { ok:true } or { ok:false, reason }. Shared by the TRANSFER_ROUTES
@@ -218,6 +240,10 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
   const range = effectiveRangeKm(to, toType);
   for (const r of all) {
     if (routeMaxLegKm(r) > range) return { ok: false, reason: `Out of range: ${r.origin}–${r.destination}` };
+  }
+  for (const r of all) {
+    const why = runwayRefusal(r, toType, fromType);
+    if (why) return { ok: false, reason: why };
   }
 
   // Regulatory restrictions re-checked per leg with the NEW aircraft type —
@@ -286,10 +312,13 @@ export function reassignCompatibility(state, routeId, toAircraftId) {
     return { ok: false, reason: `Out of range: ${route.origin}–${route.destination}` };
   }
 
-  // Regulatory restrictions re-checked with the NEW aircraft's category. Pair
-  // frequencies do not change, so the totals are the ones already approved.
   const from     = state.fleet.find(a => a.id === route.aircraftId);
   const fromType = from ? getAircraftType(from.typeId) : null;
+  const runwayWhy = runwayRefusal(route, toType, fromType);
+  if (runwayWhy) return { ok: false, reason: runwayWhy };
+
+  // Regulatory restrictions re-checked with the NEW aircraft's category. Pair
+  // frequencies do not change, so the totals are the ones already approved.
   if (!fromType || toType.category !== fromType.category) {
     const allOps = [...paxRoutes, ...cargoRoutes, ...activeCharterOps(state.charters ?? [])];
     for (const l of routeLegs(route)) {
