@@ -51,7 +51,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/competition-and-alliances.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-06",
-    "dateModified": "2026-10-13",
+    "dateModified": "2026-10-18",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -103,10 +103,13 @@
     <h2>Choosing your rivals</h2>
     <p>By default a new game draws about 25 rivals from the game's own roster, different every time. The Rivals options on the setup screen let you set the field yourself:</p>
     <ul>
-      <li><strong>Custom set.</strong> Paste a rival set: a short block of text listing each airline's name, home airport code and tier (budget, legacy or premium), and optionally its size (small, medium or large), founding year, logo, personality and quality. Size sets a rival's starting cash and network; its market value then comes out of how it plays. You can play with only your set or add it to the random field, and a set can start with up to 60 rivals.</li>
-      <li><strong>Founded in their own year.</strong> In an era game, a rival founded after your start year doesn't exist yet. It appears once the calendar reaches its year, with its own starter network, if the field has room; otherwise it waits and tries again. Classic games have no calendar, so every rival in a set starts on day one.</li>
+      <li><strong>How many, and how hard they push.</strong> Choose a field of 10, 25 or 40 random rivals. Rival pressure sets how closely they watch you: relaxed rivals pay you half the usual attention and make their moves less often, while fierce ones notice you early, fight harder for your routes and move more often.</li>
+      <li><strong>Custom set.</strong> Paste a rival set: a short block of text listing each airline's name, home airport code and tier (budget, legacy or premium), and optionally its size (small, medium or large), founding and closing years, logo, personality and quality. Size sets a rival's starting cash and network; its market value then comes out of how it plays. You can play with only your set or add it to the random field, and a set can start with up to 60 rivals.</li>
+      <li><strong>Fleets, routes and second hubs.</strong> A rival in a set can list the aircraft it flies (or just a manufacturer), its starting routes and a second hub. A carrier with a fleet preference only buys what it prefers when one of those types can fly the route, and takes whatever fits when none can. A listed route no aircraft of the era can fly is left out at the start.</li>
+      <li><strong>Founded and closed in their own years.</strong> In an era game, a rival founded after your start year doesn't exist yet. It appears once the calendar reaches its year, with its own starter network, if the field has room; otherwise it waits and tries again. A rival with a closing year ceases operations in that year, and one already closed by your start year never appears. Classic games have no calendar, so every rival in a set starts on day one and stays.</li>
+      <li><strong>Random logos and a chance to appear.</strong> Any rival's logo can be <code>"random"</code>, and <code>"randomLogos": true</code> at the top of a set shuffles them all; random logos are spread across the whole range, so a big set doesn't end up with ten of the same one. A rival can also have a <code>"chance"</code> from 0 to 100: the percent chance it takes part in a game at all, so a long list of airlines plays out differently every time. The roll leans toward underserved markets: a rival is likelier to appear where few airlines are based near its hub and less likely where many are, so a chance of 50 might come in three times in four in an empty region and one time in four in crowded Europe. Add <code>"crowding": false</code> to keep the percentage exact, and put <code>"chance"</code> at the top of a set to give every rival without its own the same odds. A rival founded later rolls in its founding year; one that misses never appears that game. A set made only of chance rivals always gets at least one.</li>
       <li><strong>No rival based at my hub.</strong> Removes any rival based at your home airport from the starting field. Others still fly in, and airlines founded later may still choose to base there.</li>
-      <li><strong>No random new airlines.</strong> Stops random start-ups from appearing mid-game. With a custom set, only the set's own airlines ever join, so the game plays exactly as written.</li>
+      <li><strong>New airlines and mergers.</strong> Random start-ups can be none, rare, normal or frequent; with none and a custom set, only the set's own airlines ever join, so the game plays exactly as written. You can also stop rivals merging with each other (you can still buy them).</li>
       <li><strong>Sharing.</strong> The Competition tab can copy any game's rivals as a set, including the airlines your set has still to found, so you can share a field with friends or replay it.</li>
     </ul>
 

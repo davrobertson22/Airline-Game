@@ -42,7 +42,7 @@ import {
   pickLargerCompetitorAircraftType,
 } from './demand.js';
 import { quotePlan } from './lineBook.js';
-import { buildRivalFromSpec } from './rivalSets.js';
+import { buildRivalFromSpec, rivalChance } from './rivalSets.js';
 
 // ─── Personality archetypes ──────────────────────────────────────────────────
 
@@ -388,6 +388,20 @@ function tailSalvage(type, count) {
 
 let _startupSeq = 0;
 
+// ─── Setup options for the whole field (Tailwinds, 2026-10-17) ───────────────
+/**
+ * Rival pressure: how hard the field pushes. `notice` scales the attention the
+ * AI pays the player (where it expands, how readily it defends, how likely a
+ * fare war — all of which already read playerNotice); `act` moves every
+ * carrier's decision cadence by a week.
+ */
+export const RIVAL_PRESSURE = {
+  relaxed: { notice: 0.5, act: +1 },
+  fierce:  { notice: 1.5, act: -1 },
+};
+/** Random start-up frequency, as a multiple of STARTUP_PROB. */
+export const STARTUP_RATE = { rare: 0.4, frequent: 2.5 };
+
 // ─── Production lines ────────────────────────────────────────────────────────
 // Production-line worlds (state.productionLinesWorld): rivals buy aircraft off
 // the same shared lines as the player (models/lineBook.js). A move that needs
@@ -489,7 +503,12 @@ export function tickCompetitorAI(competitors, ctx) {
     entrants = null,            // rival set (era games): rivals waiting for their founding year — models/rivalSets.js
     noRandomStartups = false,   // setup option: only the set's own entrants ever join mid-game
     rosterCap = 0,              // a custom field may start larger than MAX_ROSTER; entrants may refill it to its start size
+    pressure = null,            // setup option: 'relaxed' | 'fierce' (null = normal) — RIVAL_PRESSURE
+    mergers = true,             // setup option: false = rivals never merge with each other
+    startupRate = null,         // setup option: 'off' | 'rare' | 'frequent' (null = normal) — STARTUP_RATE
+    startupCap = 0,             // the field size random startups refill to (0 = MAX_ROSTER)
   } = ctx ?? {};
+  const pressureCfg = RIVAL_PRESSURE[pressure] ?? null;
 
   const events = [];
 
@@ -522,7 +541,7 @@ export function tickCompetitorAI(competitors, ctx) {
   const incumbents = buildPairIncumbents(competitors, playerRoutes);
 
   // Player is "on the radar" once established — AI attention scales with size.
-  const playerNotice = playerNoticeFor(playerMarketCap);
+  const playerNotice = playerNoticeFor(playerMarketCap) * (pressureCfg?.notice ?? 1);
 
   // ── Per-carrier network management ────────────────────────────────────────
   let updated = competitors.map(airline => {
@@ -625,7 +644,10 @@ export function tickCompetitorAI(competitors, ctx) {
     }
 
     // ── Decision cadence: each carrier acts every `actEvery` weeks, staggered ─
-    const acts = ((weekNumber + hashId(c.id)) % arch.actEvery) === 0;
+    // Rival pressure (setup option) moves every carrier's cadence a week
+    // either way: relaxed rivals act less often, fierce ones more.
+    const actEvery = Math.max(2, arch.actEvery + (pressureCfg?.act ?? 0));
+    const acts = ((weekNumber + hashId(c.id)) % actEvery) === 0;
     if (!acts) return c;
 
     const routes  = { ...c.routes };
@@ -686,8 +708,8 @@ export function tickCompetitorAI(competitors, ctx) {
         const p = pnl[key];
         if (!p) { delete loadMap[key]; continue; }
         const prev = loadMap[key] ?? 0;
-        if (p.loadFactor >= CAPACITY_FULL_LF)      loadMap[key] = Math.max(0, prev) + arch.actEvery;
-        else if (p.loadFactor < CAPACITY_THIN_LF)  loadMap[key] = Math.min(0, prev) - arch.actEvery;
+        if (p.loadFactor >= CAPACITY_FULL_LF)      loadMap[key] = Math.max(0, prev) + actEvery;
+        else if (p.loadFactor < CAPACITY_THIN_LF)  loadMap[key] = Math.min(0, prev) - actEvery;
         else                                       loadMap[key] = 0;
       }
       let movesLeft = CAPACITY_MOVES_PER_ACT;
@@ -696,7 +718,7 @@ export function tickCompetitorAI(competitors, ctx) {
       // money without being full — a smaller schedule is tried before the loss
       // timer below withdraws them (right-size, then exit).
       const losingUnfull = (k) => (pnl[k]?.profit ?? 0) < 0 && (pnl[k]?.loadFactor ?? 1) < CAPACITY_FULL_LF
-        && (lossMap[k] ?? 0) >= arch.actEvery;
+        && (lossMap[k] ?? 0) >= actEvery;
       const thin = routeKeys
         .filter(k => ((loadMap[k] ?? 0) <= -THIN_WEEKS_TO_TRIM || losingUnfull(k))
           && !inWar(k) && routes[k].frequency > MIN_FREQUENCY && !planned(k))
@@ -739,7 +761,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const p   = pnl[key];
         const [a, b] = key.split('-');
         const dist   = routeDistance(a, b);
-        const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : pickCompetitorAircraftType(dist, c.tier);
+        const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : pickCompetitorAircraftType(dist, c.tier, c.fleetPref);
         if (!type) continue;
         const tails  = cfg.tails ?? 1;
 
@@ -748,6 +770,7 @@ export function tickCompetitorAI(competitors, ctx) {
           const bigger = pickLargerCompetitorAircraftType(dist, Math.ceil((cfg.seats ?? type.seats) * UPGAUGE_MIN_SEAT_STEP), {
             prefer:   (t) => projected(key, { ...cfg, aircraftType: t.id, seats: maxSeatsForRange(t, dist), tails }),
             maxSeats: upgaugeSeatCeiling(dist, c.tier),
+            fleetPref: c.fleetPref,
           });
           if (bigger && projected(key, { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails }) > p.profit) {
             const cost = tailDeposit(bigger, tails) - tailSalvage(type, tails);
@@ -813,7 +836,7 @@ export function tickCompetitorAI(competitors, ctx) {
     for (const key of routeKeys) {
       const p = pnl[key];
       if (!p) continue;
-      lossMap[key] = (p.profit < 0 && !trimmed.has(key)) ? (lossMap[key] ?? 0) + arch.actEvery : 0;
+      lossMap[key] = (p.profit < 0 && !trimmed.has(key)) ? (lossMap[key] ?? 0) + actEvery : 0;
     }
     const cuttable = routeKeys
       .filter(k => (lossMap[k] ?? 0) >= LOSS_WEEKS_TO_CUT && !inWar(k))
@@ -866,7 +889,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const targetFreq = Math.min(28, Math.max(cfg.frequency + 2, Math.round(pInfo.freq * 0.8)));
         const [a, b] = key.split('-');
         const dist   = routeDistance(a, b);
-        const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : pickCompetitorAircraftType(dist, c.tier);
+        const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : pickCompetitorAircraftType(dist, c.tier, c.fleetPref);
         if (!type) continue;
         const needTails = tailsForRoute(dist, targetFreq);
         const addTails  = Math.max(0, needTails - (cfg.tails ?? 1));
@@ -1009,7 +1032,7 @@ export function tickCompetitorAI(competitors, ctx) {
         if (!planned(cand.key)) {
           const tails = tailsForRoute(cand.dist, cand.frequency);
           let best = null;
-          for (const t of rankCompetitorAircraftTypes(cand.dist, c.tier).slice(0, AI_LINE_ALTERNATIVES)) {
+          for (const t of rankCompetitorAircraftTypes(cand.dist, c.tier, c.fleetPref).slice(0, AI_LINE_ALTERNATIVES)) {
             if (cash - tailDeposit(t, tails) < reserve) continue;
             const q = quote(t, tails);
             if (!best || q.weeks[tails - 1] < best.q.weeks[tails - 1]) best = { t, q };
@@ -1032,7 +1055,7 @@ export function tickCompetitorAI(competitors, ctx) {
           }
         }
       } else if (cand) {
-        const type = pickCompetitorAircraftType(cand.dist, c.tier);
+        const type = pickCompetitorAircraftType(cand.dist, c.tier, c.fleetPref);
         if (type) {
           const tails = tailsForRoute(cand.dist, cand.frequency);
           const cost  = tailDeposit(type, tails);
@@ -1076,7 +1099,7 @@ export function tickCompetitorAI(competitors, ctx) {
   updated = survivors;
 
   // ── Lifecycle: AI-vs-AI mergers ────────────────────────────────────────────
-  if (updated.length >= 6 && Math.random() < MERGER_PROB) {
+  if (mergers !== false && updated.length >= 6 && Math.random() < MERGER_PROB) {
     const buyers = updated
       .filter(c => (c.cash ?? 0) > 50_000_000 && ((c.profitHistory?.at(-1) ?? 0) > 0))
       .sort((a, b) => (b.cash ?? 0) - (a.cash ?? 0));
@@ -1127,14 +1150,31 @@ export function tickCompetitorAI(competitors, ctx) {
   // its year — if the field has room. Otherwise it waits and tries again every
   // week ("if circumstances permit"). Founded with its own starter network, the
   // way a random startup is.
+  // ── Lifecycle: rivals a set closes in a given year (era games) ───────────
+  if (calendarYear != null && updated.some(c => c.ceased != null && calendarYear >= c.ceased)) {
+    updated = updated.filter(c => {
+      if (c.ceased == null || calendarYear < c.ceased) return true;
+      events.push({ type: 'ceased', airlineId: c.id, name: c.name,
+        description: `${c.name} has ceased operations${c.founded != null ? ` after ${calendarYear - c.founded} years` : ''}. Its routes are open to anyone.` });
+      return false;
+    });
+  }
+
   let entrantsLeft = entrants;
   if (entrants?.length) {
     const cap = Math.max(MAX_ROSTER, rosterCap ?? 0);
     const wait = [];
     for (const r of entrants) {
+      if (calendarYear != null && r.ceased != null && calendarYear >= r.ceased) continue;   // its years passed with no room
       const due = calendarYear != null && r.founded != null && r.founded <= calendarYear;
       if (!due || updated.length >= cap || updated.some(c => c.name === r.name)) { wait.push(r); continue; }
-      const newbie = { ...buildRivalFromSpec(r, { idSeed: weekNumber }), isStartup: true, foundedWeek: weekNumber };
+      // A chance entrant rolls once, the year it is due and there's room,
+      // against the field as it stands then (likelier where few airlines are
+      // based). A miss is final: it never gets off the ground this game.
+      if ((r.chance ?? 100) < 100
+          && !(Math.random() < rivalChance(r, [...playerHubs, ...updated.map(c => c.homeHub)]))) continue;
+      const { _skippedRoutes, ...built } = buildRivalFromSpec(r, { idSeed: weekNumber, takenLogos: updated.map(c => c.logoId) });
+      const newbie = { ...built, isStartup: true, foundedWeek: weekNumber };
       updated = [...updated, newbie];
       events.push({ type: 'startup', airlineId: newbie.id, name: newbie.name,
         description: `${newbie.name} has been founded and launched operations out of ${newbie.homeHub}.` });
@@ -1143,10 +1183,10 @@ export function tickCompetitorAI(competitors, ctx) {
   }
 
   // ── Lifecycle: startup airlines ────────────────────────────────────────────
-  if (!noRandomStartups && weekNumber >= STARTUP_MIN_WEEK
-      && updated.length < MAX_ROSTER
+  if (!noRandomStartups && startupRate !== 'off' && weekNumber >= STARTUP_MIN_WEEK
+      && updated.length < (startupCap || MAX_ROSTER)
       && updated.length > ENDGAME_ROSTER
-      && Math.random() < STARTUP_PROB) {
+      && Math.random() < STARTUP_PROB * (STARTUP_RATE[startupRate] ?? 1)) {
     const usedNames = new Set(updated.map(c => c.name));
     const pool = STARTUP_POOL.filter(s => !usedNames.has(s.name));
     if (pool.length) {
@@ -1240,7 +1280,7 @@ function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerH
       if (routes[key]) continue;
       const dist = routeDistance(base, ap.code);
       if (!dist || dist < 300) continue;
-      if (!pickCompetitorAircraftType(dist, airline.tier)) continue;
+      if (!pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) continue;
       const demand = baseCityPairDemand(base, ap.code);
       if (!demand || demand < 40) continue;
 

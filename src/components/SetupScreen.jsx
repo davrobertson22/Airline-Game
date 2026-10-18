@@ -125,7 +125,10 @@ export default function SetupScreen() {
     try { localStorage.setItem('tw_rival_set_draft', t); } catch { /* private mode */ }
   }
   const [rivalMode,         setRivalMode]         = useState('replace');  // 'replace' | 'add'
-  const [noRandomStartups,  setNoRandomStartups]  = useState(false);
+  const [rivalStartups,     setRivalStartups]     = useState('normal');   // 'off' | 'rare' | 'normal' | 'frequent'
+  const [rivalCount,        setRivalCount]        = useState('normal');   // 'few' | 'normal' | 'many'
+  const [rivalPressure,     setRivalPressure]     = useState('normal');   // 'relaxed' | 'normal' | 'fierce'
+  const [rivalMergers,      setRivalMergers]      = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
   const fileInputRef = useRef(null);
   const cardRef = useRef(null);
@@ -218,7 +221,10 @@ export default function SetupScreen() {
       startYear,
       demandWorld,
       ...(rivalSource === 'custom' && rivalParse?.ok ? { rivalSet: rivalParse.set, rivalMode } : {}),
-      ...(noRandomStartups ? { noRandomStartups: true } : {}),
+      ...(rivalStartups !== 'normal' ? { rivalStartups } : {}),
+      ...(rivalCount !== 'normal' && !(rivalSource === 'custom' && rivalMode === 'replace') ? { rivalCount } : {}),
+      ...(rivalPressure !== 'normal' ? { rivalPressure } : {}),
+      ...(!rivalMergers ? { rivalMergers: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
     });
   }
@@ -764,9 +770,12 @@ export default function SetupScreen() {
                 <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.5, color: rivalParse?.ok ? 'var(--green)' : 'var(--danger, #e5484d)' }}>
                   {rivalParse?.ok ? (
                     <>
-                      <Glyph e="✓" /> {rivalSplit.starters.length} rival{rivalSplit.starters.length === 1 ? '' : 's'} on day one
+                      <Glyph e="✓" /> {rivalSplit.byChance > 0
+                        ? <>{rivalSplit.sure > 0 ? `${rivalSplit.sure} certain and ` : ''}{rivalSplit.byChance} by chance on day one</>
+                        : <>{rivalSplit.starters.length} rival{rivalSplit.starters.length === 1 ? '' : 's'} on day one</>}
                       {rivalSplit.entrants.length > 0 && <>, {rivalSplit.entrants.length} founded later (from {rivalSplit.entrants[0].founded})</>}
                       {rivalSplit.dropped > 0 && <span style={{ color: 'var(--yellow)' }}> · only the first {RIVAL_SET_MAX_START} start; {rivalSplit.dropped} left out</span>}
+                      {rivalSplit.byChance > 0 && <span style={{ color: 'var(--text-muted)' }}> · the dice roll when the game starts{rivalSplit.sure + rivalSplit.byChance > RIVAL_SET_MAX_START ? `, and at most ${RIVAL_SET_MAX_START} start` : ''}</span>}
                       {eraInvalid || startYear == null
                         ? rivalParse.set.rivals.some(r => r.founded != null) && <span style={{ color: 'var(--text-muted)' }}> · founding years only count in era games</span>
                         : null}
@@ -792,25 +801,71 @@ export default function SetupScreen() {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
                   Each rival needs a name, a home airport code and a tier (budget, legacy or premium). Optional: size (small, medium or large),
-                  founded (a year: in era games the airline appears that year if the field has room), logo, style and quality.
+                  founded and ceased (years: in era games the airline appears and closes in those years), logo, style, quality,
+                  fleet (aircraft it flies, like "a320neo") or maker (like "Airbus"), hub2 (a second hub), routes (its
+                  starting network, like "LHR-JFK") and chance (0 to 100: the percent chance it appears at all, higher where
+                  few airlines are based near its hub). A logo can be "random". At the top of a set, "randomLogos": true
+                  shuffles every logo and "chance": 50 sets everyone's. Load the example to see them all.
                 </div>
               </div>
             )}
+            {(() => {
+              const pill = (value, setValue, opts) => (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {opts.map(o => (
+                    <button key={o.id} type="button" onClick={() => setValue(o.id)} title={o.title}
+                      style={{
+                        padding: '4px 10px', fontSize: 12, borderRadius: 14, cursor: 'pointer',
+                        border: `1px solid ${value === o.id ? 'var(--accent)' : 'var(--border)'}`,
+                        background: value === o.id ? 'rgba(56,139,253,0.15)' : 'var(--surface2)',
+                        color: value === o.id ? 'var(--accent)' : 'var(--text-muted)',
+                      }}>{o.label}</button>
+                  ))}
+                </div>
+              );
+              const row = (label, control, note) => (
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '150px 1fr', gap: isMobile ? 4 : 10, alignItems: 'center', marginTop: 10 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
+                  <div>{control}{note && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{note}</div>}</div>
+                </div>
+              );
+              const countApplies = !(rivalSource === 'custom' && rivalMode === 'replace');
+              return (
+                <>
+                  {countApplies && row('Random rivals',
+                    pill(rivalCount, setRivalCount, [
+                      { id: 'few', label: 'Few (10)' }, { id: 'normal', label: 'Usual (25)' }, { id: 'many', label: 'Many (40)' }]),
+                    rivalCount === 'many' ? 'A crowded field: more competition on every route, and a busier rivals map.' : null)}
+                  {row('Rival pressure',
+                    pill(rivalPressure, setRivalPressure, [
+                      { id: 'relaxed', label: 'Relaxed' }, { id: 'normal', label: 'Normal' }, { id: 'fierce', label: 'Fierce' }]),
+                    rivalPressure === 'relaxed'
+                      ? 'Rivals pay you half the usual attention, start fewer fare wars and make their moves less often.'
+                      : rivalPressure === 'fierce'
+                        ? 'Rivals watch you closely from early on, fight harder for your routes and move more often.'
+                        : null)}
+                  {row('New airlines',
+                    pill(rivalStartups, setRivalStartups, [
+                      { id: 'off', label: 'None' }, { id: 'rare', label: 'Rare' }, { id: 'normal', label: 'Normal' }, { id: 'frequent', label: 'Frequent' }]),
+                    rivalStartups === 'off'
+                      ? (rivalSource === 'custom' ? 'Only your set\'s own airlines ever join, so the game plays exactly as written.' : 'No random start-ups: the field only shrinks as airlines fail or are bought.')
+                      : 'Random start-ups that join mid-game when the field has room.')}
+                </>
+              );
+            })()}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={rivalMergers} onChange={e => setRivalMergers(e.target.checked)} />
+              Rivals can merge with each other
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {rivalMergers ? 'A strong rival sometimes buys a struggling one.' : 'Rivals never buy each other. You can still buy them.'}
+            </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />
               No rival based at my hub
             </label>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
               Rivals still fly in, and airlines founded later may still base there.
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={noRandomStartups} onChange={e => setNoRandomStartups(e.target.checked)} />
-              No random new airlines during the game
-            </label>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
-              {rivalSource === 'custom'
-                ? 'Only your set\'s own airlines ever join, so the game plays exactly as written.'
-                : 'The field only shrinks: no startups appear to replace airlines that fail or are bought.'}
             </div>
           </div>
 

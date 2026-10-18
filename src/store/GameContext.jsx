@@ -82,7 +82,7 @@ import { checkRouteRestrictions, runwayShortfall } from '../data/airportRestrict
 import { deliverySchedule } from '../data/delivery.js';
 import { makeSlotAllocator, slotPremiumPct, launchWindow, launchOrderDiscount } from '../data/productionLines.js';
 import { withLineBook, makeTickLedger, orderCancelTerms, SOLO_LINE_SCALE } from '../models/lineBook.js';
-import { parseRivalSet, splitRivalSet, buildRivalFromSpec, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
+import { parseRivalSet, splitRivalSet, buildRivalFromSpec, RIVAL_SET_MAX_START, RIVAL_COUNT_OPTIONS } from '../models/rivalSets.js';
 import {
   generateCharterBoard, servedAirportsOf, aircraftStationOf, pruneDismissed,
   quoteCharterForAircraft,
@@ -105,7 +105,7 @@ import {
   healAnachronisticCompetitorFleets,
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
-         acquisitionQuote } from '../models/competitorAI.js';
+         acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
@@ -1873,15 +1873,46 @@ function reducer(state, action) {
       // founds it when its year comes, if the field has room).
       const _setParse = action.rivalSet ? parseRivalSet(action.rivalSet) : null;
       const _rivalSet = _setParse?.ok ? _setParse.set : null;
-      let _competitors = _fresh.competitors;
+      // Rival count (setup option): a smaller or bigger random field. Normal
+      // keeps the field freshState() already drew, so a default game is
+      // unchanged. Random start-ups then refill to the same proportion of it.
+      const _rivalCount = RIVAL_COUNT_OPTIONS[action.rivalCount] ?? null;
+      const _randomField = _rivalCount != null ? sampleAndInitializeCompetitors(_rivalCount) : _fresh.competitors;
+      let _competitors = _randomField;
       let _entrants = null;
+      const _setToasts = [];
       if (_rivalSet) {
-        const { starters, entrants } = splitRivalSet(_rivalSet, _startYear);
-        const built = starters.map((r, i) => buildRivalFromSpec(r, { idSeed: i }));
+        // Rivals with a chance are rolled in here, against the field as it
+        // fills: the player's hub, the random field when the set adds to it,
+        // and each rival already placed (rivalSets.js drawRivals). A set of
+        // only chance rivals still gets at least one when it is the whole field.
+        const _adding = action.rivalMode === 'add';
+        const { starters, entrants, byChance, missed } = splitRivalSet(_rivalSet, _startYear, {
+          hubs: [action.hub, ...(_adding ? _randomField.map(c => c.homeHub) : [])],
+          keepOne: !_adding,
+        });
+        const skipped = [];
+        // "random" logos are drawn from the ones the field uses least.
+        const _logosInUse = _adding ? _randomField.map(c => c.logoId) : [];
+        const built = starters.map((r, i) => {
+          const { _skippedRoutes, ...c } = buildRivalFromSpec(r, { idSeed: i, takenLogos: _logosInUse });
+          _logosInUse.push(c.logoId);
+          if (_skippedRoutes?.length) skipped.push(`${c.name}: ${_skippedRoutes.join(', ')}`);
+          return c;
+        });
+        if (byChance > 0) {
+          const made = byChance - missed;
+          _setToasts.push({ type: 'info', title: 'Your rival set rolled the dice', duration: 10000,
+            message: `${made} of the ${byChance} airline${byChance === 1 ? '' : 's'} with a chance to appear ${made === 1 ? 'is' : 'are'} in this game${missed > 0 ? `; ${missed} sat it out` : ''}.` });
+        }
+        if (skipped.length) {
+          _setToasts.push({ type: 'info', title: 'Some rival routes left out', duration: 12000,
+            message: `No aircraft of the era (or of the airline's chosen fleet) can fly ${skipped.length === 1 ? 'these' : 'some'} listed routes, so they start without them. ${skipped.slice(0, 4).join(' · ')}${skipped.length > 4 ? ' …' : ''}` });
+        }
         if (action.rivalMode === 'add') {
           const taken = new Set(built.map(c => c.name.toLowerCase()));
           const room  = Math.max(0, RIVAL_SET_MAX_START - built.length);
-          _competitors = [..._fresh.competitors.filter(c => !taken.has(c.name.toLowerCase())).slice(0, room), ...built];
+          _competitors = [..._randomField.filter(c => !taken.has(c.name.toLowerCase())).slice(0, room), ...built];
         } else {
           _competitors = built;
         }
@@ -1890,7 +1921,9 @@ function reducer(state, action) {
       // "No rival based at my hub": the starting field only. Rivals still fly
       // in, and later startups and entrants may still base there.
       if (action.emptyHub === true) _competitors = _competitors.filter(c => c.homeHub !== action.hub);
-      return {
+      const _pressure = RIVAL_PRESSURE[action.rivalPressure] ? action.rivalPressure : null;
+      const _startups = ['off', 'rare', 'frequent'].includes(action.rivalStartups) ? action.rivalStartups : null;
+      const _started = {
         ..._fresh,
         startYear:   _startYear,
         // Era: no global alliances before 1997 — AI carriers start unallied.
@@ -1904,6 +1937,11 @@ function reducer(state, action) {
         } : {}),
         ...(action.noRandomStartups === true ? { noRandomStartups: true } : {}),
         ...(action.emptyHub === true ? { emptyHubStart: true } : {}),
+        // Field options (setup screen → Rivals). Absent = the usual behaviour.
+        ...(_rivalCount != null ? { rivalCount: action.rivalCount, rivalStartupCap: Math.round(_rivalCount * 28 / 25) } : {}),
+        ...(_pressure ? { rivalPressure: _pressure } : {}),
+        ...(action.rivalMergers === false ? { rivalMergers: false } : {}),
+        ...(_startups ? { rivalStartups: _startups } : {}),
         // Era: the fuel walk opens at the decade's scripted mean (0.43 in 1950),
         // not the modern 1.0 it would otherwise take years to drift down from.
         ...(_startYear != null && eraFuelMean(_startYear) != null
@@ -1958,6 +1996,9 @@ function reducer(state, action) {
           payMultiplier: 1.0, morale: 80, headcount: 0, pipeline: [],
         }])),
       };
+      return _setToasts.length
+        ? { ..._started, pendingToasts: [...(_started.pendingToasts ?? []), ..._setToasts] }
+        : _started;
     }
 
     case 'LEASE_AIRCRAFT': {
@@ -5626,6 +5667,11 @@ function reducer(state, action) {
           // Rival set (era games): rivals waiting for their founding year.
           ...(state.rivalEntrants ? { entrants: state.rivalEntrants, rosterCap: state.rivalRosterCap ?? 0 } : {}),
           noRandomStartups: state.noRandomStartups === true,
+          // Field options from the setup screen (absent on older saves = usual).
+          ...(state.rivalPressure ? { pressure: state.rivalPressure } : {}),
+          ...(state.rivalMergers === false ? { mergers: false } : {}),
+          ...(state.rivalStartups ? { startupRate: state.rivalStartups } : {}),
+          ...(state.rivalStartupCap ? { startupCap: state.rivalStartupCap } : {}),
           // Production-line games: rivals order aircraft off the shared lines
           // and wait for them. The ledger starts at the week being entered —
           // the week this tick's deliveries land.
@@ -5665,6 +5711,8 @@ function reducer(state, action) {
       for (const ev of competitorEvents) {
         if (ev.type === 'bankrupt') {
           newToasts.push({ type: 'warning', title: `✈️ ${ev.name} Collapses`, message: ev.description, duration: 9000 });
+        } else if (ev.type === 'ceased') {
+          newToasts.push({ type: 'info', title: `🛬 ${ev.name} Ceases Operations`, message: ev.description, duration: 9000 });
         } else if (ev.type === 'merger') {
           newToasts.push({ type: 'info', title: '🤝 Industry Consolidation', message: ev.description, duration: 9000 });
         } else if (ev.type === 'startup') {

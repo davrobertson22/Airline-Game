@@ -2641,8 +2641,23 @@ function blockTimeOneWay(distKm) { return distKm / 820 + 0.5; }
  * count is closest to the tier's preferred size. Returns null if nothing fits
  * (the route is then simply not served — the range constraint in action).
  */
-export function pickCompetitorAircraftType(distKm, tier) {
-  return rankCompetitorAircraftTypes(distKm, tier)[0] ?? null;
+export function pickCompetitorAircraftType(distKm, tier, pref = null) {
+  return rankCompetitorAircraftTypes(distKm, tier, pref)[0] ?? null;
+}
+
+/**
+ * A rival set's fleet preference (models/rivalSets.js): { types: [typeId], maker }.
+ * When any preferred type can do the job, ONLY preferred types are offered —
+ * an Airbus carrier stays Airbus. When none can (out of range, not yet built,
+ * line closed), the carrier takes whatever fits, so a preference never stops
+ * it flying. Null or empty = no preference (the original behaviour, unchanged).
+ */
+export function preferredTypes(list, pref) {
+  if (!pref || (!(pref.types?.length) && !pref.maker)) return list;
+  const types = new Set(pref.types ?? []);
+  const maker = pref.maker ? String(pref.maker).toLowerCase() : null;
+  const keep = list.filter(t => types.has(t.id) || (maker && String(t.manufacturer ?? '').toLowerCase().includes(maker)));
+  return keep.length ? keep : list;
 }
 
 /**
@@ -2650,7 +2665,7 @@ export function pickCompetitorAircraftType(distKm, tier) {
  * pickCompetitorAircraftType takes the head of. Production-line worlds walk
  * down it when the favourite's line is booked solid (models/competitorAI.js).
  */
-export function rankCompetitorAircraftTypes(distKm, tier) {
+export function rankCompetitorAircraftTypes(distKm, tier, pref = null) {
   const target  = TIER_SEAT_TARGET[tier] ?? 200;
   // AI carriers shop the same market as the player. Era games: only types in
   // service and still on the market this calendar year (a 1950 rival flies
@@ -2672,7 +2687,7 @@ export function rankCompetitorAircraftTypes(distKm, tier) {
   // haul, fewer near the type's range) — stored on the route by the caller.
   const score = (t) =>
     Math.abs((t.seats ?? 0) - target) + Math.max(0, (t.range ?? 0) - need) * 0.005;
-  return capable.slice().sort((a, b) => score(a) - score(b));
+  return preferredTypes(capable, pref).slice().sort((a, b) => score(a) - score(b));
 }
 
 /**
@@ -2687,7 +2702,7 @@ export function rankCompetitorAircraftTypes(distKm, tier) {
  * be the next size up never beats a modern frame that would earn more.
  * `maxSeats` bounds the search — the AI keeps a 400 km shuttle off widebodies.
  */
-export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = null, maxSeats = Infinity } = {}) {
+export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = null, maxSeats = Infinity, fleetPref = null } = {}) {
   // Same era gate as pickCompetitorAircraftType — the up-gauge shops the market
   // of the world's calendar year, not 2026. Without this a 1962 rival that
   // filled a Vanguard stepped straight onto an A321neo (Discord 2026-09-08).
@@ -2702,7 +2717,7 @@ export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = nu
   const score = prefer
     ? (t) => -prefer(t)
     : (t) => ((t.seats ?? 0) - minSeats) + Math.max(0, (t.range ?? 0) - need) * 0.005;
-  return capable.slice().sort((a, b) => score(a) - score(b))[0];
+  return preferredTypes(capable, fleetPref).slice().sort((a, b) => score(a) - score(b))[0];
 }
 
 /** Tails needed to fly `frequency` weekly departures over `distKm`, assuming ~98 utilisable block-h/tail/wk. */
@@ -2738,7 +2753,7 @@ export function buildCompetitorFleet(airline) {
   for (const [routeKey, cfg] of Object.entries(airline.routes ?? {})) {
     const [a, b] = routeKey.split('-');
     const dist   = routeDistance(a, b);
-    const type   = pickCompetitorAircraftType(dist, airline.tier);
+    const type   = pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref);
     if (!type) { routes[routeKey] = cfg; continue; }   // no in-range type — leave unflown
     const tails  = tailsForRoute(dist, cfg.frequency ?? 7);
     routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails };
@@ -2840,7 +2855,7 @@ export function generateStarterRoutes(airline, count) {
     if (ap.code === hub) continue;
     const dist = routeDistance(hub, ap.code);
     if (!dist || dist < 300) continue;
-    if (!pickCompetitorAircraftType(dist, airline.tier)) continue;   // out of range
+    if (!pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) continue;   // out of range
     const demand = baseCityPairDemand(hub, ap.code);
     if (!demand) continue;
     // Prefer dense pairs; mild haircut for very long stage lengths.
@@ -2867,6 +2882,30 @@ export function generateStarterRoutes(airline, count) {
     routes[key] = { frequency: freq, priceMultiplier };
   }
   return routes;
+}
+
+/**
+ * A starting network from a rival set's own route list ("LHR-JFK", …) instead
+ * of the generated one: same frequency and fare rules as generateStarterRoutes.
+ * A pair no aircraft the carrier would fly can reach (era, range, its fleet
+ * preference) is left out and counted in `skipped`.
+ * @returns {{ routes: object, skipped: string[] }}
+ */
+export function listedStarterRoutes(airline, pairs) {
+  const priceBase = TIER_PRICE_MULT[airline.tier] ?? 1.0;
+  const seats = TIER_SEAT_TARGET[airline.tier] ?? 200;
+  const routes = {}, skipped = [];
+  for (const pair of pairs ?? []) {
+    const [a, b] = String(pair).split('-');
+    const key  = [a, b].sort().join('-');
+    if (routes[key]) continue;
+    const dist = routeDistance(a, b);
+    if (!dist || !pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) { skipped.push(pair); continue; }
+    const demand = baseCityPairDemand(a, b) || 0;
+    const freq   = Math.max(3, Math.min(21, Math.round(demand / (seats * 0.75))));
+    routes[key] = { frequency: freq, priceMultiplier: +(priceBase * (0.97 + Math.random() * 0.06)).toFixed(3) };
+  }
+  return { routes, skipped };
 }
 
 /**

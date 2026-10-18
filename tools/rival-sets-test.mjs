@@ -36,6 +36,8 @@ const AI = await import('../src/models/competitorAI.js');
 const { AIRLINE_LOGOS } = await import('../src/components/AirlineLogo.jsx');
 const Competition = (await import('../src/components/Competition.jsx')).default;
 const SetupScreen = (await import('../src/components/SetupScreen.jsx')).default;
+const D = await import('../src/models/demand.js');
+const { getAircraftType } = await import('../src/data/aircraft.js');
 const need = () => assert.ok(RS, 'src/models/rivalSets.js does not exist');
 
 function seeded(seed) {
@@ -102,6 +104,17 @@ test('classic games start everyone; era games hold back rivals founded later', (
 });
 
 section('starting a game with a set');
+
+test('the setup screen\'s path works: the checked set it dispatches is accepted as-is', () => {
+  need();
+  // SetupScreen dispatches parseRivalSet(text).set, not the text. That object
+  // must pass START_GAME's own check, or every custom game silently gets the
+  // random field (the first build of this feature shipped exactly that bug).
+  const checked = RS.parseRivalSet(JSON.stringify(set([R('Alpha Air', 'LHR', 'legacy', { founded: 1950 }), R('Beta Jet', 'AMS', 'budget')]))).set;
+  assert.equal(RS.parseRivalSet(checked).ok, true);
+  const s = withSeed(0, () => start({ rivalSet: checked, rivalMode: 'replace' }));
+  assert.deepEqual(s.competitors.map(c => c.name).sort(), ['Alpha Air', 'Beta Jet']);
+});
 
 test('"only these rivals": the field is exactly the set', () => {
   const s = withSeed(1, () => start({ rivalSet: set([R('Alpha Air', 'LHR', 'legacy'), R('Beta Jet', 'AMS', 'budget')]), rivalMode: 'replace' }));
@@ -248,6 +261,178 @@ test('the example set parses, and its entrant only waits in an era game', () => 
   assert.equal(RS.splitRivalSet(era.set, 1990).entrants.length, 1);
 });
 
+section('second package: fleet, closing year, routes, second hub');
+
+test('the new fields parse, and mistakes in them are warnings', () => {
+  need();
+  const p = RS.parseRivalSet(set([R('Pan Global', 'JFK', 'legacy', {
+    fleet: ['B747200', 'nope'], maker: 'boeing', founded: 1927, ceased: 1991, hub2: 'mia',
+    routes: ['JFK-LHR', 'jfk - cdg', 'LHR-JFK', 'JFK-JFK', 'XXX-JFK', 'JFKLHR'],
+  }), R('Bad Close', 'LHR', 'legacy', { founded: 1980, ceased: 1975, hub2: 'LHR', maker: 'Acme' })]));
+  assert.equal(p.ok, true, p.errors.join('; '));
+  const [a, b] = p.set.rivals;
+  assert.deepEqual(a.fleet, ['b747200']);
+  assert.equal(a.maker, 'boeing');
+  assert.equal(a.ceased, 1991);
+  assert.equal(a.hub2, 'MIA');
+  assert.deepEqual(a.routes, ['JFK-LHR', 'JFK-CDG'], 'normalised, duplicates (either way round) and bad pairs dropped');
+  assert.equal(b.ceased, undefined, 'cannot close before it opens');
+  assert.equal(b.hub2, undefined, 'second hub = home hub is ignored');
+  assert.equal(b.maker, undefined);
+  assert.ok(p.warnings.some(w => /unknown aircraft type "nope"/.test(w)));
+  assert.ok(p.warnings.some(w => /route "JFK-JFK" left out/.test(w)));
+  assert.ok(p.warnings.some(w => /no manufacturer called "Acme"/.test(w)));
+});
+
+test('a fleet preference narrows the AI\'s choice, but never to nothing', () => {
+  const list = [getAircraftType('b737800'), getAircraftType('a320ceo'), getAircraftType('b777300er')];
+  assert.deepEqual(D.preferredTypes(list, { types: [], maker: 'airbus' }).map(t => t.id), ['a320ceo']);
+  assert.deepEqual(D.preferredTypes(list, { types: ['b777300er'], maker: null }).map(t => t.id), ['b777300er']);
+  assert.deepEqual(D.preferredTypes(list, { types: ['a380'], maker: null }), list, 'nothing preferred can do it: anything that fits');
+  assert.equal(D.preferredTypes(list, null), list);
+  const longHaul = D.rankCompetitorAircraftTypes(9000, 'legacy', { types: [], maker: 'airbus' });
+  assert.ok(longHaul.length > 0 && longHaul.every(t => /airbus/i.test(t.manufacturer)));
+});
+
+test('an all-Boeing rival flies only Boeings, its listed routes and its second hub', () => {
+  const s = withSeed(51, () => start({ startYear: 1975, rivalSet: set([R('Pan Global', 'JFK', 'legacy', {
+    size: 'large', maker: 'Boeing', hub2: 'MIA', routes: ['JFK-LHR', 'JFK-CDG', 'JFK-MIA', 'MIA-GRU', 'JFK-SFO'] })]) }));
+  const c = s.competitors[0];
+  assert.deepEqual(Object.keys(c.routes).sort(), ['CDG-JFK', 'GRU-MIA', 'JFK-LHR', 'JFK-MIA', 'JFK-SFO']);
+  assert.equal(c.secondaryHub, 'MIA');
+  assert.ok(c.fleet.length > 0 && c.fleet.every(f => /boeing/i.test(getAircraftType(f.typeId).manufacturer)), [...new Set(c.fleet.map(f => f.typeId))].join(','));
+  // …and keeps buying Boeing as it grows.
+  let t = s;
+  withSeed(52, () => { for (let w = 0; w < 52; w++) t = gameReducer(t, { type: 'ADVANCE_WEEK' }); });
+  const pg = t.competitors.find(x => x.name === 'Pan Global');
+  assert.ok(pg.fleet.every(f => /boeing/i.test(getAircraftType(f.typeId).manufacturer)));
+  assert.ok([...(pg.linePlans ?? [])].every(p => /boeing/i.test(getAircraftType(p.typeId).manufacturer)), 'orders too');
+});
+
+test('a listed route nothing of the era can fly is left out, and the player is told', () => {
+  const s = withSeed(53, () => start({ startYear: 1960, rivalSet: set([R('Too Far', 'LHR', 'legacy', { routes: ['LHR-SYD', 'LHR-CDG'] })]) }));
+  assert.deepEqual(Object.keys(s.competitors[0].routes), ['CDG-LHR']);
+  assert.equal(s.competitors[0]._skippedRoutes, undefined, 'bookkeeping stripped');
+  assert.ok(s.pendingToasts.some(t => /LHR-SYD/.test(t.message)));
+});
+
+test('a closing year retires the airline in that year (era games)', () => {
+  let s = withSeed(54, () => start({ startYear: 1975, rivalSet: set([R('Pan Global', 'JFK', 'legacy', { founded: 1927, ceased: 1977 }), R('Stays', 'LHR', 'legacy')]) }));
+  let closedIn = null, ev = null;
+  withSeed(55, () => {
+    for (let w = 0; w < 52 * 3 && !closedIn; w++) {
+      s = gameReducer(s, { type: 'ADVANCE_WEEK' });
+      ev = (s.lastReport?.competitorEvents ?? []).find(e => e.type === 'ceased');
+      if (ev) closedIn = 1974 + s.year;
+    }
+  });
+  assert.equal(closedIn, 1977);
+  assert.match(ev.description, /Pan Global has ceased operations after 50 years/);
+  assert.ok(!s.competitors.some(c => c.name === 'Pan Global'));
+  assert.ok(s.competitors.some(c => c.name === 'Stays'));
+});
+
+test('an airline already closed by the start year never appears; classic games ignore closing years', () => {
+  need();
+  const sp = RS.parseRivalSet(set([R('Gone', 'JFK', 'legacy', { founded: 1930, ceased: 1960 }), R('Here', 'LHR', 'legacy')])).set;
+  const split = RS.splitRivalSet(sp, 1970);
+  assert.deepEqual(split.starters.map(r => r.name), ['Here']);
+  assert.equal(split.closed, 1);
+  assert.equal(RS.splitRivalSet(sp, null).starters.length, 2);
+  let s = withSeed(56, () => start({ rivalSet: sp }));
+  const evs = [];
+  withSeed(57, () => { for (let w = 0; w < 10; w++) { s = gameReducer(s, { type: 'ADVANCE_WEEK' }); evs.push(...(s.lastReport?.competitorEvents ?? []).filter(e => e.name === 'Gone')); } });
+  assert.ok(s.competitors.some(c => c.name === 'Gone'), JSON.stringify(evs.map(e => e.type + ':' + e.description)));
+});
+
+test('an entrant whose years pass while the field is full never joins', () => {
+  need();
+  const spec = RS.parseRivalSet(set([R('Brief Air', 'MIA', 'budget', { founded: 1975, ceased: 1978 })])).set.rivals[0];
+  const field = Array.from({ length: 30 }, (_, i) => ({ id: `f${i}`, name: `F${i}`, homeHub: 'LHR', tier: 'legacy', cash: 5e7, routes: {}, fleet: [], baseQualityScore: 60, _archetype: 'balanced' }));
+  const out = withSeed(58, () => AI.tickCompetitorAI(field.slice(0, 20), { weekNumber: 300, calendarYear: 1979, entrants: [spec], rosterCap: 30 }));
+  assert.equal(out.entrants.length, 0);
+  assert.ok(!out.competitors.some(c => c.name === 'Brief Air'));
+});
+
+test('the new fields survive copying the field back out', () => {
+  need();
+  const s = withSeed(59, () => start({ startYear: 1975, rivalSet: set([
+    R('Pan Global', 'JFK', 'legacy', { maker: 'Boeing', ceased: 1991, hub2: 'MIA', routes: ['JFK-LHR', 'JFK-MIA'], fleet: ['b747200'] }),
+    R('Later', 'AMS', 'budget', { founded: 1980, ceased: 1999, fleet: ['dc930'] }),
+  ]) }));
+  const back = RS.parseRivalSet(RS.exportRivalSet({ competitors: s.competitors, entrants: s.rivalEntrants, startYear: 1975 }));
+  assert.equal(back.ok, true, back.errors.join('; '));
+  const [pg, later] = back.set.rivals;
+  assert.deepEqual([pg.maker, pg.ceased, pg.hub2, pg.routes, pg.fleet], ['boeing', 1991, 'MIA', ['JFK-LHR', 'JFK-MIA'], ['b747200']]);
+  assert.deepEqual([later.founded, later.ceased, later.fleet], [1980, 1999, ['dc930']]);
+});
+
+section('field options');
+
+test('rival count: a field of 10 or 40, start-ups refilling to the same proportion', () => {
+  need();
+  const few = withSeed(61, () => start({ rivalCount: 'few' }));
+  const many = withSeed(62, () => start({ rivalCount: 'many' }));
+  assert.equal(few.competitors.length, 10);
+  assert.equal(many.competitors.length, 40);
+  assert.equal(few.rivalStartupCap, 11);
+  assert.equal(many.rivalStartupCap, 45);
+  const plus = withSeed(63, () => start({ rivalCount: 'few', rivalSet: set([R('Mine Too', 'LHR', 'legacy')]), rivalMode: 'add' }));
+  assert.equal(plus.competitors.length, 11, 'the set adds to the smaller random field');
+});
+
+const fieldOf = (n) => Array.from({ length: n }, (_, i) => ({ id: `g${i}`, name: `G${i}`, homeHub: 'LHR', tier: 'legacy', cash: 5e7, routes: {}, fleet: [], baseQualityScore: 60, _archetype: 'balanced' }));
+const fixed = (v, fn) => { const real = Math.random; Math.random = () => v; try { return fn(); } finally { Math.random = real; } };
+const startups = (out) => out.events.filter(e => e.type === 'startup').length;
+
+test('start-up frequency: none / rare / normal / frequent, and the field-size cap', () => {
+  // A draw of 0.03 misses the normal 2% chance and the rare 0.8%, but hits the frequent 5%.
+  const at = (opts) => startups(fixed(0.03, () => AI.tickCompetitorAI(fieldOf(10), { weekNumber: 100, ...opts })));
+  assert.equal(at({}), 0);
+  assert.equal(at({ startupRate: 'rare' }), 0);
+  assert.equal(at({ startupRate: 'frequent' }), 1);
+  assert.equal(at({ startupRate: 'off' }), 0);
+  const low = (opts) => startups(fixed(0.001, () => AI.tickCompetitorAI(fieldOf(10), { weekNumber: 100, ...opts })));
+  assert.equal(low({}), 1);
+  assert.equal(low({ startupRate: 'off' }), 0);
+  assert.equal(low({ startupCap: 10 }), 0, 'a 10-rival game is not refilled past its size');
+  assert.equal(low({ startupCap: 11 }), 1);
+});
+
+test('mergers can be switched off', () => {
+  const field = () => [
+    ...fieldOf(6),
+    { id: 'rich', name: 'Rich', homeHub: 'JFK', tier: 'legacy', cash: 5e9, profitHistory: [1e6], routes: {}, fleet: [], baseQualityScore: 70, _archetype: 'balanced' },
+    { id: 'weak', name: 'Weak', homeHub: 'BOS', tier: 'budget', cash: -1e6, fireSale: true, marketCap: 5e6, routes: {}, fleet: [], baseQualityScore: 40, _archetype: 'balanced' },
+  ];
+  const merged = (opts) => fixed(0.001, () => AI.tickCompetitorAI(field(), { weekNumber: 3, ...opts })).events.some(e => e.type === 'merger');
+  assert.equal(merged({}), true);
+  assert.equal(merged({ mergers: false }), false);
+});
+
+test('rival pressure: fierce rivals act more often and notice you more; relaxed ones less', () => {
+  assert.deepEqual(Object.keys(AI.RIVAL_PRESSURE).sort(), ['fierce', 'relaxed']);
+  const acts = (pressure) => {
+    let comps = [{ id: 'solo', name: 'Solo', homeHub: 'LHR', tier: 'legacy', cash: 5e7, routes: {}, fleet: [], baseQualityScore: 60, _archetype: 'balanced' }];
+    let n = 0, last = comps[0]._routeLoss;
+    withSeed(70, () => {
+      for (let w = 1; w <= 60; w++) {
+        comps = AI.tickCompetitorAI(comps, { weekNumber: w, pressure }).competitors;
+        if (comps[0]._routeLoss !== last) { n++; last = comps[0]._routeLoss; }
+      }
+    });
+    return n;
+  };
+  const normal = acts(null), fierce = acts('fierce'), relaxed = acts('relaxed');
+  assert.equal(normal, 12, 'a balanced carrier acts every 5 weeks');
+  assert.equal(fierce, 15, '…every 4 when fierce');
+  assert.equal(relaxed, 10, '…every 6 when relaxed');
+  const s = withSeed(71, () => start({ rivalPressure: 'fierce', rivalMergers: false, rivalStartups: 'rare' }));
+  assert.deepEqual([s.rivalPressure, s.rivalMergers, s.rivalStartups], ['fierce', false, 'rare']);
+  const bad = withSeed(72, () => start({ rivalPressure: 'insane', rivalStartups: 'always', rivalCount: 'lots' }));
+  for (const k of ['rivalPressure', 'rivalStartups', 'rivalCount']) assert.equal(bad[k], undefined, k);
+});
+
 section('screens');
 
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
@@ -268,7 +453,171 @@ test('the setup screen has the Rivals options', () => {
   assert.match(html, /Random rivals/);
   assert.match(html, /Custom set/);
   assert.match(html, /No rival based at my hub/);
-  assert.match(html, /No random new airlines during the game/);
+  assert.match(html, /Rival pressure Relaxed Normal Fierce/);
+  assert.match(html, /Random rivals Few \(10\) Usual \(25\) Many \(40\)/);
+  assert.match(html, /New airlines None Rare Normal Frequent/);
+  assert.match(html, /Rivals can merge with each other/);
+});
+
+section('third package: random logos and a chance to appear');
+
+test('"random" logos parse, per rival or for the whole set', () => {
+  need();
+  const one = RS.parseRivalSet(set([R('A', 'LHR', 'legacy', { logo: 'Random' }), R('B', 'JFK', 'legacy', { logo: 'jade' })]));
+  assert.equal(one.ok, true);
+  assert.deepEqual(one.set.rivals.map(r => r.logo), ['random', 'jade']);
+  assert.equal(one.warnings.length, 0);
+  const all = RS.parseRivalSet(set([R('A', 'LHR', 'legacy', { logo: 'bolt' }), R('B', 'JFK', 'legacy')], { randomLogos: true }));
+  assert.deepEqual(all.set.rivals.map(r => r.logo), ['random', 'random'], 'randomLogos overrides listed logos');
+  assert.deepEqual(RS.parseRivalSet(set([R('A', 'LHR', 'legacy', { logo: 'jade' })], { logo: 'random' })).set.rivals[0].logo, 'random');
+});
+
+test('a random logo is drawn when the airline is built, from the least used', () => {
+  need();
+  const spec = RS.parseRivalSet(set([R('A', 'LHR', 'legacy', { logo: 'random' })])).set.rivals[0];
+  const taken = RS.RIVAL_LOGOS.filter(l => l !== 'orbit');
+  const c = RS.buildRivalFromSpec(spec, { takenLogos: taken });
+  assert.equal(c.logoId, 'orbit');
+  assert.equal(c.setSpec.logo, 'random', 'the set still says random');
+  assert.ok(RS.RIVAL_LOGOS.includes(RS.buildRivalFromSpec(spec).logoId));
+});
+
+test('a big random-logo set spreads across every logo', () => {
+  const rivals = Array.from({ length: 45 }, (_, i) => R(`Air ${i}`, ['LHR', 'JFK', 'NRT', 'SYD', 'GRU', 'JNB'][i % 6], 'legacy'));
+  const s = withSeed(70, () => start({ rivalSet: set(rivals, { randomLogos: true }), rivalMode: 'replace' }));
+  assert.equal(s.competitors.length, 45);
+  const counts = RS.RIVAL_LOGOS.map(l => s.competitors.filter(c => c.logoId === l).length);
+  assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `uneven: ${counts}`);
+});
+
+test('chance parses as a percentage, with a set-wide default and crowding switch', () => {
+  need();
+  const p = RS.parseRivalSet(set([
+    R('A', 'LHR', 'legacy', { chance: '60%' }), R('B', 'JFK', 'legacy'), R('C', 'NRT', 'legacy', { chance: 100 }),
+    R('D', 'SYD', 'legacy', { chance: 150 }), R('E', 'GRU', 'legacy', { chance: 0, crowding: true }), R('F', 'JNB', 'legacy', { chance: 20, crowding: true }),
+  ], { chance: 40, crowding: false }));
+  assert.equal(p.ok, true, p.errors.join('; '));
+  const byName = Object.fromEntries(p.set.rivals.map(r => [r.name, r]));
+  assert.equal(byName.A.chance, 60);
+  assert.equal(byName.A.crowding, false, 'the set turned crowding off');
+  assert.equal(byName.B.chance, 40, 'set default');
+  assert.equal(byName.C.chance, undefined, '100 is the same as no chance');
+  assert.equal(byName.D.chance, 40, 'a bad chance falls back to the set default');
+  assert.equal(byName.E.chance, 0);
+  assert.equal(byName.F.crowding, undefined, 'a rival can turn crowding back on');
+  assert.ok(p.warnings.some(w => /chance "150" ignored/.test(w)));
+  assert.match(RS.parseRivalSet(set([R('A', 'LHR', 'legacy')], { chance: 'often' })).warnings.join(' '), /The set's chance "often" ignored/);
+});
+
+test('crowding: likelier where few airlines are based, less likely where many are', () => {
+  need();
+  const spec = { name: 'X', hub: 'LHR', chance: 50 };
+  const empty = RS.rivalChance(spec, []);
+  const one = RS.rivalChance(spec, ['LHR']);
+  const europe = RS.rivalChance(spec, ['LHR', 'LGW', 'CDG', 'AMS', 'FRA', 'BRU']);
+  assert.equal(empty, 0.75);
+  assert.equal(one, 0.5, 'one airline at the same hub leaves the chance as written');
+  assert.ok(europe < 0.3, `crowded Europe: ${europe}`);
+  assert.equal(RS.rivalChance(spec, ['SYD', 'NRT', 'JFK']), 0.75, 'airlines far away do not count');
+  assert.equal(RS.rivalChance({ ...spec, crowding: false }, ['LHR', 'LGW', 'CDG']), 0.5, 'exact when crowding is off');
+  assert.equal(RS.rivalChance({ ...spec, chance: 90 }, []), 1, 'never above certain');
+  assert.equal(RS.rivalChance({ ...spec, chance: 0 }, []), 0, 'zero is never, crowding or not');
+  assert.equal(RS.rivalChance({ name: 'Y', hub: 'LHR' }, ['LHR', 'LHR', 'LHR']), 1, 'no chance = always');
+});
+
+test('drawing: certain rivals always come, chance rivals by their odds, underserved ones more often', () => {
+  need();
+  const rng = seeded(71);
+  const europe = ['LHR', 'LGW', 'CDG', 'AMS', 'FRA', 'BRU', 'MUC', 'ZRH'];
+  let isolated = 0, crowded = 0, sure = 0, never = 0;
+  for (let i = 0; i < 2000; i++) {
+    const { chosen } = RS.drawRivals([
+      { name: 'Sure', hub: 'CDG' }, { name: 'Never', hub: 'HNL', chance: 0 },
+      { name: 'Island', hub: 'HNL', chance: 40 }, { name: 'Crowd', hub: 'LHR', chance: 40 },
+    ], { hubs: europe, rng });
+    const names = new Set(chosen.map(r => r.name));
+    if (names.has('Sure')) sure++;
+    if (names.has('Never')) never++;
+    if (names.has('Island')) isolated++;
+    if (names.has('Crowd')) crowded++;
+  }
+  assert.equal(sure, 2000);
+  assert.equal(never, 0);
+  assert.ok(Math.abs(isolated / 2000 - 0.6) < 0.04, `isolated ${isolated / 2000}`);
+  assert.ok(crowded / 2000 < 0.2, `crowded ${crowded / 2000}`);
+});
+
+test('a field of only chance rivals is never empty, and the dice are reported', () => {
+  const rivals = Array.from({ length: 30 }, (_, i) => R(`Maybe ${i}`, ['LHR', 'CDG', 'AMS', 'FRA', 'MAD', 'FCO'][i % 6], 'legacy'));
+  const s = withSeed(72, () => start({ rivalSet: set(rivals, { chance: 30 }), rivalMode: 'replace' }));
+  assert.ok(s.competitors.length >= 1 && s.competitors.length < 30, `${s.competitors.length}`);
+  const toast = (s.pendingToasts ?? []).find(t => /rolled the dice/.test(t.title));
+  assert.ok(toast, 'a toast says how many made it');
+  assert.match(toast.message, new RegExp(`^${s.competitors.length} of the 30 airlines`));
+  const none = withSeed(73, () => start({ rivalSet: set([R('Low', 'LHR', 'legacy', { chance: 1, crowding: false })]), rivalMode: 'replace' }));
+  assert.deepEqual(none.competitors.map(c => c.name), ['Low'], 'the likeliest miss is kept when nothing came in');
+});
+
+test('chance rivals are rolled before the 60-rival cap, so a long list is not cut to its first 60', () => {
+  need();
+  const rivals = Array.from({ length: 110 }, (_, i) => R(`Air ${i}`, 'LHR', 'legacy', { chance: 100 * (i < 5 ? 1 : 0.5) }));
+  const p = RS.parseRivalSet(set(rivals)).set;
+  const preview = RS.splitRivalSet(p, null);
+  assert.equal(preview.sure, 5);
+  assert.equal(preview.byChance, 105);
+  assert.equal(preview.dropped, 0);
+  const drawn = RS.splitRivalSet(p, null, { rng: seeded(74) });
+  assert.ok(drawn.starters.slice(0, 5).every(r => r.chance == null), 'certain rivals first');
+  assert.ok(drawn.starters.some(r => Number(r.name.slice(4)) >= 60), 'rivals listed after the 60th still get a chance');
+  assert.ok(drawn.starters.length <= RS.RIVAL_SET_MAX_START);
+});
+
+test('with the random field added, chance rivals see its hubs as neighbours', () => {
+  const s = withSeed(75, () => start({ rivalSet: set([R('Maybe Air', 'HNL', 'legacy', { chance: 60 })]), rivalMode: 'add' }));
+  assert.ok(s.competitors.length >= 10, 'the random field is there');
+});
+
+test('a chance entrant rolls once when due: a miss never founds, a hit founds', () => {
+  need();
+  const field = Array.from({ length: 10 }, (_, i) => ({ id: `f${i}`, name: `F${i}`, homeHub: 'LHR', tier: 'legacy', logoId: 'jade', cash: 5e7, routes: {}, fleet: [], baseQualityScore: 60, _archetype: 'balanced' }));
+  const zero = RS.parseRivalSet(set([R('Ghost Air', 'MIA', 'budget', { founded: 1975, chance: 0 })])).set.rivals[0];
+  const out0 = withSeed(76, () => AI.tickCompetitorAI(field, { weekNumber: 200, calendarYear: 1976, entrants: [zero], rosterCap: 30 }));
+  assert.equal(out0.entrants.length, 0, 'gone for good');
+  assert.ok(!out0.competitors.some(c => c.name === 'Ghost Air'));
+  const early = withSeed(76, () => AI.tickCompetitorAI(field, { weekNumber: 200, calendarYear: 1970, entrants: [zero], rosterCap: 30 }));
+  assert.equal(early.entrants.length, 1, 'no roll before its year');
+  const likely = RS.parseRivalSet(set([R('Sure Thing', 'MIA', 'budget', { founded: 1975, chance: 99, logo: 'random', crowding: false })])).set.rivals[0];
+  let joined = 0;
+  for (let k = 0; k < 20; k++) {
+    const out = withSeed(80 + k, () => AI.tickCompetitorAI(field, { weekNumber: 200, calendarYear: 1976, entrants: [likely], rosterCap: 30 }));
+    const c = out.competitors.find(x => x.name === 'Sure Thing');
+    if (c) { joined++; assert.notEqual(c.logoId, 'jade', 'random logo avoids the one the field already uses'); }
+  }
+  assert.ok(joined >= 17, `joined ${joined}/20`);
+});
+
+test('copying the field out: entrants keep their chance, flying airlines show their drawn logo', () => {
+  need();
+  const s = withSeed(77, () => start({ startYear: 1975, rivalSet: set([
+    R('Now Air', 'JFK', 'legacy', { logo: 'random', chance: 99, crowding: false }),
+    R('Later Air', 'AMS', 'budget', { founded: 1985, chance: 35, logo: 'random' }),
+  ]) }));
+  const back = RS.parseRivalSet(RS.exportRivalSet({ competitors: s.competitors, entrants: s.rivalEntrants, startYear: 1975 }));
+  assert.equal(back.ok, true, back.errors.join('; '));
+  const now = back.set.rivals.find(r => r.name === 'Now Air');
+  const later = back.set.rivals.find(r => r.name === 'Later Air');
+  assert.ok(RS.RIVAL_LOGOS.includes(now.logo) && now.logo === s.competitors.find(c => c.name === 'Now Air').logoId);
+  assert.equal(now.chance, undefined, 'it made it into this field');
+  assert.equal(later.chance, 35);
+  assert.equal(later.logo, 'random');
+});
+
+test('the example set shows a random logo and a chance', () => {
+  need();
+  const p = RS.parseRivalSet(RS.exampleRivalSet(1980));
+  assert.equal(p.ok, true, p.errors.join('; '));
+  assert.ok(p.set.rivals.some(r => r.logo === 'random'));
+  assert.ok(p.set.rivals.some(r => r.chance === 60));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
