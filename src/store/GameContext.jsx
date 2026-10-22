@@ -776,17 +776,36 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
 export const BULK_FREQUENCY_MODES = ['delta', 'set', 'max'];
 export const MAX_ROUTE_FREQUENCY = 99;   // the per-route stepper's ceiling
 
+// Freight routes take the same plan (Fleet ▸ "Flights/wk" on a freighter's
+// routes): an id found in state.cargoRoutes is checked by the freight stepper's
+// guard (cargoFrequencyChangeBlockReason) and written back to cargoRoutes —
+// exactly what UPDATE_CARGO_FREQUENCY would do with it, one route at a time.
+function isCargoRouteId(state, routeId) {
+  return !(state.routes ?? []).some(r => r.id === routeId)
+    && (state.cargoRoutes ?? []).some(r => r.id === routeId);
+}
+
 function withRouteFrequency(state, routeId, weeklyFrequency) {
+  if (isCargoRouteId(state, routeId)) {
+    return { ...state, cargoRoutes: state.cargoRoutes.map(r => (r.id === routeId ? { ...r, weeklyFrequency } : r)) };
+  }
   return { ...state, routes: state.routes.map(r => (r.id === routeId ? { ...r, weeklyFrequency } : r)) };
+}
+
+/** The stepper guard for this route: passenger or freight. */
+function routeFrequencyBlockReason(state, routeId, newFreq) {
+  return isCargoRouteId(state, routeId)
+    ? cargoFrequencyChangeBlockReason(state, routeId, newFreq)
+    : frequencyChangeBlockReason(state, routeId, newFreq);
 }
 
 /** The highest frequency in [from, want] the guard accepts (guard is monotone in frequency). */
 function highestAllowedFrequency(state, routeId, from, want) {
-  if (!frequencyChangeBlockReason(state, routeId, want)) return want;
+  if (!routeFrequencyBlockReason(state, routeId, want)) return want;
   let lo = from, hi = want - 1;          // lo is always allowed (no change)
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (frequencyChangeBlockReason(state, routeId, mid)) hi = mid - 1; else lo = mid;
+    if (routeFrequencyBlockReason(state, routeId, mid)) hi = mid - 1; else lo = mid;
   }
   return lo;
 }
@@ -801,11 +820,11 @@ export function planBulkFrequency(state, routeIds, { mode = 'delta', value = 0 }
   const m = BULK_FREQUENCY_MODES.includes(mode) ? mode : 'delta';
   const v = Math.round(Number(value) || 0);
   const ids = [...new Set((routeIds ?? []).map(String))]
-    .filter(id => (state.routes ?? []).some(r => r.id === id));
+    .filter(id => (state.routes ?? []).some(r => r.id === id) || (state.cargoRoutes ?? []).some(r => r.id === id));
   let s = state;
   const plan = new Map();
   for (const id of ids) {
-    const r = s.routes.find(x => x.id === id);
+    const r = s.routes.find(x => x.id === id) ?? (s.cargoRoutes ?? []).find(x => x.id === id);
     const from = r.weeklyFrequency ?? 1;
     const wanted = m === 'max' ? MAX_ROUTE_FREQUENCY
       : Math.max(1, Math.min(MAX_ROUTE_FREQUENCY, m === 'set' ? v : from + v));
@@ -820,7 +839,7 @@ export function planBulkFrequency(state, routeIds, { mode = 'delta', value = 0 }
       for (const id of ids) {
         const e = plan.get(id);
         if (e.done || e.to >= MAX_ROUTE_FREQUENCY) { e.done = true; continue; }
-        const why = frequencyChangeBlockReason(s, id, e.to + 1);
+        const why = routeFrequencyBlockReason(s, id, e.to + 1);
         if (why) { e.done = true; e.reason = why; continue; }
         e.to += 1;
         s = withRouteFrequency(s, id, e.to);
@@ -841,7 +860,7 @@ export function planBulkFrequency(state, routeIds, { mode = 'delta', value = 0 }
       let to = e.wanted;
       if (to > e.from) {
         to = highestAllowedFrequency(s, id, e.from, e.wanted);
-        if (to < e.wanted) e.reason = frequencyChangeBlockReason(s, id, to + 1);
+        if (to < e.wanted) e.reason = routeFrequencyBlockReason(s, id, to + 1);
       }
       if (to !== e.from) s = withRouteFrequency(s, id, to);
       e.to = to;

@@ -37,6 +37,8 @@ import BrandingModal from './components/BrandingModal.jsx';
 import { BRANDING_OPEN_EVENT } from './utils/openBranding.js';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
+import useNavFavourites from './hooks/useNavFavourites.js';
+import { toggleNavFavourite, NAV_FAVOURITES_LIMIT } from './utils/navFavourites.js';
 import HeadwindsPitch from './components/HeadwindsPitch.jsx';
 
 // Build stamp — injected by vite.config.js `define`. Guarded so non-Vite contexts
@@ -168,6 +170,11 @@ const NAV_GROUPS = [
   { id: 'wiki' },
 ];
 
+// Pages that can be pinned to the shortcuts bar (utils/navFavourites.js): the
+// ones behind a dropdown. Dashboard, News, Finance and Help are already one
+// click away — a shortcut to them would save nothing.
+const PINNABLE = new Set(NAV_GROUPS.flatMap(g => g.children ?? []));
+
 export default function App() {
   return (
     <ToastProvider>
@@ -202,6 +209,10 @@ function AppInner() {
   }, []);
   const isMobile = useIsMobile();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  // The shortcuts bar under the menus — pinned with the ☆ beside each page in a
+  // dropdown. A pin for a page that no longer exists is simply not drawn.
+  const favourites = useNavFavourites().filter(id => PINNABLE.has(id));
+  const favouritesFull = favourites.length >= NAV_FAVOURITES_LIMIT;
   const addToast = useToast();
 
   // Show tour automatically the first time a game starts
@@ -592,18 +603,39 @@ function AppInner() {
                     {grp.children.map((cid) => {
                       const ct = TABS_BY_ID[cid];
                       const CIcon = ct.Icon;
+                      const pinned = favourites.includes(cid);
                       return (
-                        <button
-                          key={cid}
-                          role="menuitem"
-                          className={activeTab === cid ? 'active' : ''}
-                          onClick={() => navigate(cid)}
-                        >
-                          <CIcon size={14} />
-                          <span>{ct.label}</span>
-                        </button>
+                        <div key={cid} className="nav-menu-row">
+                          <button
+                            role="menuitem"
+                            className={activeTab === cid ? 'active' : ''}
+                            onClick={() => navigate(cid)}
+                          >
+                            <CIcon size={14} />
+                            <span>{ct.label}</span>
+                          </button>
+                          <button
+                            type="button"
+                            data-nav-pin={cid}
+                            className={`nav-fav-star${pinned ? ' on' : ''}`}
+                            aria-pressed={pinned}
+                            aria-label={pinned ? `Unpin ${ct.label} from the shortcuts bar` : `Pin ${ct.label} to the shortcuts bar`}
+                            title={pinned
+                              ? 'Unpin from the shortcuts bar'
+                              : favouritesFull
+                                ? `The shortcuts bar holds ${NAV_FAVOURITES_LIMIT} — unpin one first`
+                                : 'Pin to the shortcuts bar under the menus'}
+                            disabled={!pinned && favouritesFull}
+                            onClick={(e) => { e.stopPropagation(); toggleNavFavourite(cid); }}
+                          >
+                            {pinned ? '★' : '☆'}
+                          </button>
+                        </div>
                       );
                     })}
+                    {favourites.length === 0 && (
+                      <div className="nav-fav-hint">☆ pins a page to a shortcuts bar under the menus</div>
+                    )}
                   </div>
                 </>,
                 document.body
@@ -612,6 +644,38 @@ function AppInner() {
           );
         })}
       </div>
+
+      {/* Shortcuts bar — the pages pinned with ☆ in the menus above */}
+      {favourites.length > 0 && (
+        <div className="nav-favs" role="toolbar" aria-label="Shortcuts">
+          {favourites.map((id) => {
+            const t = TABS_BY_ID[id];
+            const Icon = t.Icon;
+            return (
+              <div key={id} className="nav-fav-wrap">
+                <button
+                  type="button"
+                  data-nav-fav={id}
+                  className={`nav-fav ${activeTab === id ? 'active' : ''}`}
+                  onClick={() => navigate(id)}
+                >
+                  <Icon size={12} />
+                  <span>{t.label}</span>
+                </button>
+                <button
+                  type="button"
+                  className="nav-fav-x"
+                  aria-label={`Unpin ${t.label}`}
+                  title={`Unpin ${t.label}`}
+                  onClick={() => toggleNavFavourite(id)}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Page content */}
       <div className="main-content">

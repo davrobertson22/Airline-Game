@@ -25,7 +25,7 @@ import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { lineStatus, launchWindow, slotPremiumPct, MAX_TOTAL_DISCOUNT, lineGapWeeks, lineOf } from '../data/productionLines.js';
 import { withLineBook, soloFleetBoard, orderCancelTerms } from '../models/lineBook.js';
 import InfoTip from './InfoTip.jsx';
-import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS } from '../utils/marketFilters.js';
+import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS, ownedFamilyIds } from '../utils/marketFilters.js';
 import { designAgeQualityPts, DESIGN_AGE_GRACE_YEARS, DESIGN_AGE_CAP_YEARS, DESIGN_AGE_MAX_PENALTY } from '../models/demand.js';
 import { LABOR_GROUPS, CREW_LEAD_WEEKS, crewBodiesForAircraft } from '../data/labor.js';
 import { Glyph } from './Icons.jsx';
@@ -874,7 +874,12 @@ export default function Marketplace() {
   // The dated-design chip only exists in era worlds (classic designs never
   // date), so a remembered "on" can't hide anything in a classic save.
   const activeFilters = { ...marketFilters, hideDated: calYear != null && marketFilters.hideDated };
+  // The families you fly or have on order (utils/marketFilters.js). The chip
+  // only exists once there is something to narrow to.
+  const ownedFamilies = useMemo(() => ownedFamilyIds(fleet, pendingOrders), [fleet, pendingOrders]);
   const filterChips = [
+    ...(ownedFamilies.size > 0 ? [{ key: 'yourFamilies', label: 'Your families',
+      title: 'Show only the aircraft families you already fly or have on order — your types plus their stretches, shrinks and freighters, which share your crews\' type ratings and your maintenance set-up.' }] : []),
     { key: 'inProduction', label: 'In production',
       title: 'Hide types whose production line has closed — they can only be bought second-hand.' },
     ...(calYear != null ? [{ key: 'hideDated', label: 'Hide dated designs',
@@ -891,7 +896,7 @@ export default function Marketplace() {
     (activeCategory === 'All' || t.category === activeCategory) &&
     (safeMfr        === 'All' || t.manufacturer === safeMfr) &&
     (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q)) &&
-    passesMarketFilters(t, calYear, activeFilters)
+    passesMarketFilters(t, calYear, activeFilters, { ownedFamilies })
   );
 
   return (

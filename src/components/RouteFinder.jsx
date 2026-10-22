@@ -1,13 +1,16 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useGame } from '../store/GameContext.jsx';
-import { AIRPORTS, getAirport } from '../data/airports.js';
+import { getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { effectiveRangeKm, formatMoney, calendarYear, currentGameDate } from '../utils/simulation.js';
 import { buildRouteMarket } from '../models/demand.js';
 import {
   findCandidates, sortCandidates, SORTS, DEFAULT_SCORE_LIMIT,
   finderForecastContext, forecastCandidate, candidateFrequency, rowsToScore,
+  laneServed, rankByDemandLeft,
 } from '../models/routeFinder.js';
+import ServedCell from './FinderServed.jsx';
+import OriginPicker from './OriginPicker.jsx';
 import { REGION_LABELS, REGION_ORDER, regionLabel } from '../utils/market.js';
 import { Glyph } from './Icons.jsx';
 import InfoTip from './InfoTip.jsx';
@@ -117,8 +120,6 @@ export default function RouteFinder({ onPick, standalone = false }) {
   // aircraft and re-sorting this table twelve times.
   const mem = finderMemoryKey(state, 'passenger');
   const [origin, setOrigin]     = useRememberedState(mem, 'origin', state.hub || '', c => !c || !!getAirport(c));
-  const [query, setQuery]       = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [minDist, setMinDist]   = useRememberedState(mem, 'minDist', '');
   const [maxDist, setMaxDist]   = useRememberedState(mem, 'maxDist', '');
   const [region, setRegion]     = useRememberedState(mem, 'region', '');
@@ -205,6 +206,24 @@ export default function RouteFinder({ onPick, standalone = false }) {
       origin, open, typeId, owned?.best, minDist, maxDist, region, showUnflyable, showServed,
       soloOnly, splitMetros]);
 
+  // ── How much of each market is already flown ───────────────────────────────
+  // models/routeFinder.js laneServed: the tick's share fight with everyone on
+  // the lane, at maturity. Under a millisecond a lane, so it is priced for the
+  // rows on screen (and, under "Most demand left", as far down as that ranking
+  // needs) and cached until the network, the rivals or the month move. It does
+  // not depend on the aircraft picked — what rivals carry is the same whatever
+  // you would fly in with.
+  const servedCache = useMemo(
+    () => new Map(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.routes, state.competitors, state.humanRivals, state.encroachments, state.fleet,
+     state.hubs, state.routePricing, state.activeEvents, state.week, gameDate.month]);
+  const servedOf = (r) => {
+    const k = `${r.origin}|${r.code}|${r.yourLanePairs?.[0] ?? ''}`;
+    if (!servedCache.has(k)) servedCache.set(k, laneServed(state, r, { gameDate }));
+    return servedCache.get(k);
+  };
+
   // ── Forecasts, bounded and progressive ─────────────────────────────────────
   // The engine's real launch projection, so "Plan →" cannot contradict the row it
   // was clicked on. Bounded two ways, as before:
@@ -271,7 +290,10 @@ export default function RouteFinder({ onPick, standalone = false }) {
   const known = (k) => cache.has(k) || stale.has(k);
 
   // Which rows this view needs priced, in the order to price them.
-  const sortedRows = useMemo(() => sortCandidates(rows, sortBy), [rows, sortBy]);
+  const sortedRows = useMemo(
+    () => (sortBy === 'room' ? rankByDemandLeft(rows, servedOf, limit) : sortCandidates(rows, sortBy)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, sortBy, sortBy === 'room' ? limit : 0, servedCache]);
   const targets = useMemo(() => {
     if (!forecastCtx || rows.length === 0) return [];
     const list = forecastSort
@@ -395,15 +417,6 @@ export default function RouteFinder({ onPick, standalone = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shownCodes, origin, gameDate.month]);
 
-  // Origin picker (compact inline search)
-  const originMatches = useMemo(() => {
-    const q = query.trim().toUpperCase();
-    if (!q) return [];
-    return AIRPORTS.filter(a =>
-      a.code.includes(q) || a.city.toUpperCase().includes(q) || a.name.toUpperCase().includes(q)
-    ).slice(0, 8);
-  }, [query]);
-
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       {/* Header / toggle */}
@@ -429,63 +442,11 @@ export default function RouteFinder({ onPick, standalone = false }) {
           {/* Controls */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
 
-            {/* Origin */}
-            <div style={{ position: 'relative', minWidth: 180 }}>
-              <div className="form-label" style={{ marginBottom: 6 }}>From</div>
-              <div
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface2)',
-                  border: `1px solid ${pickerOpen ? 'var(--accent)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius)', padding: '7px 10px', cursor: 'pointer',
-                }}
-                onClick={() => setPickerOpen(v => !v)}
-              >
-                {originAirport ? (
-                  <>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{originAirport.code}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{originAirport.city}</span>
-                  </>
-                ) : (
-                  <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>Select airport…</span>
-                )}
-                <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: 11 }}>▾</span>
-              </div>
-              {pickerOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100,
-                  background: 'var(--surface2)', border: '1px solid var(--accent)',
-                  borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', overflow: 'hidden',
-                }}>
-                  <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>
-                    <input
-                      autoFocus
-                      className="form-input"
-                      placeholder="Search city or code…"
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                    {(query ? originMatches : AIRPORTS.slice(0, 8)).map(a => (
-                      <div
-                        key={a.code}
-                        onClick={() => { setOrigin(a.code); setQuery(''); setPickerOpen(false); resetPaging(); }}
-                        style={{ padding: '7px 10px', cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--surface3)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <span style={{ fontWeight: 700, fontSize: 13, width: 34, flexShrink: 0 }}>{a.code}</span>
-                        <span style={{ fontSize: 12 }}>{a.city}</span>
-                      </div>
-                    ))}
-                    {query && originMatches.length === 0 && (
-                      <div style={{ padding: 12, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center' }}>No airports found</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Origin — your own network first (components/OriginPicker.jsx) */}
+            <OriginPicker
+              value={origin}
+              onChange={code => { setOrigin(code); resetPaging(); }}
+            />
 
             {/* Aircraft — your fleet first, catalogue after */}
             <div>
@@ -649,6 +610,7 @@ export default function RouteFinder({ onPick, standalone = false }) {
                         { h: 'Destination', right: false },
                         { h: 'Distance',    right: true  },
                         { h: 'Market',      right: true, tip: "The whole city-pair market per week. Airports in one metro share it: JFK–LHR and EWR–LHR are one New York↔London market, not two." },
+                        { h: 'Served',      right: true, tip: "How much of the market is already flown — everyone on the lane, rivals' one-stops over their hubs and your own services included, from the same share fight the weekly results run (at maturity, this month). Low is room for you; near 100% means a new route mostly takes passengers from someone. Hover a figure for who carries what." },
                         { h: 'Ref fare',    right: true  },
                         { h: 'Rivals',      right: false, tip: 'Carriers flying this market from any airport in either city.' },
                         { h: 'Est. load',   right: true, tip: 'Projected mature load factor for the selected aircraft at 7 flights a week — the same projection the Route Planner runs.' },
@@ -718,6 +680,9 @@ export default function RouteFinder({ onPick, standalone = false }) {
                             <div style={{ fontSize: 10, color: seasonal > 1.05 ? 'var(--green)' : seasonal < 0.95 ? 'var(--yellow)' : 'var(--text-dim)' }}>
                               ×{seasonal.toFixed(2)} season
                             </div>
+                          </td>
+                          <td style={{ padding: pad, textAlign: 'right' }}>
+                            <ServedCell served={r.served ?? servedOf(r)} />
                           </td>
                           <td style={{ padding: pad, textAlign: 'right', color: 'var(--text-muted)' }}>${r.refPrice}</td>
                           <td style={{ padding: pad }}>
