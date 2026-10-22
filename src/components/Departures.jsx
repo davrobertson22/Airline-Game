@@ -5,7 +5,9 @@ import {
 } from '../models/departureBoard.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
-import { routeLegs, routeStops, fleetAvgUtilization } from '../utils/simulation.js';
+import { routeLegs, routeStops, fleetAvgUtilization, currentGameDate, isRouteActive } from '../utils/simulation.js';
+import { airlineWeeks, weekDepartures, wrapWeek } from '../models/schedule.js';
+import { utcOffsetMinutes } from '../data/timezones.js';
 import { laborEffects } from '../data/labor.js';
 import { isOutOfService, groundedKind } from '../data/maintenance.js';
 import AirportSelect from './AirportSelect.jsx';
@@ -20,8 +22,10 @@ import { Glyph } from './Icons.jsx';
  * thinking of entering as much as the one you already fly. The airport screen
  * links here for the airport you are looking at.
  *
- * Times and flight numbers do not exist in the model (the schedule is a weekly
- * frequency) and are synthesised deterministically in models/departureBoard.js.
+ * Your own flights print at their times in your schedule (models/schedule.js,
+ * edited under Operations → Schedule). Rivals have no timetable — the model is
+ * weekly frequency — so their times, and every flight number, are synthesised
+ * deterministically in models/departureBoard.js.
  * Everything else on the board — who flies where, how often, on what, and how
  * punctually — is real state.
  */
@@ -94,13 +98,38 @@ export default function Departures({ initialAirport = null }) {
     } catch { return 0.85; }
   }, [state.labor, state.satisfaction, fleet, routes, state.cargoRoutes]);
 
+  // The airline's timetable — rebuilt only when the fleet or routes change, not
+  // when the player pages through days or airports. Charters are passed in
+  // because they take time on their tails: without them a route on a tail
+  // flying a charter would print at a different time from the schedule editor.
+  const month = currentGameDate(state).month;
+  const weeks = useMemo(() => airlineWeeks({
+    fleet, routes, cargoRoutes: state.cargoRoutes ?? [], charters: state.charters ?? [],
+  }, month), [fleet, routes, state.cargoRoutes, state.charters, month]);
+
   const rows = useMemo(() => {
     // The player's own departures, in BOTH directions — every route is a round
     // trip, so it departs its destination as often as its origin — including
     // every leg of a tag flight that leaves this airport (a rotation stopping
     // here departs here, once each way).
+    // Your flights print at their timetabled times (models/schedule.js — your
+    // pinned departures, automatic ones elsewhere), local to this airport: the
+    // same timetable the schedule editor uses. A route dormant this month
+    // (seasonal) isn't flying, so it isn't on the board.
+    const offset = utcOffsetMinutes(getAirport(airport));
+    const timesFor = (r, to) => {
+      const week = weeks.get(r.aircraftId);
+      if (!week) return undefined;
+      return weekDepartures(week)
+        .filter(d => d.routeId === r.id && d.from === airport && d.to === to)
+        .map(d => {
+          const local = wrapWeek(d.utcMin + offset);
+          return { day: Math.floor(local / 1440), min: local % 1440, key: `${d.routeId}|${d.rotation}|${d.leg}` };
+        });
+    };
     const myLegs = [];
     for (const r of routes) {
+      if (!isRouteActive(r, month)) continue;
       const ac   = fleet.find(a => a.id === r.aircraftId);
       const type = getAircraftType(ac?.typeId);
       // A grounded or in-check tail with no reserve covering it is not flying
@@ -111,9 +140,12 @@ export default function Departures({ initialAirport = null }) {
       const cancelReason = !cancelled ? null
         : ac.status === 'maintenance' ? `Aircraft in ${ac.checkType ?? 'heavy'} check`
         : `Aircraft grounded — ${groundedKind(ac).toLowerCase()}`;
-      for (const to of departuresFromStops(routeStops(r), airport)) {
+      // A tag rotation can depart here twice toward the same stop (out and
+      // back); the timetable already lists both, so take each `to` once.
+      for (const to of new Set(departuresFromStops(routeStops(r), airport))) {
         myLegs.push({
           to,
+          times: timesFor(r, to),
           weeklyFrequency: r.weeklyFrequency ?? 0,
           typeId: type?.id,
           typeName: type?.name ?? '—',
@@ -165,7 +197,7 @@ export default function Departures({ initialAirport = null }) {
       worldSeed: String(state.worldId ?? state.seed ?? state.airlineName ?? 'tailwinds'),
       carriers,
     });
-  }, [airport, day, mineOnly, routes, fleet, state.competitors, state.airlineName,
+  }, [airport, day, mineOnly, routes, fleet, weeks, month, state.competitors, state.airlineName,
       state.logoId, state.logoColor, state.customLogo, state.worldId, state.seed, playerOtp]);
 
   const ap = getAirport(airport);
@@ -283,9 +315,9 @@ export default function Departures({ initialAirport = null }) {
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 10, lineHeight: 1.6 }}>
         <Glyph e="ℹ" /> Who flies where, how often, on what aircraft and how punctually is your world's
         real state — the board is the fastest way to read an airport you are thinking of entering, and
-        a carrier running late here is one whose crews are stretched. Clock times, flight numbers and
-        gates are generated from the world seed: the schedule is weekly frequency, so the timetable is
-        dressing, but it is the same dressing for everyone in this world, every time.
+        a carrier running late here is one whose crews are stretched. Your own flights leave at the times
+        in your schedule (Operations → Schedule). Other airlines&apos; clock times, and every flight number and
+        gate, are generated from the world seed, so they are the same every time you look.
       </div>
     </div>
   );

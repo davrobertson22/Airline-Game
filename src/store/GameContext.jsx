@@ -107,6 +107,7 @@ import {
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
+import { normalizeStarts } from '../models/schedule.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -3062,13 +3063,21 @@ function reducer(state, action) {
       // whole point: closing and re-opening cost both.
       const { routeId, toAircraftId } = action;
       if (!reassignCompatibility(state, routeId, toAircraftId).ok) return state;
+      // A route joining a tail that already flies something (a route, freight
+      // or a charter) drops its pinned timetable (models/schedule.js) and goes
+      // back to automatic: its times were fitted round another aircraft's week,
+      // and kept they'd knock the new tail's own pins back to automatic.
+      // Cosmetic only.
+      const targetBusy = [...(state.routes ?? []), ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])]
+        .some(r => r.aircraftId === toAircraftId && r.id !== routeId);
       // reassignCompatibility has already refused a tail that cannot reach every
       // leg, so the destination is known-good: drop any out-of-range flag now
       // rather than leaving the badge up until the next tick.
       const move = r => {
         if (r.id !== routeId) return r;
-        const { rangeStranded: _fixed, ...rest } = r;
-        return { ...rest, aircraftId: toAircraftId };
+        const { rangeStranded: _fixed, ...kept } = r;
+        const { schedule: _times, ...rest } = kept;
+        return { ...(targetBusy ? rest : kept), aircraftId: toAircraftId };
       };
       const nextRoutes = (state.routes ?? []).map(move);
       const nextCargo  = (state.cargoRoutes ?? []).map(move);
@@ -3645,6 +3654,41 @@ function reducer(state, action) {
         cargoRoutes: (state.cargoRoutes ?? []).map(r =>
           r.id === action.routeId ? { ...r, yieldPrice } : r
         ),
+      };
+    }
+
+    // action: { schedules: { [routeId]: number[] | null } } — passenger or cargo.
+    // The player's pinned departures (minutes into the week, UTC) for each
+    // route; null or [] puts the route back on the automatic timetable.
+    // Cosmetic: the departure board and the schedule editor read it; nothing
+    // in the tick does. Charters can't be pinned (they aren't in either list).
+    // See models/schedule.js.
+    case 'SET_ROUTE_SCHEDULES': {
+      const want = action.schedules;
+      if (!want || typeof want !== 'object') return state;
+      let changed = false;
+      // Only a real change makes a new state — a no-op (clearing a route with
+      // no pins, re-sending the same pins) must not recompute every memo on
+      // routes or trigger an autosave.
+      const apply = (r) => {
+        if (!Object.prototype.hasOwnProperty.call(want, r.id)) return r;
+        const starts = normalizeStarts(want[r.id], r.weeklyFrequency ?? 0);
+        const before = r.schedule?.starts ?? [];
+        if (starts.length === before.length && starts.every((v, i) => v === before[i])) return r;
+        changed = true;
+        if (!starts.length) {
+          const { schedule, ...rest } = r;
+          return rest;
+        }
+        return { ...r, schedule: { starts } };
+      };
+      const routes = (state.routes ?? []).map(apply);
+      const cargoRoutes = (state.cargoRoutes ?? []).map(apply);
+      if (!changed) return state;
+      return {
+        ...state,
+        routes: routes.some((r, i) => r !== state.routes[i]) ? routes : state.routes,
+        cargoRoutes: cargoRoutes.some((r, i) => r !== (state.cargoRoutes ?? [])[i]) ? cargoRoutes : state.cargoRoutes,
       };
     }
 
