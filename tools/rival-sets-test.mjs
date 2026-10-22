@@ -8,6 +8,7 @@
 //
 //   node --import ./tools/_register-loader.mjs tools/rival-sets-test.mjs
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
@@ -38,6 +39,7 @@ const Competition = (await import('../src/components/Competition.jsx')).default;
 const SetupScreen = (await import('../src/components/SetupScreen.jsx')).default;
 const D = await import('../src/models/demand.js');
 const { getAircraftType } = await import('../src/data/aircraft.js');
+const AC = await import('../src/data/aircraft.js');
 const need = () => assert.ok(RS, 'src/models/rivalSets.js does not exist');
 
 function seeded(seed) {
@@ -618,6 +620,161 @@ test('the example set shows a random logo and a chance', () => {
   assert.equal(p.ok, true, p.errors.join('; '));
   assert.ok(p.set.rivals.some(r => r.logo === 'random'));
   assert.ok(p.set.rivals.some(r => r.chance === 60));
+});
+
+section('fixes 2026-10-18: start-ups, up-gauges, founding years in a copy');
+
+test('random start-ups never hold the seat a set airline is waiting for', () => {
+  need();
+  const spec = RS.parseRivalSet(set([R('Late Air', 'MIA', 'budget', { founded: 1975 })])).set.rivals[0];
+  const carrier = (i, extra = {}) => ({ id: `f${i}`, name: `F${i}`, homeHub: 'LHR', tier: 'legacy', cash: 5e7, routes: {}, fleet: [], baseQualityScore: 60, _archetype: 'balanced', ...extra });
+  // 28 flying: 22 from the set, 6 of the game's own start-ups.
+  const mixed = [...Array.from({ length: 22 }, (_, i) => carrier(i, { fromSet: true })),
+                 ...Array.from({ length: 6 }, (_, i) => carrier(22 + i, { isStartup: true, foundedWeek: 100 }))];
+  const out = withSeed(91, () => AI.tickCompetitorAI(mixed, { weekNumber: 300, calendarYear: 1976, entrants: [spec], rosterCap: 22 }));
+  assert.equal(out.entrants.length, 0, 'it joins: the start-ups do not count against its room');
+  assert.ok(out.competitors.some(c => c.name === 'Late Air'));
+  // A field genuinely full of set airlines still makes it wait.
+  const full = Array.from({ length: 28 }, (_, i) => carrier(i, { fromSet: true }));
+  const wait = withSeed(91, () => AI.tickCompetitorAI(full, { weekNumber: 300, calendarYear: 1976, entrants: [spec], rosterCap: 22 }));
+  assert.equal(wait.entrants.length, 1);
+});
+
+test('a historical pack gets every airline in its year, even with frequent start-ups', () => {
+  need();
+  const HUBS = ['LHR', 'CDG', 'FRA', 'AMS', 'MAD', 'FCO', 'ZRH', 'CPH', 'ARN', 'OSL', 'HEL', 'VIE', 'BRU', 'DUB', 'LIS', 'ATH', 'IST', 'JFK', 'LAX', 'ATL', 'DFW', 'MIA', 'SFO', 'YYZ', 'GRU', 'NRT', 'HKG', 'SIN'];
+  // 24 on day one, 4 founded 1958-61: years for random start-ups to fill the
+  // field first. End-to-end check of the whole path; the seat rule itself is
+  // pinned by the test above (failures here before the fix were seed-dependent,
+  // as bankruptcies often free a seat in time — a 50-year probe lost 6 of 34).
+  const rivals = HUBS.map((hub, i) => R(`Hist ${i}`, hub, i % 3 ? 'legacy' : 'budget', { founded: i < 24 ? 1940 : 1958 + (i - 24) }));
+  let s = withSeed(92, () => start({ startYear: 1950, rivalSet: set(rivals), rivalStartups: 'frequent' }));
+  assert.equal(s.rivalEntrants.length, 4);
+  const joined = {};
+  let startups = 0;
+  withSeed(93, () => {
+    for (let w = 0; w < 52 * 12; w++) {
+      s = gameReducer({ ...s, cash: 1e12 }, { type: 'ADVANCE_WEEK' });
+      for (const e of s.lastReport?.competitorEvents ?? []) {
+        if (e.type !== 'startup') continue;
+        if (e.name.startsWith('Hist ')) joined[e.name] ??= 1950 + Math.floor(w / 52);
+        else startups++;
+      }
+    }
+  });
+  for (const r of rivals.filter(x => x.founded > 1950)) assert.equal(joined[r.name], r.founded, `${r.name} joins in ${r.founded}`);
+  assert.ok(startups > 0, 'random start-ups still launch alongside');
+});
+
+test('an up-gauge stays inside the fleet preference; a fallback route may still step up', () => {
+  withSeed(98, () => start());   // a classic world: the whole catalogue is on the market
+  const { AIRCRAFT_TYPES } = AC;
+  const top = AIRCRAFT_TYPES.filter(t => /boeing/i.test(t.manufacturer)).sort((a, b) => b.seats - a.seats)[0];
+  const boeing = { types: [], maker: 'boeing' };
+  const strict = D.pickLargerCompetitorAircraftType(8000, Math.ceil(top.seats * 1.15), { fleetPref: boeing, strictPref: true });
+  assert.equal(strict, null, 'a Boeing carrier that fills its biggest Boeing stays on it');
+  const loose = D.pickLargerCompetitorAircraftType(8000, Math.ceil(top.seats * 1.15), { fleetPref: boeing, strictPref: false });
+  assert.ok(loose && !/boeing/i.test(loose.manufacturer), 'a route that already had to fall back can still grow');
+  assert.equal(D.isPreferredType(top, boeing), true);
+  assert.equal(D.isPreferredType(AC.getAircraftType('a380'), boeing), false);
+  assert.equal(D.isPreferredType(AC.getAircraftType('a380'), null), true, 'no preference: everything is preferred');
+});
+
+test('ten years on, one-maker carriers fly only their maker (classic, everything on the market)', () => {
+  need();
+  let s = withSeed(94, () => start({ hub: 'SYD', rivalStartups: 'off', rivalSet: set([
+    R('Airbus A', 'CDG', 'legacy', { size: 'large', maker: 'Airbus' }),
+    R('Boeing B', 'ORD', 'legacy', { size: 'large', maker: 'Boeing' }),
+    R('Listed F', 'SIN', 'premium', { size: 'large', fleet: ['a350900', 'b787900'] }),
+  ]) }));
+  const offPref = (st) => Object.fromEntries(st.competitors.map(c => [c.name,
+    (c.fleet ?? []).filter(f => !D.isPreferredType(AC.getAircraftType(f.typeId), c.fleetPref)).map(f => f.typeId)]));
+  assert.deepEqual(offPref(s), { 'Airbus A': [], 'Boeing B': [], 'Listed F': [] });
+  withSeed(95, () => { for (let w = 0; w < 52 * 10; w++) s = gameReducer({ ...s, cash: 1e12 }, { type: 'ADVANCE_WEEK' }); });
+  for (const [name, off] of Object.entries(offPref(s))) assert.deepEqual(off, [], `${name} has off-preference metal: ${off.join(', ')}`);
+});
+
+test('copying the field out keeps the year an airline joined, not the start year', () => {
+  need();
+  let s = withSeed(96, () => start({ startYear: 1970, rivalSet: eraSet, rivalStartups: 'off' }));
+  withSeed(97, () => { for (let w = 0; w < 52 * 4; w++) s = gameReducer({ ...s, cash: 1e12 }, { type: 'ADVANCE_WEEK' }); });
+  assert.ok(s.competitors.some(c => c.name === 'Seventies Jet'), 'joined in 1972');
+  const launched = { id: 'su1', name: 'Velocity Air', homeHub: 'ORD', tier: 'budget', isStartup: true, foundedWeek: 5 * 52 + 3, routes: {}, baseQualityScore: 40 };
+  const back = RS.parseRivalSet(RS.exportRivalSet({ competitors: [...s.competitors, launched], entrants: s.rivalEntrants, startYear: 1970 }));
+  assert.equal(back.ok, true, back.errors.join('; '));
+  const year = (n) => back.set.rivals.find(r => r.name === n)?.founded;
+  assert.equal(year('Founder Air'), 1960);
+  assert.equal(year('Seventies Jet'), 1972, 'was 1970: pasted into a new 1970 game it came two years early');
+  assert.equal(year('Eighties Air'), 1981);
+  assert.equal(year('Velocity Air'), 1975, "a game's own start-up keeps the year it launched");
+});
+
+section('several makers per airline (2026-10-21)');
+
+test('maker takes a list, a comma-separated string or "makers"; one maker stays a string', () => {
+  need();
+  const p = RS.parseRivalSet(set([
+    R('List', 'JFK', 'legacy', { maker: ['Boeing', 'McDonnell Douglas'] }),
+    R('Commas', 'LHR', 'legacy', { maker: 'Airbus, Embraer; ATR' }),
+    R('Plural', 'CDG', 'legacy', { makers: ['Airbus', 'ATR'] }),
+    R('Both', 'AMS', 'legacy', { maker: 'Fokker', makers: ['Boeing', 'fokker'] }),
+    R('One', 'FRA', 'legacy', { maker: ['Airbus'] }),
+    R('Mixed', 'MAD', 'legacy', { maker: ['Boeing', 'Acme', ''] }),
+    R('None', 'ORD', 'legacy', { maker: ['Acme', 'Nope'] }),
+  ]));
+  assert.equal(p.ok, true, p.errors.join('; '));
+  assert.deepEqual(Object.fromEntries(p.set.rivals.map(r => [r.name, r.maker])), {
+    List: ['boeing', 'mcdonnell douglas'], Commas: ['airbus', 'embraer', 'atr'], Plural: ['airbus', 'atr'],
+    Both: ['fokker', 'boeing'], One: 'airbus', Mixed: 'boeing', None: undefined,
+  });
+  assert.equal(p.warnings.filter(w => /no manufacturer called "Acme"/.test(w)).length, 2, 'an unknown maker is dropped, the rest kept');
+  assert.ok(p.warnings.some(w => /no manufacturer called "Nope"/.test(w)));
+  assert.ok(!p.warnings.some(w => /no manufacturer called ""/.test(w)), 'an empty entry is skipped quietly');
+  const again = RS.parseRivalSet(p.set);
+  assert.deepEqual(again.set.rivals.map(r => r.maker), p.set.rivals.map(r => r.maker), 'the checked set START_GAME re-checks is unchanged');
+});
+
+test('a two-maker preference keeps both makers and nothing else', () => {
+  const list = ['b737800', 'a320ceo', 'e175', 'atr72', 'dc930'].map(id => getAircraftType(id));
+  assert.deepEqual(D.preferredTypes(list, { types: [], maker: ['boeing', 'embraer'] }).map(t => t.id), ['b737800', 'e175']);
+  assert.deepEqual(D.preferredTypes(list, { types: ['atr72'], maker: ['airbus'] }).map(t => t.id), ['a320ceo', 'atr72']);
+  assert.deepEqual(D.preferredTypes(list, { types: [], maker: ['cessna', 'pilatus'] }), list, 'nothing preferred can do it: anything that fits');
+  assert.deepEqual(D.preferredTypes(list, { types: [], maker: [] }), list, 'an empty list is no preference');
+  assert.deepEqual(D.preferredTypes(list, { types: [], maker: [] }, { strict: true }), list, '…even strict');
+  assert.equal(D.isPreferredType(getAircraftType('dc930'), { types: [], maker: ['boeing', 'mcdonnell douglas'] }), true);
+  assert.equal(D.isPreferredType(getAircraftType('a320ceo'), { types: [], maker: ['boeing', 'mcdonnell douglas'] }), false);
+});
+
+test('a Boeing + McDonnell Douglas carrier flies only those, and a copy of the field keeps both', () => {
+  need();
+  const pref = /^(boeing|mcdonnell douglas)$/i;
+  let s = withSeed(71, () => start({ startYear: 1975, rivalMode: 'replace', rivalStartups: 'off', rivalSet: set([
+    R('Twin Maker', 'JFK', 'legacy', { size: 'large', maker: ['Boeing', 'McDonnell Douglas'] }),
+  ]) }));
+  const off = (st) => (st.competitors.find(x => x.name === 'Twin Maker')?.fleet ?? [])
+    .map(f => getAircraftType(f.typeId)).filter(t => !pref.test(t.manufacturer)).map(t => t.id);
+  assert.ok(s.competitors[0].fleet.length > 0);
+  assert.deepEqual(off(s), []);
+  withSeed(72, () => { for (let w = 0; w < 52 * 3; w++) s = gameReducer({ ...s, cash: 1e12 }, { type: 'ADVANCE_WEEK' }); });
+  assert.deepEqual(off(s), [], 'still only Boeing and McDonnell Douglas three years on');
+  const back = RS.parseRivalSet(RS.exportRivalSet({ competitors: s.competitors, entrants: s.rivalEntrants, startYear: 1975 }));
+  assert.equal(back.ok, true, back.errors.join('; '));
+  assert.deepEqual(back.set.rivals.find(r => r.name === 'Twin Maker').maker, ['boeing', 'mcdonnell douglas']);
+});
+
+test('the example set shows a list of makers', () => {
+  need();
+  const p = RS.parseRivalSet(RS.exampleRivalSet());
+  assert.ok(p.set.rivals.some(r => Array.isArray(r.maker) && r.maker.length > 1));
+});
+
+test('the competition guide lists every maker name the game knows, and no others', () => {
+  const html = readFileSync(new URL('../public/competition-and-alliances.html', import.meta.url), 'utf8');
+  const table = /<h3>Manufacturer names<\/h3>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/.exec(html)?.[1] ?? '';
+  const listed = [...table.matchAll(/<tr><td>([^<]+)<\/td>/g)].map(m => m[1]).sort();
+  const game = [...new Set(AC.AIRCRAFT_TYPES.map(t => t.manufacturer).filter(Boolean))].sort();
+  assert.deepEqual(listed, game, 'regenerate the Manufacturer names table in public/competition-and-alliances.html');
+  for (const m of game) assert.equal(RS.parseRivalSet(set([R('X', 'JFK', 'legacy', { maker: [m] })])).warnings.length, 0, m);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

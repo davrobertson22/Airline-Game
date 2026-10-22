@@ -9,7 +9,7 @@
 //       { "name": "Pacific Rim Airlines", "hub": "NRT", "tier": "legacy",
 //         "size": "large", "founded": 1951, "logo": "jade",
 //         "style": "fortress", "quality": 72,
-//         "fleet": ["b747400", "b777300er"], "maker": "Boeing",
+//         "fleet": ["b747400", "b777300er"], "maker": ["Boeing", "Embraer"],
 //         "ceased": 2001, "hub2": "KIX", "routes": ["NRT-LAX", "NRT-HKG"] } ] }
 //
 // Size, not money: small / medium / large set starting cash and network size
@@ -25,7 +25,12 @@
 // Also optional (2026-10-17, second package):
 //   fleet / maker  the carrier only buys these types / this manufacturer when
 //                  one can fly the route — otherwise whatever fits, so it
-//                  never stops flying (demand.js preferredTypes)
+//                  never stops flying (demand.js preferredTypes). "maker"
+//                  can name several (2026-10-21, Discord: VodkaOnFire): a
+//                  list ["Boeing", "Embraer"] or one string split on commas
+//                  ("Boeing, Embraer"); "makers" reads the same. One maker is
+//                  kept as a string, several as a list (saves and copies
+//                  from before keep their string).
 //   ceased         era games: the airline winds down in that year
 //   hub2           a second hub from day one
 //   routes         its starting network ("AAA-BBB"), replacing the generated
@@ -175,13 +180,17 @@ export function parseRivalSet(input) {
       }
       if (fleet.length > RIVAL_FLEET_MAX) { warnings.push(`${label}: only the first ${RIVAL_FLEET_MAX} fleet types are kept.`); fleet = fleet.slice(0, RIVAL_FLEET_MAX); }
     }
-    let maker = null;
-    if (raw.maker != null && String(raw.maker).trim()) {
-      const m = String(raw.maker).trim().toLowerCase();
+    // One maker or several: a list, or one string split on commas. JSON
+    // keeps only the last of a repeated key, so a list is the way to name two.
+    const makers = [];
+    for (const v of [raw.maker, raw.makers].flatMap(x => x == null ? [] : Array.isArray(x) ? x : String(x).split(/[,;]/))) {
+      const m = String(v ?? '').trim().toLowerCase();
+      if (!m) continue;
       const hit = MAKERS.find(x => x.toLowerCase() === m) ?? MAKERS.find(x => x.toLowerCase().includes(m));
-      if (hit) maker = m;
-      else warnings.push(`${label}: no manufacturer called "${raw.maker}" in the game; ignored.`);
+      if (!hit) warnings.push(`${label}: no manufacturer called "${String(v).trim()}" in the game; ignored.`);
+      else if (!makers.includes(m)) makers.push(m);
     }
+    const maker = makers.length > 1 ? makers : (makers[0] ?? null);
     let ceased = null;
     if (raw.ceased != null && raw.ceased !== '') {
       const y = Number(raw.ceased);
@@ -408,7 +417,7 @@ export function exportRivalSet({ competitors = [], entrants = [], name = '', sta
   const rivals = [
     ...competitors.map(c => ({
       name: c.name, hub: c.homeHub, tier: c.tier, size: sizeOf(c),
-      ...(startYear != null ? { founded: c.founded != null && c.founded <= startYear ? c.founded : startYear } : {}),
+      ...(startYear != null ? { founded: foundedYearOf(c, startYear) } : {}),
       ...(RIVAL_LOGOS.includes(c.logoId) ? { logo: c.logoId } : {}),
       ...(RIVAL_STYLES.includes(c._archetype) ? { style: c._archetype } : {}),
       quality: Math.round(c.baseQualityScore ?? TIER_QUALITY[c.tier] ?? 60),
@@ -422,6 +431,16 @@ export function exportRivalSet({ competitors = [], entrants = [], name = '', sta
     })),
   ];
   return JSON.stringify({ tailwindsRivals: RIVAL_SET_VERSION, ...(name ? { name } : {}), rivals }, null, 2);
+}
+
+/** An exported airline's founding year (era games): the year its set gave it;
+ *  else, for one launched mid-game, the year it launched; else the start year
+ *  (the random field, all flying on day one). Never clamped to the start year:
+ *  an airline that joined in 1974 must not come back in a 1970 copy. */
+function foundedYearOf(c, startYear) {
+  if (c.founded != null) return c.founded;
+  if (c.isStartup && Number.isFinite(c.foundedWeek)) return startYear + Math.floor((c.foundedWeek - 1) / 52);
+  return startYear;
 }
 
 /** The second-package fields a set spelled out, carried into an export. */
@@ -451,7 +470,7 @@ export function exampleRivalSet(startYear = null) {
     return c && { name: c.name, hub: c.homeHub, tier: c.tier, size: sizes[i], logo: c.logoId };
   }).filter(Boolean);
   // Show the optional fields on two of them.
-  if (rivals[0]) { rivals[0].maker = 'Boeing'; rivals[0].routes = ['LHR-JFK', 'LHR-CDG', 'LHR-FRA', 'LHR-DXB', 'LHR-SIN']; }
+  if (rivals[0]) { rivals[0].maker = ['Boeing', 'Embraer']; rivals[0].routes = ['LHR-JFK', 'LHR-CDG', 'LHR-FRA', 'LHR-DXB', 'LHR-SIN']; }
   if (rivals[2]) { rivals[2].fleet = ['a380', 'b777300er']; rivals[2].hub2 = 'DOH'; }
   if (rivals[1]) rivals[1].logo = 'random';
   if (rivals[3]) rivals[3].chance = 60;

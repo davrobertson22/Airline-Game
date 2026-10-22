@@ -38,6 +38,11 @@
     li { margin:0 0 8px; }
     .cta { display:inline-block; background:var(--gold); color:#20180a; font-weight:700; padding:13px 30px; border-radius:8px; text-decoration:none; margin:18px 0; }
     .tip { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:0 0 16px; }
+    table.stats { width:100%; border-collapse:collapse; font-size:0.88rem; }
+    table.stats th, table.stats td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+    table.stats th:first-child, table.stats td:first-child { text-align:left; white-space:normal; }
+    table.stats th { color:var(--muted); font-weight:600; }
+    .tablewrap { overflow-x:auto; margin:0 0 28px; }
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
@@ -51,7 +56,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/competition-and-alliances.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-06",
-    "dateModified": "2026-10-18",
+    "dateModified": "2026-10-21",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -105,13 +110,66 @@
     <ul>
       <li><strong>How many, and how hard they push.</strong> Choose a field of 10, 25 or 40 random rivals. Rival pressure sets how closely they watch you: relaxed rivals pay you half the usual attention and make their moves less often, while fierce ones notice you early, fight harder for your routes and move more often.</li>
       <li><strong>Custom set.</strong> Paste a rival set: a short block of text listing each airline's name, home airport code and tier (budget, legacy or premium), and optionally its size (small, medium or large), founding and closing years, logo, personality and quality. Size sets a rival's starting cash and network; its market value then comes out of how it plays. You can play with only your set or add it to the random field, and a set can start with up to 60 rivals.</li>
-      <li><strong>Fleets, routes and second hubs.</strong> A rival in a set can list the aircraft it flies (or just a manufacturer), its starting routes and a second hub. A carrier with a fleet preference only buys what it prefers when one of those types can fly the route, and takes whatever fits when none can. A listed route no aircraft of the era can fly is left out at the start.</li>
+      <li><strong>Fleets, routes and second hubs.</strong> A rival in a set can list the aircraft it flies (or just its manufacturers), its starting routes and a second hub. Name one manufacturer as <code>"maker": "Boeing"</code>, or several as a list: <code>"maker": ["Boeing", "Embraer"]</code>. One piece of text with commas, <code>"Boeing, Embraer"</code>, works too. Writing <code>"maker"</code> twice doesn't, because only the last copy of a repeated name is read. A carrier with a fleet preference only buys what it prefers when one of those types can fly the route, and takes whatever fits when none can. Within its preference it still picks the best-sized aircraft for each route, so a carrier allowed two makers may end up flying mostly one. A listed route no aircraft of the era can fly is left out at the start.</li>
       <li><strong>Founded and closed in their own years.</strong> In an era game, a rival founded after your start year doesn't exist yet. It appears once the calendar reaches its year, with its own starter network, if the field has room; otherwise it waits and tries again. A rival with a closing year ceases operations in that year, and one already closed by your start year never appears. Classic games have no calendar, so every rival in a set starts on day one and stays.</li>
       <li><strong>Random logos and a chance to appear.</strong> Any rival's logo can be <code>"random"</code>, and <code>"randomLogos": true</code> at the top of a set shuffles them all; random logos are spread across the whole range, so a big set doesn't end up with ten of the same one. A rival can also have a <code>"chance"</code> from 0 to 100: the percent chance it takes part in a game at all, so a long list of airlines plays out differently every time. The roll leans toward underserved markets: a rival is likelier to appear where few airlines are based near its hub and less likely where many are, so a chance of 50 might come in three times in four in an empty region and one time in four in crowded Europe. Add <code>"crowding": false</code> to keep the percentage exact, and put <code>"chance"</code> at the top of a set to give every rival without its own the same odds. A rival founded later rolls in its founding year; one that misses never appears that game. A set made only of chance rivals always gets at least one.</li>
       <li><strong>No rival based at my hub.</strong> Removes any rival based at your home airport from the starting field. Others still fly in, and airlines founded later may still choose to base there.</li>
       <li><strong>New airlines and mergers.</strong> Random start-ups can be none, rare, normal or frequent; with none and a custom set, only the set's own airlines ever join, so the game plays exactly as written. You can also stop rivals merging with each other (you can still buy them).</li>
       <li><strong>Sharing.</strong> The Competition tab can copy any game's rivals as a set, including the airlines your set has still to found, so you can share a field with friends or replay it.</li>
     </ul>
+
+    <h3>Manufacturer names</h3>
+    <p>Write a maker the way the aircraft market spells it; capital letters don't matter. A name also matches every maker whose name contains it: <code>"Douglas"</code> covers McDonnell Douglas as well, <code>"de Havilland"</code> covers De Havilland Canada, and <code>"Airbus"</code> includes the Airbus/CASA turboprop. A misspelt maker is left out with a warning on the setup screen, and the rest of the list still counts.</p>
+    <p>In an era game a maker only matters once one of its aircraft is on the market: a rival limited to Airbus in a 1960 game flies whatever fits until Airbus's first type enters service. The table gives, for each maker, the year its first type in the game entered service and the year its last production line closed.</p>
+    <div class="tablewrap">
+      <table class="stats">
+        <thead><tr><th>Maker</th><th>First in service</th><th>Last line closed</th></tr></thead>
+        <tbody>
+          <tr><td>Aérospatiale/BAC</td><td>1976</td><td>1979</td></tr>
+          <tr><td>Airbus</td><td>1975</td><td>In production</td></tr>
+          <tr><td>Airbus/CASA</td><td>1998</td><td>2013</td></tr>
+          <tr><td>Aircraft Industries</td><td>1971</td><td>1997</td></tr>
+          <tr><td>Antonov</td><td>1959</td><td>2018</td></tr>
+          <tr><td>ATR</td><td>2011</td><td>In production</td></tr>
+          <tr><td>BAC</td><td>1968</td><td>1982</td></tr>
+          <tr><td>Beechcraft</td><td>1991</td><td>2002</td></tr>
+          <tr><td>Boeing</td><td>1949</td><td>In production</td></tr>
+          <tr><td>Bombardier</td><td>1996</td><td>In production</td></tr>
+          <tr><td>Bristol</td><td>1957</td><td>1960</td></tr>
+          <tr><td>British Aerospace</td><td>1982</td><td>2001</td></tr>
+          <tr><td>Britten-Norman</td><td>1967</td><td>1990</td></tr>
+          <tr><td>Canadair</td><td>1947</td><td>1950</td></tr>
+          <tr><td>Cessna</td><td>2010</td><td>In production</td></tr>
+          <tr><td>COMAC</td><td>2016</td><td>In production</td></tr>
+          <tr><td>Convair</td><td>1948</td><td>1966</td></tr>
+          <tr><td>Curtiss</td><td>1942</td><td>1945</td></tr>
+          <tr><td>de Havilland</td><td>1952</td><td>1964</td></tr>
+          <tr><td>De Havilland Canada</td><td>1978</td><td>2022</td></tr>
+          <tr><td>Dornier</td><td>1982</td><td>2002</td></tr>
+          <tr><td>Douglas</td><td>1936</td><td>1986</td></tr>
+          <tr><td>Embraer</td><td>1973</td><td>In production</td></tr>
+          <tr><td>Fokker</td><td>1958</td><td>1997</td></tr>
+          <tr><td>Gulfstream</td><td>2014</td><td>In production</td></tr>
+          <tr><td>Hawker Siddeley</td><td>1962</td><td>1988</td></tr>
+          <tr><td>Ilyushin</td><td>1954</td><td>2014</td></tr>
+          <tr><td>Irkut</td><td>2025</td><td>In production</td></tr>
+          <tr><td>Lockheed</td><td>1947</td><td>1984</td></tr>
+          <tr><td>Martin</td><td>1951</td><td>1953</td></tr>
+          <tr><td>McDonnell Douglas</td><td>1965</td><td>2000</td></tr>
+          <tr><td>Mitsubishi</td><td>2026</td><td>In production</td></tr>
+          <tr><td>Pilatus</td><td>2020</td><td>In production</td></tr>
+          <tr><td>Saab</td><td>1984</td><td>1999</td></tr>
+          <tr><td>Short Brothers</td><td>1982</td><td>1991</td></tr>
+          <tr><td>Sud Aviation</td><td>1959</td><td>1972</td></tr>
+          <tr><td>Sukhoi</td><td>2011</td><td>In production</td></tr>
+          <tr><td>Tupolev</td><td>1956</td><td>2017</td></tr>
+          <tr><td>Vickers</td><td>1953</td><td>1970</td></tr>
+          <tr><td>Viking Air</td><td>2010</td><td>In production</td></tr>
+          <tr><td>Xian</td><td>2000</td><td>2019</td></tr>
+          <tr><td>Yakovlev</td><td>1968</td><td>2003</td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <h2>Reading a contested route</h2>
     <p>When a competitor shows up on your route, demand doesn't just halve. The market splits based on fares, frequency, product quality, connections, brand awareness and reputation, and loyalty — and a rival's one-stop over its own hub competes with your nonstop too. The head-to-head card for each contested route on the Competition tab shows each carrier's projected share and flags what's costing you, such as a brand most travellers haven't heard of yet, or an all-economy cabin against a rival that sells business. Before reacting, work out which lever they're actually beating you on. Cheaper fares? More frequencies? A better cabin? Each calls for a different response, and the reflexive response — matching their fare cut — is usually the worst available.</p>

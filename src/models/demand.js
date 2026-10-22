@@ -2662,19 +2662,35 @@ export function pickCompetitorAircraftType(distKm, tier, pref = null) {
   return rankCompetitorAircraftTypes(distKm, tier, pref)[0] ?? null;
 }
 
+/** A fleet preference's manufacturers, lower-case: its maker is one string or a list of them. */
+function prefMakers(pref) {
+  const m = pref?.maker;
+  if (!m) return [];
+  return (Array.isArray(m) ? m : [m]).map(x => String(x ?? '').toLowerCase()).filter(Boolean);
+}
+
 /**
  * A rival set's fleet preference (models/rivalSets.js): { types: [typeId], maker }.
+ * maker is one manufacturer ("boeing") or several (["boeing", "embraer"]).
  * When any preferred type can do the job, ONLY preferred types are offered —
  * an Airbus carrier stays Airbus. When none can (out of range, not yet built,
  * line closed), the carrier takes whatever fits, so a preference never stops
  * it flying. Null or empty = no preference (the original behaviour, unchanged).
  */
-export function preferredTypes(list, pref) {
-  if (!pref || (!(pref.types?.length) && !pref.maker)) return list;
-  const types = new Set(pref.types ?? []);
-  const maker = pref.maker ? String(pref.maker).toLowerCase() : null;
-  const keep = list.filter(t => types.has(t.id) || (maker && String(t.manufacturer ?? '').toLowerCase().includes(maker)));
-  return keep.length ? keep : list;
+export function preferredTypes(list, pref, { strict = false } = {}) {
+  if (!pref || (!(pref.types?.length) && !prefMakers(pref).length)) return list;
+  const keep = list.filter(t => isPreferredType(t, pref));
+  return keep.length || strict ? keep : list;
+}
+
+/** Whether a type is one a fleet preference names (by id or manufacturer). No preference → true. */
+export function isPreferredType(type, pref) {
+  if (!type) return false;
+  const makers = prefMakers(pref);
+  if (!pref || (!(pref.types?.length) && !makers.length)) return true;
+  if ((pref.types ?? []).includes(type.id)) return true;
+  const mfr = String(type.manufacturer ?? '').toLowerCase();
+  return makers.some(m => mfr.includes(m));
 }
 
 /**
@@ -2719,7 +2735,7 @@ export function rankCompetitorAircraftTypes(distKm, tier, pref = null) {
  * be the next size up never beats a modern frame that would earn more.
  * `maxSeats` bounds the search — the AI keeps a 400 km shuttle off widebodies.
  */
-export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = null, maxSeats = Infinity, fleetPref = null } = {}) {
+export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = null, maxSeats = Infinity, fleetPref = null, strictPref = false } = {}) {
   // Same era gate as pickCompetitorAircraftType — the up-gauge shops the market
   // of the world's calendar year, not 2026. Without this a 1962 rival that
   // filled a Vanguard stepped straight onto an A321neo (Discord 2026-09-08).
@@ -2734,7 +2750,11 @@ export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = nu
   const score = prefer
     ? (t) => -prefer(t)
     : (t) => ((t.seats ?? 0) - minSeats) + Math.max(0, (t.range ?? 0) - need) * 0.005;
-  return preferredTypes(capable, fleetPref).slice().sort((a, b) => score(a) - score(b))[0];
+  // strictPref (the route already flies a preferred type): nothing bigger in
+  // the preference means no up-gauge — an all-Boeing carrier that fills its
+  // biggest Boeing stays on it rather than buying an A380. Not up-gauging never
+  // stops a route flying, so the "whatever fits" fallback isn't needed here.
+  return preferredTypes(capable, fleetPref, { strict: strictPref }).slice().sort((a, b) => score(a) - score(b))[0] ?? null;
 }
 
 /** Tails needed to fly `frequency` weekly departures over `distKm`, assuming ~98 utilisable block-h/tail/wk. */
@@ -2818,9 +2838,9 @@ export function healAnachronisticCompetitorFleets(competitors, calYear) {
       // Never let the heal hand out MORE seats than the illegal frame carried:
       // this is a downgrade to period metal, not a free up-gauge.
       const wasSeats = cfg.seats ?? getAircraftType(cfg.aircraftType)?.seats ?? Infinity;
-      const type = AIRCRAFT_TYPES
-        .filter(t => (t.range ?? 0) >= dist && maxSeatsForRange(t, dist) <= wasSeats && aircraftOrderable(t, calYear))
-        .sort((x, y) => Math.abs(maxSeatsForRange(x, dist) - target) - Math.abs(maxSeatsForRange(y, dist) - target))[0];
+      const type = preferredTypes(AIRCRAFT_TYPES
+        .filter(t => (t.range ?? 0) >= dist && maxSeatsForRange(t, dist) <= wasSeats && aircraftOrderable(t, calYear)), c.fleetPref)
+        .slice().sort((x, y) => Math.abs(maxSeatsForRange(x, dist) - target) - Math.abs(maxSeatsForRange(y, dist) - target))[0];
       if (!type) { delete routes[routeKey]; continue; }   // nothing of the era can fly it — drop the route
       routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails: tailsForRoute(dist, cfg.frequency ?? 7) };
       swapped.set(routeKey, type.id);

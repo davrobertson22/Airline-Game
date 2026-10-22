@@ -802,7 +802,7 @@ export default function SetupScreen() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
                   Each rival needs a name, a home airport code and a tier (budget, legacy or premium). Optional: size (small, medium or large),
                   founded and ceased (years: in era games the airline appears and closes in those years), logo, style, quality,
-                  fleet (aircraft it flies, like "a320neo") or maker (like "Airbus"), hub2 (a second hub), routes (its
+                  fleet (aircraft it flies, like "a320neo") or maker (like "Airbus", or a list like ["Boeing", "Embraer"]), hub2 (a second hub), routes (its
                   starting network, like "LHR-JFK") and chance (0 to 100: the percent chance it appears at all, higher where
                   few airlines are based near its hub). A logo can be "random". At the top of a set, "randomLogos": true
                   shuffles every logo and "chance": 50 sets everyone's. Load the example to see them all.

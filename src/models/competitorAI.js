@@ -40,6 +40,7 @@ import {
   computeCompetitorRoutePnL,
   buildPairIncumbents,
   pickLargerCompetitorAircraftType,
+  isPreferredType,
 } from './demand.js';
 import { quotePlan } from './lineBook.js';
 import { buildRivalFromSpec, rivalChance } from './rivalSets.js';
@@ -771,6 +772,8 @@ export function tickCompetitorAI(competitors, ctx) {
             prefer:   (t) => projected(key, { ...cfg, aircraftType: t.id, seats: maxSeatsForRange(t, dist), tails }),
             maxSeats: upgaugeSeatCeiling(dist, c.tier),
             fleetPref: c.fleetPref,
+            // Already on a preferred type: step up only within the preference.
+            strictPref: isPreferredType(type, c.fleetPref),
           });
           if (bigger && projected(key, { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails }) > p.profit) {
             const cost = tailDeposit(bigger, tails) - tailSalvage(type, tails);
@@ -1163,11 +1166,16 @@ export function tickCompetitorAI(competitors, ctx) {
   let entrantsLeft = entrants;
   if (entrants?.length) {
     const cap = Math.max(MAX_ROSTER, rosterCap ?? 0);
+    // Random start-ups (the game's own, not the set's) never hold a seat a set
+    // airline is waiting for: they don't count against the room here, so a
+    // set's historical airlines join in their year however many start-ups
+    // have launched meanwhile (bug: a 1950 pack lost 6 of 34 to start-ups).
+    const seated = () => updated.filter(c => !(c.isStartup && !c.fromSet)).length;
     const wait = [];
     for (const r of entrants) {
       if (calendarYear != null && r.ceased != null && calendarYear >= r.ceased) continue;   // its years passed with no room
       const due = calendarYear != null && r.founded != null && r.founded <= calendarYear;
-      if (!due || updated.length >= cap || updated.some(c => c.name === r.name)) { wait.push(r); continue; }
+      if (!due || seated() >= cap || updated.some(c => c.name === r.name)) { wait.push(r); continue; }
       // A chance entrant rolls once, the year it is due and there's room,
       // against the field as it stands then (likelier where few airlines are
       // based). A miss is final: it never gets off the ground this game.
