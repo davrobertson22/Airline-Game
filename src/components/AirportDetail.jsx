@@ -3,7 +3,7 @@ import { requestDepartureBoard } from './Departures.jsx';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
-import { AIRPORTS, getAirport, baseTierOf } from '../data/airports.js';
+import { AIRPORTS, getAirport, baseTierOf, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
 import { demandWorldActive, demandFactor } from '../data/demandWorld.js';
 import {
   baseCityPairDemand, referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE,
@@ -19,6 +19,7 @@ import FuelBasisChip, { fuelBasisTitle } from './FuelBasisChip.jsx';
 import FuelFarmControls from './FuelFarmControls.jsx';
 import { stationFuelDriver, fuelStationsOn } from '../data/fuelStations.js';
 import { useConfirm } from './ConfirmModal.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 import {
   canBuildLounge, isLoungeOpen, loungeCloseRefund,
   LOUNGE_BUILD_COST, LOUNGE_BUILD_WEEKS, LOUNGE_WEEKLY_OPEX,
@@ -47,6 +48,92 @@ function Stat({ label, value, sub, color }) {
       <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>{label}</div>
       <div style={{ fontWeight: 700, fontSize: 15, color: color ?? 'var(--text)' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * What leasing one more gate at `code` costs, in the numbers the engine uses.
+ *
+ * Gates are a monthly fee billed pro-rata, a quarter a week, on each airport's
+ * TOTAL (weeklyTick §4: round(totalGateMonthlyFee / 4)), so the weekly change
+ * is the difference of two rounded quarters rather than the next gate's fee / 4.
+ * `action` is exactly what the card dispatches — the same ADD_GATE the Airports
+ * tab's "+ Gate" buttons send.
+ */
+export function gateLeaseQuote(state, code) {
+  const airport = getAirport(code);
+  const held    = (state.gates ?? {})[code] ?? 0;
+  const nowFee  = totalGateMonthlyFee(airport, held);
+  const nextFee = gateMonthlyFee(airport, held + 1);
+  return {
+    held, nowFee, nextFee,
+    weeklyNow:   Math.round(nowFee / 4),
+    weeklyAfter: Math.round(totalGateMonthlyFee(airport, held + 1) / 4),
+    action: { type: 'ADD_GATE', airportCode: code },
+  };
+}
+
+/**
+ * Getting a gate at THIS airport, from the page you are already looking at.
+ *
+ *   "Could you add an option to open gates when tapping on a city? Right now,
+ *    you can only open lounges and more information." (Discord, Oct 2026)
+ *
+ * Tapping an airport on the network map opens this page, and it offered a
+ * lounge, a ground station and the market — but not the gate you need before
+ * you can fly there at all. The lease lived only on the Airports tab.
+ *
+ * Port of the Headwinds card without its gate-market half: single-player has
+ * no auctions or player listings, and ADD_GATE has no refusals, so there is no
+ * denial to explain. Releasing stays on the Airports tab, which knows when
+ * flights still need the gate.
+ */
+function GateLeaseCard({ code }) {
+  const { state, dispatch } = useGame();
+  const confirm = useConfirm();
+  const q = gateLeaseQuote(state, code);
+  const { held, nowFee, nextFee, weeklyNow, weeklyAfter } = q;
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 16 }}><Glyph e="🚪" size={16} /></span>
+        <div style={{ fontWeight: 600 }}>Lease a Gate</div>
+      </div>
+
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
+        {held > 0
+          ? <>You hold {held} gate{held === 1 ? '' : 's'} here for {formatMoney(nowFee)}/mo. Each one is worth {SLOTS_PER_GATE} departures a week, and gates get dearer the more of an airport you take.</>
+          : <>A gate at {code} is what lets you schedule departures here at all — {SLOTS_PER_GATE} a week per gate. No up-front cost; you pay for as long as you hold it, flying or not.</>}
+      </div>
+
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
+        <Stat label="Next gate" value={`${formatMoney(nextFee)}/mo`} color="var(--accent)"
+              sub={`+${formatMoney(weeklyAfter - weeklyNow)}/wk · +${SLOTS_PER_GATE} departures/wk`} />
+        {held > 0 && <Stat label="You pay now" value={`${formatMoney(nowFee)}/mo`} sub={`${held} gate${held === 1 ? '' : 's'}`} />}
+      </div>
+
+      <button
+        className="btn btn-primary"
+        style={{ fontSize: 13 }}
+        title={`Lease gate ${held + 1} at ${code}`}
+        onClick={async () => {
+          if (await confirm({
+            title: `Lease a gate at ${code}?`,
+            body: `${formatMoney(nextFee)}/month, billed weekly — your gate bill here goes from `
+                + `${formatMoney(weeklyNow)} to ${formatMoney(weeklyAfter)} a week.\n\n`
+                + `It gives you ${SLOTS_PER_GATE} more departures a week at ${code}. `
+                + `There is no up-front cost, and you can hand it back on the Airports tab `
+                + `while no flights need it — but an empty gate costs the same as a busy one.`,
+            confirmLabel: `Lease for ${formatMoney(nextFee)}/mo`,
+          })) {
+            dispatch(q.action);
+          }
+        }}
+      >
+        {held > 0 ? '+ Lease another gate' : '+ Lease a gate here'} — {formatMoney(nextFee)}/mo
+      </button>
     </div>
   );
 }
@@ -356,6 +443,10 @@ function LoungeCard({ code }) {
 
 export default function AirportDetail({ code, onBack, backLabel = '← Back to Airports' }) {
   const { state } = useGame();
+  // Below ~960px the card grid holds at most two columns, where "the whole row"
+  // and "two cards" are the same thing — except on a phone, where there is ONE
+  // column and `span 2` invents a second, pushing half the page off-screen.
+  const narrow    = useIsMobile(960);
   const airport   = getAirport(code);
   const gates     = state.gates ?? {};
   const hubs      = state.hubs  ?? (state.hub ? { [state.hub]: { tier: 1 } } : {});
@@ -624,8 +715,11 @@ export default function AirportDetail({ code, onBack, backLabel = '← Back to A
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 12 }}>
 
+        {/* First, because tapping an airport on the map lands here and a gate is
+            the thing you need before anything else on this page matters. */}
+        <GateLeaseCard code={code} />
         <LoungeCard code={code} />
         <GroundStationCard code={code} />
 
@@ -823,7 +917,7 @@ export default function AirportDetail({ code, onBack, backLabel = '← Back to A
         </div>
 
         {/* Passenger flows — top pairs */}
-        <div className="card" style={{ gridColumn: 'span 2' }}>
+        <div className="card" style={{ gridColumn: narrow ? '1 / -1' : 'span 2' }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>
             Passenger Flows
             <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>

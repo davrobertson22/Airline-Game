@@ -410,11 +410,26 @@ export function worldAirportsInView(airports = AIRPORTS, zoom = 2, view = null, 
 
 const TIER_WORD = { mega: 'Major hub', major: 'Major airport', regional: 'Regional airport' };
 
+// Clicking ANY airport on the map — a background dot or one of your own —
+// opens its detail page, which is where you lease a gate there (Discord, Oct
+// 2026: "Could you add an option to open gates when tapping on a city?").
+const AIRPORT_CLICK_HINT = "Click to lease a gate or see the airport's details";
+
 /** Hover card for a background airport. */
 export function worldAirportTip(a) {
   return `<div class="map-tip"><div class="map-tip-title">${a.code} · ${a.name}</div>`
     + `<div class="map-tip-sub">${a.city}, ${a.country} · ${TIER_WORD[a.tier] ?? 'Airport'}</div>`
-    + `<div class="map-tip-hint">Click for the airport's details</div></div>`;
+    + `<div class="map-tip-hint">${AIRPORT_CLICK_HINT}</div></div>`;
+}
+
+/** Hover card for one of your own airports (a hub when `hubInfo` is set). */
+export function networkAirportTip(airport, hubInfo = null) {
+  const badge = hubInfo
+    ? ` <span style="color:${HUB_COLOR}">● ${String(hubInfo.name ?? 'Hub').toUpperCase()}</span>`
+    : '';
+  return `<div class="map-tip"><div class="map-tip-title">${airport.code}</div>`
+    + `<div class="map-tip-sub">${airport.city}, ${airport.country}${badge}</div>`
+    + `<div class="map-tip-hint">${AIRPORT_CLICK_HINT}</div></div>`;
 }
 
 const WORLD_AIRPORTS_KEY = 'tw_map_world_airports';
@@ -1133,10 +1148,9 @@ export default function RouteMap() {
           }),
           zIndexOffset: 1000,
         });
-        hubMarker.bindTooltip(
-          `<div class="map-tip"><div class="map-tip-title">${airport.code}</div><div class="map-tip-sub">${airport.city}, ${airport.country} <span style="color:${HUB_COLOR}">● ${hubInfo.name.toUpperCase()}</span></div></div>`,
-          { className: 'game-tooltip', offset: [12, 0] },
-        );
+        hubMarker.bindTooltip(networkAirportTip(airport, hubInfo), { className: 'game-tooltip', offset: [12, 0] });
+        // Same as a background dot: the airport's page, with its gate card.
+        hubMarker.on('click', (e) => { L.DomEvent.stopPropagation(e); setDetailCode(airport.code); });
         hubMarker.addTo(map);
         layersRef.current.push(hubMarker);
       } else {
@@ -1159,10 +1173,8 @@ export default function RouteMap() {
           weight: 1.5,
           fillOpacity: 1,
         });
-        marker.bindTooltip(
-          `<div class="map-tip"><div class="map-tip-title">${airport.code}</div><div class="map-tip-sub">${airport.city}, ${airport.country}</div></div>`,
-          { className: 'game-tooltip', offset: [10, 0] },
-        );
+        marker.bindTooltip(networkAirportTip(airport), { className: 'game-tooltip', offset: [10, 0] });
+        marker.on('click', (e) => { L.DomEvent.stopPropagation(e); setDetailCode(airport.code); });
         marker.addTo(map);
         layersRef.current.push(marker);
       }
@@ -1301,7 +1313,7 @@ export default function RouteMap() {
             <span style={{ fontWeight: 600, fontSize: 14 }}>Route Network</span>
             {noNetwork ? (
               <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-                No routes yet{showAirports ? ' — every airport you can fly to is on the map; click one for its details' : ''}
+                No routes yet{showAirports ? ' — every airport you can fly to is on the map; click one to lease a gate there' : ''}
               </span>
             ) : (
             <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
