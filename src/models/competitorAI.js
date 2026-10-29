@@ -44,6 +44,9 @@ import {
 } from './demand.js';
 import { quotePlan } from './lineBook.js';
 import { buildRivalFromSpec, rivalChance } from './rivalSets.js';
+import {
+  buildCargoContest, manageCompetitorCargo, deliverCargoPlan, cargoLaneOf, cargoTailKey,
+} from './competitorCargo.js';
 
 // ─── Personality archetypes ──────────────────────────────────────────────────
 
@@ -440,8 +443,17 @@ export function deliverLinePlans(c, absWeek) {
   const routes  = { ...c.routes };
   let   fleet   = [...(c.fleet ?? [])];
   const loadMap = { ...(c._routeLoad ?? {}) };
+  const cargo   = { ...(c.cargoRoutes ?? {}) };
+  const cargoLoad = { ...(c._cargoLoad ?? {}) };
   const events  = [];
   for (const p of done) {
+    // Freighters for a cargo lane (competitorCargo.js) — their own book.
+    if (cargoLaneOf(p.routeKey) != null) {
+      const r = deliverCargoPlan(c, p, { cargoRoutes: cargo, fleet, cargoLoad });
+      fleet = r.fleet;
+      if (r.delivered && p.event) events.push(p.event);
+      continue;
+    }
     const n   = (p.weeks ?? []).length;
     const cur = routes[p.routeKey];
     if (p.kind === 'launch') {
@@ -468,7 +480,8 @@ export function deliverLinePlans(c, absWeek) {
   }
   const doneIds = new Set(done.map(p => p.id));
   return {
-    carrier: { ...c, routes, fleet, _routeLoad: loadMap, linePlans: plans.filter(p => !doneIds.has(p.id)) },
+    carrier: { ...c, routes, fleet, _routeLoad: loadMap, linePlans: plans.filter(p => !doneIds.has(p.id)),
+               ...(c.cargoRoutes || Object.keys(cargo).length ? { cargoRoutes: cargo, _cargoLoad: cargoLoad } : {}) },
     events,
   };
 }
@@ -508,6 +521,9 @@ export function tickCompetitorAI(competitors, ctx) {
     mergers = true,             // setup option: false = rivals never merge with each other
     startupRate = null,         // setup option: 'off' | 'rare' | 'frequent' (null = normal) — STARTUP_RATE
     startupCap = 0,             // the field size random startups refill to (0 = MAX_ROSTER)
+    cargo = false,              // setup option: rivals open freight lanes (competitorCargo.js)
+    playerCargoRoutes = [],     // state.cargoRoutes — the player's freighters, for the freight contest
+    playerFleet = [],           // state.fleet — to read those freighters' types
   } = ctx ?? {};
   const pressureCfg = RIVAL_PRESSURE[pressure] ?? null;
 
@@ -543,6 +559,11 @@ export function tickCompetitorAI(competitors, ctx) {
 
   // Player is "on the radar" once established — AI attention scales with size.
   const playerNotice = playerNoticeFor(playerMarketCap) * (pressureCfg?.notice ?? 1);
+
+  // Who flies freight where (player + every rival), as the week opens. Built
+  // once: a rival's freight decisions this week see last week's lanes, the
+  // same lag the passenger side has with incumbents.
+  const cargoContest = buildCargoContest(competitors, playerCargoRoutes, playerFleet);
 
   // ── Per-carrier network management ────────────────────────────────────────
   let updated = competitors.map(airline => {
@@ -680,12 +701,14 @@ export function tickCompetitorAI(competitors, ctx) {
                      weeks: q.weeks, cfg, orderedAbs: lines.absWeek, event };
       plans = [...plans, plan];
       lines.add(q.lineId, q.weeks);
-      const [a, b] = key.split('-');
+      const lane = cargoLaneOf(key);
+      const [a, b] = (lane ?? key).split('-');
       const n = q.weeks.length;
       const first = q.weeks[0] - lines.absWeek;
       const last  = q.weeks[n - 1] - lines.absWeek;
-      events.push({ type: 'aircraftOrder', airlineId: c.id, name: c.name, routeKey: key, typeId: type.id, count: n,
-        description: `${c.name} ordered ${n} ${type.name}${n === 1 ? '' : 's'} for ${a} → ${b}`
+      events.push({ type: 'aircraftOrder', airlineId: c.id, name: c.name, routeKey: lane ?? key, typeId: type.id, count: n,
+        ...(lane ? { cargo: true } : {}),
+        description: `${c.name} ordered ${n} ${type.name}${n === 1 ? '' : 's'} for ${a} → ${b}${lane ? ' freight' : ''}`
           + (n === 1 ? `, delivering in ${first} weeks.` : `, delivering in ${first}–${last} weeks.`) });
     };
 
@@ -1083,7 +1106,28 @@ export function tickCompetitorAI(competitors, ctx) {
       }
     }
 
+    // 8. Freight: rivals with a freight arm run it on the same action week,
+    //    out of the same bank account and order book (competitorCargo.js).
+    let cargoOut = null;
+    if (c.cargoRoutes && Object.keys(c.cargoRoutes).length || (cargo && c.tier !== 'budget')) {
+      cargoOut = manageCompetitorCargo(c, {
+        cash, fleet, actEvery, reserve, lastProfit, weekNumber, month, world,
+        contest: cargoContest, playerNotice, paxRoutes: Object.keys(routes).length,
+        launchesAllowed: cargo === true, events,
+        lines, quote, placeOrder, planned,
+        cancelPlans: (key) => {
+          for (const pl of plans) if (pl.routeKey === key) lines.remove(pl.lineId, pl.weeks.filter(w => w >= lines.absWeek));
+          plans = plans.filter(pl => pl.routeKey !== key);
+        },
+        pendingLaunchLanes: new Set(plans.filter(p => p.kind === 'cargoLaunch').map(p => cargoLaneOf(p.routeKey))),
+        lineGiveUpWeeks: AI_LINE_GIVE_UP_WEEKS,
+      });
+      cash  = cargoOut.cash;
+      fleet = cargoOut.fleet;
+    }
+
     return { ...c, routes, fleet, cash, _routeLoss: lossMap, _routeLoad: loadMap,
+             ...(cargoOut ? { cargoRoutes: cargoOut.cargoRoutes, _cargoLoss: cargoOut._cargoLoss, _cargoLoad: cargoOut._cargoLoad } : {}),
              ...((lines || c.linePlans) ? { linePlans: plans } : {}) };
   });
 
@@ -1135,12 +1179,23 @@ export function tickCompetitorAI(competitors, ctx) {
           mergedFleet.push({ ...tail, id: `${buyer.id}-x${tail.id}` });
         }
       }
+      // The freight arm comes too, lane by lane, on the same overlap rule.
+      const mergedCargo = { ...(buyer.cargoRoutes ?? {}) };
+      for (const [key, cfg] of Object.entries(target.cargoRoutes ?? {})) {
+        if (mergedCargo[key]) continue;
+        mergedCargo[key] = { ...cfg };
+        for (const tail of (target.fleet ?? []).filter(f => f.routeKey === cargoTailKey(key))) {
+          mergedFleet.push({ ...tail, id: `${buyer.id}-x${tail.id}` });
+        }
+      }
+      const hasCargo = Object.keys(mergedCargo).length > 0;
       updated = updated
         .filter(c => c.id !== target.id)
         .map(c => c.id !== buyer.id ? c : {
           ...c,
           routes: mergedRoutes,
           fleet:  mergedFleet,
+          ...(hasCargo ? { cargoRoutes: mergedCargo } : {}),
           cash:   (c.cash ?? 0) - price + Math.max(0, target.cash ?? 0),
         });
       events.push({ type: 'merger', airlineId: buyer.id, name: buyer.name, targetName: target.name,

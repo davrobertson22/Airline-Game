@@ -482,8 +482,8 @@ export function laneServed(state, row, { gameDate = null } = {}) {
  * Your side is exactly the freight table's figure — cargoLaneAllocations plus
  * simulateCargoRoute, the tick's own pair — summed over your freighters on the
  * pair, at maturity. A rival's side (Headwinds players publish their freighter
- * capacity on `competitors[].cargoRoutes`; Tailwinds' AI carriers fly no
- * freight) is estimated the way the tick weighs it: its price-weighted capacity's
+ * capacity on `competitors[].cargoRoutes`, and so do Tailwinds' AI carriers'
+ * freight arms — models/competitorCargo.js) is estimated the way the tick weighs it: its price-weighted capacity's
  * share of the lane, never more than it can lift.
  *
  * @returns {{ pool, tonnes, yourTonnes, rivalTonnes, share, yourShare, rivalShare }|null}
@@ -515,7 +515,7 @@ export function cargoLaneServed(state, origin, destination, { gameDate = null } 
       const cap = cr?.tonnesPerWeek ?? 0;
       if (!(cap > 0)) continue;
       const [ra, rb] = String(k).split('-');
-      if (!ra || !rb || metroPairKeyOf(ra, rb) !== key) continue;
+      if (!ra || !rb || metroPairKeyOf(ra, rb) !== metroPairKeyOf(origin, destination)) continue;
       rivalCap += cap;
       rivalYieldCap += (cr.yieldPrice ?? 0) * cap;
     }

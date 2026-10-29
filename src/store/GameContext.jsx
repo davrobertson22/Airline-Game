@@ -106,6 +106,7 @@ import {
 } from '../models/demand.js';
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
+import { buildCargoContest, computeCompetitorCargoStats, withCargoStats, cargoTailKey } from '../models/competitorCargo.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
 import { normalizeStarts } from '../models/schedule.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
@@ -1962,6 +1963,10 @@ function reducer(state, action) {
         ...(_pressure ? { rivalPressure: _pressure } : {}),
         ...(action.rivalMergers === false ? { rivalMergers: false } : {}),
         ...(_startups ? { rivalStartups: _startups } : {}),
+        // Rivals fly freight (competitorCargo.js). On for every new game unless
+        // switched off at setup; saves from before it existed carry no flag and
+        // keep their uncontested freight market.
+        ...(action.rivalFreight === false ? {} : { rivalFreight: true }),
         // Era: the fuel walk opens at the decade's scripted mean (0.43 in 1950),
         // not the modern 1.0 it would otherwise take years to drift down from.
         ...(_startYear != null && eraFuelMean(_startYear) != null
@@ -4710,6 +4715,42 @@ function reducer(state, action) {
         }
       }
 
+      // ── Inherit the freight arm: one cargo route per inherited freighter ───
+      // Same rule as the passenger network above. Rival freighters carry the
+      // routeKey `cargo:<lane>` (competitorCargo.js), so they never land on a
+      // passenger route of the same city pair. The lane keeps the rate the
+      // rival was charging.
+      const inheritedCargo = [];
+      for (const [key, cfg] of Object.entries(target.cargoRoutes ?? {})) {
+        const [a, b] = key.split('-');
+        const dist   = routeDistanceKm(a, b);
+        const yieldPrice = cfg.yieldPrice ?? cargoReferenceYield(a, b);
+        let remaining = cfg.frequency ?? 0;
+        for (const opId of (tailsByRoute[cargoTailKey(key)] ?? []).filter(id => !assignedIds.has(id))) {
+          if (remaining <= 0) break;
+          const opType = getAircraftType(acquiredFleet.find(f => f.id === opId)?.typeId);
+          const cap    = opType ? Math.max(1, maxFrequency(dist, opType)) : remaining;
+          const freq   = Math.min(remaining, cap);
+          assignedIds.add(opId);
+          remaining   -= freq;
+          slotsByAirport[a] = (slotsByAirport[a] ?? 0) + freq;
+          slotsByAirport[b] = (slotsByAirport[b] ?? 0) + freq;
+          inheritedCargo.push({
+            id:              uid(),
+            origin:          a,
+            destination:     b,
+            aircraftId:      opId,
+            yieldPrice,
+            weeklyFrequency: freq,
+            weeksOpen:       0,
+            hub:             state.hub,
+            cargo:           true,
+            inherited:       true,
+            ...(fuelStationsOn(state) ? { tankering: 'auto' } : {}),
+          });
+        }
+      }
+
       // Price/cater the inherited pairs (one set per O&D). Don't clobber a pair the
       // player already operates — they keep their own settings on overlapping routes.
       const acquiredPricing  = { ...(state.routePricing  ?? {}) };
@@ -4753,7 +4794,7 @@ function reducer(state, action) {
         marketCap:    state.marketCap ?? null,
         cash:         state.cash - acquisitionCost + (target.cash ?? 0),
         fleetCount:   finalFleet.filter(a => a.status !== 'retired').length,
-        routeCount:   state.routes.length + inheritedRoutes.length,
+        routeCount:   state.routes.length + inheritedRoutes.length + (state.cargoRoutes?.length ?? 0) + inheritedCargo.length,
         airports:     Object.values(newGates).filter(n => n > 0).length,
         weeksPlayed:  (state.year - 1) * 52 + state.week,
         year:         state.year,
@@ -4765,7 +4806,9 @@ function reducer(state, action) {
           type: 'success',
           icon: '🤝',
           title: `Acquired ${target.name}`,
-          message: `+${inheritedRoutes.length} routes · +${acquiredFleetFinal.length} aircraft`
+          message: `+${inheritedRoutes.length} routes`
+                 + `${inheritedCargo.length > 0 ? ` · +${inheritedCargo.length} freight route${inheritedCargo.length === 1 ? '' : 's'}` : ''}`
+                 + ` · +${acquiredFleetFinal.length} aircraft`
                  + `${surplus > 0 ? ` (${surplus} spare)` : ''} · +${gatesGained} gates`,
           duration: 8000,
         },
@@ -4775,6 +4818,7 @@ function reducer(state, action) {
         ...state,
         cash:                state.cash - acquisitionCost + (target.cash ?? 0),
         routes:              [...state.routes, ...inheritedRoutes],
+        ...(inheritedCargo.length > 0 ? { cargoRoutes: [...(state.cargoRoutes ?? []), ...inheritedCargo] } : {}),
         routePricing:        acquiredPricing,
         routeCatering:       acquiredCatering,
         fleet:               finalFleet,
@@ -5759,6 +5803,10 @@ function reducer(state, action) {
           ...(state.rivalMergers === false ? { mergers: false } : {}),
           ...(state.rivalStartups ? { startupRate: state.rivalStartups } : {}),
           ...(state.rivalStartupCap ? { startupCap: state.rivalStartupCap } : {}),
+          // Rivals' freight arms contest the player's freighters (setup option).
+          cargo:             state.rivalFreight === true,
+          playerCargoRoutes: state.cargoRoutes ?? [],
+          playerFleet:       state.fleet ?? [],
           // Production-line games: rivals order aircraft off the shared lines
           // and wait for them. The ledger starts at the week being entered —
           // the week this tick's deliveries land.
@@ -5776,8 +5824,14 @@ function reducer(state, action) {
       // instead of hoarding (keeps late-game acquisitions attainable).
       const approxMonth = gameMonth;
       const compPairCounts = buildPairIncumbents(aiCompetitors, state.routes);
+      // Freight lanes share their pool the same way: every rival freighter and
+      // the player's, on the lanes as they stand after this week's moves.
+      const compCargoContest = aiCompetitors.some(c => c.cargoRoutes && Object.keys(c.cargoRoutes).length)
+        ? buildCargoContest(aiCompetitors, state.cargoRoutes ?? [], state.fleet ?? []) : null;
       const updatedCompetitors = aiCompetitors.map(c => {
-        const stats            = computeCompetitorWeeklyStats(c, approxMonth, compPairCounts, aiWorld);
+        const stats            = withCargoStats(
+          computeCompetitorWeeklyStats(c, approxMonth, compPairCounts, aiWorld),
+          compCargoContest ? computeCompetitorCargoStats(c, { month: approxMonth, contest: compCargoContest, world: aiWorld }) : null);
         const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =
@@ -5810,6 +5864,10 @@ function reducer(state, action) {
           newToasts.push({ type: 'danger', title: `🔥 Fare War — ${ev.name}`, message: ev.description, duration: 10000 });
         } else if (ev.type === 'fareWarEnd') {
           newToasts.push({ type: 'info', title: `🕊️ Fare War Over — ${ev.name}`, message: ev.description, duration: 7000 });
+        } else if (ev.type === 'cargoLaunch' && ev.attackedPlayer) {
+          // A rival's freighters on one of your freight lanes: your tonnage on
+          // it drops from next week, so say so rather than let it go quiet.
+          newToasts.push({ type: 'warning', title: `📦 ${ev.name} Competes For Your Freight`, message: ev.description, duration: 9000 });
         }
       }
 

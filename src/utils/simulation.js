@@ -3007,7 +3007,10 @@ export function cargoLaneAllocations(cargoRoutes = [], fleet = [], demandMultipl
     groups.get(rk).push({ route, type });
   }
   for (const [rk, group] of groups) {
-    const rivalLane    = rivalByLane.get(rk) ?? null;
+    // Rivals are rolled up by METRO lane (above); own routes group by airport
+    // pair. Look the rival side up by the group's metro key, or a rival on
+    // EWR–FRA never met the player's EWR–FRA (the metro key is JFK's).
+    const rivalLane    = rivalByLane.get(metroPairKeyOf(group[0].route.origin, group[0].route.destination)) ?? null;
     const rivalLaneCap = rivalLane?.cap ?? 0;
     // A lane is contested when the PLAYER flies ≥2 routes on it (own pooling) OR
     // a rival also flies it. A single own route with no rival stays "solo" and

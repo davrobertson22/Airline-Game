@@ -42,6 +42,8 @@ const COMPETITOR_TIER = {
   fareWarEnd: 2, mktBlitz: 2, launch: 2, cut: 2, recovered: 2,
   allianceJoin: 2, allianceLeave: 2,
   quality: 3, boost: 3, trim: 3, aircraftOrder: 3,
+  // Rival freight arms (competitorCargo.js).
+  cargoLaunch: 2, cargoCut: 2, cargoBoost: 3, cargoTrim: 3,
 };
 
 // High-volume competitor actions. A busy world produces roughly five route
@@ -50,15 +52,19 @@ const COMPETITOR_TIER = {
 // "carriers launched 5 new routes" line you can open, rather than five lines
 // that bury the fare war underneath them. The rarer events (fare wars, mergers,
 // failures, distress) are never rolled — each one matters on its own.
-const ROLLABLE_COMPETITOR = new Set(['launch', 'cut', 'boost', 'trim', 'aircraftOrder']);
+const ROLLABLE_COMPETITOR = new Set(['launch', 'cut', 'boost', 'trim', 'aircraftOrder',
+  'cargoLaunch', 'cargoCut', 'cargoBoost', 'cargoTrim']);
 
-const ROLLUP_VERB = { launch: 'launched', cut: 'withdrew from', boost: 'added capacity on', trim: 'trimmed capacity on', aircraftOrder: 'had new aircraft ordered' };
+const ROLLUP_VERB = { launch: 'launched', cut: 'withdrew from', boost: 'added capacity on', trim: 'trimmed capacity on', aircraftOrder: 'had new aircraft ordered',
+  // Freight rollups read "N freight lanes <verb> across the market" (News.jsx).
+  cargoLaunch: 'opened', cargoCut: 'abandoned', cargoBoost: 'stepped up', cargoTrim: 'cut back' };
 
 const COMPETITOR_ICON = {
   bankrupt: '📉', ceased: '🛬', merger: '🤝', startup: '🚀', fireSale: '🏷️', recovered: '📈',
   fareWar: '⚔️', fareWarEnd: '🕊️', mktBlitz: '📣', secondHub: '🏛️',
   launch: '🛫', cut: '🛬', boost: '📈', trim: '📉', quality: '⭐',
   allianceJoin: '🤝', allianceLeave: '💔', aircraftOrder: '🏭',
+  cargoLaunch: '📦', cargoCut: '📦', cargoBoost: '📦', cargoTrim: '📦',
 };
 
 /**

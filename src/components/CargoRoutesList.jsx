@@ -10,6 +10,7 @@ import { Glyph, GlyphLabel } from './Icons.jsx';
 import OutOfRangeBadge from './OutOfRangeBadge.jsx';
 import { useToast } from './ToastSystem.jsx';
 import NumberStepper from './NumberStepper.jsx';
+import { cargoRivalsOnLane } from '../models/competitorCargo.js';
 
 const ACCENT = '#e8833a';
 const CARGO_PAGE_SIZE = 60;
@@ -68,7 +69,11 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
       const sim      = aircraft ? simulateCargoRoute(route, aircraft, gd, null, 1.0, 1.0, alloc.get(route.id) ?? null) : null;
-      return { route, aircraft, type, sim, pooled: alloc.has(route.id) };
+      // "Shared lane" is about YOUR freighters sharing a pool; a lane a rival
+      // contests gets an allocation too, but that's the rivals chip below.
+      return { route, aircraft, type, sim,
+               pooled: (alloc.get(route.id)?.laneRoutes ?? 0) >= 2,
+               rivals: cargoRivalsOnLane(state.competitors, route.origin, route.destination) };
     });
   }, [cargoRoutes, fleet, gd, state.competitors]);
 
@@ -162,6 +167,39 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
       {viewMode === 'table'
         ? <CargoTable rows={rows} controls={controls} />
         : rows.map(r => <CargoRouteCard key={r.route.id} {...r} controls={controls} />)}
+    </div>
+  );
+}
+
+// ─── Rival freighters on a lane ─────────────────────────────────────────────────
+
+function rivalsTitle(rivals) {
+  return 'Rival freighters on this lane take their share of its freight, more of it the more they lift and the cheaper they price:\n'
+    + rivals.map(r => `${r.name}: ${r.tonnesPerWeek.toLocaleString()} t/wk${r.frequency ? `, ${r.frequency}×/wk` : ''}`
+      + `${r.aircraftType ? ` (${getAircraftType(r.aircraftType)?.name ?? r.aircraftType})` : ''}`
+      + `${r.yieldPrice != null ? ` at $${r.yieldPrice.toFixed(3)}/t-km` : ''}`).join('\n');
+}
+
+/** Chip on a freight lane a rival also flies. */
+export function CargoRivalsChip({ rivals, style }) {
+  if (!rivals?.length) return null;
+  return (
+    <span
+      style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(251,191,36,0.12)', color: 'var(--yellow)', border: '1px solid rgba(251,191,36,0.35)', textTransform: 'uppercase', letterSpacing: '.04em', ...style }}
+      title={rivalsTitle(rivals)}
+    >
+      <Glyph e="⚔" /> {rivals.length === 1 ? rivals[0].name : `${rivals.length} rivals`}
+    </span>
+  );
+}
+
+/** One line naming who else flies the lane, for the expanded row and the card. */
+function CargoRivalsLine({ rivals }) {
+  if (!rivals?.length) return null;
+  return (
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+      <Glyph e="⚔" /> Competing for this freight: {rivals.map(r =>
+        `${r.name} (${r.tonnesPerWeek.toLocaleString()} t/wk${r.yieldPrice != null ? ` at $${r.yieldPrice.toFixed(3)}` : ''})`).join(' · ')}
     </div>
   );
 }
@@ -274,7 +312,7 @@ function CargoTable({ rows, controls }) {
 }
 
 function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
-  const { route, aircraft, type, sim, pooled } = row;
+  const { route, aircraft, type, sim, pooled, rivals } = row;
   const oa = getAirport(route.origin);
   const da = getAirport(route.destination);
 
@@ -324,6 +362,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
               <Glyph e="⚖" /> Shared lane
             </span>
           )}
+          <CargoRivalsChip rivals={rivals} style={{ marginLeft: 6 }} />
         </td>
         <td style={{ ...RIGHT, color: 'var(--text-muted)' }}>{sim ? `${sim.distance.toLocaleString()} km` : '—'}</td>
         <td style={RIGHT}>{route.weeklyFrequency}×</td>
@@ -344,6 +383,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
             <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '4px 0 10px' }}>
               {aircraft ? `${aircraft.name}${aircraft.tailNumber ? ` · ${aircraft.tailNumber}` : ''}` : <GlyphLabel size={12} text="⚠ no freighter assigned" />}
               {type && ` · ${type.payloadTonnes}t payload`}
+              <CargoRivalsLine rivals={rivals} />
             </div>
             <CargoRouteControls route={route} sim={sim} controls={controls} />
           </td>
@@ -411,7 +451,7 @@ function CargoRouteControls({ route, sim, controls }) {
 
 // ─── Card view (same layout as before, sharing the controls with the table) ─────
 
-function CargoRouteCard({ route, aircraft, type, sim, pooled, controls }) {
+function CargoRouteCard({ route, aircraft, type, sim, pooled, rivals, controls }) {
   const lf = sim?.loadFactor ?? 0;
   const lfColor = lf >= 0.75 ? 'var(--green)' : lf >= 0.45 ? 'var(--yellow)' : 'var(--red)';
 
@@ -431,6 +471,7 @@ function CargoRouteCard({ route, aircraft, type, sim, pooled, controls }) {
                 <Glyph e="⚖" /> Shared lane
               </span>
             )}
+            <CargoRivalsChip rivals={rivals} />
             {aircraft?.status === 'grounded' && (
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
@@ -448,6 +489,7 @@ function CargoRouteCard({ route, aircraft, type, sim, pooled, controls }) {
             {type && ` · ${type.payloadTonnes}t payload`}
             {sim && ` · ${sim.distance.toLocaleString()} km`}
           </div>
+          <CargoRivalsLine rivals={rivals} />
         </div>
 
         {/* Middle: stats */}

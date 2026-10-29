@@ -157,7 +157,9 @@ function compose(item) {
       if (d.description) return { headline: '', sub: d.description, standalone: true };
       if (d.total > 1) {
         return {
-          headline: `${plural(d.total, 'route', 'routes')} ${d.verb ?? 'changed'} across the market`,
+          headline: String(d.eventType ?? '').startsWith('cargo')
+            ? `${plural(d.total, 'freight lane', 'freight lanes')} ${d.verb ?? 'changed'} across the market`
+            : `${plural(d.total, 'route', 'routes')} ${d.verb ?? 'changed'} across the market`,
           standalone: true,
           list: (d.entries ?? []).map((e) => `${e.airline ?? 'A carrier'} · ${pair(e.routeKey) ?? '—'}`),
         };

@@ -2846,7 +2846,11 @@ export function healAnachronisticCompetitorFleets(competitors, calYear) {
       swapped.set(routeKey, type.id);
     }
     const fleet = (c.fleet ?? [])
-      .filter(tail => routes[tail.routeKey] != null || tail.routeKey == null)
+      // Freighter tails (routeKey `cargo:…`, competitorCargo.js) fly freight
+      // lanes, not passenger routes — the heal never touches them. Rival
+      // freighters are only ever bought from the era's own market.
+      .filter(tail => routes[tail.routeKey] != null || tail.routeKey == null
+        || String(tail.routeKey).startsWith('cargo:'))
       .map(tail => swapped.has(tail.routeKey) ? { ...tail, typeId: swapped.get(tail.routeKey) } : tail);
     return { ...c, routes, fleet };
   });

@@ -115,3 +115,37 @@ weekly tick fills tonnes against yield with elasticity -> profit flows to Financ
 - `src/utils/simulation.js` — `simulateCargoRoute`
 - game state / context     — `cargoRoutes`
 - UI — cargo surfaces paralleling Routes / Marketplace / Finance
+
+---
+
+## Update (Oct 2026): AI freighter competitors — BUILT
+
+Superseding "AI freighter competitors" in §4. Freight was made contested across
+airlines first (the `competitors[].cargoRoutes` channel in `cargoLaneAllocations`,
+built for Headwinds' human rivals); Tailwinds' AI now publishes on it.
+
+- **Module:** `src/models/competitorCargo.js`. Called from `tickCompetitorAI` on a
+  carrier's action week (step 8, after the passenger network), sharing its cash and
+  production-line order book. Weekly P&L folds into `weeklyStats` in GameContext.
+- **Shape:** `c.cargoRoutes[laneKey] = { aircraftType, frequency, tails, yieldMultiplier,
+  tonnesPerWeek, yieldPrice, openedWeek }`; freighter tails live in `c.fleet` with
+  `routeKey: 'cargo:<lane>'` and `cargo: true` (never collide with a passenger route).
+- **Economics:** the player's own — `simulateCargoRoute` with a pre-allocated demand,
+  plus landing fees and lease + maintenance per tail — then two AI stand-ins:
+  ×1.5 on fuel+crew (as AI passenger routes) and 30% of revenue as sales cost
+  (forwarders, trucking). Without them a 777F lane out-earned the rival's whole
+  passenger airline; with them freight is ~15–20% of AI profit over a 5-year run.
+- **Contest:** symmetric. Each carrier's demand = pool × own elasticity × own cap /
+  (own cap + everyone else's price-weighted cap), by metro lane — the player is one
+  entry. Fixed alongside: the player's side looked rivals up by airport key while
+  storing them by metro key, so a rival on EWR–FRA never met the player there.
+- **Who:** legacy + premium only; 2 lanes, +2 at a cargoScore ≥ 70 hub, +1 expansionist;
+  from week 13, ≥ 5 passenger routes, profitable, cash > 2× reserve; 35% chance per
+  action week. Copycat/aggressive weight the player's freight lanes by notice.
+  Fleet preference is strict for freighters (preferred makers or no freight).
+- **Lifecycle:** trim thin lanes, cut after 12 loss-weeks, grow full ones (≤14×/wk,
+  ≤4 tails); mergers carry lanes + tails; `ACQUIRE_COMPETITOR` turns each freighter
+  into a player cargo route at the rival's rate; era heal leaves freighter tails alone.
+- **Flag:** `state.rivalFreight` — set on every new game unless switched off at setup
+  ("Rivals fly freight"). Older saves have no flag and keep an uncontested freight market.
+- **Tests:** `tools/competitor-cargo-test.mjs`, `tools/competitor-cargo-ui-test.mjs`.

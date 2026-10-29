@@ -15,6 +15,7 @@ import AirlineLogo from './AirlineLogo.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { buyoutNudgeToast } from '../utils/headwinds.js';
 import { exportRivalSet } from '../models/rivalSets.js';
+import { metroPairKeyOf } from '../data/metros.js';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,10 @@ export default function Competition() {
   // routeKey → the player's TOTAL presence on that pair (all aircraft, all
   // schedules folded together — see buildPlayerPairMap).
   const playerRouteMap = buildPlayerPairMap(routes, fleet, weekToGameDate(state.week).monthIndex);
+  // Metro lanes your freighters fly — a rival freight lane on one is contested.
+  const playerCargoLanes = useMemo(
+    () => new Set((state.cargoRoutes ?? []).map(r => metroPairKeyOf(r.origin, r.destination))),
+    [state.cargoRoutes]);
 
   // Routes where at least one competitor overlaps with the player
   // A pair is contested by a rival NONSTOP or by a rival ONE-STOP over its hub
@@ -203,6 +208,7 @@ export default function Competition() {
             key={c.id}
             carrier={c}
             playerRouteMap={playerRouteMap}
+            playerCargoLanes={playerCargoLanes}
             playerCash={state.cash}
             expanded={expandedCarrier === c.id}
             onToggle={() => setExpandedCarrier(p => p === c.id ? null : c.id)}
@@ -799,9 +805,10 @@ function CompetitiveHints({ playerRoute, playerQual, competitors, routeKey, refP
   );
 }
 
-function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle, onAcquire }) {
+function NetworkPanel({ carrier, playerRouteMap, playerCargoLanes = new Set(), playerCash, expanded, onToggle, onAcquire }) {
   const tier   = TIER_META[carrier.tier] ?? { label: carrier.tier, color: 'var(--text-muted)' };
   const routes = Object.entries(carrier.routes).sort(([a], [b]) => a.localeCompare(b));
+  const cargoLanes = Object.entries(carrier.cargoRoutes ?? {}).sort(([a], [b]) => a.localeCompare(b));
   const arch     = carrier._archetype ? ARCHETYPES[carrier._archetype] : null;
   const alliance = getAlliance(effectiveAllianceId(carrier));
   const atWar    = carrier._fareWars && Object.keys(carrier._fareWars).length > 0;
@@ -865,6 +872,11 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
             hub {carrier.homeHub}{carrier.secondaryHub ? ` +${carrier.secondaryHub}` : ''}
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{routes.length} routes</span>
+          {cargoLanes.length > 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              · <Glyph e="📦" /> {cargoLanes.length} freight lane{cargoLanes.length === 1 ? '' : 's'}
+            </span>
+          )}
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· quality {carrier.baseQualityScore}/100</span>
           {hasMarketCap && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -948,6 +960,58 @@ function NetworkPanel({ carrier, playerRouteMap, playerCash, expanded, onToggle,
               })}
             </tbody>
           </table>
+          {cargoLanes.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, borderTop: '1px solid var(--border)' }}>
+              <thead>
+                <tr style={{ color: 'var(--text-muted)', background: 'var(--surface2)' }}>
+                  <th style={{ textAlign: 'left',  padding: '6px 14px', fontWeight: 500 }}><Glyph e="📦" /> Freight lane</th>
+                  <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>Rate</th>
+                  <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>vs ref</th>
+                  <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>Freq</th>
+                  <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 500 }}>Lift</th>
+                  <th style={{ textAlign: 'left',  padding: '6px 14px', fontWeight: 500 }}>Freighters</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cargoLanes.map(([key, cfg]) => {
+                  const [a, b] = key.split('-');
+                  const isShared = playerCargoLanes.has(metroPairKeyOf(a, b));
+                  const mult = cfg.yieldMultiplier ?? 1;
+                  return (
+                    <tr key={key} style={{
+                      borderTop: '1px solid var(--border)',
+                      background: isShared ? 'rgba(251,191,36,0.05)' : 'transparent',
+                    }}>
+                      <td style={{ padding: '7px 14px' }}>
+                        <span style={{ fontWeight: 600 }}><AirportLink code={a} />–<AirportLink code={b} /></span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>
+                          {getAirport(a)?.city ?? a}–{getAirport(b)?.city ?? b}
+                        </span>
+                        {isShared && (
+                          <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--yellow)', fontWeight: 600 }}
+                            title="Your freighters fly this lane too: you split its freight">
+                            <Glyph e="⚔" /> contested
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '7px 12px', fontWeight: 700 }}>
+                        <span style={{ color: priceColor(mult) }}>${(cfg.yieldPrice ?? 0).toFixed(3)}</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>/t-km</span>
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '7px 12px', color: 'var(--text-muted)' }}>
+                        {Math.round(mult * 100)}%
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '7px 12px' }}>{cfg.frequency}×/wk</td>
+                      <td style={{ textAlign: 'right', padding: '7px 12px' }}>{(cfg.tonnesPerWeek ?? 0).toLocaleString()} t/wk</td>
+                      <td style={{ padding: '7px 14px', color: 'var(--text-muted)', fontSize: 11 }}>
+                        {`${cfg.tails ?? 1}× ${getAircraftType(cfg.aircraftType)?.name ?? cfg.aircraftType}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
@@ -963,6 +1027,7 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
   const netCost         = acquisitionCost - (target.cash ?? 0);
   const canAfford       = playerCash >= acquisitionCost;
   const routeCount      = Object.keys(target.routes ?? {}).length;
+  const cargoCount      = Object.keys(target.cargoRoutes ?? {}).length;
   const tier            = TIER_META[target.tier] ?? { label: target.tier, color: 'var(--text-muted)' };
 
   // Preview the fleet + gates that transfer with the airline.
@@ -970,6 +1035,12 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
   Object.entries(target.routes ?? {}).forEach(([key, cfg]) => {
     const [a, b] = key.split('-');
     const f = cfg.frequency ?? 7;
+    slotsByAirport[a] = (slotsByAirport[a] ?? 0) + f;
+    slotsByAirport[b] = (slotsByAirport[b] ?? 0) + f;
+  });
+  Object.entries(target.cargoRoutes ?? {}).forEach(([key, cfg]) => {
+    const [a, b] = key.split('-');
+    const f = cfg.frequency ?? 0;
     slotsByAirport[a] = (slotsByAirport[a] ?? 0) + f;
     slotsByAirport[b] = (slotsByAirport[b] ?? 0) + f;
   });
@@ -1023,6 +1094,9 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
           <DealRow label="You receive. Their cash" value={`+${formatMoney(target.cash ?? 0)}`} color="var(--green)" />
           <DealRow label="You receive · routes" value={`+${routeCount}`} color="var(--green)" />
+          {cargoCount > 0 && (
+            <DealRow label="You receive · freight lanes" value={`+${cargoCount}`} color="var(--green)" />
+          )}
           <DealRow label="You receive · aircraft" value={`+${aircraftGained}`} color="var(--green)" />
           <DealRow label="You receive · staff" value="Their crews" color="var(--green)" />
           <DealRow label="You receive, gate slots" value={`+${gatesGained}`} color="var(--green)" />
@@ -1048,6 +1122,15 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
               {routeCount > 12 && (
                 <span style={{ color: 'var(--text-muted)', padding: '2px 4px' }}>+{routeCount - 12} more</span>
               )}
+              {Object.keys(target.cargoRoutes ?? {}).map(key => {
+                const [a, b] = key.split('-');
+                return (
+                  <span key={`cargo:${key}`} style={{ background: 'var(--surface)', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}
+                    title="Freight lane: its freighters become yours and keep flying it">
+                    <Glyph e="📦" /> {a}–{b}
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}

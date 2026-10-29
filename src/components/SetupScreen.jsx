@@ -129,6 +129,7 @@ export default function SetupScreen() {
   const [rivalCount,        setRivalCount]        = useState('normal');   // 'few' | 'normal' | 'many'
   const [rivalPressure,     setRivalPressure]     = useState('normal');   // 'relaxed' | 'normal' | 'fierce'
   const [rivalMergers,      setRivalMergers]      = useState(true);
+  const [rivalFreight,      setRivalFreight]      = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
   const fileInputRef = useRef(null);
   const cardRef = useRef(null);
@@ -225,6 +226,7 @@ export default function SetupScreen() {
       ...(rivalCount !== 'normal' && !(rivalSource === 'custom' && rivalMode === 'replace') ? { rivalCount } : {}),
       ...(rivalPressure !== 'normal' ? { rivalPressure } : {}),
       ...(!rivalMergers ? { rivalMergers: false } : {}),
+      ...(!rivalFreight ? { rivalFreight: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
     });
   }
@@ -859,6 +861,15 @@ export default function SetupScreen() {
             </label>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
               {rivalMergers ? 'A strong rival sometimes buys a struggling one.' : 'Rivals never buy each other. You can still buy them.'}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={rivalFreight} onChange={e => setRivalFreight(e.target.checked)} />
+              Rivals fly freight
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {rivalFreight
+                ? 'Established full-service rivals start freighter lanes from their hubs and compete with yours for the freight.'
+                : 'Freight stays yours alone: rivals never fly freighters.'}
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />
