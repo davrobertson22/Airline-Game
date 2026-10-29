@@ -15,7 +15,8 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon } from './components/Icons.jsx';
+import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
+import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite } from './components/MapShell.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
 import Competition from './components/Competition.jsx';
@@ -190,7 +191,15 @@ function AppInner() {
   // server owns time and persistence there, so solo-only chrome (Next Week,
   // Save/Load, New Game) is hidden. Always falsy in the solo game.
   const { state, dispatch, remote, hydrated } = useGame();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Classic (top bar + tabs) or map-first (components/MapShell.jsx), per
+  // browser. In map-first the 'map' tab means "no panel open". The map-first
+  // layout is opt-in: classic invites the player to try it until they have, or
+  // have said no thanks.
+  const [layout, setLayout] = useState(readLayout);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const [layoutInvite, setLayoutInvite] = useState(readInviteOpen);
+  const [activeTab, setActiveTab] = useState(() => (readLayout() === 'map' ? MAP_TAB : 'dashboard'));
   const [openGroup, setOpenGroup] = useState(null);
   const [menuPos, setMenuPos] = useState(null);
   const [showTour, setShowTour] = useState(false);
@@ -260,7 +269,9 @@ function AppInner() {
     // The horizon is a hard stop: 2050 week 52 is the last week flown.
     if (state.phase === 'ended') return;
     dispatch({ type: 'ADVANCE_WEEK' });
-    setActiveTab('dashboard');
+    // Classic jumps to the Dashboard; map-first leaves the player where they
+    // are (the weekly debrief still opens over either).
+    if (layoutRef.current !== 'map') setActiveTab('dashboard');
     resetTimer();
 
     weeksSinceAd.current += 1;
@@ -367,6 +378,14 @@ function AppInner() {
   }
 
   const navigate = (id) => { setActiveTab(id); setOpenGroup(null); };
+  const switchLayout = (next) => {
+    const l = writeLayout(next);
+    setLayout(l);
+    if (l === 'map') setLayoutInvite(false);
+    setActiveTab(l === 'map' ? MAP_TAB : 'dashboard');
+    setOpenGroup(null);
+    setShowMobileMenu(false);
+  };
 
   const tabContent = {
     dashboard:   <Dashboard />,
@@ -391,341 +410,51 @@ function AppInner() {
     wiki:        <Wiki />,
   };
 
-  return (
-    <div className="app-layout">
-      {/* Top bar */}
-      <div className="topbar">
-        <div className="topbar-logo">
-          <span className="topbar-logo-icon"><TailwindsMark size={20} /></span>
-          Tailwinds - Airline Manager
-          <StageTag />
-        </div>
-        <div className="topbar-sep" />
-        <button
-          type="button"
-          onClick={() => setShowBranding(true)}
-          title="Edit airline branding"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'none', border: 'none', padding: 0, margin: 0,
-            cursor: 'pointer', color: 'inherit',
-          }}
-        >
-          <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
-          <div className="topbar-airline">{state.airlineName}</div>
-        </button>
-        <div className="topbar-spacer" />
-        <div className="topbar-kpis">
-          <div className="topbar-kpi">
-            <span className="topbar-kpi-label">DATE</span>
-            <span className="topbar-kpi-value" style={{ fontSize: 13 }}>{formatGameDate(state)}</span>
-          </div>
-          <div className="topbar-kpi-divider" />
-          <div className="topbar-kpi">
-            <span className="topbar-kpi-label">CASH</span>
-            <span className={`topbar-cash ${state.cash < 0 ? 'negative' : ''}`}>
-              {formatMoney(state.cash)}
-            </span>
-          </div>
-        </div>
+  // The footer closes every page (classic) or panel (map-first).
+  const footer = (
+    <footer className="app-footer app-footer-inline">
+      <div style={{ marginBottom: 8 }}>
         {!remote && (
-        <button className="btn-advance" onClick={handleAdvanceWeek} title="Advance now (auto-advances in the shown time)">
-          Next Week › <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>{formatCountdown(timeUntilNextWeek)}</span>
-        </button>
+          <a href="/?home" style={{ color: 'var(--accent)', textDecoration: 'none', marginRight: 16, fontSize: 12, fontWeight: 600 }}>← Home</a>
         )}
-        {!isMobile && (<>
-        {!remote && (<>
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          onClick={() => setSaveLoadMode('save')}
-          title="Save game to a slot"
-        >
-          <SaveIcon size={13} /> Save
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          onClick={() => setSaveLoadMode('load')}
-          title="Load a saved game"
-        >
-          <FolderOpenIcon size={13} /> Load
-        </button>
-        </>)}
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px' }}
-          onClick={() => setShowTour(true)}
-          title="How to play"
-        >
-          ?
-        </button>
-        <a
-          className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}
-          href="https://discord.com/invite/B7zP8X3YGm"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Join the Tailwinds community on Discord"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-          Discord
-        </a>
-        {/* Always-visible ask: one quiet button in the top bar, never a popup. */}
-        <a
-          className="btn btn-ghost"
-          style={{
-            fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 5,
-            textDecoration: 'none', color: 'var(--accent-bright)', borderColor: 'var(--accent)', fontWeight: 600,
-          }}
-          href={KOFI_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Tailwinds is free and built by one person. Chip in on Ko-fi to help cover the servers."
-        >
-          <span aria-hidden="true" style={{ color: '#ff5e5b' }}>♥</span> Support
-        </a>
-        {!remote && (
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 12, padding: '5px 10px' }}
-          onClick={handleReset}
-        >
-          New Game
-        </button>
-        )}
-        </>)}
-        {isMobile && (
-          <div className="topbar-menu-wrap">
-            <button
-              className="btn btn-ghost topbar-menu-btn"
-              onClick={() => setShowMobileMenu(v => !v)}
-              aria-label="More actions"
-              aria-expanded={showMobileMenu}
-            >
-              ⋯
-            </button>
-            {showMobileMenu && (
-              <>
-                <div className="topbar-menu-backdrop" onClick={() => setShowMobileMenu(false)} />
-                <div className="topbar-menu" role="menu">
-                  <div className="topbar-menu-date" aria-hidden="true">
-                    <span>{formatGameDate(state)}</span>
-                  </div>
-                  {!remote && (<>
-                  <button role="menuitem" onClick={() => { setSaveLoadMode('save'); setShowMobileMenu(false); }}>
-                    <SaveIcon size={14} /> Save game
-                  </button>
-                  <button role="menuitem" onClick={() => { setSaveLoadMode('load'); setShowMobileMenu(false); }}>
-                    <FolderOpenIcon size={14} /> Load game
-                  </button>
-                  </>)}
-                  <button role="menuitem" onClick={() => { setShowTour(true); setShowMobileMenu(false); }}>
-                    <span style={{ width: 14, textAlign: 'center', fontWeight: 700 }}>?</span> How to play
-                  </button>
-                  <a
-                    role="menuitem"
-                    href="https://discord.com/invite/B7zP8X3YGm"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setShowMobileMenu(false)}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-                    Discord
-                  </a>
-                  <a
-                    role="menuitem"
-                    href={KOFI_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setShowMobileMenu(false)}
-                    style={{ color: 'var(--accent-bright)', fontWeight: 600 }}
-                  >
-                    <span aria-hidden="true" style={{ width: 14, textAlign: 'center', color: '#ff5e5b' }}>♥</span> Support Tailwinds
-                  </a>
-                  {!remote && (
-                  <button role="menuitem" className="topbar-menu-danger" onClick={() => { setShowMobileMenu(false); handleReset(); }}>
-                    New Game
-                  </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Nav tabs (grouped) */}
-      <div className="nav-tabs">
-        {NAV_GROUPS.map((grp) => {
-          if (!grp.children) {
-            const t = TABS_BY_ID[grp.id];
-            const Icon = t.Icon;
-            return (
-              <button
-                key={grp.id}
-                className={`nav-tab ${activeTab === grp.id ? 'active' : ''}`}
-                onClick={() => navigate(grp.id)}
-              >
-                <Icon size={14} />
-                <span>{t.label}</span>
-              </button>
-            );
-          }
-          const GroupIcon = grp.Icon;
-          const activeChild = grp.children.includes(activeTab);
-          const open = openGroup === grp.label;
-          return (
-            <div key={grp.label} className="nav-group">
-              <button
-                className={`nav-tab ${activeChild ? 'active' : ''} ${open ? 'open' : ''}`}
-                onClick={(e) => {
-                  if (open) { setOpenGroup(null); return; }
-                  const r = e.currentTarget.getBoundingClientRect();
-                  // Clamp inside the viewport: a partially-scrolled nav tab can
-                  // have r.left < 0 (menu clipped off the left edge on phones),
-                  // and a right-edge tab can push the 190px menu off the right.
-                  const menuW = 200;
-                  const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
-                  setMenuPos({ top: r.bottom + 4, left });
-                  setOpenGroup(grp.label);
-                }}
-                aria-expanded={open}
-              >
-                <GroupIcon size={14} />
-                <span>{grp.label}</span>
-                <span className="nav-caret" aria-hidden="true">▾</span>
-              </button>
-              {open && menuPos && createPortal(
-                <>
-                  <div className="nav-group-backdrop" onClick={() => setOpenGroup(null)} />
-                  <div className="nav-group-menu" role="menu" style={{ top: menuPos.top, left: menuPos.left }}>
-                    {grp.children.map((cid) => {
-                      const ct = TABS_BY_ID[cid];
-                      const CIcon = ct.Icon;
-                      const pinned = favourites.includes(cid);
-                      return (
-                        <div key={cid} className="nav-menu-row">
-                          <button
-                            role="menuitem"
-                            className={activeTab === cid ? 'active' : ''}
-                            onClick={() => navigate(cid)}
-                          >
-                            <CIcon size={14} />
-                            <span>{ct.label}</span>
-                          </button>
-                          <button
-                            type="button"
-                            data-nav-pin={cid}
-                            className={`nav-fav-star${pinned ? ' on' : ''}`}
-                            aria-pressed={pinned}
-                            aria-label={pinned ? `Unpin ${ct.label} from the shortcuts bar` : `Pin ${ct.label} to the shortcuts bar`}
-                            title={pinned
-                              ? 'Unpin from the shortcuts bar'
-                              : favouritesFull
-                                ? `The shortcuts bar holds ${NAV_FAVOURITES_LIMIT} — unpin one first`
-                                : 'Pin to the shortcuts bar under the menus'}
-                            disabled={!pinned && favouritesFull}
-                            onClick={(e) => { e.stopPropagation(); toggleNavFavourite(cid); }}
-                          >
-                            {pinned ? '★' : '☆'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {favourites.length === 0 && (
-                      <div className="nav-fav-hint">☆ pins a page to a shortcuts bar under the menus</div>
-                    )}
-                  </div>
-                </>,
-                document.body
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Shortcuts bar — the pages pinned with ☆ in the menus above */}
-      {favourites.length > 0 && (
-        <div className="nav-favs" role="toolbar" aria-label="Shortcuts">
-          {favourites.map((id) => {
-            const t = TABS_BY_ID[id];
-            const Icon = t.Icon;
-            return (
-              <div key={id} className="nav-fav-wrap">
-                <button
-                  type="button"
-                  data-nav-fav={id}
-                  className={`nav-fav ${activeTab === id ? 'active' : ''}`}
-                  onClick={() => navigate(id)}
-                >
-                  <Icon size={12} />
-                  <span>{t.label}</span>
-                </button>
-                <button
-                  type="button"
-                  className="nav-fav-x"
-                  aria-label={`Unpin ${t.label}`}
-                  title={`Unpin ${t.label}`}
-                  onClick={() => toggleNavFavourite(id)}
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Page content */}
-      <div className="main-content">
-        {tabContent[activeTab]}
-        {/* The ask, on the Dashboard only — not on every tab, and never over
-            the game or at a moment the player has just lost money. */}
-        {activeTab === 'dashboard' && <SupportCard />}
-        {/* Disclaimer lives at the end of the scrollable content (desktop +
-            mobile) so it's reachable on scroll without permanently occupying
-            screen space. */}
-        <footer className="app-footer app-footer-inline">
-          <div style={{ marginBottom: 8 }}>
-            {!remote && (
-              <a href="/?home" style={{ color: 'var(--accent)', textDecoration: 'none', marginRight: 16, fontSize: 12, fontWeight: 600 }}>← Home</a>
-            )}
-            {[
-              ['How to Play', '/how-to-play.html'],
-              ['Strategy Guide', '/strategy.html'],
-              ['Glossary', '/glossary.html'],
-              ['Devlog', '/devlog.html'],
-              ['About', '/about.html'],
-              ['♥ Support', '/support.html'],
-              ['Privacy', '/privacy.html'],
-            ].map(([label, href]) => (
-              <a
-                key={href}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: href === '/support.html' ? 'var(--accent-bright)' : 'var(--accent)',
-                  textDecoration: 'none', marginRight: 16, fontSize: 12,
-                  fontWeight: href === '/support.html' ? 700 : 500,
-                }}
-              >
-                {label}
-              </a>
-            ))}
-          </div>
-          AI was used in the development of this game. While core mechanics were designed by humans,
-          much of the coding and scaling of designs were done through the use of LLMs.
-          <div
-            title={BUILD_TIME ? `Built ${BUILD_TIME}` : undefined}
-            style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', letterSpacing: '.02em' }}
+        {[
+          ['How to Play', '/how-to-play.html'],
+          ['Strategy Guide', '/strategy.html'],
+          ['Glossary', '/glossary.html'],
+          ['Devlog', '/devlog.html'],
+          ['About', '/about.html'],
+          ['♥ Support', '/support.html'],
+          ['Privacy', '/privacy.html'],
+        ].map(([label, href]) => (
+          <a
+            key={href}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: href === '/support.html' ? 'var(--accent-bright)' : 'var(--accent)',
+              textDecoration: 'none', marginRight: 16, fontSize: 12,
+              fontWeight: href === '/support.html' ? 700 : 500,
+            }}
           >
-            Tailwinds v{APP_VERSION} · build {BUILD_ID}
-          </div>
-        </footer>
+            {label}
+          </a>
+        ))}
       </div>
+      AI was used in the development of this game. While core mechanics were designed by humans,
+      much of the coding and scaling of designs were done through the use of LLMs.
+      <div
+        title={BUILD_TIME ? `Built ${BUILD_TIME}` : undefined}
+        style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', letterSpacing: '.02em' }}
+      >
+        Tailwinds v{APP_VERSION} · build {BUILD_ID}
+      </div>
+    </footer>
+  );
 
+  // Modals and overlays — the same in both layouts.
+  const overlays = (
+    <>
       {/* Weekly debrief modal — suppressed while an away digest is showing */}
       <WeeklyDebrief />
 
@@ -851,6 +580,380 @@ function AppInner() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  const DISCORD_HREF = 'https://discord.com/invite/B7zP8X3YGm';
+  const tabLabel = (id) => TABS_BY_ID[id]?.label;
+
+  if (layout === 'map') {
+    return (
+      <div className="app-layout app-layout-map">
+        <MapShell
+          state={state}
+          remote={remote}
+          tabs={TABS_BY_ID}
+          navGroups={NAV_GROUPS}
+          tabLabel={tabLabel}
+          activeTab={activeTab}
+          navigate={navigate}
+          content={activeTab !== MAP_TAB ? (
+            <>
+              {tabContent[activeTab]}
+              {activeTab === 'dashboard' && <SupportCard />}
+            </>
+          ) : null}
+          footer={footer}
+          onAdvance={handleAdvanceWeek}
+          countdown={formatCountdown(timeUntilNextWeek)}
+          onBranding={() => setShowBranding(true)}
+          onTour={() => setShowTour(true)}
+          onSave={() => setSaveLoadMode('save')}
+          onLoad={() => setSaveLoadMode('load')}
+          onNewGame={handleReset}
+          onClassic={() => switchLayout('classic')}
+          discordHref={DISCORD_HREF}
+          supportHref={KOFI_URL}
+        />
+        {overlays}
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-layout">
+      {/* Top bar */}
+      <div className="topbar">
+        <div className="topbar-logo">
+          <span className="topbar-logo-icon"><TailwindsMark size={20} /></span>
+          Tailwinds - Airline Manager
+          <StageTag />
+        </div>
+        <div className="topbar-sep" />
+        <button
+          type="button"
+          onClick={() => setShowBranding(true)}
+          title="Edit airline branding"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'none', border: 'none', padding: 0, margin: 0,
+            cursor: 'pointer', color: 'inherit',
+          }}
+        >
+          <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
+          <div className="topbar-airline">{state.airlineName}</div>
+        </button>
+        <div className="topbar-spacer" />
+        <div className="topbar-kpis">
+          <div className="topbar-kpi">
+            <span className="topbar-kpi-label">DATE</span>
+            <span className="topbar-kpi-value" style={{ fontSize: 13 }}>{formatGameDate(state)}</span>
+          </div>
+          <div className="topbar-kpi-divider" />
+          <div className="topbar-kpi">
+            <span className="topbar-kpi-label">CASH</span>
+            <span className={`topbar-cash ${state.cash < 0 ? 'negative' : ''}`}>
+              {formatMoney(state.cash)}
+            </span>
+          </div>
+        </div>
+        {!remote && (
+        <button className="btn-advance" onClick={handleAdvanceWeek} title="Advance now (auto-advances in the shown time)">
+          Next Week › <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>{formatCountdown(timeUntilNextWeek)}</span>
+        </button>
+        )}
+        {!isMobile && (<>
+        {!remote && (<>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          onClick={() => setSaveLoadMode('save')}
+          title="Save game to a slot"
+        >
+          <SaveIcon size={13} /> Save
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          onClick={() => setSaveLoadMode('load')}
+          title="Load a saved game"
+        >
+          <FolderOpenIcon size={13} /> Load
+        </button>
+        </>)}
+        <button
+          className="btn btn-ghost"
+          data-layout-switch="map"
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', position: 'relative' }}
+          onClick={() => switchLayout('map')}
+          title="Try the map-first layout (beta) — the world map fills the screen and pages open over it. Switch back any time."
+          aria-label="Map view (beta)"
+        >
+          <GlobeIcon size={13} /><span className="topbar-mapview-label">Map view</span>
+          {layoutInvite && <span className="new-dot new-dot-corner" aria-label="new" />}
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={() => setShowTour(true)}
+          title="How to play"
+        >
+          ?
+        </button>
+        <a
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}
+          href="https://discord.com/invite/B7zP8X3YGm"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Join the Tailwinds community on Discord"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+          Discord
+        </a>
+        {/* Always-visible ask: one quiet button in the top bar, never a popup. */}
+        <a
+          className="btn btn-ghost"
+          style={{
+            fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 5,
+            textDecoration: 'none', color: 'var(--accent-bright)', borderColor: 'var(--accent)', fontWeight: 600,
+          }}
+          href={KOFI_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Tailwinds is free and built by one person. Chip in on Ko-fi to help cover the servers."
+        >
+          <span aria-hidden="true" style={{ color: '#ff5e5b' }}>♥</span> Support
+        </a>
+        {!remote && (
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={handleReset}
+        >
+          New Game
+        </button>
+        )}
+        </>)}
+        {isMobile && (
+          <div className="topbar-menu-wrap">
+            <button
+              className="btn btn-ghost topbar-menu-btn"
+              onClick={() => setShowMobileMenu(v => !v)}
+              aria-label="More actions"
+              aria-expanded={showMobileMenu}
+            >
+              ⋯
+            </button>
+            {showMobileMenu && (
+              <>
+                <div className="topbar-menu-backdrop" onClick={() => setShowMobileMenu(false)} />
+                <div className="topbar-menu" role="menu">
+                  <div className="topbar-menu-date" aria-hidden="true">
+                    <span>{formatGameDate(state)}</span>
+                  </div>
+                  {!remote && (<>
+                  <button role="menuitem" onClick={() => { setSaveLoadMode('save'); setShowMobileMenu(false); }}>
+                    <SaveIcon size={14} /> Save game
+                  </button>
+                  <button role="menuitem" onClick={() => { setSaveLoadMode('load'); setShowMobileMenu(false); }}>
+                    <FolderOpenIcon size={14} /> Load game
+                  </button>
+                  </>)}
+                  <button role="menuitem" data-layout-switch="map" onClick={() => switchLayout('map')}>
+                    <GlobeIcon size={14} /> Try map view <span className="beta-chip">Beta</span>
+                  </button>
+                  <button role="menuitem" onClick={() => { setShowTour(true); setShowMobileMenu(false); }}>
+                    <span style={{ width: 14, textAlign: 'center', fontWeight: 700 }}>?</span> How to play
+                  </button>
+                  <a
+                    role="menuitem"
+                    href="https://discord.com/invite/B7zP8X3YGm"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setShowMobileMenu(false)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+                    Discord
+                  </a>
+                  <a
+                    role="menuitem"
+                    href={KOFI_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setShowMobileMenu(false)}
+                    style={{ color: 'var(--accent-bright)', fontWeight: 600 }}
+                  >
+                    <span aria-hidden="true" style={{ width: 14, textAlign: 'center', color: '#ff5e5b' }}>♥</span> Support Tailwinds
+                  </a>
+                  {!remote && (
+                  <button role="menuitem" className="topbar-menu-danger" onClick={() => { setShowMobileMenu(false); handleReset(); }}>
+                    New Game
+                  </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Nav tabs (grouped) */}
+      <div className="nav-tabs">
+        {NAV_GROUPS.map((grp) => {
+          if (!grp.children) {
+            const t = TABS_BY_ID[grp.id];
+            const Icon = t.Icon;
+            return (
+              <button
+                key={grp.id}
+                className={`nav-tab ${activeTab === grp.id ? 'active' : ''}`}
+                onClick={() => navigate(grp.id)}
+              >
+                <Icon size={14} />
+                <span>{t.label}</span>
+              </button>
+            );
+          }
+          const GroupIcon = grp.Icon;
+          const activeChild = grp.children.includes(activeTab);
+          const open = openGroup === grp.label;
+          return (
+            <div key={grp.label} className="nav-group">
+              <button
+                className={`nav-tab ${activeChild ? 'active' : ''} ${open ? 'open' : ''}`}
+                onClick={(e) => {
+                  if (open) { setOpenGroup(null); return; }
+                  const r = e.currentTarget.getBoundingClientRect();
+                  // Clamp inside the viewport: a partially-scrolled nav tab can
+                  // have r.left < 0 (menu clipped off the left edge on phones),
+                  // and a right-edge tab can push the 190px menu off the right.
+                  const menuW = 200;
+                  const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
+                  setMenuPos({ top: r.bottom + 4, left });
+                  setOpenGroup(grp.label);
+                }}
+                aria-expanded={open}
+              >
+                <GroupIcon size={14} />
+                <span>{grp.label}</span>
+                <span className="nav-caret" aria-hidden="true">▾</span>
+              </button>
+              {open && menuPos && createPortal(
+                <>
+                  <div className="nav-group-backdrop" onClick={() => setOpenGroup(null)} />
+                  <div className="nav-group-menu" role="menu" style={{ top: menuPos.top, left: menuPos.left }}>
+                    {grp.children.map((cid) => {
+                      const ct = TABS_BY_ID[cid];
+                      const CIcon = ct.Icon;
+                      const pinned = favourites.includes(cid);
+                      return (
+                        <div key={cid} className="nav-menu-row">
+                          <button
+                            role="menuitem"
+                            className={activeTab === cid ? 'active' : ''}
+                            onClick={() => navigate(cid)}
+                          >
+                            <CIcon size={14} />
+                            <span>{ct.label}</span>
+                          </button>
+                          <button
+                            type="button"
+                            data-nav-pin={cid}
+                            className={`nav-fav-star${pinned ? ' on' : ''}`}
+                            aria-pressed={pinned}
+                            aria-label={pinned ? `Unpin ${ct.label} from the shortcuts bar` : `Pin ${ct.label} to the shortcuts bar`}
+                            title={pinned
+                              ? 'Unpin from the shortcuts bar'
+                              : favouritesFull
+                                ? `The shortcuts bar holds ${NAV_FAVOURITES_LIMIT} — unpin one first`
+                                : 'Pin to the shortcuts bar under the menus'}
+                            disabled={!pinned && favouritesFull}
+                            onClick={(e) => { e.stopPropagation(); toggleNavFavourite(cid); }}
+                          >
+                            {pinned ? '★' : '☆'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {favourites.length === 0 && (
+                      <div className="nav-fav-hint">☆ pins a page to a shortcuts bar under the menus</div>
+                    )}
+                  </div>
+                </>,
+                document.body
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Invitation to try the map-first layout (opt-in beta) */}
+      {layoutInvite && (
+        <div className="layout-invite" role="note">
+          <GlobeIcon size={15} />
+          <span className="layout-invite-text">
+            <strong>New: Map view</strong> <span className="beta-chip">Beta</span>
+            <span className="layout-invite-more"> — the world map fills the screen and every page opens over it. Switch back any time.</span>
+          </span>
+          <button type="button" className="btn btn-primary layout-invite-try" data-layout-switch="map" onClick={() => switchLayout('map')}>
+            Try it
+          </button>
+          <button
+            type="button"
+            className="layout-invite-x"
+            aria-label="No thanks — hide this"
+            title="No thanks — you can still try it from the Map view button"
+            onClick={() => { closeInvite('dismissed'); setLayoutInvite(false); }}
+          >×</button>
+        </div>
+      )}
+
+      {/* Shortcuts bar — the pages pinned with ☆ in the menus above */}
+      {favourites.length > 0 && (
+        <div className="nav-favs" role="toolbar" aria-label="Shortcuts">
+          {favourites.map((id) => {
+            const t = TABS_BY_ID[id];
+            const Icon = t.Icon;
+            return (
+              <div key={id} className="nav-fav-wrap">
+                <button
+                  type="button"
+                  data-nav-fav={id}
+                  className={`nav-fav ${activeTab === id ? 'active' : ''}`}
+                  onClick={() => navigate(id)}
+                >
+                  <Icon size={12} />
+                  <span>{t.label}</span>
+                </button>
+                <button
+                  type="button"
+                  className="nav-fav-x"
+                  aria-label={`Unpin ${t.label}`}
+                  title={`Unpin ${t.label}`}
+                  onClick={() => toggleNavFavourite(id)}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Page content */}
+      <div className="main-content">
+        {tabContent[activeTab]}
+        {/* The ask, on the Dashboard only — not on every tab, and never over
+            the game or at a moment the player has just lost money. */}
+        {activeTab === 'dashboard' && <SupportCard />}
+        {/* Disclaimer lives at the end of the scrollable content (desktop +
+            mobile) so it's reachable on scroll without permanently occupying
+            screen space. */}
+        {footer}
+      </div>
+
+      {overlays}
     </div>
   );
 }

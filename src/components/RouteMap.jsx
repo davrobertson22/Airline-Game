@@ -12,7 +12,8 @@ import { getAlliance } from '../data/alliances.js';
 import { HUB_TIERS } from '../models/demand.js';
 import { Glyph } from './Icons.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { TILE_URL, TILE_OPTS } from './basemap.js';
+import { setMapBasemap } from './basemap.js';
+import useBasemap from '../hooks/useBasemap.js';
 import { rivalIndexFor } from '../models/network.js';
 import { AirportDetailModal } from './AirportLink.jsx';
 
@@ -170,9 +171,17 @@ function greatCirclePoints(lat1, lon1, lat2, lon2, n = 80) {
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS  = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 
-function loadLeaflet() {
-  return new Promise((resolve, reject) => {
-    if (window.L) { resolve(window.L); return; }
+// One in-flight load shared by every caller (ported from Headwinds mapCore.js).
+// Two callers racing — React's development double-mount, or the map-first
+// layout mounting the map at startup — each appended a <script>, and the second
+// copy replaced window.L under a map built by the first. The next redraw then
+// mixed two Leaflets' Bounds classes and threw "reading 'x'" in _clipPoints.
+let leafletPromise = null;
+
+export function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject) => {
 
     // CSS
     if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
@@ -185,9 +194,14 @@ function loadLeaflet() {
     const script = document.createElement('script');
     script.src = LEAFLET_JS;
     script.onload  = () => resolve(window.L);
-    script.onerror = () => reject(new Error('Failed to load Leaflet'));
+    script.onerror = () => {
+      // A failed load must not poison every later attempt.
+      leafletPromise = null;
+      reject(new Error('Failed to load Leaflet'));
+    };
     document.head.appendChild(script);
   });
+  return leafletPromise;
 }
 
 // ── Palette ────────────────────────────────────────────────────────────────────
@@ -434,8 +448,10 @@ export function networkAirportTip(airport, hubInfo = null) {
 
 const WORLD_AIRPORTS_KEY = 'tw_map_world_airports';
 
-export default function RouteMap() {
+export default function RouteMap({ fullBleed = false } = {}) {
   const { state } = useGame();
+  // Satellite (Blue Marble) or Dark (CARTO) — see basemap.js.
+  const [basemap, setBasemap] = useBasemap();
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
           competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
@@ -446,8 +462,23 @@ export default function RouteMap() {
   // The map has a fixed inline height that a CSS media query can't reach, so we
   // size it here. Shorter on phones so the route list below is reachable without
   // a long scroll; unchanged (520) on desktop.
+  //
+  // Full-bleed (the map-first layout's background) fills its parent instead, so
+  // the height is measured — Leaflet's size wants a number, not '100%'.
   const isMobile = useIsMobile();
-  const mapHeight = isMobile ? 380 : 520;
+  const bleedRef = useRef(null);
+  const [bleedHeight, setBleedHeight] = useState(() =>
+    (typeof window !== 'undefined' ? window.innerHeight : 800));
+  useEffect(() => {
+    if (!fullBleed || !bleedRef.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      const h = Math.round(e.contentRect.height);
+      if (h > 0) setBleedHeight(h);
+    });
+    ro.observe(bleedRef.current);
+    return () => ro.disconnect();
+  }, [fullBleed]);
+  const mapHeight = fullBleed ? bleedHeight : (isMobile ? 380 : 520);
 
   const mapElRef      = useRef(null);   // DOM node
   const mapRef        = useRef(null);   // Leaflet map instance
@@ -519,11 +550,12 @@ export default function RouteMap() {
       zoomDelta: 1,
     });
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Full-bleed: wheel / pinch zoom only — the corner belongs to the HUD.
+    if (!fullBleed) L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // CartoDB Dark Matter — proper dark game-map feel. URL + options live in
-    // basemap.js because the tile source now carries an API key.
-    L.tileLayer(TILE_URL, TILE_OPTS).addTo(map);
+    // Satellite (NASA Blue Marble) or CARTO Dark Matter — basemap.js owns both
+    // URLs, and swaps the layer in place when the player changes it.
+    setMapBasemap(map, basemap);
 
     // Click empty map → deselect
     map.on('click', () => setSelectedId(null));
@@ -550,6 +582,11 @@ export default function RouteMap() {
   useEffect(() => {
     if (mapRef.current) mapRef.current.invalidateSize();
   }, [mapHeight]);
+
+  // Satellite / Dark switched (here or from the map-first settings menu).
+  useEffect(() => {
+    if (mapReady) setMapBasemap(mapRef.current, basemap);
+  }, [mapReady, basemap]);
 
   // 3. Derive route data
   //
@@ -1300,6 +1337,72 @@ export default function RouteMap() {
 
   const selectedData = selectedId != null ? routeGroups.find(x => x.key === selectedId) : null;
 
+  // Satellite / Dark. Shared by the Map tab's header and the full-bleed map's
+  // floating controls.
+  const basemapToggle = (
+    <div className="map-view-toggle" role="group" aria-label="Map style">
+      {[['satellite', 'Satellite'], ['dark', 'Dark']].map(([v, label]) => (
+        <button
+          key={v}
+          data-basemap={v}
+          className={basemap === v ? 'active' : ''}
+          aria-pressed={basemap === v}
+          onClick={() => setBasemap(v)}
+          title={v === 'satellite' ? 'NASA Blue Marble satellite imagery' : 'Dark map with coastlines and borders'}
+        >{label}</button>
+      ))}
+    </div>
+  );
+
+  // The map itself.
+  const mapBody = (
+    <>
+    {error ? (
+      <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
+        <Glyph e="⚠" /> Could not load map: {error}
+      </div>
+    ) : !ready ? (
+      <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--text-muted)', fontSize: 13, gap: 10 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+        </svg>
+        Loading map tiles…
+      </div>
+    ) : (
+      <div ref={mapElRef} style={{ height: mapHeight }} />
+    )}
+    </>
+  );
+
+  // Map-first layout: the map IS the screen. No card, no route table — the
+  // Routes page has the table — just the map and a small floating control row.
+  // With no network yet it still draws every airport you can fly to.
+  if (fullBleed) {
+    return (
+      <div ref={bleedRef} className="map-bleed">
+        {mapBody}
+        {noNetwork && (
+          <div className="map-bleed-hint">No routes yet — tap <strong>Search</strong> to find your first one.</div>
+        )}
+        <div className="map-bleed-controls">
+          {basemapToggle}
+          <button
+            className={`map-bleed-chip${showAirports ? ' on' : ''}`}
+            aria-pressed={showAirports}
+            onClick={toggleAirports}
+            title={showAirports ? 'Hide the airports you don\'t fly to' : 'Show every airport you can fly to'}
+          >Airports</button>
+          {selectedId != null && (
+            <button className="map-bleed-chip on" onClick={() => setSelectedId(null)}>
+              <Glyph e="✕" /> Focus
+            </button>
+          )}
+        </div>
+        {detailCode && <AirportDetailModal code={detailCode} onClose={() => setDetailCode(null)} />}
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Map card */}
@@ -1327,6 +1430,7 @@ export default function RouteMap() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', alignItems: 'center', flexWrap: 'wrap' }}>
+            {basemapToggle}
             {/* Filters: aircraft type + airport */}
             {typesInUse.length > 1 && (
               <select
@@ -1514,21 +1618,7 @@ export default function RouteMap() {
           </div>
         </div>
 
-        {/* Map container */}
-        {error ? (
-          <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
-            <Glyph e="⚠" /> Could not load map: {error}
-          </div>
-        ) : !ready ? (
-          <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--text-muted)', fontSize: 13, gap: 10 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-            </svg>
-            Loading map tiles…
-          </div>
-        ) : (
-          <div ref={mapElRef} style={{ height: mapHeight }} />
-        )}
+        {mapBody}
       </div>
 
       {detailCode && <AirportDetailModal code={detailCode} onClose={() => setDetailCode(null)} />}
