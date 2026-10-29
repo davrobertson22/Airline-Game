@@ -16,6 +16,7 @@ import { getSeasonalProfile } from '../models/demand.js';
 import BoardObjectives from './BoardObjectives.jsx';
 import InfoTip from './InfoTip.jsx';
 import { requestNav } from '../utils/navIntent.js';
+import { airlineAlerts, projectedRouteResults, projectWeekShared } from '../utils/airlineAlerts.js';
 import { fuelImpact } from '../utils/fuelImpact.js';
 import { programmeSavingsFromReport } from '../data/fuelProgrammes.js';
 import { navPathFor } from '../navPath.js';
@@ -50,7 +51,7 @@ export default function Dashboard() {
   // so the Dashboard's revenue/profit always agree with Finance. Runs the real engine
   // (so cargo, all fixed costs, loan interest and tax are included) rather than a
   // home-grown estimate.
-  const proj = useMemo(() => projectWeek(state), [state]);
+  const proj = useMemo(() => projectWeekShared(state), [state]);
   // What 1.28x actually costs THIS fleet, in dollars a week (fuelImpact.js).
   const fuelKpi = useMemo(() => fuelImpact(state, { lookbacks: [] }), [state]);
 
@@ -62,23 +63,7 @@ export default function Dashboard() {
   // factor stuck at its old value) when the player changed fares mid-week. Prefer the
   // engine's routeResult; fall back to a standalone sim only for routes the engine
   // skips (grounded / dormant-seasonal), using the same labor + fuel the engine used.
-  const routeResults = useMemo(() => {
-    const rrById = {};
-    for (const rr of proj.report?.routeResults ?? []) rrById[rr.routeId] = rr;
-    const avgUtil = fleetAvgUtilization(fleet, [...routes, ...(state.cargoRoutes ?? [])]);
-    return routes.map(route => {
-      const aircraft = fleet.find(a => a.id === route.aircraftId);
-      const result = !aircraft ? null
-        : (rrById[route.id] ?? simulateRoute(
-            // Lounge fields — without them this fallback quotes the full
-            // third-party premium ground rate on a route the tick discounts.
-            { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
-            aircraft, gd, state.labor ?? null, proj.fuelMultiplier, null,
-            rivalSpecsFor(state, route.origin, route.destination), avgUtil, state.satisfaction ?? null,
-            1.0, state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state)));
-      return { route, result };
-    });
-  }, [routes, fleet, proj, gd, state.labor]);
+  const routeResults = useMemo(() => projectedRouteResults(state, proj), [state, proj]);
 
   const projectedRevenue = proj.effectiveRevenue;   // all-in weekly revenue (incl. cargo)
   const projectedProfit  = proj.netCash;            // fully-loaded weekly cash bottom line
@@ -328,86 +313,9 @@ export default function Dashboard() {
   }, [routes, cargoRoutes]);
 
   // ── Action alerts ────────────────────────────────────────────────────────
-  // Every alert names a problem that lives on ANOTHER tab, so every alert
-  // carries that tab and the filter it should arrive under. "3 loss-making
-  // routes · consider repricing" used to be an inert line of text sitting
-  // directly above KPI boxes that were all clickable — the player was told
-  // exactly what was wrong and then left to rebuild the query by hand.
-  const alerts = [];
-  // Crew FIRST. A parked aircraft is the one problem whose symptom (routes earning
-  // less than the planner said) points everywhere except at its cause — "Why am I
-  // not getting the full revenue from my routes?" was this (Discord 2026-09-29).
-  const crewSt = crewStatus(state, (a) => getAircraftType(a.typeId));
-  const crewAlert = crewParkedAlertText(crewSt);
-  if (crewAlert)
-    alerts.push({ color: crewSt.level === 'grounding' ? 'var(--red)' : 'var(--yellow)', icon: AlertIcon, text: crewAlert, to: 'operations' });
-  // Aircraft on routes that will sit out next week with nobody to fly them.
-  // First, because it is the one that zeroes revenue outright — a new airline
-  // that never found Company ▸ Operations flew six routes of nobody for weeks
-  // (Discord 2026-09-21). Same list the tick parks (tickPrep).
-  {
-    const routed = new Set([...(routes ?? []), ...(cargoRoutes ?? [])].map(r => r.aircraftId));
-    const noCrew = crewGroundedAircraftIds(state).filter(id => routed.has(id)).length;
-    if (noCrew > 0)
-      alerts.push({
-        color: 'var(--red)', icon: AlertIcon,
-        text: `${noCrew} aircraft grounded — no crew to fly ${noCrew === 1 ? 'it' : 'them'}, so ${noCrew === 1 ? 'its routes carry' : 'their routes carry'} no passengers · hire in Operations`,
-        to: 'operations',
-      });
-  }
-  if (idleAircraft > 0)
-    alerts.push({ color: 'var(--yellow)', icon: AlertIcon, text: idleFleetAlertText(idleFleet), to: 'fleet', filter: { filterChip: 'idle' } });
-  if (isFinite(weeksOfCash) && weeksOfCash < 4)
-    alerts.push({ color: 'var(--red)', icon: DotIcon, text: `Only ${weeksOfCash} weeks of cash runway remaining`, to: 'finance' });
-  // The silent killer: routes are in the black, but fixed costs, financing and
-  // tax flip the bottom line negative. Invisible until cash dips — call it out.
-  if (pnl.projected && pnl.projected.routeOp > 0 && pnl.projected.net < 0)
-    alerts.push({
-      color: 'var(--red)', icon: TrendDownIcon,
-      text: `Routes earn +${formatMoney(pnl.projected.routeOp)}/wk, but fixed costs, financing & tax turn that into ${formatMoney(pnl.projected.net)}/wk · see Weekly P&L`,
-      to: 'finance',
-    });
-  // Count what the Routes tab's "losing" filter counts: CITY PAIRS, on the
-  // profit basis the player has chosen, fixed costs included by default. This
-  // alert used to count per-aircraft deployments on contribution alone, so it
-  // routinely disagreed with the very filter it links to — a different number
-  // on either side of one click.
-  const alertBasis = loadProfitBasis();
-  const losingPairs = (() => {
-    const byPair = {};
-    for (const { route, result } of routeResults) {
-      if (!result) continue;
-      const key = `${route.origin}→${route.destination}`;
-      byPair[key] = (byPair[key] ?? 0) + routeProfit(result, fixedByRoute[route.id] ?? 0, alertBasis);
-    }
-    return Object.values(byPair).filter(v => v < 0);
-  })();
-  if (losingPairs.length > 0)
-    alerts.push({ color: 'var(--red)', icon: TrendDownIcon, text: `${losingPairs.length} loss-making city pair${losingPairs.length !== 1 ? 's' : ''} · consider repricing`, to: 'routes', filter: { filterTab: 'unprofitable' } });
-  // Lease expiry is the only recurring event that deletes revenue-producing
-  // routes without the player doing anything: the tick returns the aircraft,
-  // bills four weeks' redelivery, and closes every route it was flying. Its
-  // entire warning was a toast at 8 and 4 weeks — which nobody who was away
-  // has ever seen, and in a world that ticks whether you are watching or not,
-  // "away" is the normal state.
-  const expiringLeases = leasesAtRisk(state, fleet);
-  if (expiringLeases.length > 0) {
-    const soonest = expiringLeases[0];
-    alerts.push({
-      color: 'var(--yellow)', icon: AlertIcon,
-      text: `${expiringLeases.length} lease${expiringLeases.length !== 1 ? 's' : ''} expiring within ${leaseWarnPhrase(state)} (soonest ${soonest.name}, ${soonest.leaseRemainingWeeks}w) · ${leaseAutoRenewSetting(state).enabled ? 'marked let-expire — extend or buy out to keep them' : 'extend, buy out, turn on auto-renew, or their routes close'}`,
-      to: 'fleet', filter: { filterChip: 'expiring' },
-    });
-  }
-  if (activeEvents.length > 0) {
-    const bad = activeEvents.filter(e =>
-      (e.effects?.fuelMult ?? 1) > 1 ||
-      (e.effects?.globalDemandMult ?? 1) < 1 ||
-      (e.effects?.regionDemandMult ?? 1) < 1
-    );
-    if (bad.length > 0)
-      alerts.push({ color: 'var(--yellow)', icon: bad[0].icon, text: `${bad[0].name} active. Check Finance for impact`, to: 'finance' });
-  }
+  // Built by utils/airlineAlerts.js, which the map view's alert column also
+  // reads, so the two can never list different problems.
+  const alerts = airlineAlerts(state, proj, routeResults);
 
   return (
     <div>

@@ -67,7 +67,22 @@
 
     <div class="entry">
       <p class="date">October 29, 2026</p>
-      <h2>Passenger demand recalibrated against real traffic (new games)</h2>
+      <h2>Map view, reorganised from your feedback</h2>
+      <p>The map view (the beta layout where the world map fills the screen) has a new layout, built from a player&rsquo;s review of the first version:</p>
+      <ul>
+        <li><strong>Everything is on the bottom bar, one click each.</strong> Seven groups: Search, Network, Fleet, World, Operations, Service and Finance. A group opens straight onto a page, and the other pages in it sit as tabs along the top. Search opens the Route Finder, with the Route Planner one tab over. No page has two buttons any more.</li>
+        <li><strong>Pages sorted where you&rsquo;d look for them.</strong> The departure board and schedule live under Network. Crew, maintenance and fuel are under Operations, and marketing, catering, ancillaries, reputation and loyalty under Service. Finance splits into statements, loans and forecast, analysis and breakdown.</li>
+        <li><strong>Cash, last week&rsquo;s result and the date in one row</strong> at the top, in bigger type. A green or red figure next to your cash shows how much it went up or down last week.</li>
+        <li><strong>Alerts down the right edge.</strong> Idle aircraft, expiring leases, loss-making routes and world events each get an icon. Hover for the details, or click to go straight there.</li>
+        <li><strong>See an airport&rsquo;s whole network.</strong> Click any airport code or pin on the map to light up every route at that airport.</li>
+        <li><strong>A big airline logo top left</strong>, with Guide, Tutorial and Discord top right, and a Map&nbsp;/&nbsp;Dashboard switch bottom left.</li>
+        <li><strong>Smoother panning and zooming</strong> on big networks: the map no longer blurs every route line and every button on each frame.</li>
+      </ul>
+      <p>The classic layout is unchanged. You can switch between the two any time from Settings.</p>
+    </div>
+    <div class="entry">
+      <p class="date">October 29, 2026</p>
+      <h2>Passenger demand overhaul: recalibrated against real traffic, and markets that grow with service (new games)</h2>
       <p>We checked the game&rsquo;s passenger demand against real ticket data: every US city pair in the US Department of Transportation&rsquo;s airfare survey and every Australian domestic route in the government&rsquo;s route statistics. The big routes were close, but the game had about four times as many US domestic passengers as the real world, almost all of them in small cities and short hops. Australia had only about half its real traffic. New games now use a recalibrated model:</p>
       <ul>
         <li><strong>Short trips are driven, not flown.</strong> In the US and Australia, demand now fades on routes under about 650&nbsp;km, the way it does when most people take the car. Orlando to Miami no longer looks like New York to Los Angeles.</li>
@@ -77,7 +92,15 @@
         <li><strong>Australia flies more.</strong> Long domestic routes such as Sydney&ndash;Melbourne, Brisbane&ndash;Cairns and Perth to the mining towns get substantially more demand. Short hops within New South Wales get less.</li>
         <li><strong>Double-counted cities fixed.</strong> A few secondary airports were carrying their whole metro&rsquo;s population a second time: St. Petersburg (Tampa), Sanford (Orlando), Mesa (Phoenix), Newport News (Norfolk), Everett (Seattle) and a few smaller ones. Each now has its own share of the city instead.</li>
       </ul>
-      <p>We deliberately stopped short of full realism, about two-thirds of the way there, so regional flying stays playable. Routes outside the US and Australia are unchanged until we have real data to check them against. <strong>Games already in progress keep the demand they started with.</strong> More on how demand works in the <a href="/route-economics.html">route economics guide</a>.</p>
+      <p>We deliberately stopped short of full realism, about two-thirds of the way there, so regional flying stays playable. Routes outside the US and Australia are unchanged until we have real data to check them against.</p>
+      <p>Markets also stop being fixed. Until now every city pair had a set size, whoever flew it and however often. In new games a market now grows with the service it gets, and fades when that service leaves:</p>
+      <ul>
+        <li><strong>New routes build their market.</strong> A city pair nobody flies starts at 70% of its full size. Fly it and the market grows over the following year, which replaces the old 16-week ramp-up. About twice a day at the going fare brings it to full size (daily gets it to about 90%), and more flights or lower fares grow it further, up to 30% above normal.</li>
+        <li><strong>Markets remember.</strong> Cut a route and its market fades over months, not overnight. A rival who moves in soon after takes over most of what you built, and so can you after a rival leaves.</li>
+        <li><strong>Everyone builds the same market.</strong> Your flights and your rivals&rsquo; all count toward the size of a market, but your frequency, brand and product still decide who carries the passengers. A newcomer on a busy route now wins its share gradually instead of shrinking the whole market.</li>
+        <li><strong>The world starts settled.</strong> Routes the rival airlines already fly start at their full size, so a new game opens on real-world demand rather than in a slump.</li>
+      </ul>
+      <p>Both changes are switched on by default for new games, and you can turn market development off on the setup screen. <strong>Games already in progress keep the demand they started with.</strong> More on how demand works in the <a href="/route-economics.html">route economics guide</a>.</p>
     </div>
     <div class="entry">
       <p class="date">October 29, 2026</p>

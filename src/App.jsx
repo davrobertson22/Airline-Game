@@ -16,7 +16,7 @@ import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
 import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
-import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite } from './components/MapShell.jsx';
+import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
 import Competition from './components/Competition.jsx';
@@ -327,7 +327,8 @@ function AppInner() {
       const d = e?.detail;
       const id = typeof d === 'string' ? d : d?.tab;
       if (typeof id !== 'string' || !TABS.some(t => t.id === id)) return;
-      setActiveTab(id);
+      // Map view: a classic tab id lands on its map page (MapShell).
+      setActiveTab(layoutRef.current === 'map' ? resolveMapPage(id) : id);
       setOpenGroup(null);
     };
     window.addEventListener('hw:navigate', onNavigate);
@@ -377,7 +378,7 @@ function AppInner() {
     dispatch({ type: 'RESET' });
   }
 
-  const navigate = (id) => { setActiveTab(id); setOpenGroup(null); };
+  const navigate = (id) => { setActiveTab(layout === 'map' ? resolveMapPage(id) : id); setOpenGroup(null); };
   const switchLayout = (next) => {
     const l = writeLayout(next);
     setLayout(l);
@@ -409,6 +410,22 @@ function AppInner() {
     news:        <News />,
     wiki:        <Wiki />,
   };
+
+  // Map view pages: the classic pages, plus the parts of Operations and Finance
+  // the map view gives tabs of their own (see MapShell's MAP_GROUPS).
+  const mapPages = layout === 'map' ? {
+    ...tabContent,
+    dashboard:        <>{tabContent.dashboard}<SupportCard /></>,
+    operations:       <Operations section="crew" />,
+    departures:       <Operations section="board" />,
+    marketing:        <Operations section="marketing" />,
+    catering:         <Operations section="catering" />,
+    fuel:             <Finance group="fuel" />,
+    'fin-statements': <Finance group="statements" />,
+    'fin-planning':   <Finance group="planning" />,
+    'fin-analysis':   <Finance group="analysis" />,
+    'fin-breakdown':  <Finance group="breakdown" />,
+  } : null;
 
   // The footer closes every page (classic) or panel (map-first).
   const footer = (
@@ -593,16 +610,10 @@ function AppInner() {
           state={state}
           remote={remote}
           tabs={TABS_BY_ID}
-          navGroups={NAV_GROUPS}
           tabLabel={tabLabel}
           activeTab={activeTab}
           navigate={navigate}
-          content={activeTab !== MAP_TAB ? (
-            <>
-              {tabContent[activeTab]}
-              {activeTab === 'dashboard' && <SupportCard />}
-            </>
-          ) : null}
+          pages={mapPages}
           footer={footer}
           onAdvance={handleAdvanceWeek}
           countdown={formatCountdown(timeUntilNextWeek)}

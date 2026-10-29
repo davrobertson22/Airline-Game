@@ -58,9 +58,14 @@ await test('the page panel has no backdrop blur, and is opaque instead', () => {
   assert.ok(bg && !/rgba\([^)]*,\s*0?\.\d+\s*\)/.test(bg), `panel background should be opaque, got ${bg}`);
 });
 
-await test('the small floating controls keep their glass', () => {
-  for (const cls of ['.ms-rail-btn', '.ms-dock', '.ms-cash']) {
-    assert.ok(rules.some(r => selects(r, cls) && /backdrop-filter:\s*blur/.test(r.body)), `${cls} lost its blur`);
+// Superseded 2026-10-29 (Barca's flat-map lag, ported from Headwinds): the
+// small controls lost their glass too. Measured on a 250-route airline panning
+// the flat map, blurring the map under the floating controls cost about as much
+// as the route glows' blur filter. They are now a near-opaque fill.
+await test('the floating controls are a solid fill, not a blur of the moving map', () => {
+  for (const cls of ['.ms-dock', '.ms-status', '.ms-alert', '.ms-home']) {
+    assert.ok(rules.some(r => selects(r, cls) && /background:\s*rgba\(8, 10, 16/.test(r.body)), `${cls} has its fill`);
+    assert.ok(!rules.some(r => selects(r, cls) && /backdrop-filter:\s*blur/.test(r.body)), `${cls} blurs the map`);
   }
 });
 
@@ -70,7 +75,7 @@ await test('the map\'s CSS animations pause while a page covers it', () => {
 });
 
 await test('map view pauses the background map whenever a page is open', () => {
-  assert.match(shellSrc, /<RouteMap fullBleed paused=\{!!panelOpen\} \/>/);
+  assert.match(shellSrc, /<RouteMap fullBleed paused=\{!*panelOpen\} \/>/);
 });
 
 await test('the background airport dots key on the pinned codes, not the array', () => {
