@@ -437,6 +437,82 @@ export function worldAirportTip(a) {
 }
 
 /** Hover card for one of your own airports (a hub when `hubInfo` is set). */
+/** Line colour for a route group: purple rotation, else green / red by profit. */
+export function routeGroupColor(g) {
+  return g.multi ? TAG_COLOR : ((g.hasResult ? g.profit : 0) >= 0 ? PROFIT_COLOR : LOSS_COLOR);
+}
+
+/** Tooltip for one of your passenger lines (one city pair or rotation). */
+export function routeTipHtml(g) {
+  const { origin, dest } = g;
+  const chain = g.chain?.length >= 2 ? g.chain : [origin, dest];
+  const profit = g.hasResult ? g.profit : 0;
+  const profitColor = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
+  const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
+  const pax     = g.hasResult ? Math.round(g.passengers).toLocaleString() : '—';
+  const profStr = g.hasResult ? `<span style="color:${profitColor}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
+  const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
+  const acText  = `${g.aircraftCount} aircraft`;
+  const titleHtml = chain.map(a => a.code).join(' <span class="map-tip-arrow">→</span> ');
+  const subHtml = g.multi
+    ? `${chain.length - 1} legs · ${origin.city} → ${dest.city} · ${acText}`
+    : `${origin.city} → ${dest.city} · ${acText}`;
+  return `
+        <div class="map-tip">
+          <div class="map-tip-title">${titleHtml}</div>
+          <div class="map-tip-sub">${subHtml}</div>
+          <div class="map-tip-stats">
+            <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
+            <div><span class="map-tip-lbl">Pax/wk</span><span class="map-tip-val">${pax}</span></div>
+            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
+            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
+          </div>
+          <div class="map-tip-hint">Click to focus this route</div>
+        </div>
+      `;
+}
+
+/** Tooltip for one of your freighter lines. */
+export function cargoTipHtml(g) {
+  const { origin, dest } = g;
+  const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
+  const tonnes  = g.hasResult ? `${Math.round(g.tonnes).toLocaleString()} t` : '—';
+  const profit  = g.hasResult ? g.profit : 0;
+  const profStr = g.hasResult ? `${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk` : '—';
+  const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
+  return `
+        <div class="map-tip">
+          <div class="map-tip-title" style="color:${CARGO_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-sub">${origin.city} → ${dest.city} · ${g.aircraftCount} freighter${g.aircraftCount !== 1 ? 's' : ''}</div>
+          <div class="map-tip-stats">
+            <div><span class="map-tip-lbl">Tonnes/wk</span><span class="map-tip-val" style="color:${CARGO_COLOR}">${tonnes}</span></div>
+            <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
+            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
+            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
+          </div>
+        </div>
+      `;
+}
+
+/**
+ * The shape of what the route layer draws, as one string: every line (its group
+ * key fixes the geometry) and every pin with its hub badge. A weekly tick
+ * usually leaves all of that alone and moves only the numbers in the tooltips,
+ * and now and then flips a break-even route between green and red. So when
+ * this is unchanged the layer effect recolours and re-labels the lines in place
+ * instead of tearing down and re-adding every polyline and marker. Sorted: the
+ * engine may hand routes back in a different order after a tick.
+ * (Port from Headwinds, where map view keeps the map on screen all the time.)
+ */
+export function networkDrawKey(routeGroups, airportSet, hubs) {
+  const lines = routeGroups.map(g => g.key).sort().join('|');
+  const pins = airportSet.map((a) => {
+    const h = hubs[a.code];
+    return h ? `${a.code}*${h.tier ?? ''}*${h.name ?? ''}` : a.code;
+  }).sort().join(',');
+  return `${lines}#${pins}`;
+}
+
 export function networkAirportTip(airport, hubInfo = null) {
   const badge = hubInfo
     ? ` <span style="color:${HUB_COLOR}">● ${String(hubInfo.name ?? 'Hub').toUpperCase()}</span>`
@@ -448,8 +524,15 @@ export function networkAirportTip(airport, hubInfo = null) {
 
 const WORLD_AIRPORTS_KEY = 'tw_map_world_airports';
 
-export default function RouteMap({ fullBleed = false } = {}) {
-  const { state } = useGame();
+export default function RouteMap({ fullBleed = false, paused = false } = {}) {
+  // Map view keeps this map mounted under every page. While a page covers it
+  // (`paused`) it holds the state it last drew, so a weekly tick or any click
+  // inside the page doesn't re-project the week and rebuild every Leaflet layer
+  // behind the panel. It catches up once, when the panel closes.
+  const live = useGame();
+  const heldRef = useRef(live);
+  if (!paused) heldRef.current = live;
+  const { state } = heldRef.current;
   // Satellite (Blue Marble) or Dark (CARTO) — see basemap.js.
   const [basemap, setBasemap] = useBasemap();
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
@@ -511,6 +594,9 @@ export default function RouteMap({ fullBleed = false } = {}) {
   const worldRendererRef = useRef(null);
   const cargoLayersRef = useRef([]);   // amber cargo route overlay layers
   const charterLayersRef = useRef([]); // yellow charter contract overlay layers
+  // Signatures of what each layer effect last drew (see networkDrawKey), so a
+  // tick that changes no line can skip the rebuild.
+  const drawnRef = useRef({ routes: null, cargo: null, partners: null });
 
   // Keep refs of current interaction state so the (rarely-rebuilt) layer effect
   // can apply correct styling without being a dependency.
@@ -572,6 +658,7 @@ export default function RouteMap({ fullBleed = false } = {}) {
       fittedExtentRef.current = null;
       flownToRef.current = null;
       worldRendererRef.current = null;   // its canvas belonged to the old map
+      drawnRef.current = { routes: null, cargo: null, partners: null };
       setMapReady(false);
     };
   }, [ready]);
@@ -866,19 +953,24 @@ export default function RouteMap({ fullBleed = false } = {}) {
     const L = window.L;
     const dim = selectedId != null ? 0.25 : 1;   // fade partners when focusing a route
 
+    // The airport filter applies to partner overlays too, so "show me JFK"
+    // really means only lines touching JFK. (The aircraft-type filter is
+    // ours-only — we don't know what partners fly.)
+    const shown = partnerRouteData.filter(({ type, origin, dest }) =>
+      (type === 'alliance' ? showAlliance : type === 'codeshare' ? showCodeshare : showRivals)
+      && (airportFilter === 'all' || origin.code === airportFilter || dest.code === airportFilter));
+    // Every tick hands over new competitor objects, usually with the same
+    // network; everything a partner or rival line shows is in this key.
+    const drawKey = `${dim}#` + shown.map(({ comp, type, origin, dest, contested }) =>
+      `${comp.id}:${comp.name}:${type}:${contested ? 1 : 0}:${origin.code}-${dest.code}`).sort().join('|');
+    if (drawnRef.current.partners === drawKey) return;
+    drawnRef.current.partners = drawKey;
+
     // Clear previous partner layers
     partnerLayersRef.current.forEach(l => map.removeLayer(l));
     partnerLayersRef.current = [];
 
-    for (const { comp, type, color, origin, dest, contested } of partnerRouteData) {
-      const show = type === 'alliance' ? showAlliance
-                 : type === 'codeshare' ? showCodeshare
-                 : showRivals;
-      if (!show) continue;
-      // The airport filter applies to partner overlays too, so "show me JFK"
-      // really means only lines touching JFK. (The aircraft-type filter is
-      // ours-only — we don't know what partners fly.)
-      if (airportFilter !== 'all' && origin.code !== airportFilter && dest.code !== airportFilter) continue;
+    for (const { comp, type, color, origin, dest, contested } of shown) {
 
       const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
       const tipHtml = `
@@ -944,6 +1036,17 @@ export default function RouteMap({ fullBleed = false } = {}) {
     const L = window.L;
     const dim = selectedId != null ? 0.3 : 1;   // fade cargo when focusing a passenger route
 
+    // Same lines as last time (a tick): refresh the tooltips only.
+    const drawKey = showCargo ? `${dim}#${cargoGroups.map(g => g.key).sort().join('|')}` : 'off';
+    if (drawnRef.current.cargo === drawKey) {
+      const byKey = new Map(cargoGroups.map(g => [g.key, g]));
+      for (const l of cargoLayersRef.current) {
+        if (l._cargoKey && byKey.has(l._cargoKey)) l.setTooltipContent(cargoTipHtml(byKey.get(l._cargoKey)));
+      }
+      return;
+    }
+    drawnRef.current.cargo = drawKey;
+
     cargoLayersRef.current.forEach(l => map.removeLayer(l));
     cargoLayersRef.current = [];
     if (!showCargo) return;
@@ -951,23 +1054,7 @@ export default function RouteMap({ fullBleed = false } = {}) {
     for (const g of cargoGroups) {
       const { origin, dest } = g;
       const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
-      const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
-      const tonnes  = g.hasResult ? `${Math.round(g.tonnes).toLocaleString()} t` : '—';
-      const profit  = g.hasResult ? g.profit : 0;
-      const profStr = g.hasResult ? `${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk` : '—';
-      const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
-      const tipHtml = `
-        <div class="map-tip">
-          <div class="map-tip-title" style="color:${CARGO_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
-          <div class="map-tip-sub">${origin.city} → ${dest.city} · ${g.aircraftCount} freighter${g.aircraftCount !== 1 ? 's' : ''}</div>
-          <div class="map-tip-stats">
-            <div><span class="map-tip-lbl">Tonnes/wk</span><span class="map-tip-val" style="color:${CARGO_COLOR}">${tonnes}</span></div>
-            <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
-            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
-            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
-          </div>
-        </div>
-      `;
+      const tipHtml = cargoTipHtml(g);
 
       for (const pts of segments) {
         const glow = L.polyline(pts, {
@@ -982,6 +1069,7 @@ export default function RouteMap({ fullBleed = false } = {}) {
           lineCap: 'round', smoothFactor: 1,
         });
         line.bindTooltip(tipHtml, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
+        line._cargoKey = g.key;
         line.on('mouseover', () => line.setStyle({ weight: 4, opacity: 1 }));
         line.on('mouseout',  () => line.setStyle({ weight: 2.5, opacity: 0.9 * dim }));
         line.addTo(map);
@@ -1080,6 +1168,27 @@ export default function RouteMap({ fullBleed = false } = {}) {
     if (!map || !window.L) return;
     const L = window.L;
 
+    // Same lines and pins (the usual weekly tick): recolour any route that
+    // crossed break-even, put the new numbers in the tooltips, and keep every
+    // layer, the hover/focus styles and the view.
+    const drawKey = networkDrawKey(routeGroups, airportSet, hubs);
+    if (drawnRef.current.routes === drawKey) {
+      for (const g of routeGroups) {
+        const group = lineGroupsRef.current.get(g.key);
+        if (!group) continue;
+        const color = routeGroupColor(g);
+        if (color !== group.color) {
+          group.halo.forEach(l => l.setStyle({ color }));
+          group.main.forEach(l => l.setStyle({ color }));
+          group.color = color;
+        }
+        const tip = routeTipHtml(g);
+        group.main.forEach(l => l.setTooltipContent(tip));
+      }
+      return;
+    }
+    drawnRef.current.routes = drawKey;
+
     // Clear previous layers
     layersRef.current.forEach(l => map.removeLayer(l));
     layersRef.current = [];
@@ -1103,28 +1212,7 @@ export default function RouteMap({ fullBleed = false } = {}) {
         : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
       framePaths.push(segments[0]);
 
-      const lf      = g.hasResult ? `${(g.loadFactor * 100).toFixed(0)}%` : '—';
-      const pax     = g.hasResult ? Math.round(g.passengers).toLocaleString() : '—';
-      const profStr = g.hasResult ? `<span style="color:${profitColor}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>` : '—';
-      const rev     = g.hasResult ? `+${formatMoney(g.revenue)}` : '—';
-      const acText  = `${g.aircraftCount} aircraft`;
-      const titleHtml = chain.map(a => a.code).join(' <span class="map-tip-arrow">→</span> ');
-      const subHtml = g.multi
-        ? `${chain.length - 1} legs · ${origin.city} → ${dest.city} · ${acText}`
-        : `${origin.city} → ${dest.city} · ${acText}`;
-      const tipHtml = `
-        <div class="map-tip">
-          <div class="map-tip-title">${titleHtml}</div>
-          <div class="map-tip-sub">${subHtml}</div>
-          <div class="map-tip-stats">
-            <div><span class="map-tip-lbl">Load</span><span class="map-tip-val">${lf}</span></div>
-            <div><span class="map-tip-lbl">Pax/wk</span><span class="map-tip-val">${pax}</span></div>
-            <div><span class="map-tip-lbl">Revenue</span><span class="map-tip-val" style="color:${PROFIT_COLOR}">${rev}</span></div>
-            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
-          </div>
-          <div class="map-tip-hint">Click to focus this route</div>
-        </div>
-      `;
+      const tipHtml = routeTipHtml(g);
 
       const halo = [];
       const main = [];
@@ -1243,7 +1331,10 @@ export default function RouteMap({ fullBleed = false } = {}) {
   // 5. Every airport in the game, dim, under the network. Redrawn for the view
   // on every pan and zoom (see worldAirportsInView). Lives in its own panes so
   // it always sits beneath your lines and your own airports' markers.
-  const pinnedCodes = useMemo(() => new Set(airportSet.map(a => a.code)), [airportSet]);
+  // Keyed on the codes, not the array: airportSet is a new array after every
+  // tick, and a new Set here clears and redraws every background dot.
+  const pinnedKey = useMemo(() => airportSet.map(a => a.code).sort().join(','), [airportSet]);
+  const pinnedCodes = useMemo(() => new Set(pinnedKey ? pinnedKey.split(',') : []), [pinnedKey]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.L || !showAirports) return;

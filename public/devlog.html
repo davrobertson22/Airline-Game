@@ -67,6 +67,32 @@
 
     <div class="entry">
       <p class="date">October 29, 2026</p>
+      <h2>Passenger demand recalibrated against real traffic (new games)</h2>
+      <p>We checked the game&rsquo;s passenger demand against real ticket data: every US city pair in the US Department of Transportation&rsquo;s airfare survey and every Australian domestic route in the government&rsquo;s route statistics. The big routes were close, but the game had about four times as many US domestic passengers as the real world, almost all of them in small cities and short hops. Australia had only about half its real traffic. New games now use a recalibrated model:</p>
+      <ul>
+        <li><strong>Short trips are driven, not flown.</strong> In the US and Australia, demand now fades on routes under about 650&nbsp;km, the way it does when most people take the car. Orlando to Miami no longer looks like New York to Los Angeles.</li>
+        <li><strong>Small towns lose travellers to big airports nearby.</strong> If a much bigger airport is within a few hours&rsquo; drive, many locals use it, so a small US airport next to a major hub has a smaller market of its own.</li>
+        <li><strong>US city size matters more.</strong> Small US cities generate fewer trips per person than the old model gave them, so regional routes are thinner, and the right aircraft for them is smaller.</li>
+        <li><strong>Theme-park and casino cities are sized more realistically.</strong> Most visitors to places like Orlando and Las Vegas arrive by car, so they count for less air demand than visitors to island resorts like Hawaii.</li>
+        <li><strong>Australia flies more.</strong> Long domestic routes such as Sydney&ndash;Melbourne, Brisbane&ndash;Cairns and Perth to the mining towns get substantially more demand. Short hops within New South Wales get less.</li>
+        <li><strong>Double-counted cities fixed.</strong> A few secondary airports were carrying their whole metro&rsquo;s population a second time: St. Petersburg (Tampa), Sanford (Orlando), Mesa (Phoenix), Newport News (Norfolk), Everett (Seattle) and a few smaller ones. Each now has its own share of the city instead.</li>
+      </ul>
+      <p>We deliberately stopped short of full realism, about two-thirds of the way there, so regional flying stays playable. Routes outside the US and Australia are unchanged until we have real data to check them against. <strong>Games already in progress keep the demand they started with.</strong> More on how demand works in the <a href="/route-economics.html">route economics guide</a>.</p>
+    </div>
+    <div class="entry">
+      <p class="date">October 29, 2026</p>
+      <h2>Map view runs smoothly again</h2>
+      <p>The new map view (the beta layout where the world map fills the screen) could get very laggy as soon as you opened a page over the map. That&rsquo;s fixed:</p>
+      <ul>
+        <li>Pages opened over the map (Dashboard, Finance, Routes and the rest) scroll and respond at full speed again. In our tests they had been running at about half speed.</li>
+        <li>The map behind an open page now waits until you close it before it updates, instead of redrawing your whole network behind the page every time something changed.</li>
+        <li>Advancing the week on the map no longer redraws every route. Lines that move from profit to loss (or back) just change colour, and the numbers in the tooltips update in place.</li>
+      </ul>
+      <p>The classic layout is unchanged. You can switch between the two any time from the settings menu.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">October 29, 2026</p>
       <h2>Rival airlines now fly freight</h2>
       <p>Freight was the one business the AI airlines never touched: your freighters only ever competed with each other. Not any more. In new games, established full-service rivals start freight arms of their own and compete with you for the cargo.</p>
       <ul>
@@ -806,18 +832,6 @@
       <p>See the <a href="/aircraft.html">aircraft guide</a> for what each type can do, and <a href="/route-economics.html">route economics</a> for how capacity feeds into a route.</p>
     </div>
     <div class="entry">
-      <p class="date">September 5, 2026</p>
-      <h2>No Wi-Fi on a Constellation</h2>
-      <p>The order form would happily sell you a Wi-Fi and streaming package for a Lockheed Constellation, and let you specify satellite connectivity from the factory on a Boeing 377 &mdash; a factory that closed in 1950. Thanks to Kat the Fox and CorporalSimmons on Discord for spotting it in both games.</p>
-      <ul>
-        <li><strong>Wi-Fi now needs an airframe that can carry it.</strong> Aircraft whose production line closed before 1970 &mdash; the propliners and the first generation of jets, from the DC-3 and the Constellation through the Comet and the 707-120 &mdash; can no longer be ordered with connectivity or retrofitted with it. They were built decades before anyone put an antenna on a fuselage, and nothing was ever certified to go in one. Everything from the 727 and 737-200 generation onward is unaffected.</li>
-        <li><strong>The order form says so, instead of hiding the option.</strong> Pick a vintage type and the connectivity section tells you which year the line closed and why there is nothing to buy. On the aircraft page, those tails show <em>No Wi-Fi possible</em> in place of a retrofit button.</li>
-        <li><strong>Fitting a mixed selection no longer quotes you for the impossible.</strong> Select a hangar full of aircraft and hit Fit Wi-Fi and the price covers only the tails that can actually take it &mdash; the rest are listed as unfittable rather than silently skipped.</li>
-        <li><strong>Era worlds: the factory respects the calendar too.</strong> Onboard internet arrives in 2004. Retrofits already knew that; new orders did not, so a 1950s airline could order a brand-new DC-6 with streaming Wi-Fi. It can't any more.</li>
-        <li><strong>Flying vintage metal still costs you.</strong> An aircraft that cannot be fitted still takes the no-Wi-Fi quality penalty on every route &mdash; passengers judge the flight they got, not the engineering that made it impossible. See <a href="/route-economics.html">route economics</a> for how cabin quality feeds into demand.</li>
-      </ul>
-    </div>
-    <div class="entry">
       <p class="date">September 7, 2026</p>
       <h2>A stop is disliked twice as much</h2>
       <p>With every airline now selling connections, the question came up: shouldn&rsquo;t most passengers prefer the nonstop when there is one? They did &mdash; but not by enough. At equal fare a one-stop over a major hub could take more than 40% of a city pair from a nonstop, and on thin routes two rivals&rsquo; one-stops together could out-sell the direct flight. Airlines&rsquo; own forecasting models put a one-stop at a fifth to a third of a nonstop&rsquo;s appeal, so the connection penalty is now doubled for every carrier&rsquo;s connections alike: a typical stop takes about a third of a pair at equal fare, a stop that doubles the trip about a sixth.</p>
@@ -833,6 +847,18 @@
         <li><strong>The news feed says so.</strong> Added flights and up-gauges appear as capacity additions, trims as a new rolled-up line, so you can see a rival re-shaping its network around you.</li>
       </ul>
       <p>On the two-year contested test network you end about 15% less well off than you did last week, and about 25% better off than before this whole run of changes began &mdash; the overflow you now keep is the overflow a rival genuinely cannot serve. Rivals also carry fewer chronic losers to bankruptcy, so the field you compete against stays a little larger. See <a href="/competition-and-alliances.html">competition</a>.</p>
+    </div>
+    <div class="entry">
+      <p class="date">September 5, 2026</p>
+      <h2>No Wi-Fi on a Constellation</h2>
+      <p>The order form would happily sell you a Wi-Fi and streaming package for a Lockheed Constellation, and let you specify satellite connectivity from the factory on a Boeing 377 &mdash; a factory that closed in 1950. Thanks to Kat the Fox and CorporalSimmons on Discord for spotting it in both games.</p>
+      <ul>
+        <li><strong>Wi-Fi now needs an airframe that can carry it.</strong> Aircraft whose production line closed before 1970 &mdash; the propliners and the first generation of jets, from the DC-3 and the Constellation through the Comet and the 707-120 &mdash; can no longer be ordered with connectivity or retrofitted with it. They were built decades before anyone put an antenna on a fuselage, and nothing was ever certified to go in one. Everything from the 727 and 737-200 generation onward is unaffected.</li>
+        <li><strong>The order form says so, instead of hiding the option.</strong> Pick a vintage type and the connectivity section tells you which year the line closed and why there is nothing to buy. On the aircraft page, those tails show <em>No Wi-Fi possible</em> in place of a retrofit button.</li>
+        <li><strong>Fitting a mixed selection no longer quotes you for the impossible.</strong> Select a hangar full of aircraft and hit Fit Wi-Fi and the price covers only the tails that can actually take it &mdash; the rest are listed as unfittable rather than silently skipped.</li>
+        <li><strong>Era worlds: the factory respects the calendar too.</strong> Onboard internet arrives in 2004. Retrofits already knew that; new orders did not, so a 1950s airline could order a brand-new DC-6 with streaming Wi-Fi. It can't any more.</li>
+        <li><strong>Flying vintage metal still costs you.</strong> An aircraft that cannot be fitted still takes the no-Wi-Fi quality penalty on every route &mdash; passengers judge the flight they got, not the engineering that made it impossible. See <a href="/route-economics.html">route economics</a> for how cabin quality feeds into demand.</li>
+      </ul>
     </div>
     <div class="entry">
       <p class="date">September 5, 2026</p>
@@ -1872,19 +1898,6 @@
     </div>
 
     <div class="entry">
-      <p class="date">July 7, 2026</p>
-      <h2>Unions arrive: strikes and contract negotiations</h2>
-      <p>Underpaying your people is no longer a slow, quiet drag on quality — labor relations now have teeth.</p>
-      <ul>
-        <li><strong>Union unrest.</strong> Each labor group — pilots, cabin crew, ground staff, maintenance — now builds unrest week by week while its morale sits below 50, and the deeper the deficit the faster it climbs. Watch the new unrest bars on the Operations page: cross the strike threshold and a walkout is only a dice roll away.</li>
-        <li><strong>Strikes ground your schedule.</strong> When a group walks out, a large share of your flights are cancelled for one to two weeks — pilots hit hardest at over half the schedule — while your fixed costs keep running. Settle instantly with a 15% raise, or hold the line and eat the losses. Either way there's an industrial truce before the next walkout can start.</li>
-        <li><strong>Contract talks every couple of years.</strong> Each union periodically tables a pay demand — bigger after profitable years, and a snap back toward market rate if you've been paying below it. You get four weeks to accept, counter at the midpoint, or refuse. Counters are a gamble: content crews usually take the deal, angry ones pocket the raise and come back sooner. Ignoring the demand counts as a refusal.</li>
-        <li><strong>Strike losses on the books.</strong> Cancelled-flight revenue losses show up in the weekly debrief and your revenue history, so you can see exactly what a labor dispute cost you.</li>
-      </ul>
-      <p>The full mechanics are documented in the in-game wiki under Operations. Cost-cutters, consider this your two-week warning — the <a href="/strategy.html">strategy guide</a>'s advice about not gutting pay just became load-bearing.</p>
-    </div>
-
-    <div class="entry">
       <p class="date">July 8, 2026</p>
       <h2>Fixed: quality investments now count on multi-aircraft routes — and the Alliances page stops lying</h2>
       <p>Players reported being unable to push their quality score past ~60 — thanks for flagging it, and for the follow-up reports. It turned out to be TWO bugs:</p>
@@ -1895,6 +1908,19 @@
       <p>Also worth knowing: a standard-everything product genuinely tops out in the low 60s by design. To go higher, upgrade seat and service quality, fly a younger fleet, invest in hubs and catering, keep morale high, and leave slack in your schedules — the quality breakdown on each route's detail page shows exactly where your points come from.</p>
       <p>One more refinement in this update: spacious cabins now build lasting goodwill. Floor space you deliberately leave unfilled already boosted per-route quality — it now also feeds your passenger-satisfaction track record, so a roomy fleet earns its reputation over time just like good catering and punctuality do.</p>
       <p><strong>And we simplified the scoreboard.</strong> Six overlapping labels ("overall brand score", "product quality", "quality score (demand)", "passenger satisfaction"…) are now three clear scores, each answering one question: <strong>Quality</strong> — how good is the product? (wins market share and business travelers; satisfaction is a component inside it), <strong>Reputation</strong> — how much do travelers trust you? (demand nudge + price power), and <strong>Awareness</strong> — how many people know you exist? (demand reach). The Reputation page shows all three with their exact effects, and the Wiki explains the model.</p>
+    </div>
+
+    <div class="entry">
+      <p class="date">July 7, 2026</p>
+      <h2>Unions arrive: strikes and contract negotiations</h2>
+      <p>Underpaying your people is no longer a slow, quiet drag on quality — labor relations now have teeth.</p>
+      <ul>
+        <li><strong>Union unrest.</strong> Each labor group — pilots, cabin crew, ground staff, maintenance — now builds unrest week by week while its morale sits below 50, and the deeper the deficit the faster it climbs. Watch the new unrest bars on the Operations page: cross the strike threshold and a walkout is only a dice roll away.</li>
+        <li><strong>Strikes ground your schedule.</strong> When a group walks out, a large share of your flights are cancelled for one to two weeks — pilots hit hardest at over half the schedule — while your fixed costs keep running. Settle instantly with a 15% raise, or hold the line and eat the losses. Either way there's an industrial truce before the next walkout can start.</li>
+        <li><strong>Contract talks every couple of years.</strong> Each union periodically tables a pay demand — bigger after profitable years, and a snap back toward market rate if you've been paying below it. You get four weeks to accept, counter at the midpoint, or refuse. Counters are a gamble: content crews usually take the deal, angry ones pocket the raise and come back sooner. Ignoring the demand counts as a refusal.</li>
+        <li><strong>Strike losses on the books.</strong> Cancelled-flight revenue losses show up in the weekly debrief and your revenue history, so you can see exactly what a labor dispute cost you.</li>
+      </ul>
+      <p>The full mechanics are documented in the in-game wiki under Operations. Cost-cutters, consider this your two-week warning — the <a href="/strategy.html">strategy guide</a>'s advice about not gutting pay just became load-bearing.</p>
     </div>
 
     <div class="entry">
