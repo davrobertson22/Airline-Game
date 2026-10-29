@@ -44,6 +44,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -90,6 +94,7 @@
   <main>
     <h1>How to Play Tailwinds</h1>
     <p class="lede">Tailwinds is a free browser-based airline management game. You start with a small budget and one decision at a time, build a regional carrier into a global airline. This guide walks you through your first hour.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <p>There is nothing to download and no account to create. Everything runs in your browser, and your progress saves automatically on the device you play on. If you have never played a tycoon or management simulation before, this page covers everything you need; if you are an experienced player, jump ahead to the <a href="/strategy.html">strategy guide</a>.</p>
 
@@ -116,15 +121,30 @@
       <p>Open two or three routes out of your hub to start. Every route needs one of your gates at both ends. You begin with a single gate at your hub, and each gate gives you 50 departure slots a week, so add a gate at each destination (the Gates screen, under Airports) before you open a route there. Opening a route also has a one-off launch cost that rises with distance. Look for city pairs with healthy demand, a flight time your aircraft can serve comfortably, and limited competition. Set a fare that covers your costs with room to spare, then watch your load factor — the percentage of seats you fill. A route flying at 80%+ load is working; one stuck at 40% is bleeding you.</p>
     </div>
 
+    <figure class="shot">
+      <img src="/img/guide/planner-demand.webp" width="1200" height="355" loading="lazy" alt="Route Planner analysis of San Francisco to Honolulu showing market demand, the leisure and business split, reference price, seasonality and competitors" />
+      <figcaption>The Route Planner sizes a market before you commit: San Francisco–Honolulu carries 22,894 passengers a week one way, 85% of them leisure travellers. The reference economy fare is $371, and no rival flies the route yet.</figcaption>
+    </figure>
+
     <div class="step">
       <span class="num">4</span><h3>Advance the clock and read the results</h3>
       <p>Time passes in weekly turns. Press <strong>Next Week</strong> when you are ready; if you leave the game open, the week also advances on its own after an hour, and the countdown sits on the button. After each week, review the numbers: which routes made money, which lost it, and what your cash balance is doing. This feedback loop is the whole game. Cut or re-price routes that lose money, add frequency to routes that are full, and keep a healthy cash cushion so one bad week doesn't end your run.</p>
     </div>
 
+    <figure class="shot">
+      <img src="/img/guide/dashboard.webp" width="1200" height="521" loading="lazy" alt="The Tailwinds Dashboard showing cash, projected profit, revenue, fleet, network, load factor, yield and fuel tiles above a weekly P&amp;L and cost-mix bar" />
+      <figcaption>The Dashboard twenty weeks into a new airline based in San Francisco: nine routes, a 92% load factor and $5.47M of weekly revenue. The routes earn $1.18M a week before fixed costs, but leases, gates and overheads still turn that into a weekly loss of $364.7K. The weekly P&amp;L and cost-mix bar show where the money goes.</figcaption>
+    </figure>
+
     <div class="step">
       <span class="num">5</span><h3>Reinvest and expand</h3>
       <p>As profit accumulates, grow deliberately. Add aircraft to your winning routes, open new destinations that connect through your hub, and start thinking about a second hub once your first is established. Every aircraft after your first two needs crew hired under Company &rsaquo; Operations, and pilots take ten weeks to train, so hire ahead of your deliveries: a short-handed airline runs late, and a badly short one leaves aircraft parked.</p>
     </div>
+
+    <figure class="shot">
+      <img src="/img/guide/map.webp" width="1200" height="496" loading="lazy" alt="Route map of a nine-route network radiating from San Francisco to Seattle, Portland, Salt Lake City, Denver, Chicago, Las Vegas, Phoenix, Los Angeles and San Diego" />
+      <figcaption>Network › Map for the same airline: nine spokes from a San Francisco hub to the West Coast, the Mountain West and Chicago. Green lines are profitable routes, red lines lose money, and every dot is an airport you could fly to.</figcaption>
+    </figure>
 
     <h2>Key numbers to watch</h2>
     <p>Three figures tell you almost everything about your airline's health at a glance:</p>

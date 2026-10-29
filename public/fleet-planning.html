@@ -41,6 +41,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -87,9 +91,15 @@
   <main>
     <h1>Fleet Planning: The Right Aircraft at the Right Time</h1>
     <p class="lede">Fleet decisions are the biggest financial commitments you make in Tailwinds. This guide covers the lease-versus-buy question, old versus new generations, fleet commonality, and how your fleet should evolve from startup to global carrier.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <h2>The golden rule: routes first, fleet second</h2>
     <p>Never lease an aircraft and then go looking for something to do with it. Every aircraft should be the answer to a question your route map is already asking: "what's the cheapest machine that can fly this mission with seats I can actually fill?" Fleet planning done in the other direction — falling in love with a jet and hunting for routes to justify it — is how hangar queens are born. An idle or half-utilised aircraft still pays its full weekly lease and maintenance.</p>
+
+    <figure class="shot">
+      <img src="/img/guide/fleet.webp" width="1200" height="275" loading="lazy" alt="Fleet screen showing the airline's livery, fleet size, weekly lease and maintenance totals, idle aircraft count and utilisation by aircraft type" />
+      <figcaption>The Fleet screen totals what your aircraft cost whether they fly or not. For these nine leased narrowbodies that's $732K a week in leases and $586K in maintenance. Under the totals, each type shows its average utilisation and age.</figcaption>
+    </figure>
 
     <h2>Lease or buy?</h2>
     <p>In Tailwinds, leasing costs roughly 9–14% of an aircraft's purchase price per year, charged weekly, plus a refundable deposit of twelve weeks' rent when you sign. Buying pays the full price up front. The arithmetic gives clear guidance:</p>
@@ -121,6 +131,11 @@
       <li><strong>Cancelling costs more.</strong> On a purchase you lose the deposit and a fifth of the instalments you've paid. On a lease you get the deposit back only if the aircraft is still 26 weeks or more away. Either way the slot goes back on the line for anyone to take.</li>
       <li><strong>Launch customers (era games).</strong> A new type is announced two years before it enters service, and for the first six months you can sign up as a launch customer: at least 20 widebodies or 30 of anything smaller, paid in full when you order, for 8% off on top of the bulk discount and the first slots on the line from January of its first year. Each earlier launch programme with the same manufacturer adds 2%, up to 25% off in all. Launch orders are firm and cannot be cancelled.</li>
     </ul>
+
+    <figure class="shot">
+      <img src="/img/guide/market.webp" width="1200" height="785" loading="lazy" alt="The Fleet Market screen in table view, listing Airbus types with seats, range, runway, fuel per seat, maintenance, lease and purchase price" />
+      <figcaption>Fleet › Market in table view puts every type side by side: seats, range, runway length, fuel burn per seat, a 0–100 fuel-efficiency score, weekly maintenance, lease rate and purchase price. Filter by category or manufacturer, or show only types you can lease right now.</figcaption>
+    </figure>
 
     <h2>Old classics vs. new generation</h2>
     <p>Almost every mission in the game has a budget option and a premium option: 737-800 or MAX 8, A330ceo or A350, CRJ or E2. The trade is always the same — the classic leases for much less, the new type burns meaningfully less fuel per seat. Which wins depends on utilisation and fuel:</p>

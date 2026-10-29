@@ -41,6 +41,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -87,6 +91,7 @@
   <main>
     <h1>10 Beginner Mistakes in Tailwinds (and How to Fix Them)</h1>
     <p class="lede">Every airline that goes bankrupt in Tailwinds dies of one of about ten diseases, and most of them are caught early. This guide walks through the mistakes we see new CEOs make again and again — what each one costs you, why it feels like the right move at the time, and the specific fix.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <h2>1. Buying aircraft when you should be leasing</h2>
     <p>A Boeing 737-800 costs $28&nbsp;million to buy outright, or $68,000 a week to lease plus a refundable deposit of twelve weeks' rent. Early on, that purchase price is nearly three times your $10&nbsp;million starting capital — you can't buy one at all without borrowing, and even a cheaper type bought outright ties your capital up in a single airframe — capital that can't open routes, ride out a bad month, or fund a second aircraft. The lease looks more expensive on a long enough horizon, and it is; that's the price of flexibility. But an airline with three leased aircraft earning on three routes almost always outruns an airline with one owned aircraft and an empty bank account.</p>
@@ -107,6 +112,11 @@
     <h2>5. Treating route profit as the whole story</h2>
     <p>The Routes screen can show profit two ways, and they answer different questions. <strong>Contribution</strong> answers "did this route cover its flying costs?" — fuel, crew, landing fees. It does not answer "is this route paying for the aircraft?" Lease and maintenance run whether the aircraft flies or not, and a route can be comfortably green on contribution while the airframe assigned to it loses money once its $68,000 lease and $57,600 base maintenance land somewhere. That somewhere is your bottom line.</p>
     <p><strong>The fix:</strong> judge routes on <strong>Fully-loaded profit</strong> (the default under "Profit shown" on the Routes screen), which splits each aircraft's lease and maintenance across the routes it flies by block-hours. A route that's green on contribution and red on fully-loaded profit is a route flying an aircraft it can't afford — fix the fares, the frequency, or the equipment.</p>
+
+    <figure class="shot">
+      <img src="/img/guide/dashboard.webp" width="1200" height="521" loading="lazy" alt="The Tailwinds Dashboard showing cash, projected profit, revenue, fleet, network, load factor, yield and fuel tiles above a weekly P&amp;L and cost-mix bar" />
+      <figcaption>The Dashboard twenty weeks into a new airline based in San Francisco: nine routes, a 92% load factor and $5.47M of weekly revenue. The routes earn $1.18M a week before fixed costs, but leases, gates and overheads still turn that into a weekly loss of $364.7K. The weekly P&amp;L and cost-mix bar show where the money goes.</figcaption>
+    </figure>
 
     <h2>6. Flying with zero fuel hedges — or 100% hedged at the top</h2>
     <p>Fuel is the biggest single operating cost for most fleets, and its price wanders constantly: cheap-oil gluts, crisis spikes, everything between. Beginners tend to one of two extremes. Either they never open the hedging screen and eat every spike at full exposure, or they panic during a spike and hedge everything for a year, then pay above-normal prices long after the spike has passed.</p>

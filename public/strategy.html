@@ -43,6 +43,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -89,6 +93,7 @@
   <main>
     <h1>Tailwinds Strategy Guide</h1>
     <p class="lede">Once you know the basics, winning at Tailwinds comes down to a handful of systems working together: your fleet, your route economics, your hubs, and your balance sheet. This guide breaks down how each one works and how good players use them.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <p>This page is the overview. When you're ready to go deeper, each system has its own full guide: <a href="/hub-strategy.html">hub strategy</a>, <a href="/route-economics.html">route economics &amp; pricing</a>, <a href="/fleet-planning.html">fleet planning</a>, and <a href="/competition-and-alliances.html">competition &amp; alliances</a> — plus the <a href="/aircraft.html">aircraft guides</a> covering every plane in the game with real stats. Newer additions: <a href="/beginner-mistakes.html">the ten most common beginner mistakes</a>, a <a href="/route-case-study.html">week-by-week route case study with real numbers</a>, and the <a href="/fuel-hedging.html">complete fuel hedging guide</a>.</p>
 
@@ -123,6 +128,11 @@
     <h3>Think in networks, not single routes</h3>
     <p>The best routes aren't always the ones that look most profitable in isolation. A route that feeds passengers into your hub, where they connect onward, can be worth more to your whole network than its standalone numbers show. This connecting value is the core idea behind hubs.</p>
 
+    <figure class="shot">
+      <img src="/img/guide/route-finder.webp" width="1200" height="592" loading="lazy" alt="Route Finder listing unserved markets from San Francisco for a Boeing 737-800, with distance, market size, reference fare, rivals, estimated load and estimated profit" />
+      <figcaption>Network › Route Finder ranks every market you don't serve yet that your aircraft can actually reach. Here it lists San Francisco's biggest unserved markets for a Boeing 737-800, with each one's size, reference fare, rivals, estimated load and estimated weekly profit, and whether you still need a gate there.</figcaption>
+    </figure>
+
     <h2 id="hubs">Hub strategy</h2>
     <p>A hub is an airport where you concentrate flights so passengers can connect from many origins to many destinations through a single point. The power of a hub is multiplicative: ten routes into a hub don't just serve ten cities, they serve the many city-pairs that can be built by connecting through it. That's how a mid-size airline serves markets too thin to fly nonstop.</p>
     <h3>Choosing where to hub</h3>
@@ -138,6 +148,11 @@
       <li><strong>Redeploy</strong> when a route isn't worth a price war — move that aircraft to a market where you have an edge rather than bleeding both airlines dry.</li>
     </ul>
     <div class="tip">Price wars are mutually destructive. Sometimes the strongest move is to let a marginal route go and put your capacity where the competitor isn't.</div>
+
+    <figure class="shot">
+      <img src="/img/guide/competition.webp" width="1200" height="508" loading="lazy" alt="Industry leaderboard ranking airlines by market capitalisation, with each carrier's home hub and whether it is a premium or legacy airline" />
+      <figcaption>Company › Competition ranks every airline in your world by market capitalisation, with its home hub and its business model (premium or legacy). Your rivals grow, merge and go under as the game goes on, so this list changes over time.</figcaption>
+    </figure>
 
     <h2 id="alliances">Alliances &amp; codeshares</h2>
     <p>Joining one of the game's alliances lets you share routes with partner airlines, extending your network into markets you don't fly yourself. Codeshare agreements with individual rival carriers work the same way on a smaller scale. Both feed passengers between partners, lifting load factors on both sides and unlocking international city-pairs that would be unprofitable to serve alone. The trade-off is coordination and shared revenue — an alliance is most valuable when your partners' networks complement yours rather than overlap with them. In games that start in a historical year, codeshares only arrive around 1990 and alliances in 1997.</p>

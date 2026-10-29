@@ -41,6 +41,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -87,6 +91,7 @@
   <main>
     <h1>Route Economics: Reading a P&amp;L and Pricing to Win</h1>
     <p class="lede">Every decision in Tailwinds eventually shows up in a route's profit line. This guide breaks down where demand comes from, what each flight really costs, how to set fares, and how to protect yourself when fuel prices spike.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <h2>Where demand comes from</h2>
     <p>Tailwinds uses a gravity-style demand model: the bigger the populations at both ends of a route and the shorter the distance between them, the more people want to fly it. On top of raw population, four modifiers matter:</p>
@@ -98,6 +103,11 @@
     </ul>
     <p>Demand also swings with the seasons and grows year by year. It is shared among every airline flying the pair, weighted by fares, frequency, quality, and brand and reputation. You're never pricing in a vacuum — you're competing for a finite pool.</p>
 
+    <figure class="shot">
+      <img src="/img/guide/planner-demand.webp" width="1200" height="355" loading="lazy" alt="Route Planner analysis of San Francisco to Honolulu showing market demand, the leisure and business split, reference price, seasonality and competitors" />
+      <figcaption>The Route Planner sizes a market before you commit: San Francisco–Honolulu carries 22,894 passengers a week one way, 85% of them leisure travellers. The reference economy fare is $371, and no rival flies the route yet.</figcaption>
+    </figure>
+
     <h2>What a flight actually costs</h2>
     <p>A route's costs fall into four groups, and they behave differently:</p>
     <ul>
@@ -107,6 +117,11 @@
       <li><strong>Airline overheads.</strong> Some costs never appear on a route line: staff payroll for every aircraft in the fleet, gate rent, head office, insurance, booking and distribution fees (about 2.5% of revenue), marketing, your loyalty programme and hub investment. Routes have to earn enough True profit to pay for all of them.</li>
     </ul>
     <p>Divide total weekly route cost by seats flown and you get <strong>cost per seat</strong> — the number your average fare must beat. Do this mentally before opening any route: seats × realistic load factor × fare against the per-flight and per-aircraft lines, with something left over for overheads. If the margin only works at 95% load, it doesn't work.</p>
+
+    <figure class="shot">
+      <img src="/img/guide/planner-economics.webp" width="1200" height="510" loading="lazy" alt="Route Planner estimated economics for San Francisco to Honolulu: a best-aircraft ranking and an estimate of capacity, load factor, revenue, operating cost, lease and net profit" />
+      <figcaption>Lower down the Planner, the same route priced on an Airbus A320neo at seven flights a week: an estimated 87% load, $786K of weekly revenue (including $40.3K from connecting passengers) and $220.9K of net profit. The Best aircraft table ranks every type that can fly the route by weekly profit.</figcaption>
+    </figure>
 
     <h2>Setting fares</h2>
     <p>Fares steer demand share and yield simultaneously. Cut fares and you fill more seats at lower revenue each; raise them and you earn more per passenger but push travellers to competitors — or out of the market entirely. Practical rules:</p>
@@ -127,6 +142,11 @@
       <li><strong>Size coverage to your exposure.</strong> A turboprop-heavy regional airline can shrug at fuel swings; a widebody long-haul network should rarely fly unhedged.</li>
       <li><strong>Treat the premium as insurance.</strong> Hedges won't always pay off — that's fine. You're buying predictable costs, which is what lets you price routes with confidence. To cut the bill itself rather than steady it, look at fuel-efficiency programmes, winglet retrofits, fuel farms at your busiest airports and, for the very largest airlines, a refinery — all covered in the <a href="/fuel-hedging.html">fuel hedging guide</a>.</li>
     </ul>
+
+    <figure class="shot">
+      <img src="/img/guide/finance.webp" width="1200" height="479" loading="lazy" alt="Finance statements screen with a profit waterfall from weekly revenue to weekly cash, broken into fuel, flight operations, passenger services, aircraft, labour, commercial and overhead costs" />
+      <figcaption>Finance › Statements walks weekly revenue down to cash. In this example, $5.47M of revenue drops step by step through fuel, flight operations, passenger services, aircraft, staff and overheads to a $364.7K weekly loss. The table below compares the last three weeks with this week's projection.</figcaption>
+    </figure>
 
     <h2>Diagnosing a losing route</h2>
     <p>Work down this checklist before killing a route:</p>

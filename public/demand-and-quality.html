@@ -44,6 +44,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -90,6 +94,7 @@
   <main>
     <h1>How Demand &amp; Quality Actually Work</h1>
     <p class="lede">Tailwinds looks approachable on the surface, but underneath sits a full passenger-choice model: every week, simulated travellers weigh your fares, your product, and your schedule against every competitor on the route. This guide opens the hood.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
     <h2>The passenger's decision</h2>
     <p>Demand on a route isn't handed to the airline with the lowest fare. Each passenger segment scores every airline's offer with a utility model — roughly: <em>quality weight × quality score − price weight × relative fare</em>, plus a frequency term — and market share follows from those scores. The two segments weigh the ingredients very differently:</p>
@@ -100,6 +105,11 @@
     </table>
     <p>That asymmetry is the heart of airline strategy in Tailwinds. Leisure travellers chase cheap fares and mostly tolerate a spartan product; business travellers pay more than double the weight on quality and want frequent departures so they can fly when the meeting ends, not when the airline feels like it. A low-cost configuration and a premium configuration can both win — on different routes, against different rivals.</p>
     <p>Beyond price, quality and frequency, a few more terms enter the same calculation. Your brand reach (awareness from marketing, reputation, loyalty and alliance membership) scales how strongly each offer pulls, a hub with many onward spokes adds a connectivity bonus, and lounges at either end lift your appeal to business travellers only. Secondary airports in a multi-airport city, and airports with perimeter rules on long flights, reach a smaller slice of the city's travellers. Loyalty members and a trusted brand also make your passengers less sensitive to price; a poor reputation makes them more so.</p>
+
+    <figure class="shot">
+      <img src="/img/guide/planner-demand.webp" width="1200" height="355" loading="lazy" alt="Route Planner analysis of San Francisco to Honolulu showing market demand, the leisure and business split, reference price, seasonality and competitors" />
+      <figcaption>The Route Planner sizes a market before you commit: San Francisco–Honolulu carries 22,894 passengers a week one way, 85% of them leisure travellers. The reference economy fare is $371, and no rival flies the route yet.</figcaption>
+    </figure>
 
     <h2>The quality score, factor by factor</h2>
     <p>Every route you fly carries a 0–100 quality score, recomputed weekly from how you actually run the airline. Nothing in it is a dial you set directly — each point is earned (or lost) somewhere in your operation:</p>
