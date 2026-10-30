@@ -6,6 +6,14 @@
   <title>Aircraft Guide — All 198 Planes in Tailwinds Airline Management Game</title>
   <meta name="description" content="Complete guide to all 198 aircraft in Tailwinds: narrow-bodies, widebodies, regional jets, turboprops, freighters and flagships — with real in-game stats and economics." />
   <link rel="canonical" href="https://www.tailwindsairlinegame.com/aircraft.html" />
+  <meta property="og:title" content="Aircraft Guide — All 198 Planes in Tailwinds Airline Management Game" />
+  <meta property="og:description" content="Complete guide to all 198 aircraft in Tailwinds: narrow-bodies, widebodies, regional jets, turboprops, freighters and flagships — with real in-game stats and economics." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.tailwindsairlinegame.com/aircraft.html" />
+  <meta property="og:image" content="https://www.tailwindsairlinegame.com/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <!-- Google AdSense -->
   <meta name="google-adsense-account" content="ca-pub-5123198950074938">
@@ -43,6 +51,10 @@
     .note { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:10px 0 0; font-size:0.92rem; }
     .crumbs { font-size:0.85rem; color:var(--muted); margin:0 0 20px; }
     .crumbs a { color:var(--muted); }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-24px 0 32px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -64,6 +76,7 @@
     <p class="crumbs"><a href="/">Home</a> › <a href="/aircraft.html">Aircraft</a></p>
     <h1>Aircraft in Tailwinds</h1>
     <p class="lede">Every aircraft in the game, organised by category — with real stats, per-seat economics, and advice on when to fly each one.</p>
+    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
 
       <p>Tailwinds ships with <strong>198 real-world aircraft types</strong>, from 9-seat island hoppers to the Airbus A380 — every one modelled with its own seats or payload, range, lease and purchase price, fuel burn, crew cost, and maintenance bill. Which ones you fly, and where, is most of the game.</p>
       <p>The guides below cover every type in each category, with full stat tables, per-seat economics computed from the game's actual data, and honest notes on when each aircraft earns its keep. If you're new, start with the <a href="/fleet-planning.html">fleet planning guide</a> to learn how to think about aircraft selection, then dive into a category.</p>
@@ -103,12 +116,16 @@
       <h2>How aircraft economics work in Tailwinds</h2>
       <p>Every aircraft in the game charges you in four ways: a <strong>weekly lease</strong> (or capital tied up in a purchase), <strong>fuel</strong> burned per kilometre flown, <strong>crew</strong> cost per kilometre, and a weekly <strong>maintenance</strong> bill that grows as the airframe ages. Revenue comes from the seats (or cargo tonnes) you fill. The art of fleet planning is matching capacity and range to each route so you pay for exactly the aircraft the mission needs — and nothing more. Orders are not instant, either: the first frame of a type arrives after twice its class's lead time (two weeks for a turboprop, up to ten for a double-decker), and each further frame of the same type follows one lead time behind the last.</p>
       <p>Two derived numbers appear throughout these guides. <strong>Fuel per seat-km</strong> is the fuel cost of moving one seat one kilometre — the cleanest efficiency comparison between types. <strong>Lease per seat</strong> spreads the weekly lease across capacity, showing how expensive each seat is before it ever leaves the gate. Together they explain most of why one aircraft makes money on a route and another loses it.</p>
+      <figure class="shot">
+        <img src="/img/guide/market.webp" width="1200" height="785" loading="lazy" alt="The Fleet Market screen in table view, listing Airbus types with seats, range, runway, fuel per seat, maintenance, lease and purchase price" />
+        <figcaption>Fleet › Market in table view puts every type side by side: seats, range, runway length, fuel burn per seat, a 0–100 fuel-efficiency score, weekly maintenance, lease rate and purchase price. Filter by category or manufacturer, or show only types you can lease right now.</figcaption>
+      </figure>
     <a class="cta" href="/">Play Tailwinds — It's Free →</a>
   </main>
 
   <footer class="site">
     <div class="footwrap">
-      <a href="/">Home</a>
+      <a href="/?home">Home</a>
       <a href="/how-to-play.html">How to Play</a>
       <a href="/strategy.html">Strategy</a>
       <a href="/aircraft.html">Aircraft</a>
@@ -123,7 +140,7 @@
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
-      <span style="margin-left:auto;">© Tailwinds — free to play in your browser.</span>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
     </div>
   </footer>
 </body>

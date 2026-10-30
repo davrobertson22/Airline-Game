@@ -307,7 +307,27 @@ for (const layout of ['cards', 'table']) {
       assert.ok(html.includes(`at ${typicalSeatsOf(T(id))} seats`), `${id}: "at ${typicalSeatsOf(T(id))} seats"`);
     }
   });
+  // A type the maker quotes at full payload (typicalSeats = seats) said nothing,
+  // so its range read as missing its cabin (Discord, 2026-10-21: DC-8-30).
+  test(`the marketplace (${layout}) says so when the range is quoted with every seat filled`, () => {
+    store.set('market_layout', layout);
+    const html = renderToString(React.createElement(ctx.GameProvider, null, React.createElement(Marketplace)))
+      .replaceAll('<!-- -->', '');
+    for (const id of ['erj145', 'b1900d']) {
+      assert.equal(typicalSeatsOf(T(id)), T(id).seats, `${id} is quoted at full payload`);
+      assert.ok(html.includes(`at all ${T(id).seats} seats`), `${id}: "at all ${T(id).seats} seats"`);
+    }
+  });
 }
+
+const { readFileSync } = await import('node:fs');
+test('every passenger row on the aircraft guide pages names the seats its range is quoted at', () => {
+  const pages = ['narrow-body', 'wide-body', 'regional-jets', 'turboprops', 'flagships']
+    .map(p => readFileSync(new URL(`../public/aircraft-${p}.html`, import.meta.url), 'utf8')).join('\n');
+  assert.ok(pages.includes('7,417 km at all 177 seats'), 'DC-8-30');
+  const bare = [...pages.matchAll(/<td>([\d,]+) km<\/td>/g)].map(m => m[1]);
+  assert.deepEqual(bare, [], 'range cells with no seats');
+});
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

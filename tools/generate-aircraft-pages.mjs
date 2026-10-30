@@ -11,12 +11,14 @@ import { fuelCostPerKm } from '../src/utils/fuel.js';
 import { cruiseSpeedKmh, typicalSeatsOf, fullCabinRangeKm } from '../src/utils/simulation.js';
 
 // A passenger type's headline range is quoted at its typical cabin; say which, and
-// what it flies packed to the exit limit.
+// what it flies packed to the exit limit. A type quoted at full payload says so too.
 const lightCabinNote = (t) => {
   if (t.freighter) return '';
   const typical = typicalSeatsOf(t);
-  return typical > 0 && typical < (t.seats ?? 0)
-    ? ` at ${typical} seats (${fmtIntLite(fullCabinRangeKm(t))} km at ${t.seats})` : '';
+  if (!(typical > 0)) return '';
+  return typical < (t.seats ?? 0)
+    ? ` at ${typical} seats (${fmtIntLite(fullCabinRangeKm(t))} km at ${t.seats})`
+    : ` at all ${t.seats} seats`;
 };
 const fmtIntLite = (n) => Math.round(n).toLocaleString('en-US');
 
@@ -54,7 +56,7 @@ const PAGES = [
       <p>Narrow-body jets are the backbone of almost every successful Tailwinds airline. They cover the busiest segment of the route map — short and medium-haul city pairs with strong, repeatable demand — and they do it with economics that widebodies simply cannot match on those stage lengths. If your airline only ever mastered one aircraft category, it should be this one.</p>
       <p>The core trade-off inside the category is capacity versus cost. Smaller types like the A318 or 737-700 are cheap to lease and easy to fill, which makes them forgiving while you learn a market. Larger types like the A321neo or 737 MAX 10 carry far more passengers for only modestly higher trip cost — brilliant on proven routes, punishing on speculative ones. The table and per-type notes below use each aircraft's actual in-game numbers, including fuel cost per seat-kilometre, the single best measure of how cheaply a jet moves one passenger one kilometre.</p>
       <h2>How to choose</h2>
-      <p>Match seats to demand first, then range to mission, and only then look at price. A jet that is 30% too big for its route flies half-empty and loses money regardless of how efficient it is on paper. New-generation types (neo, MAX, A220, E2) burn noticeably less fuel per seat than the classics they replaced, but lease for more — they reward busy networks that keep them in the air. Older classics are the value play for cash-strapped early airlines: far lower weekly lease, but higher burn, and they arrive second-hand with a maintenance bill already inflated by age. The oldest jets here, whose lines closed in 1976 or earlier, are buy-only, because no lessor stocks them. The Comet 1 is listed for history: its certificate was withdrawn in 1955, so it can only be bought in an era game, between 1952 and 1954.</p>`,
+      <p>Match seats to demand first, then range to mission, and only then look at price. A jet that is 30% too big for its route flies half-empty and loses money regardless of how efficient it is on paper. New-generation types (neo, MAX, A220, E2) burn noticeably less fuel per seat than the classics they replaced, but lease for more — they reward busy networks that keep them in the air. Older classics are the value play for cash-strapped early airlines: far lower weekly lease, but higher burn, and they arrive second-hand with a maintenance bill already inflated by age. The oldest jets here, whose lines closed in 1976 or earlier, are buy-only, because no lessor stocks them. The Comet 1 is listed for history: its certificate was withdrawn in 1954, so it can only be bought in an era game, from 1952 through 1954.</p>`,
   },
   {
     file: 'aircraft-wide-body.html',
@@ -152,7 +154,7 @@ const NAV = `
 const FOOTER = `
   <footer class="site">
     <div class="footwrap">
-      <a href="/">Home</a>
+      <a href="/?home">Home</a>
       <a href="/how-to-play.html">How to Play</a>
       <a href="/strategy.html">Strategy</a>
       <a href="/aircraft.html">Aircraft</a>
@@ -167,7 +169,7 @@ const FOOTER = `
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
-      <span style="margin-left:auto;">© Tailwinds — free to play in your browser.</span>
+      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
     </div>
   </footer>`;
 
@@ -200,7 +202,15 @@ const CSS = `
     .card .specs b { color:var(--text); font-weight:600; }
     .note { border-left:3px solid var(--gold); padding:4px 0 4px 16px; color:var(--muted); margin:10px 0 0; font-size:0.92rem; }
     .crumbs { font-size:0.85rem; color:var(--muted); margin:0 0 20px; }
-    .crumbs a { color:var(--muted); }`;
+    .crumbs a { color:var(--muted); }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-24px 0 32px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }`;
+
+// Shown under every page's lede. Bump it when the pages' content changes
+// (new aircraft, rebalanced stats, rewritten advice), not on every regeneration.
+const UPDATED = 'October 29, 2026';
 
 function pageShell({ title, description, canonical, h1, lede, body }) {
   return `<!DOCTYPE html>
@@ -211,6 +221,14 @@ function pageShell({ title, description, canonical, h1, lede, body }) {
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}" />
   <link rel="canonical" href="${canonical}" />
+  <meta property="og:title" content="${esc(title)}" />
+  <meta property="og:description" content="${esc(description)}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${canonical}" />
+  <meta property="og:image" content="https://www.tailwindsairlinegame.com/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <!-- Google AdSense -->
   <meta name="google-adsense-account" content="ca-pub-5123198950074938">
@@ -228,6 +246,7 @@ ${NAV}
     <p class="crumbs"><a href="/">Home</a> › <a href="/aircraft.html">Aircraft</a>${h1 === 'Aircraft in Tailwinds' ? '' : ` › ${esc(h1)}`}</p>
     <h1>${esc(h1)}</h1>
     <p class="lede">${lede}</p>
+    <p class="byline">By the Tailwinds team · Last updated ${UPDATED}</p>
 ${body}
     <a class="cta" href="/">Play Tailwinds — It's Free →</a>
   </main>
@@ -360,7 +379,11 @@ ${catCounts
 
       <h2>How aircraft economics work in Tailwinds</h2>
       <p>Every aircraft in the game charges you in four ways: a <strong>weekly lease</strong> (or capital tied up in a purchase), <strong>fuel</strong> burned per kilometre flown, <strong>crew</strong> cost per kilometre, and a weekly <strong>maintenance</strong> bill that grows as the airframe ages. Revenue comes from the seats (or cargo tonnes) you fill. The art of fleet planning is matching capacity and range to each route so you pay for exactly the aircraft the mission needs — and nothing more. Orders are not instant, either: the first frame of a type arrives after twice its class's lead time (two weeks for a turboprop, up to ten for a double-decker), and each further frame of the same type follows one lead time behind the last.</p>
-      <p>Two derived numbers appear throughout these guides. <strong>Fuel per seat-km</strong> is the fuel cost of moving one seat one kilometre — the cleanest efficiency comparison between types. <strong>Lease per seat</strong> spreads the weekly lease across capacity, showing how expensive each seat is before it ever leaves the gate. Together they explain most of why one aircraft makes money on a route and another loses it.</p>`;
+      <p>Two derived numbers appear throughout these guides. <strong>Fuel per seat-km</strong> is the fuel cost of moving one seat one kilometre — the cleanest efficiency comparison between types. <strong>Lease per seat</strong> spreads the weekly lease across capacity, showing how expensive each seat is before it ever leaves the gate. Together they explain most of why one aircraft makes money on a route and another loses it.</p>
+      <figure class="shot">
+        <img src="/img/guide/market.webp" width="1200" height="785" loading="lazy" alt="The Fleet Market screen in table view, listing Airbus types with seats, range, runway, fuel per seat, maintenance, lease and purchase price" />
+        <figcaption>Fleet › Market in table view puts every type side by side: seats, range, runway length, fuel burn per seat, a 0–100 fuel-efficiency score, weekly maintenance, lease rate and purchase price. Filter by category or manufacturer, or show only types you can lease right now.</figcaption>
+      </figure>`;
 
 writeFileSync(
   path.join(OUT, 'aircraft.html'),

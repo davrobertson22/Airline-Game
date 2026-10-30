@@ -66,6 +66,28 @@
     <p class="lede">What's changing in Tailwinds, update by update. The game ships improvements continuously — this page collects them into readable release notes. For discussion, bug reports, and sneak peeks, <a href="/contact.html">join the Discord</a>.</p>
 
     <div class="entry">
+      <p class="date">October 30, 2026</p>
+      <h2>Crew replacements now stay ahead of leavers while you grow</h2>
+      <p>With <em>Replace leavers automatically</em> on, a growing airline could still find itself a few crew short for a week or two, usually just after new aircraft arrived. Thanks to the player on Discord who reported it. Three fixes:</p>
+      <ul>
+        <li><strong>Crew training for new aircraft are no longer mistaken for spare staff.</strong> While you had pilots in training for an aircraft on order, the automatic replacements counted them as extra people and stopped replacing leavers. A few weeks after the aircraft landed, the gap showed up. Replacements now keep going while your new crews train.</li>
+        <li><strong>Replacements skip the recruiting queue.</strong> A big hire for new aircraft can take several weeks to recruit, and replacements used to wait behind it. They now start training straight away, up to one week's normal intake.</li>
+        <li><strong>&ldquo;Hire by week N&rdquo; counts recruiting time.</strong> If the crew for your next delivery is more than one week's intake, the Operations screen now tells you to start hiring early enough to have them trained in time, instead of a week or two late.</li>
+      </ul>
+      <p>Small airlines also no longer sit one person short of their requirement. See <a href="/on-time-performance.html">on-time performance</a> for how staffing affects your schedule.</p>
+    </div>
+    <div class="entry">
+      <p class="date">October 29, 2026</p>
+      <h2>Real-world fares and flight costs (new games)</h2>
+      <p>Alongside the new passenger demand, new games now use fares and flight costs checked against real data. Real US economy fares barely rise with distance: a short hop costs nearly as much as a medium-haul trip, and coast-to-coast is far cheaper per kilometre. The old fares rose steeply with distance, so short hops were half price and coast-to-coast about 30% too dear. Old flight costs had the same flaw: they had no take-off cost, so short hops were almost free to fly.</p>
+      <ul>
+        <li><strong>Domestic fares follow the real curve.</strong> In every country, short domestic hops now pay more and long domestic stages less: Boston&ndash;New York goes from $93 to $117, New York&ndash;Los Angeles from $381 to $301. International fares are unchanged.</li>
+        <li><strong>Every flight pays for its take-off.</strong> Fuel and crew now include a fixed amount for taxi, take-off and climb on every departure, with a lower per-kilometre rate to match. Each aircraft costs exactly what it used to on its typical mission (about 1,200 km for a narrowbody, 6,000 km for a widebody), so short hops cost more and long stages a little less.</li>
+        <li><strong>Gate to gate takes longer.</strong> Each flight now includes taxi and climb time on the block-hour clock, so an aircraft flies fewer short hops a week: about 44 Boston&ndash;New York round trips for an A320neo, down from 58. Schedules use the same times.</li>
+      </ul>
+      <p>The result: short-haul is no longer the easy money it was, and long-haul international is unchanged. Long domestic routes in a single-class cabin are a bit harder, so they reward premium seats and the right-sized aircraft, much as they do for real airlines. Like the demand changes, this goes about two-thirds of the way to the real numbers. <strong>Games already in progress are unchanged.</strong> See the <a href="/route-economics.html">route economics guide</a>.</p>
+    </div>
+    <div class="entry">
       <p class="date">October 29, 2026</p>
       <h2>Map view, reorganised from your feedback</h2>
       <p>The map view (the beta layout where the world map fills the screen) has a new layout, built from a player&rsquo;s review of the first version:</p>
@@ -90,6 +112,9 @@
         <li><strong>US city size matters more.</strong> Small US cities generate fewer trips per person than the old model gave them, so regional routes are thinner, and the right aircraft for them is smaller.</li>
         <li><strong>Theme-park and casino cities are sized more realistically.</strong> Most visitors to places like Orlando and Las Vegas arrive by car, so they count for less air demand than visitors to island resorts like Hawaii.</li>
         <li><strong>Australia flies more.</strong> Long domestic routes such as Sydney&ndash;Melbourne, Brisbane&ndash;Cairns and Perth to the mining towns get substantially more demand. Short hops within New South Wales get less.</li>
+        <li><strong>Seasons follow real traffic.</strong> Every US and Australian airport now has its own seasonal pattern, taken from three years of real passenger numbers. Florida and Arizona are busiest in winter, Seattle, Boston and Chicago in summer. Ski towns like Vail and Aspen do most of their year between December and March, and Darwin and Cairns peak in the dry season.</li>
+        <li><strong>Regions fly differently.</strong> Westerners fly far more than the old model gave them credit for, and the Northeast and Midwest fly a little less. On top of that, each US and Australian airport is matched to its real traffic, and airports we have no data for take their region&rsquo;s figure.</li>
+        <li><strong>Busy short-haul corridors.</strong> Short hops are now judged on real driving times rather than distance, so a mountain pass counts for what it is. California, the Pacific Northwest and the Texas Triangle fly far more short-haul than other regions. The New York&ndash;Philadelphia&ndash;Washington corridor loses travellers to the train, and Floridians drive. Mountain resorts like Aspen, Jackson Hole and Sun Valley keep their short flights, because nobody drives the pass if they can fly it.</li>
         <li><strong>Double-counted cities fixed.</strong> A few secondary airports were carrying their whole metro&rsquo;s population a second time: St. Petersburg (Tampa), Sanford (Orlando), Mesa (Phoenix), Newport News (Norfolk), Everett (Seattle) and a few smaller ones. Each now has its own share of the city instead.</li>
       </ul>
       <p>We deliberately stopped short of full realism, about two-thirds of the way there, so regional flying stays playable. Routes outside the US and Australia are unchanged until we have real data to check them against.</p>
