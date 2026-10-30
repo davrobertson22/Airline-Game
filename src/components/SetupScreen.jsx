@@ -104,6 +104,8 @@ export default function SetupScreen() {
   const [enableObjectives,  setEnableObjectives]  = useState(true);
   // Production lines (data/productionLines.js): on for new games; fixed for the game's life.
   const [productionLines,   setProductionLines]   = useState(true);
+  // Market development (models/marketDev.js): on for new games; fixed for the game's life.
+  const [marketDev,         setMarketDev]         = useState(true);
   const [eraSel,            setEraSel]            = useState('');       // '' | preset year (string) | 'custom'
   const [eraCustom,         setEraCustom]         = useState('1965');
   const [step,              setStep]              = useState(1);
@@ -221,6 +223,7 @@ export default function SetupScreen() {
       customLogo:       usingCustom ? customLogo : null,
       enableObjectives,
       productionLines,
+      marketDev,
       startYear,
       demandWorld,
       ...(rivalSource === 'custom' && rivalParse?.ok ? { rivalSet: rivalParse.set, rivalMode } : {}),
@@ -681,6 +684,38 @@ export default function SetupScreen() {
                   {productionLines
                     ? 'Aircraft come off factory lines you share with your rivals, and they order and wait too. Pay extra for an early slot, pay for purchases in stages, and sign up as a launch customer in era games'
                     : 'Classic ordering: a private delivery queue, paid in full when you order'}
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              aria-pressed={marketDev}
+              onClick={() => setMarketDev(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                marginTop: 8, padding: '12px 14px',
+                background: 'var(--surface2)',
+                border: `1px solid ${marketDev ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0,
+                background: marketDev ? 'var(--accent)' : 'var(--surface3)', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: 2, left: marketDev ? 18 : 2, width: 16, height: 16,
+                  borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                  <Glyph e="📈" /> Market development
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {marketDev
+                    ? 'Markets grow with the service they get: a new route builds its market over about a year, and a market fades slowly after its flights leave'
+                    : 'Classic markets: every city pair has a fixed size whoever flies it'}
                 </div>
               </div>
             </button>

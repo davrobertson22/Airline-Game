@@ -22,6 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { baseCityPairDemand, routeDistance, referencePrice } from '../utils/market.js';
+import { marketDevFor, marketDevTarget, MARKET_DEV_REF_FREQ } from './marketDev.js';
 import { getAircraftType, maxSeatsForRange, eraPurchasePrice } from '../data/aircraft.js';
 import { valueRemaining } from '../data/overhead.js';
 import { ALLIANCES, applyAllianceEra } from '../data/alliances.js';
@@ -1344,7 +1345,14 @@ function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerH
       const dist = routeDistance(base, ap.code);
       if (!dist || dist < 300) continue;
       if (!pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) continue;
-      const demand = baseCityPairDemand(base, ap.code);
+      // Market development (models/marketDev.js): score a candidate at the
+      // market it would CREATE, not only the one there today — halfway between
+      // today's level and what a well-served pair settles at — or rivals would only
+      // ever enter markets someone else developed. Exactly 1 when the world is
+      // not a market-development world.
+      const devNow = marketDevFor(base, ap.code);
+      const devFactor = (devNow + Math.max(devNow, marketDevTarget(MARKET_DEV_REF_FREQ))) / 2;
+      const demand = baseCityPairDemand(base, ap.code) * devFactor;
       if (!demand || demand < 40) continue;
 
       const inc          = incumbents.get(key) ?? 0;

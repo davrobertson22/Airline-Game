@@ -43,6 +43,7 @@ import {
 import { programmeWeeklyCost } from '../data/fuelProgrammes.js';
 import { routeFuelStations, fuelByStationOf, sumFuelByStation, setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn } from '../data/fuelStations.js';
 import { applyDemandWorld } from '../data/demandWorld.js';
+import { setMarketDev } from '../models/marketDev.js';
 import { totalFarmWeeklyCost, farmDiscountsOf } from '../data/fuelFarm.js';
 import { refineryWeeklyOpex } from '../data/refinery.js';
 import {
@@ -3835,6 +3836,8 @@ export function weeklyTick(state) {
   // world (no-op when it is already live, which it is in the game itself).
   applyDemandWorld(state.demandWorld ?? null);
   setDemandModel(state.demandModel);
+  // Market development (models/marketDev.js): this state's D table, or none.
+  setMarketDev(state);
 
   // Crew pipeline, severe band: tails with nobody to fly them. Transient for this
   // week only (see tickPrep) — an unstaffed aircraft earns nothing but still costs

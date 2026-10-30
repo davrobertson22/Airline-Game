@@ -33,6 +33,7 @@ import { baseCityPairDemand, referencePrice, routeDistance, pairDemandGrowth, ge
 import { SEASONS as V2_SEASONS } from '../data/demandV2Seasons.js';
 import { pairAppeal } from '../data/metros.js';
 import { onDemandWorldChange } from '../data/demandWorld.js';
+import { marketDevFor, marketDevActive } from './marketDev.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
 import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm, aircraftAvailability, aircraftOrderable, typicalSeatsOf, maxSeatsForRange } from '../data/aircraft.js';
@@ -619,7 +620,10 @@ export function pairDemandNow(origin, destination, gameDate, base = baseCityPair
   const seasonal = getSeasonalProfile(origin, destination)[gameDate.month] ?? 1;
   const growth   = gameDate.absWeek != null
     ? pairDemandGrowth(origin, destination, gameDate.absWeek) : 1;
-  return Math.round(base * seasonal * 1 * 1 * growth);
+  // Market development (models/marketDev.js): exactly 1 outside a
+  // market-development world, and the same factor buildRouteMarket applies.
+  const dev = marketDevFor(origin, destination);
+  return Math.round(base * seasonal * 1 * 1 * growth * dev);
 }
 
 // ─── Core calculations ────────────────────────────────────────────────────────
@@ -647,7 +651,17 @@ export function buildRouteMarket(origin, destination, gameDate, maturityFactor =
   // hand) gets exactly 1, so nothing that predates the growth model moves.
   const growth   = gameDate.absWeek != null
     ? pairDemandGrowth(origin, destination, gameDate.absWeek) : 1;
-  const adjusted = Math.round(base * seasonal * maturityFactor * demandMult * growth);
+  // Market development world (models/marketDev.js, docs/market-development-
+  // design.md): the pair's development level D scales the pool, and the old
+  // per-route maturity ramp stops shrinking the MARKET — D's own climb from the
+  // floor is the ramp on a new pair, and on an established pair the market is
+  // already there. The ramp survives as `awareness`: a utility term that lets a
+  // newcomer win share gradually in a contested fight (computeMarketShare).
+  // Outside such a world dev is exactly 1 and the pool is unchanged.
+  const devOn        = marketDevActive();
+  const dev          = marketDevFor(origin, destination);
+  const poolMaturity = devOn ? 1 : maturityFactor;
+  const adjusted = Math.round(base * seasonal * poolMaturity * demandMult * growth * dev);
 
   const shares        = getRouteClassDemandShares(origin, destination);
   const premiumShare  = shares.firstClass + shares.businessClass + shares.premiumEconomy;
@@ -662,8 +676,9 @@ export function buildRouteMarket(origin, destination, gameDate, maturityFactor =
     businessDemand,
     seasonalityFactor: seasonal,
     demandGrowth: growth,
-    maturityFactor,
+    maturityFactor: poolMaturity,
     eventDemandMult: demandMult,
+    ...(devOn ? { marketDev: dev, awareness: maturityFactor } : {}),
     referencePrice: refPrice,
     distanceKm: routeDistance(origin, destination),
   };
@@ -1068,7 +1083,15 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   const compressedRef    = market.referencePrice * fareCompression;
   const compressedBizRef = compressedRef * BUSINESS_PRICE_MULTIPLIER;
 
-  const leisureUtils  = offers.map(o => computeUtility(o, market, 'leisure'));
+  // Awareness ramp (market-development worlds only): the player's route
+  // maturity, moved out of the pool and into utility. log(ramp) multiplies the
+  // offer's softmax weight by exactly the ramp, so a newcomer wins share
+  // gradually — but it is deliberately NOT in offersBrandCapture below: it moves
+  // passengers between carriers, never out of the market. Absent everywhere
+  // else (market.awareness undefined → 0).
+  const awareUtil = (o) => (market.awareness != null && market.awareness < 1 && o.airlineId === 'player')
+    ? Math.log(Math.max(market.awareness, 0.01)) : 0;
+  const leisureUtils  = offers.map(o => computeUtility(o, market, 'leisure') + awareUtil(o));
   // Business softmax EXCLUDES economy-only offers (no business cabin). Otherwise a
   // cheap all-economy carrier captures business-segment share it cannot sell —
   // phantom pax that earn $0, inflate its load factor, and (for player configs with
@@ -1080,7 +1103,7 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   const bizCapable = offers.map(o => o.businessPrice != null && (o.businessSeats ?? 0) > 0);
   const anyBiz = bizCapable.some(Boolean);
   const businessUtils = offers.map((o, i) =>
-    anyBiz && !bizCapable[i] ? -Infinity : computeUtility(o, market, 'business'));
+    anyBiz && !bizCapable[i] ? -Infinity : computeUtility(o, market, 'business') + awareUtil(o));
   const leisureShares  = softmax(leisureUtils);
   const businessShares = anyBiz ? softmax(businessUtils) : offers.map(() => 0);
 
@@ -3673,8 +3696,10 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const [a, b] = routeKey.split('-');
   const dist  = routeDistance(a, b);
   const refP  = referencePrice(a, b);
-  const baseD = baseCityPairDemand(a, b);
-  if (!dist || !refP || !baseD) return null;
+  const baseRaw = baseCityPairDemand(a, b);
+  if (!dist || !refP || !baseRaw) return null;
+  // The same market the player's tick sees (models/marketDev.js; 1 when off).
+  const baseD = baseRaw * marketDevFor(a, b);
 
   const evDemand = world?.demandMultFor ? Number(world.demandMultFor(a, b)) : 1;
   const evMult   = Number.isFinite(evDemand) && evDemand > 0 ? evDemand : 1;

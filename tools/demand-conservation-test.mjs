@@ -272,7 +272,9 @@ function buildAirline(shape, fare) {
   // A THIN pair, or both shapes are capacity-bound at any sane fare and the
   // duplication is invisible.
   const O = 'JFK', D = 'BTV', TAIL = 'PWM';
-  let s = gameReducer(freshState(), { type: 'START_GAME', airlineName: 'Pool Air', hub: O, enableObjectives: false });
+  let s = gameReducer(freshState(), { type: 'START_GAME', airlineName: 'Pool Air', hub: O, enableObjectives: false,
+    // Classic markets: a thin pair sized for this pool-conservation check.
+    marketDev: false });
   s = { ...s, competitors: [], encroachments: {}, cash: 400_000_000 };
   for (const code of [D, TAIL]) s = gameReducer(s, { type: 'ADD_GATE', airportCode: code });
   for (let i = 0; i < 2; i++) { s = gameReducer(s, { type: 'LEASE_AIRCRAFT', typeId: smallType.id }); tick(); }
@@ -322,7 +324,9 @@ test('H2: replacing a nonstop with a tag leg does not raise total pair traffic a
   const fare = Math.round(market.referencePrice * 1.25);
   // One nonstop alone claims the whole (elastic) pool at this fare.
   const O = 'JFK', D = 'BTV';
-  let s = gameReducer(freshState(), { type: 'START_GAME', airlineName: 'Solo Air', hub: O, enableObjectives: false });
+  let s = gameReducer(freshState(), { type: 'START_GAME', airlineName: 'Solo Air', hub: O, enableObjectives: false,
+    // Classic markets: a thin pair sized for this pool-conservation check.
+    marketDev: false });
   s = { ...s, competitors: [], encroachments: {}, cash: 400_000_000 };
   s = gameReducer(s, { type: 'ADD_GATE', airportCode: D });
   s = gameReducer(s, { type: 'LEASE_AIRCRAFT', typeId: smallType.id }); tick();

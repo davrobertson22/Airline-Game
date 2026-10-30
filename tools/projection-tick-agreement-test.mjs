@@ -70,7 +70,9 @@ const DESTS = ['ORD', 'LAX', 'MIA', 'BOS', 'SFO', 'ATL', 'DEN', 'SEA'];
 function startedAirline({ seed = 12345, ageWeeks = 500, freq = 21, fare = 1.15 } = {}) {
   seedRandom(seed);
   let s = gameReducer(freshState(),
-    { type: 'START_GAME', airlineName: 'Probe Air', hub: 'JFK', enableObjectives: false });
+    { type: 'START_GAME', airlineName: 'Probe Air', hub: 'JFK', enableObjectives: false,
+      // Classic markets: the sold-out lanes are calibrated so a slump moves them.
+      marketDev: false });
   s = { ...s, cash: 5e9 };
   for (let i = 0; i < 14; i++) s = gameReducer(s, { type: 'ADD_GATE', airportCode: 'JFK' });
   for (const d of DESTS) {

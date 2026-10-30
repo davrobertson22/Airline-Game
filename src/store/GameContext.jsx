@@ -19,6 +19,7 @@ import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, ca
          setFareIndex, setEraStartYear, setEraCalendarYear,
          setDemandModel, isDemandModel, DEMAND_MODEL_CLASSIC, DEMAND_MODEL_LATEST } from '../utils/market.js';
 import { applyDemandWorld, isDemandWorld, summarizeDemandWorld, demandFactor } from '../data/demandWorld.js';
+import { setMarketDev, prewarmMarketDev, advanceMarketDev, cleanMarketDev } from '../models/marketDev.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
@@ -1865,6 +1866,8 @@ function reducer(state, action) {
   applyDemandWorld(state?.demandWorld ?? null);
   // Demand model (utils/market.js "Demand model v2"): this game's, never the last one's.
   setDemandModel(state?.demandModel);
+  // Market development (models/marketDev.js): this state's D table, or none.
+  setMarketDev(state);
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
   setFuelStationDiscounts(fuelStationsOn(state)    // this airline's fuel farms (§8)
     ? farmDiscountsOf(state, absoluteWeek(state?.year ?? 1, state?.week ?? 1)) : null);
@@ -2025,6 +2028,15 @@ function reducer(state, action) {
         // airline in the world sells connections over its hubs, not just you.
         // Always on in Tailwinds — new games here, old saves in reconcileState.
         rivalItineraries: true,
+        // Market development (docs/market-development-design.md): a city pair's
+        // market grows with the service it gets and fades slowly when that
+        // service leaves. NEW games only — existing saves carry no flag and keep
+        // fixed gravity markets for their whole life. Every pair the starting
+        // field serves opens at its equilibrium, so the world starts settled.
+        ...(action.marketDev !== false ? {
+          marketDevWorld: true,
+          marketDev:      prewarmMarketDev({ competitors: _competitors }),
+        } : {}),
         // TRACKED FROM BIRTH. ensureCrewSeeded only fills groups with no headcount
         // recorded — that is the migration path for saves older than the pipeline.
         // A new game must not take it, or an airline that buys its whole fleet
@@ -6393,6 +6405,12 @@ function reducer(state, action) {
           ...(aircraftPayments ? { aircraftPayments } : {}),
           loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members },
         competitors:       updatedCompetitors,
+        // Market development: next week's D from the service that flew THIS
+        // week (the week-start routes and rival networks the tick just ran).
+        // Absent in a world without the flag, so classic saves never grow a key.
+        ...(state.marketDevWorld === true
+          ? { marketDev: advanceMarketDev(state, { month: weekToGameDate(state.week).monthIndex }) }
+          : {}),
         ...(state.rivalEntrants ? { rivalEntrants: aiEntrants ?? state.rivalEntrants } : {}),
         encroachments:     updatedEncroachments,
         hubs:              hubsAfterBuild,
@@ -6834,6 +6852,15 @@ function reconcileState(parsed) {
     delete parsed.demandModel;
   }
   setDemandModel(parsed.demandModel);
+  // Market development survives a load only on a flagged world, and only
+  // well-formed (bad entries dropped). An unflagged save never grows the key.
+  if (parsed.marketDevWorld === true) {
+    parsed = { ...parsed, marketDev: cleanMarketDev(parsed.marketDev) };
+  } else if (parsed.marketDev != null) {
+    parsed = { ...parsed };
+    delete parsed.marketDev;
+  }
+  setMarketDev(parsed);
   const reconciled = {
     ...parsed,
     horizonExempt,
@@ -7109,6 +7136,7 @@ export function GameProvider({ children }) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   applyDemandWorld(state?.demandWorld ?? null);
   setDemandModel(state?.demandModel);
+  setMarketDev(state);
 
   // ── Hydrate ────────────────────────────────────────────────────────────────
   // StrictMode double-invokes effects in development. A latch rather than a
