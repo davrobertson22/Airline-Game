@@ -16,7 +16,8 @@ import {
   calcReconfCost, refitWeeks, calendarYear, shortYearLabel, buildEventDemandModel,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
-         setFareIndex, setEraStartYear, setEraCalendarYear } from '../utils/market.js';
+         setFareIndex, setEraStartYear, setEraCalendarYear,
+         setDemandModel, isDemandModel, DEMAND_MODEL_CLASSIC, DEMAND_MODEL_LATEST } from '../utils/market.js';
 import { applyDemandWorld, isDemandWorld, summarizeDemandWorld, demandFactor } from '../data/demandWorld.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
 import { prepareWeek } from '../utils/tickPrep.js';
@@ -1862,6 +1863,8 @@ function reducer(state, action) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   // Randomized-demand world (data/demandWorld.js): idempotent, cheap when unchanged.
   applyDemandWorld(state?.demandWorld ?? null);
+  // Demand model (utils/market.js "Demand model v2"): this game's, never the last one's.
+  setDemandModel(state?.demandModel);
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
   setFuelStationDiscounts(fuelStationsOn(state)    // this airline's fuel farms (§8)
     ? farmDiscountsOf(state, absoluteWeek(state?.year ?? 1, state?.week ?? 1)) : null);
@@ -1884,6 +1887,14 @@ function reducer(state, action) {
       // sizes networks and picks starter routes off tiers and demand.
       const _demandWorld = isDemandWorld(action.demandWorld) ? action.demandWorld : null;
       applyDemandWorld(_demandWorld);
+      // Demand model v2 is the model for NEW games (recalibrated against real
+      // O&D — utils/market.js). Set before freshState() for the same reason as
+      // the world: the rival sample sizes its networks off demand. Existing
+      // saves carry no stamp and price on the classic model for their whole life.
+      // `demandModel: 1` on the action starts a classic game (no setup UI —
+      // fixtures built on classic demand use it).
+      const _demandModel = action.demandModel === DEMAND_MODEL_CLASSIC ? DEMAND_MODEL_CLASSIC : DEMAND_MODEL_LATEST;
+      setDemandModel(_demandModel);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
       const _fresh = freshState();
       // Custom rival set (models/rivalSets.js), pasted in at setup. Re-checked
@@ -1990,6 +2001,7 @@ function reducer(state, action) {
         loans:       [],
         phase:             'playing',
         ...(_demandWorld ? { demandWorld: _demandWorld, pendingToasts: demandWorldToasts(_demandWorld, action.hub) } : {}),
+        ...(isDemandModel(_demandModel) ? { demandModel: _demandModel } : {}),
         objectives:        action.enableObjectives !== false ? initialObjectives() : [],
         objectivesEnabled: action.enableObjectives !== false,
         // Crew pipeline (A7) is the model for NEW games: crew are hired and
@@ -6662,6 +6674,7 @@ function reducer(state, action) {
       // The incoming save's demand world, not the outgoing game's, must be live
       // while reconcileState re-derives anything from demand or tiers.
       applyDemandWorld(action.payload?.demandWorld ?? null);
+      setDemandModel(action.payload?.demandModel);
       return reconcileState(action.payload);
     }
 
@@ -6814,6 +6827,13 @@ function reconcileState(parsed) {
     delete parsed.demandWorld;
   }
   applyDemandWorld(parsed.demandWorld ?? null);
+  // Demand model: only a known version survives a load; anything else (and every
+  // save from before v2 existed) is classic. Never upgraded on load.
+  if (parsed.demandModel != null && !isDemandModel(parsed.demandModel)) {
+    parsed = { ...parsed };
+    delete parsed.demandModel;
+  }
+  setDemandModel(parsed.demandModel);
   const reconciled = {
     ...parsed,
     horizonExempt,
@@ -7088,6 +7108,7 @@ export function GameProvider({ children }) {
   // until the first click. Idempotent; the reducer re-sets the same values.
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   applyDemandWorld(state?.demandWorld ?? null);
+  setDemandModel(state?.demandModel);
 
   // ── Hydrate ────────────────────────────────────────────────────────────────
   // StrictMode double-invokes effects in development. A latch rather than a

@@ -28,7 +28,7 @@ import { AIRCRAFT_TYPES, getAircraftType, aircraftAvailability } from './aircraf
 import { getAirport } from './airports.js';
 import { weeklyLandingFee, landingCategoryFor } from './overhead.js';
 import { fuelCostPerKm } from '../utils/fuel.js';
-import { distanceKm } from '../utils/market.js';
+import { distanceKm, sectorCostKm } from '../utils/market.js';
 
 // ── Contract types ───────────────────────────────────────────────────────────
 
@@ -184,8 +184,9 @@ export function missionCostPerWeek({
   // which is not in the fee table at all, and silently applied the default.
   const cat     = landingCategoryFor(type);
 
-  const fuel    = Math.round(dist * fuelCostPerKm(type) * flights * fuelIndex * fuelMod);
-  const crew    = Math.round(dist * (type.crewCostPerKm ?? 0) * flights);
+  const costKm  = sectorCostKm(type, dist);   // v2's per-departure take-off chunk (= dist classic)
+  const fuel    = Math.round(costKm * fuelCostPerKm(type) * flights * fuelIndex * fuelMod);
+  const crew    = Math.round(costKm * (type.crewCostPerKm ?? 0) * flights);
   const landing = weeklyLandingFee(cat, flightsPerWeek, o.tier, d.tier);
 
   // Handling surcharge only at the ends you do NOT already serve (locked design

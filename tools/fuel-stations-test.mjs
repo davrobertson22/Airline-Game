@@ -8,6 +8,7 @@
 //
 //   node tools/fuel-stations-test.mjs
 
+import { sectorCostKm } from '../src/utils/market.js';
 import assert from 'node:assert/strict';
 import {
   stationFuelBasis, stationFuelDriver, stationFuelBand, routeFuelStations, tankerFraction,
@@ -218,7 +219,9 @@ test('the same tail on a dear pair costs more per km than on a cheap pair', () =
   const cheap = simulateRoute({ origin: 'JFK', destination: 'LAX', weeklyFrequency: 7, tankering: 'off' }, ac, gd, null, 1.0);
   const dear = simulateRoute({ origin: 'BOS', destination: 'JFK', weeklyFrequency: 7, tankering: 'off' }, ac, gd, null, 1.0);
   assert.ok(cheap && dear, 'sims ran');
-  const perKm = (r, o, d) => r.fuelCost / routeDistanceKm(o, d) / 14;
+  // Per BILLED km (market.js sectorCostKm): in a demand-model-v2 game a short
+  // sector carries a fixed take-off chunk, so raw-km cost differs by length.
+  const perKm = (r, o, d) => r.fuelCost / sectorCostKm(type, routeDistanceKm(o, d)) / 14;
   assert.ok(near(perKm(cheap, 'JFK', 'LAX') / perKm(dear, 'BOS', 'JFK'), cheap.fuelStationFactor / dear.fuelStationFactor, 0.01));
   setFuelStationsEnabled(false);
 });

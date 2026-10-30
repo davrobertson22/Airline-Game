@@ -107,8 +107,10 @@ assert.ok(TYPE, 'a320neo missing from the aircraft data — re-point this fixtur
  * same aeroplane the tick flies.
  */
 function airline({ hub, dest, tails, freq, weeksOpen = 20, awareness = 70 }) {
+  // Classic demand model: these fixtures (saturated DCA–GSP etc.) were sized on
+  // it, and the agreement they test does not depend on it.
   let s = quiet(() => gameReducer(freshState(),
-    { type: 'START_GAME', airlineName: 'Probe Air', hub, enableObjectives: false }));
+    { type: 'START_GAME', airlineName: 'Probe Air', hub, enableObjectives: false, demandModel: 1 }));
   s = { ...s, cash: 5e9 };
   for (let i = 0; i < 6; i++) s = gameReducer(s, { type: 'ADD_GATE', airportCode: hub });
   for (let i = 0; i < 6; i++) s = gameReducer(s, { type: 'ADD_GATE', airportCode: dest });

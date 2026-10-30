@@ -12,6 +12,17 @@
  * worker prices with the identical sum the main thread would.
  */
 import { finderForecastContext, forecastCandidate } from '../models/routeFinder.js';
+import { setDemandModel } from './market.js';
+import { applyDemandWorld } from '../data/demandWorld.js';
+
+// A worker is its own module world: the main thread's module-level demand
+// knobs (demand model version, randomized-demand world) never reach it, so they
+// are set here from the held state before pricing — otherwise a v2 game's
+// finder would rank routes on classic demand.
+function syncDemandModules(state) {
+  setDemandModel(state?.demandModel);
+  applyDemandWorld(state?.demandWorld ?? null);
+}
 
 export function createForecastWorkerCore() {
   let heldId = null;
@@ -25,6 +36,7 @@ export function createForecastWorkerCore() {
     }
     if (msg.type === 'price') {
       if (msg.stateId !== heldId || !held) return { type: 'result', jobId: msg.jobId, missing: true };
+      syncDemandModules(held);
       const ctx = finderForecastContext(msg.ctx);
       const results = (msg.rows ?? []).map((r) => {
         try { return [r.key, forecastCandidate(held, r, ctx)]; }

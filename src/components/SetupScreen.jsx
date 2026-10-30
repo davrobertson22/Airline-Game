@@ -13,6 +13,7 @@ import { fileToLogoDataURL, LOGO_UPLOAD_HINT } from '../utils/logoImage.js';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE } from '../data/demandWorld.js';
 import { loadAirportMarkets } from './AllAirportsTable.jsx';
+import { DEMAND_MODEL_LATEST } from '../utils/market.js';
 import { parseRivalSet, splitRivalSet, exampleRivalSet, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
@@ -201,7 +202,8 @@ export default function SetupScreen() {
     if (demandMode === 'random') {
       setRolling(true);
       try {
-        const { AIRPORT_MARKETS } = await loadAirportMarkets();
+        // A new game runs the latest demand model, so its tiers roll off those markets.
+        const { AIRPORT_MARKETS } = await loadAirportMarkets(DEMAND_MODEL_LATEST);
         demandWorld = rollDemandWorld(seedValue, { uncapMegas }, AIRPORT_MARKETS);
       } catch (_) {
         setRolling(false);

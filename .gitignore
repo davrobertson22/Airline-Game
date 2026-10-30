@@ -31,3 +31,6 @@ npm-debug.log*
 _logo_preview.mjs
 _to_delete/
 _stage_tmp/
+
+# Demand audit downloads (DOT, BITRE, OSRM): re-fetch with tools/demand-audit/fetch-*.mjs
+tools/demand-audit/data/

@@ -696,7 +696,10 @@ test('ten years on, one-maker carriers fly only their maker (classic, everything
 
 test('copying the field out keeps the year an airline joined, not the start year', () => {
   need();
-  let s = withSeed(96, () => start({ startYear: 1970, rivalSet: eraSet, rivalStartups: 'off' }));
+  // Classic demand model: this is about the founding year surviving an export,
+  // and under v2's per-flight costs this seed's Seventies Jet (a budget start-up
+  // flying 720Bs on short European hops) goes bust before year 4.
+  let s = withSeed(96, () => start({ startYear: 1970, rivalSet: eraSet, rivalStartups: 'off', demandModel: 1 }));
   withSeed(97, () => { for (let w = 0; w < 52 * 4; w++) s = gameReducer({ ...s, cash: 1e12 }, { type: 'ADVANCE_WEEK' }); });
   assert.ok(s.competitors.some(c => c.name === 'Seventies Jet'), 'joined in 1972');
   const launched = { id: 'su1', name: 'Velocity Air', homeHub: 'ORD', tier: 'budget', isStartup: true, foundedWeek: 5 * 52 + 3, routes: {}, baseQualityScore: 40 };

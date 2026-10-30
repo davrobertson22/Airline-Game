@@ -75,8 +75,9 @@ const paxRoute = (id, aircraftId, o, d, extra = {}) => ({
 
 function world(extra = {}) {
   seedRandom(11);
+  // Classic demand model: the reach/route scenarios here were built on it.
   const s = gameReducer(freshState(),
-    { type: 'START_GAME', airlineName: 'Renewal Air', hub: 'JFK', enableObjectives: false });
+    { type: 'START_GAME', airlineName: 'Renewal Air', hub: 'JFK', enableObjectives: false, demandModel: 1 });
   return {
     ...s, cash: 900_000_000, crewPipeline: false,
     gates: { ...(s.gates ?? {}), JFK: 40, BOS: 20, ORD: 20, LAX: 20 },

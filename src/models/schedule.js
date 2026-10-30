@@ -21,6 +21,7 @@
 // player — and their blocks carry `charter: true` so the editor draws them as
 // fixed. Without them a tail on a charter showed free time it doesn't have.
 
+import { sectorTaxiHours } from '../utils/market.js';
 import {
   routeStops, routeDistanceKm, cruiseSpeedKmh, turnaroundHours, isRouteActive, activeCharterOps,
 } from '../utils/simulation.js';
@@ -59,7 +60,8 @@ export function routeRotation(route, type) {
   }
   const back = [...out].reverse().map(l => ({ from: l.to, to: l.from, km: l.km }));
   const legs = [...out, ...back].map(l => ({
-    ...l, flightMin: Math.max(1, Math.round((l.km / speed) * 60)), turnMin,
+    // Gate to gate: v2 adds taxi/climb/approach time per sector (0 classic).
+    ...l, flightMin: Math.max(1, Math.round((l.km / speed + sectorTaxiHours(type)) * 60)), turnMin,
   }));
   const durMin = legs.reduce((s, l) => s + l.flightMin + l.turnMin, 0);
   return { stops, legs, durMin };
