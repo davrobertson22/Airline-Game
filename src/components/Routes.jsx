@@ -43,6 +43,7 @@ import {
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo, blockHourFit,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport,
+  routePairKey,
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
 
@@ -2488,9 +2489,26 @@ function BulkFrequencyModal({ allGroups, onApply, onClose }) {
 
 // ─── Per-class pricing panel ──────────────────────────────────────────────────
 
-function PricingPanel({ route, aircraft, type }) {
+// Exported for tools/pair-cabins-pricing-test.mjs (SSR of the real panel).
+export function PricingPanel({ route, aircraft, type }) {
   const { state, dispatch } = useGame();
   const config = aircraft?.config ?? (type ? { economy: type.seats } : {});
+  // Fares belong to the PAIR, so a cabin another aircraft on the pair sells is
+  // this route's fare too. Showing only this tail's cabins hid them — on a pair
+  // flown by an A321 and a 777, the A321 row had no way to see or set First
+  // (port from Headwinds, Discord Dunno23 2026-10-19).
+  const pairCabins = useMemo(() => {
+    const key = routePairKey(route.origin, route.destination);
+    const fleetById = new Map((state.fleet ?? []).map(a => [a.id, a]));
+    const out = new Set();
+    for (const r of state.routes ?? []) {
+      if (r.id === route.id || routePairKey(r.origin, r.destination) !== key) continue;
+      const a = fleetById.get(r.aircraftId);
+      const cfg = a?.config ?? (a ? { economy: getAircraftType(a.typeId)?.seats ?? 0 } : {});
+      for (const [cls, n] of Object.entries(cfg)) if (n > 0 && !((config[cls] ?? 0) > 0)) out.add(cls);
+    }
+    return [...out];
+  }, [state.routes, state.fleet, route.id, route.origin, route.destination, config]);
   const basis  = loadProfitBasis();
 
   // Forecast the DRAFT fares through the sanctioned shared projection —
@@ -2539,6 +2557,7 @@ function PricingPanel({ route, aircraft, type }) {
         origin={route.origin}
         dest={route.destination}
         config={config}
+        pairCabins={pairCabins}
         fares={route.classPrices}
         project={project}
         onCommitMany={(updates) =>
