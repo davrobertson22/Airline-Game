@@ -157,6 +157,7 @@ import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxS
          isLegalEraStartYear, ERA_MIN_START_YEAR, ERA_MAX_START_YEAR,
          HORIZON_YEAR, horizonReached, pastHorizon } from '../data/era.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
+import { cleanHex, normalizeAirlineCode } from '../utils/logoBranding.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
 // retain. 1820 weeks = 35 game years — comfortably covers the Statistics page's
@@ -1278,6 +1279,10 @@ function freshState() {
     logoId: 'horizon',
     logoColor: '#f5a623',
     customLogo: null,   // data URL of a user-uploaded logo (overrides logoId when set)
+    // logoBg (tile colour, hex) and airlineCode (QF, UA …) are absent until
+    // chosen: absent = the default dark tile / a code derived from the name.
+    // Left off the fresh state so a game that never sets them is byte-for-byte
+    // what it was (the golden masters hash the whole state).
     hub: '',
     homeCountry: '',  // ISO country code of starting hub — hubs restricted to this country
     cash: STARTING_CASH,
@@ -2013,6 +2018,8 @@ function reducer(state, action) {
         logoId:      action.logoId    ?? 'horizon',
         logoColor:   action.logoColor ?? '#f5a623',
         customLogo:  action.customLogo ?? null,
+        ...(cleanHex(action.logoBg) ? { logoBg: cleanHex(action.logoBg) } : {}),
+        ...(normalizeAirlineCode(action.airlineCode) ? { airlineCode: normalizeAirlineCode(action.airlineCode) } : {}),
         hub:         action.hub,
         homeCountry: getAirport(action.hub)?.country ?? '',
         gates:       { [action.hub]: 1 },
@@ -3409,6 +3416,16 @@ function reducer(state, action) {
       if (typeof action.logoId === 'string')   next.logoId    = action.logoId;
       if (typeof action.logoColor === 'string') next.logoColor = action.logoColor;
       if ('customLogo' in action)              next.customLogo = action.customLogo ?? null;
+      // Tile colour and airline code: null clears back to the default (dark
+      // tile / code derived from the name); anything invalid is ignored.
+      if ('logoBg' in action) {
+        if (action.logoBg == null) next.logoBg = null;
+        else if (cleanHex(action.logoBg)) next.logoBg = cleanHex(action.logoBg);
+      }
+      if ('airlineCode' in action) {
+        if (action.airlineCode == null || action.airlineCode === '') next.airlineCode = null;
+        else if (normalizeAirlineCode(action.airlineCode)) next.airlineCode = normalizeAirlineCode(action.airlineCode);
+      }
       // Livery (data/livery.js): a whole paint scheme at a time, normalised so
       // the save only ever holds valid colours/styles. `livery: null` clears it
       // back to the default derived from the logo colour (liveryFor). Absent →

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { formatMoney, routeQualityBreakdown } from '../utils/simulation.js';
 import AirlineLogo from './AirlineLogo.jsx';
+import { carrierLogo } from '../utils/logoBranding.js';
 import AllianceDashboard from './AllianceDashboard.jsx';
 import { partnershipActuals } from '../utils/allianceStats.js';
 import {
@@ -302,7 +303,7 @@ function AllianceCard({
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {memberComps.map(c => (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <AirlineLogo id={c.logoId} size={18} radius={4} />
+              <AirlineLogo {...carrierLogo(state, c)} size={18} radius={4} />
               <span style={{ fontSize: 11 }}>{c.name}</span>
             </div>
           ))}
@@ -414,12 +415,13 @@ function AllianceCard({
 // ─── Active codeshare row ────────────────────────────────────────────────────
 
 function ActiveCodeshareRow({ agreement, comp, weeklyRevenue, dispatch }) {
+  const { state } = useGame();
   const tier = TIER_META[agreement.competitorTier] ?? TIER_META.legacy;
   const net  = weeklyRevenue - agreement.weeklyFee;
 
   return (
     <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-      {comp && <AirlineLogo id={comp.logoId} size={32} radius={6} />}
+      {comp && <AirlineLogo {...carrierLogo(state, comp)} size={32} radius={6} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 13 }}>{agreement.competitorName}</div>
         <div style={{ fontSize: 11, color: tier.color }}>{tier.label}</div>
@@ -529,7 +531,7 @@ function AvailableCodeshares({ competitors, codeshareAgreements, servedAirports,
                 className="card"
                 style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}
               >
-                <AirlineLogo id={comp.logoId} size={30} radius={6} />
+                <AirlineLogo {...carrierLogo(state, comp)} size={30} radius={6} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{comp.name}</div>

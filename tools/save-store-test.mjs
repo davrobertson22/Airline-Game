@@ -346,7 +346,7 @@ test('a localStorage slot is still the flat record with gameState', async () => 
 test('metaFromState carries exactly what the cards render', () => {
   const meta = metaFromState(stateAt());
   assert.deepEqual(Object.keys(meta).sort(),
-    ['airlineName', 'cash', 'customLogo', 'hub', 'logoColor', 'logoId', 'startYear', 'week', 'year']);
+    ['airlineName', 'cash', 'customLogo', 'hub', 'logoBg', 'logoColor', 'logoId', 'startYear', 'week', 'year']);
 });
 
 test('the key list is the four saves and nothing else', () => {

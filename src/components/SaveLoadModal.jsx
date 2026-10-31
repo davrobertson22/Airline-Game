@@ -71,7 +71,7 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
       ) : (
         <div className="save-slot-body">
           <div className="save-slot-airline">
-            <AirlineLogo id={slot.logoId} customSrc={slot.customLogo} size={26} radius={5} accentColor={slot.logoColor} />
+            <AirlineLogo id={slot.logoId} customSrc={slot.customLogo} size={26} radius={5} accentColor={slot.logoColor} bgColor={slot.logoBg} />
             <div>
               <div className="save-slot-airline-name">{slot.airlineName}</div>
               <div className="save-slot-hub">{slot.hub}</div>

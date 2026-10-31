@@ -12,6 +12,8 @@ import { ARCHETYPES, FIRE_SALE_PREMIUM, ACQUISITION_PREMIUM, acquisitionQuote, a
 import { getAlliance, effectiveAllianceId } from '../data/alliances.js';
 import { getAircraftType } from '../data/aircraft.js';
 import AirlineLogo from './AirlineLogo.jsx';
+import { carrierLogo } from '../utils/logoBranding.js';
+import { worldAirlineCodes } from '../models/departureBoard.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { buyoutNudgeToast } from '../utils/headwinds.js';
 import { exportRivalSet } from '../models/rivalSets.js';
@@ -268,6 +270,7 @@ export function RivalSetShare({ state }) {
 
 function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, playerHub, playerCash,
                         playerMarketCap, playerSharePrice }) {
+  const { state } = useGame();
   // Build unified list with player + competitors
   const entries = [
     {
@@ -350,7 +353,7 @@ function Leaderboard({ competitors, playerLastWeek, playerName, playerLogoId, pl
               </div>
 
               {/* Logo */}
-              <AirlineLogo id={entry.logoId} size={32} />
+              <AirlineLogo {...carrierLogo(state, entry)} size={32} />
 
               {/* Name + hub */}
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -416,6 +419,8 @@ function SectionHeader({ children }) {
 }
 
 function CompetitorCard({ carrier, playerRouteMap }) {
+  const { state } = useGame();
+  const code = worldAirlineCodes(state)[carrier.id ?? carrier.name];
   const tier        = TIER_META[carrier.tier] ?? { label: carrier.tier, color: 'var(--text-muted)' };
   const totalRoutes  = Object.keys(carrier.routes).length;
   const sharedRoutes = Object.keys(carrier.routes).filter(k => k in playerRouteMap).length;
@@ -425,9 +430,12 @@ function CompetitorCard({ carrier, playerRouteMap }) {
     <div className="card" style={{ padding: '14px 16px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <AirlineLogo id={carrier.logoId} size={36} />
+        <AirlineLogo {...carrierLogo(state, carrier)} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>{carrier.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>
+            {carrier.name}
+            {code && <span title="Airline code" style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{code}</span>}
+          </div>
           <span style={{
             fontSize: 10, padding: '1px 7px', borderRadius: 99,
             background: 'var(--surface2)', color: tier.color, fontWeight: 600,
@@ -1021,6 +1029,7 @@ function NetworkPanel({ carrier, playerRouteMap, playerCargoLanes = new Set(), p
 // ─── Acquisition modal ────────────────────────────────────────────────────────
 
 function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
+  const { state } = useGame();
   const quote           = acquisitionQuote(target) ?? {};
   const premium         = target.fireSale ? FIRE_SALE_PREMIUM : ACQUISITION_PREMIUM;
   const acquisitionCost = quote.price ?? Math.round((target.marketCap ?? 0) * premium);
@@ -1058,7 +1067,7 @@ function AcquisitionModal({ target, playerCash, onConfirm, onCancel }) {
       <div className="card" style={{ width: '100%', maxWidth: 420, padding: '24px 24px 20px' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <AirlineLogo id={target.logoId} size={44} />
+          <AirlineLogo {...carrierLogo(state, target)} size={44} />
           <div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>{target.name}</div>
             <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 99, background: 'var(--surface2)', color: tier.color, fontWeight: 600 }}>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatMoney } from '../utils/simulation.js';
 import { buildAllianceStats } from '../utils/allianceStats.js';
 import AirlineLogo from './AirlineLogo.jsx';
+import { carrierLogo } from '../utils/logoBranding.js';
 import { Glyph } from './Icons.jsx';
 
 const TIER_COLOR = { budget: 'var(--yellow)', legacy: 'var(--accent)', premium: '#a78bfa' };
@@ -106,7 +107,7 @@ export default function AllianceDashboard({ alliance, members, state, roster }) 
                 <tr key={m.id}>
                   <td>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {m.logoId && <AirlineLogo id={m.logoId} size={16} />}
+                      {m.logoId && <AirlineLogo {...carrierLogo(state, m)} size={16} />}
                       <span style={{ fontWeight: 600 }}>{m.name}</span>
                       {roleOf(m.id) === 'FOUNDER' && <span title="Founder">★</span>}
                       <span style={{ fontSize: 10, color: TIER_COLOR[m.tier] ?? 'var(--text-muted)' }}>

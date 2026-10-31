@@ -82,7 +82,7 @@ function CloudSlotCard({ index, slot, mode, canUploadHere, busy, onUpload, onLoa
       ) : (
         <div className="save-slot-body">
           <div className="save-slot-airline">
-            <AirlineLogo id={m.logoId} customSrc={m.customLogo} size={26} radius={5} accentColor={m.logoColor} />
+            <AirlineLogo id={m.logoId} customSrc={m.customLogo} size={26} radius={5} accentColor={m.logoColor} bgColor={m.logoBg} />
             <div>
               <div className="save-slot-airline-name">{m.airlineName}</div>
               <div className="save-slot-hub">{m.hub}</div>
