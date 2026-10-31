@@ -1842,15 +1842,23 @@ function renewOne(state, newId, toasts) {
 // an ordinary HIRE_CREW right after the tick — same cost, same training wait,
 // same accounting as the player clicking Hire. (Inside the tick it would need
 // its own P&L row; outside it, it is simply a hire.) See autoReplacePlan.
+//
+// Two things keep the replacements ahead of the leavers (2026-10-30, Discord
+// 2026-10-21 "I regularly see 1-2 weeks where I am short"): the plan is told
+// what is on order, so crew training for a delivery are not mistaken for spare
+// people; and the hire is marked `replace`, so it starts training ahead of any
+// growth hire waiting in the recruiting queue instead of behind it.
 function withAutoReplace(prev, next) {
   if (!next || next === prev || !next.crewPipeline || !next.labor) return next;
-  const plan = autoReplacePlan(next.labor, next.fleet ?? [], (a) => getAircraftType(a.typeId));
+  const plan = autoReplacePlan(next.labor, next.fleet ?? [], (a) => getAircraftType(a.typeId),
+    (id) => relativePay(next, id, next.labor?.[id]?.payMultiplier),
+    { pendingOrders: next.pendingOrders ?? [], absWeek: absoluteWeek(next.year ?? 1, next.week ?? 1) });
   if (plan.length === 0) return next;
   let s = next;
   for (const { group, bodies, owedAfter } of plan) {
     let owed = owedAfter;
     if (bodies >= 1) {
-      const hired = reducer(s, { type: 'HIRE_CREW', group, bodies });
+      const hired = reducer(s, { type: 'HIRE_CREW', group, bodies, replace: true });
       // Couldn't afford it: keep owing the whole amount, try again next week.
       if (hired === s) owed += crewUnitsForBodies(group, bodies);
       else s = hired;
@@ -4221,9 +4229,23 @@ function reducer(state, action) {
         relativePay(state, group, g.payMultiplier));
       const usedSoFar  = intakeUsed(g, nowAbsWeek);
       const waiting    = Math.max(0, Number(g.recruiting) || 0);
-      const room       = waiting > 1e-9 ? 0 : Math.max(0, intakeCap - usedSoFar);
+      // Replacing leavers (`replace`, sent only by "Replace leavers
+      // automatically") goes to the FRONT of the line: it fills seats the
+      // airline already has, so it must not wait behind a big growth hire in
+      // the queue — that wait is exactly how replacements used to land after
+      // the people they were replacing had gone. It still has a speed limit:
+      // one week's intake of replacements, tracked separately, so an airline
+      // paying far under the going rate still cannot backfill at full speed.
+      const replaceUsed = g.intake?.absWeek === nowAbsWeek
+        ? Math.max(0, Number(g.intake?.replaceUsed) || 0) : 0;
+      const room       = action.replace
+        ? Math.max(0, intakeCap - replaceUsed)
+        : waiting > 1e-9 ? 0 : Math.max(0, intakeCap - usedSoFar);
       const startNow   = Math.min(trained, room);
       const toQueue    = trained - startNow;
+      const intakeNext = { absWeek: nowAbsWeek, used: usedSoFar + startNow,
+        ...((action.replace || replaceUsed > 0)
+          ? { replaceUsed: replaceUsed + (action.replace ? startNow : 0) } : {}) };
       return {
         ...state,
         cash: state.cash - cost,
@@ -4235,7 +4257,7 @@ function reducer(state, action) {
             pipeline: startNow > 0
               ? [...(g.pipeline ?? []), { count: startNow, readyAbsWeek }]
               : (g.pipeline ?? []),
-            ...(startNow > 0 ? { intake: { absWeek: nowAbsWeek, used: usedSoFar + startNow } } : {}),
+            ...(startNow > 0 ? { intake: intakeNext } : {}),
             ...(toQueue > 1e-9 ? { recruiting: Math.round((waiting + toQueue) * 10000) / 10000 } : {}),
           },
         },
