@@ -15,7 +15,7 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
+import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
 import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
@@ -29,6 +29,7 @@ import Charters from './components/Charters.jsx';
 import Maintenance from './components/Maintenance.jsx';
 import Ancillaries from './components/Ancillaries.jsx';
 import Loyalty from './components/Loyalty.jsx';
+import Partnerships from './components/Partnerships.jsx';
 import Alliances from './components/Alliances.jsx';
 import Wiki from './components/Wiki.jsx';
 import News from './components/News.jsx';
@@ -149,6 +150,7 @@ const TABS = [
   { id: 'ancillaries', label: 'Ancillaries',  Icon: AncillaryIcon     },
   { id: 'reputation',  label: 'Reputation',    Icon: RepIcon         },
   { id: 'loyalty',     label: 'Loyalty',       Icon: LoyaltyIcon     },
+  { id: 'partners',    label: 'Partnerships',  Icon: HandshakeIcon   },
   { id: 'alliances',   label: 'Alliances',    Icon: AllianceIcon    },
   { id: 'competition', label: 'Competition',  Icon: CompetitionIcon   },
   { id: 'finance',     label: 'Finance',       Icon: FinanceIcon     },
@@ -167,7 +169,7 @@ const NAV_GROUPS = [
   { label: 'Network',  Icon: MapIcon,        children: ['map', 'finder', 'planner', 'routes'] },
   { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
   { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
-  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'charters', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'alliances', 'competition'] },
+  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'charters', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'partners', 'alliances', 'competition'] },
   { id: 'finance' },
   { id: 'wiki' },
 ];
@@ -414,6 +416,7 @@ function AppInner() {
     ancillaries: <Ancillaries />,
     reputation:  <Reputation />,
     loyalty:     <Loyalty />,
+    partners:    <Partnerships />,
     alliances:   <Alliances />,
     competition: <Competition />,
     finance:     <Finance />,
@@ -836,7 +839,11 @@ function AppInner() {
 
       {/* Nav tabs (grouped) */}
       <div className="nav-tabs">
-        {NAV_GROUPS.map((grp) => {
+        {NAV_GROUPS.map((g0) => {
+          // Travel partnerships exist only in games started with them; older
+          // saves hide the page rather than show it empty.
+          const grp = g0.children && state.partnershipsWorld !== true
+            ? { ...g0, children: g0.children.filter((c) => c !== 'partners') } : g0;
           if (!grp.children) {
             const t = TABS_BY_ID[grp.id];
             const Icon = t.Icon;

@@ -20,7 +20,11 @@ import {
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateSensReduction, CLASS_FARE_MULTIPLIERS,
+  stateTravelPartnerFields, routeStops,
 } from '../utils/simulation.js';
+import {
+  TRAVEL_PARTNER_MAP, TP_TYPES, travelPartnerCovers, travelPartnerInSeason, travelLiftScale, seasonLabel,
+} from '../data/travelPartners.js';
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
@@ -54,6 +58,28 @@ function Stat({ label, value, sub, color }) {
       {sub && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>}
     </div>
   );
+}
+
+/** Travel partners covering this route's stops, with what each lifts this month. */
+function travelPartnerRows(state, route) {
+  const partners = state.travelPartners;
+  if (!partners || !route) return [];
+  const month = currentGameDate(state).month;
+  const stops = routeStops(route);
+  const out = [];
+  for (const c of Object.values(partners)) {
+    const p = TRAVEL_PARTNER_MAP[c.partnerId];
+    if (!p || !stops.some(code => travelPartnerCovers(p, code))) continue;
+    const inSeason = travelPartnerInSeason(p, month);
+    const lift = inSeason ? p.lift * travelLiftScale(c.happiness) : 0;
+    out.push({
+      id: p.id, name: p.name, segment: TP_TYPES[p.type].segment, lift,
+      note: !inSeason ? `out of season (${seasonLabel(p)})`
+        : lift < p.lift ? `${TP_TYPES[p.type].label.toLowerCase()} · unhappy, promoting you less`
+        : `${TP_TYPES[p.type].label.toLowerCase()} · ${TP_TYPES[p.type].segment} travellers`,
+    });
+  }
+  return out;
 }
 
 /** Where this route's quality score comes from — mirrors the engine exactly
@@ -122,9 +148,21 @@ function QualityBreakdownPanel({ route, aircraft, state }) {
           </span>
         </div>
       )}
-<div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
+{/* Travel partners — like lounges, a demand term outside the quality score. */}
+      {travelPartnerRows(state, route).map(t => (
+        <div key={t.id} data-route-partner={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
+          <span>
+            {t.name}
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{t.note}</span>
+          </span>
+          <span style={{ fontWeight: 600, color: t.lift > 0 ? 'var(--green)' : 'var(--text-dim)', whiteSpace: 'nowrap', marginLeft: 10 }}>
+            {t.lift > 0 ? `+${(t.lift * 100).toFixed(1)}% ${t.segment}` : 'no lift'}
+          </span>
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
         Quality drives your share of passengers against competitors — business travelers weigh it heavily.
-        Lounges sit outside this score: they move the business segment on their own.
+        Lounges and travel partners sit outside this score: they move their demand segment on their own.
       </div>
     </div>
   );
@@ -318,6 +356,8 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // lounge parity while the tick scores it higher answers the question
           // wrongly on the one screen built to answer it.
           loungeAppeal:      stateLoungeFields(state, origin, dest).loungeAppeal,
+          // Travel partners — the segment lifts the tick attaches.
+          ...stateTravelPartnerFields(state, origin, dest),
           // See the note on combinedOffer below: without this the share panel
           // scores a brand-new airline as an established one. The campaign lift
           // and the loyalty/reputation elasticity blunting are attached for the
@@ -410,6 +450,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // for the same reason: the single-tail offer above carries all four,
           // and a pair should not be scored differently for having two tails.
           loungeAppeal: stateLoungeFields(state, origin, dest).loungeAppeal,
+          ...stateTravelPartnerFields(state, origin, dest),
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost: playerCampaignBoost(state, origin, dest),
           brandReach: stateBrandReach(state, maxHubBonus, false, [origin, dest]),
@@ -445,7 +486,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
       // same labor / utilization / satisfaction inputs the engine uses.
       const result = simulateRoute(
-        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
+        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateTravelPartnerFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
         // The live fuel multiplier (price × burn), never a bare 1.0: the
         // fallback preview must agree with the tick like every other one.
         aircraft, gameDate, state.labor ?? null, fuelSimMultiplierOf(state),

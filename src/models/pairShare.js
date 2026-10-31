@@ -63,6 +63,7 @@ import {
   hubSpokeCounts,
   routePairKey,
   stateSensReduction,
+  stateTravelPartnerFields,
   stateBrandReach,
   stateLoungeFields,
   stateGroundHandlingFields,
@@ -199,6 +200,10 @@ export function buildPlayerPairOffer(state, pairRoutes) {
     // off would preview the business share of a carrier with a lounge network
     // for one that has none (or vice versa).
     loungeAppeal:     stateLoungeFields(state, r0.origin, r0.destination).loungeAppeal,
+    // Travel partners (cruise / tours lift leisure, hotels / ride share lift
+    // business). Same reason again: an offer without them previews a partnered
+    // airline as if it had none.
+    ...stateTravelPartnerFields(state, r0.origin, r0.destination),
   };
 }
 
@@ -887,6 +892,10 @@ export function projectRouteAddition(state, spec) {
       // loungeContractFactor it quotes the full third-party premium ground rate
       // on a route the tick discounts — wrong in both directions at once.
       ...stateLoungeFields(state, origin, destination),
+      // Travel-partner segment lifts, for the month being projected — the tick
+      // attaches the same fields.
+      ...stateTravelPartnerFields(state, origin, destination, gameDate?.month ?? null),
+      ...(state.partnershipsWorld === true ? { travelPartnerTrack: true } : {}),
       ...(hcf ? { hubCostFactors: hcf } : {}),
       // Self-handling factor, with the route being launched counted against the
       // station's capacity — the tick will see it in the schedule next week.

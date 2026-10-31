@@ -32,6 +32,7 @@ export const TAB_LABELS = {
   ancillaries:  'Ancillaries',
   reputation:   'Reputation',
   loyalty:      'Loyalty',
+  partners:     'Partnerships',
   alliances:    'Alliances',
   competition:  'Competition',
   finance:      'Finance',
@@ -56,6 +57,7 @@ export const TAB_GROUP = {
   ancillaries:  'Company',
   reputation:   'Company',
   loyalty:      'Company',
+  partners:     'Company',
   alliances:    'Company',
   competition:  'Company',
 };

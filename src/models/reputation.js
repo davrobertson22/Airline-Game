@@ -19,6 +19,7 @@
 import { laborEffects } from '../data/labor.js';
 import { computeQualityScore, cabinQualityPoints, designAgeQualityPts } from './demand.js';
 import { getAircraftType } from '../data/aircraft.js';
+import { travelPartnerReputation } from '../data/travelPartners.js';
 
 const QUALITY_SCORE = { basic: 15, standard: 45, premium: 72, luxury: 100 };
 
@@ -75,12 +76,17 @@ export function calcReputation(state, loyaltyBonus = 0, avgUtilization = null) {
   const moraleScore  = Math.round(Math.min(100, Math.max(0, avgMorale + profitBump)));
 
   const penalty = Math.max(0, state.reputationPenalty ?? 0);
+  // Travel partners (data/travelPartners.js): delighted partners add up to +2,
+  // sour ones take up to 8 off, weighted by how prominent the partner is. 0
+  // with no partners, so every existing figure is unchanged.
+  const partnersTerm = travelPartnerReputation(state.travelPartners);
   const overall = Math.max(0, Math.min(100, Math.round(
     serviceScore * 0.35 +
     fleetScore   * 0.20 +
     networkScore * 0.20 +
     moraleScore  * 0.25 +
-    loyaltyBonus
+    loyaltyBonus +
+    partnersTerm
   ) - penalty));
 
   // Quality score as fed into the demand model (mirrors computeQualityScore inputs);
@@ -103,7 +109,8 @@ export function calcReputation(state, loyaltyBonus = 0, avgUtilization = null) {
     designAgePts:   avgDesignAgePts,
   }) + effects.groundQualityBonus));
 
-  return { overall, service: serviceScore, fleet: fleetScore, network: networkScore, morale: moraleScore, qualityDemandScore, avgAgeYears, loyaltyBonus };
+  return { overall, service: serviceScore, fleet: fleetScore, network: networkScore, morale: moraleScore, qualityDemandScore, avgAgeYears, loyaltyBonus,
+    ...(partnersTerm !== 0 || state.travelPartners ? { partners: partnersTerm } : {}) };
 }
 
 /**

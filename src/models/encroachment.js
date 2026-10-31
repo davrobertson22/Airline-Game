@@ -177,6 +177,11 @@ export function buildEncroachmentOffer(spec, market, pairCodes = null) {
     // bank has no lounge network to model. The field exists so a preview or a
     // ported multiplayer rival spec can supply one without a second edit here.
     loungeAppeal:      spec.loungeAppeal ?? 1,
+    // Travel partners — same plumbing as loungeAppeal: a human rival's own
+    // partner lift must reach every other player's tick, or the two ticks score
+    // the same pair differently. AI carriers sign no partners and stay at 1.
+    travelLeisureAppeal:  spec.travelLeisureAppeal ?? 1,
+    travelBusinessAppeal: spec.travelBusinessAppeal ?? 1,
   };
 }
 

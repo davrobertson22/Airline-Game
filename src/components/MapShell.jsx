@@ -119,6 +119,9 @@ export const MAP_PAGES = {
   ancillaries:    { tab: 'ancillaries', Icon: TicketIcon },
   reputation:     { tab: 'reputation', Icon: RepIcon },
   loyalty:        { tab: 'loyalty', Icon: LoyaltyIcon },
+  // Travel partners exist only in games started with them (App.jsx hides the
+  // classic tab the same way).
+  partners:       { tab: 'partners', Icon: HandshakeIcon, when: (s) => s?.partnershipsWorld === true },
   'fin-statements': { tab: 'finance', label: 'Statements', Icon: ScaleIcon },
   'fin-planning':   { tab: 'finance', label: 'Loans & Forecast', Icon: BanknoteIcon },
   'fin-analysis':   { tab: 'finance', label: 'Analysis', Icon: BarChartIcon },
@@ -133,7 +136,7 @@ export const MAP_GROUPS = [
   { id: 'fleet',   label: 'Fleet',      Icon: FleetIcon,      pages: ['fleet', 'market'] },
   { id: 'world',   label: 'World',      Icon: GlobeIcon,      pages: ['competition', 'alliances', 'news'] },
   { id: 'ops',     label: 'Operations', short: 'Ops', Icon: OperationsIcon, pages: ['operations', 'maintenance', 'fuel'] },
-  { id: 'service', label: 'Service',    Icon: SeatIcon,       pages: ['marketing', 'catering', 'ancillaries', 'reputation', 'loyalty'] },
+  { id: 'service', label: 'Service',    Icon: SeatIcon,       pages: ['marketing', 'catering', 'ancillaries', 'reputation', 'loyalty', 'partners'] },
   { id: 'finance', label: 'Finance',    Icon: FinanceIcon,    pages: ['fin-statements', 'fin-planning', 'fin-analysis', 'fin-breakdown'] },
 ];
 

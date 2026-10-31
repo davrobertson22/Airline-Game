@@ -161,7 +161,7 @@ await test('3/5. Barca\'s groups, each page in exactly one', () => {
     Fleet:      ['fleet', 'market'],
     World:      ['competition', 'alliances', 'news'],
     Operations: ['operations', 'maintenance', 'fuel'],
-    Service:    ['marketing', 'catering', 'ancillaries', 'reputation', 'loyalty'],
+    Service:    ['marketing', 'catering', 'ancillaries', 'reputation', 'loyalty', 'partners'],
     Finance:    ['fin-statements', 'fin-planning', 'fin-analysis', 'fin-breakdown'],
   });
   const all = MAP_GROUPS.flatMap(g => g.pages);
@@ -183,6 +183,7 @@ await test('4. a group is one click and its pages are tabs in the panel header',
   assert.ok(/data-page="planner"[^>]*aria-selected="true"/.test(tabs), 'Route Planner tab, selected');
   assert.ok(/data-shell="group:search"[^>]*aria-pressed="true"/.test(html), 'Search lit in the dock');
   assert.ok(shell('competition').includes('data-page="news"'), 'Tailwinds has News in solo');
+  assert.ok(!shell('marketing').includes('data-page="partners"'), 'Partnerships only in games started with them');
   assert.ok(!shell(MAP_TAB).includes('class="ms-panel"'), 'map only: no panel');
 });
 
