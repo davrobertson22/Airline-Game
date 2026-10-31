@@ -1890,13 +1890,15 @@ function reducer(state, action) {
       // sizes networks and picks starter routes off tiers and demand.
       const _demandWorld = isDemandWorld(action.demandWorld) ? action.demandWorld : null;
       applyDemandWorld(_demandWorld);
-      // Demand model v2 is the model for NEW games (recalibrated against real
-      // O&D — utils/market.js). Set before freshState() for the same reason as
+      // The latest demand model (v3 — utils/market.js) is the model for NEW
+      // games; a game keeps the one it started on. Set before freshState() for the same reason as
       // the world: the rival sample sizes its networks off demand. Existing
       // saves carry no stamp and price on the classic model for their whole life.
       // `demandModel: 1` on the action starts a classic game (no setup UI —
       // fixtures built on classic demand use it).
-      const _demandModel = action.demandModel === DEMAND_MODEL_CLASSIC ? DEMAND_MODEL_CLASSIC : DEMAND_MODEL_LATEST;
+      // A fixture may name an older model (`demandModel: 2`); anything else is the latest.
+      const _demandModel = action.demandModel === DEMAND_MODEL_CLASSIC ? DEMAND_MODEL_CLASSIC
+        : isDemandModel(action.demandModel) ? action.demandModel : DEMAND_MODEL_LATEST;
       setDemandModel(_demandModel);
       const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
       const _fresh = freshState();

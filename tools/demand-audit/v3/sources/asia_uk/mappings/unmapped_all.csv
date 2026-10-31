@@ -1,0 +1,21 @@
+source,name (or segment for Japan),passengers_all_years_in_output,note
+UK_CAA,OIL RIGS | OIL RIGS,1786261,offshore helicopter traffic to North Sea installations; no airport
+UK_CAA,AUSTRIA | ZELTWEG (MILITARY),456,military/private airfield without IATA code
+UK_CAA,FRANCE | GUYANCOURT,172,military/private airfield without IATA code
+UK_CAA,EGYPT | CAIRO WEST AFB,156,military/private airfield without IATA code
+UK_CAA,FRANCE | MULHOUSE HABSHEIM,100,military/private airfield without IATA code
+UK_CAA,GERMANY | SCHWABISCH HALL HESSENTAL,77,military/private airfield without IATA code
+UK_CAA,UK | DUNKESWELL,56,military/private airfield without IATA code
+UK_CAA,UK | COMPTON ABASS,4,military/private airfield without IATA code
+UK_CAA,GERMANY | EGELSBACH,1,military/private airfield without IATA code
+IN_DGCA,PURNEA,164025,Purnea (VEPU) has no IATA code in OurAirports
+IN_DGCA,PITHORAGARH,19850,Naini Saini (VIDF) no IATA code in OurAirports
+IN_DGCA,UTTARLAI,126,Uttarlai/Barmer (VIUT) no IATA code in OurAirports
+JP_MLIT,新島―調布,99787,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,調布―三宅島,75492,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,調布―神津島,74826,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,大島―調布,50816,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,八丈島―青ヶ島,16725,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,三宅島―御蔵島,13596,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,八丈島―御蔵島,10482,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"
+JP_MLIT,大島―利島,7180,"Izu-islands commuter airfield/heliport (Chofu RJTF, Niijima RJAN, Kozushima RJAZ, Toshima/Mikurajima/Aogashima heliports) without IATA code"

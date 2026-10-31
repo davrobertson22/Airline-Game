@@ -212,7 +212,11 @@ t('a new game is a market-development world, pre-warmed at equilibrium', () => {
   assert.equal(entries.length, svc.size, 'exactly the pairs the starting field flies');
 });
 
-t('neutral start: a fresh world\'s served markets average D = 1.0 (±5%), demand-weighted', () => {
+// Calibrated on demand v2 (0.97–1.04 across eight hubs). Under v3 the AI
+// starting field is sized on different demand and lands at 0.99–1.055 (mean
+// 1.03), so the band is ±6%: the reference frequency is shared by v2 and v3
+// games, and retuning it would move games already started on v2.
+t('neutral start: a fresh world\'s served markets average D = 1.0 (±6%), demand-weighted', () => {
   for (const [hub, seed] of [['JFK', 21], ['FRA', 22], ['SIN', 23], ['SYD', 24]]) {
     seedRandom(seed);
     const s = start({ hub });
@@ -223,7 +227,7 @@ t('neutral start: a fresh world\'s served markets average D = 1.0 (±5%), demand
       const base = baseCityPairDemand(a, b);
       ws += base * e.d; w += base;
     }
-    near(ws / w, 1.0, 0.05, hub);
+    near(ws / w, 1.0, 0.06, hub);
   }
 });
 

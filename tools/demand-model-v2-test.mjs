@@ -46,8 +46,9 @@ function test(name, fn) {
 }
 const quiet = (fn) => { const p = Math.random; Math.random = () => 0.9999999; try { return fn(); } finally { Math.random = p; } };
 const d = (pair) => baseCityPairDemand(...pair.split('-'));
+// A v2 game: since v3 shipped, a new game is v3, so these fixtures name v2.
 const startGame = (extra = {}) => quiet(() => gameReducer(freshState(),
-  { type: 'START_GAME', airlineName: 'Model Air', hub: 'ORD', enableObjectives: false, ...extra }));
+  { type: 'START_GAME', airlineName: 'Model Air', hub: 'ORD', enableObjectives: false, demandModel: 2, ...extra }));
 
 // Classic figures captured from the engine BEFORE v2 existed (2026-10-29).
 const CLASSIC = {"JFK-LAX":27244,"JFK-LHR":26200,"EWR-LGW":26200,"SYD-MEL":28418,"PER-PHE":574,"JFK-ORF":14313,"MIA-MCO":25409,"ORD-CID":3176,"DEN-ASE":790,"CHO-IAD":1122,"LAS-SFB":6355,"HNL-LAX":28392,"DEL-BOM":69006,"NRT-ICN":72662,"LHR-CDG":36766,"GRU-EZE":15720,"YYZ-ORD":9642,"SEA-YVR":4253,"MCO-SJU":16081,"CBR-SYD":8015,"BNE-CNS":2618,"DXB-LHR":22038,"TPA-PIE":0,"PHX-AZA":0,"JFK-PHL":15078};
@@ -75,7 +76,7 @@ test('a save with no demandModel loads classic, even straight after a v2 game', 
 });
 test('a load never upgrades: an unknown demandModel is dropped to classic', () => {
   const v2 = startGame();
-  for (const bad of [3, 0, '2', 'v2', null]) {
+  for (const bad of [4, 0, '2', 'v2', null]) {
     const s = gameReducer(v2, { type: 'LOAD_STATE', payload: { ...v2, demandModel: bad } });
     assert.equal(getDemandModel(), DEMAND_MODEL_CLASSIC, String(bad));
     assert.ok(!isDemandModel(s.demandModel), `kept ${bad}`);
@@ -88,11 +89,11 @@ test('the classic Airports table is the classic model (generated, not stale)', (
   for (const c of sample) assert.deepEqual(fresh[c], TABLE_V1[c], `${c} — run node tools/generate-airport-markets.mjs`);
 });
 
-console.log('\n── 2. New games run v2 ────────────────────────────────────────────');
-test('START_GAME stamps demandModel 2 and switches the engine to it', () => {
+console.log('\n── 2. v2 games run v2 (and keep it) ───────────────────────────────');
+test('START_GAME with demandModel 2 stamps it and switches the engine to it', () => {
   setDemandModel(DEMAND_MODEL_CLASSIC);
   const s = startGame();
-  assert.equal(s.demandModel, DEMAND_MODEL_LATEST);
+  assert.equal(s.demandModel, 2);
   assert.equal(getDemandModel(), 2);
   assert.notEqual(d('JFK-ORF'), CLASSIC['JFK-ORF']);
 });

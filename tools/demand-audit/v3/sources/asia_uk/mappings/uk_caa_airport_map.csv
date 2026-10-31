@@ -1,0 +1,669 @@
+caa_country,caa_name,iata,method,oa_name,in_game
+UK,ABERDEEN,ABZ,manual,Aberdeen International Airport,True
+UK,ALDERNEY,ACI,manual,Alderney Airport,False
+UK,BARRA,BRR,manual,Barra Airport,True
+UK,BELFAST CITY (GEORGE BEST),BHD,manual,George Best Belfast City Airport,True
+UK,BELFAST INTERNATIONAL,BFS,manual,Belfast International Airport,True
+UK,BEMBRIDGE,BBP,manual,Bembridge Airport,False
+UK,BENBECULA,BEB,manual,Benbecula Airport,False
+UK,BIGGIN HILL,BQH,manual,London Biggin Hill Airport,False
+UK,BIRMINGHAM,BHX,manual,Birmingham Airport,True
+UK,BLACKPOOL,BLK,manual,Blackpool Airport,False
+UK,BOURNEMOUTH,BOH,manual,Bournemouth Airport,True
+UK,BRISTOL,BRS,manual,Bristol Airport,True
+UK,BRIZE NORTON,BZZ,manual,RAF Brize Norton,False
+UK,CAMBRIDGE,CBG,manual,Cambridge City Airport,False
+UK,CAMPBELTOWN,CAL,manual,Campbeltown Airport,False
+UK,CARDIFF WALES,CWL,manual,Cardiff International Airport,True
+UK,CITY OF DERRY (EGLINTON),LDY,manual,City of Derry Airport,True
+UK,COLL,COL,manual,Coll Airport,False
+UK,COLONSAY,CSA,manual,Colonsay Airstrip,False
+UK,DONCASTER SHEFFIELD,DSA,manual,?,True
+UK,DUNDEE,DND,manual,Dundee Airport,False
+UK,EAST MIDLANDS INTERNATIONAL,EMA,manual,East Midlands Airport,True
+UK,EDAY,EOI,manual,Eday Airport,False
+UK,EDINBURGH,EDI,manual,Edinburgh Airport,True
+UK,EXETER,EXT,manual,Exeter International Airport,True
+UK,FAIR ISLE,FIE,manual,Fair Isle Airport,False
+UK,FARNBOROUGH,FAB,manual,Farnborough Airport,False
+UK,FOULA,FOA,manual,Foula Airfield,False
+UK,GATWICK,LGW,manual,London Gatwick Airport,True
+UK,GLASGOW,GLA,manual,Glasgow Airport,True
+UK,GLOUCESTERSHIRE,GLO,manual,Gloucestershire Airport,False
+UK,GUERNSEY,GCI,manual,Guernsey Airport,False
+UK,HAWARDEN,CEG,manual,Hawarden Airport,False
+UK,HEATHROW,LHR,manual,London Heathrow Airport,True
+UK,HUMBERSIDE,HUY,manual,Humberside Airport,True
+UK,INVERNESS,INV,manual,Inverness Airport,True
+UK,ISLAY,ILY,manual,Islay Airport,False
+UK,ISLE OF MAN,IOM,manual,Isle of Man Airport,True
+UK,ISLES OF SCILLY (ST.MARYS),ISC,manual,St. Mary's Airport,False
+UK,JERSEY,JER,manual,Jersey Airport,True
+UK,KIRKWALL,KOI,manual,Kirkwall Airport,True
+UK,LANDS END (ST JUST),LEQ,manual,Land's End Airport,False
+UK,LEEDS BRADFORD,LBA,manual,Leeds Bradford Airport,True
+UK,LERWICK (TINGWALL),LWK,manual,Lerwick / Tingwall Airport,False
+UK,LIVERPOOL (JOHN LENNON),LPL,manual,Liverpool John Lennon Airport,True
+UK,LONDON CITY,LCY,manual,London City Airport,True
+UK,LUTON,LTN,manual,London Luton Airport,True
+UK,MANCHESTER,MAN,manual,Manchester Airport,True
+UK,MARHAM(KINGS LYNN),KNF,manual,RAF Marham,False
+UK,NEWCASTLE,NCL,manual,Newcastle International Airport,True
+UK,NEWQUAY,NQY,manual,Cornwall Airport Newquay,True
+UK,NORTH RONALDSAY,NRL,manual,North Ronaldsay Airport,False
+UK,NORTHOLT,NHT,manual,RAF Northolt,False
+UK,NORWICH,NWI,manual,Norwich Airport,True
+UK,OBAN (NORTH CONNEL),OBN,manual,Oban Airport,False
+UK,OXFORD (KIDLINGTON),OXF,manual,London Oxford Airport,False
+UK,PAPA WESTRAY,PPW,manual,Papa Westray Airport,False
+UK,PRESTWICK,PIK,manual,Glasgow Prestwick Airport,False
+UK,REDHILL,KRH,manual,?,False
+UK,SANDAY,NDY,manual,Sanday Airport,False
+UK,SHOREHAM,ESH,manual,Brighton City Airport,False
+UK,SOUTHAMPTON,SOU,manual,Southampton Airport,True
+UK,SOUTHEND,SEN,manual,London Southend Airport,True
+UK,STANSTED,STN,manual,London Stansted Airport,True
+UK,STORNOWAY,SYY,manual,Stornoway Airport,False
+UK,STRONSAY,SOY,manual,Stronsay Airport,False
+UK,SUMBURGH,LSI,manual,Sumburgh Airport,True
+UK,TEESSIDE INTERNATIONAL AIRPORT,MME,manual,Teesside International Airport,False
+UK,TIREE,TRE,manual,Tiree Airport,False
+UK,WARTON,WRT,manual,Warton Aerodrome,False
+UK,WESTRAY,WRY,manual,Westray Airport,False
+UK,WHALSAY,WHS,manual,Whalsay Airstrip,False
+UK,WICK JOHN O GROATS,WIC,manual,Wick John O'Groats Airport,True
+ALBANIA,TIRANA,TIA,auto(score=18.0),Tirana International Airport Mother Teresa,True
+ALGERIA,ALGIERS,ALG,auto(score=20.0),Houari Boumediene Airport,True
+ANTIGUA AND BARBUDA,ANTIGUA,ANU,manual,V. C. Bird International Airport,True
+ARGENTINA,BUENOS AIRES,EZE,auto(score=22.0),Ezeiza International Airport - Ministro Pistarini,True
+ARMENIA,YEREVAN,EVN,auto(score=20.0),Zvartnots International Airport,True
+ASCENSION ISLAND,ASCENSION ISLAND,ASI,auto(score=14.0),RAF Ascension Island,False
+ASCENSION ISLAND,SAINT HELENA,HLE,auto(score=17.0),Saint Helena International Airport,True
+AUSTRALIA,MELBOURNE,MEL,auto(score=20.0),Melbourne Airport,True
+AUSTRALIA,PERTH (AUSTRALIA),PER,auto(score=15.0),Perth International Airport,True
+AUSTRALIA,SYDNEY,SYD,manual,Sydney Kingsford Smith International Airport,True
+AUSTRIA,GRAZ,GRZ,auto(score=20.0),Graz Airport,True
+AUSTRIA,INNSBRUCK,INN,auto(score=20.0),Innsbruck Airport,True
+AUSTRIA,KLAGENFURT,KLU,auto(score=20.0),Klagenfurt Airport,True
+AUSTRIA,LINZ,LNZ,auto(score=20.0),Linz-Hörsching Airport,True
+AUSTRIA,SALZBURG,SZG,auto(score=20.0),Salzburg Airport,True
+AUSTRIA,VIENNA,VIE,auto(score=20.0),Vienna International Airport,True
+AUSTRIA,ZELTWEG (MILITARY),,manual,,False
+AZERBAIJAN,BAKU (HEYDER ALIYEV INT'L),GYD,auto(score=16.7),Heydar Aliyev International Airport,True
+BAHAMAS,NASSAU,NAS,auto(score=20.0),Lynden Pindling International Airport,True
+BAHRAIN,BAHRAIN,BAH,auto(score=18.0),Bahrain International Airport,True
+BANGLADESH,DHAKHA,DAC,manual,Hazrat Shahjalal International Airport,True
+BANGLADESH,HAZRAT SHAHJALAL INTERNATIONAL AIRPORT,DAC,auto(score=18.0),Hazrat Shahjalal International Airport,True
+BANGLADESH,SYLHET,ZYL,auto(score=20.0),Osmany International Airport,True
+BARBADOS,BRIDGETOWN,BGI,auto(score=20.0),Grantley Adams International Airport,True
+BELARUS,BREST (BELARUS),BQT,auto(score=12.0),Brest International Airport,False
+BELGIUM,ANTWERP,ANR,auto(score=16.0),Antwerp International Airport (Deurne),False
+BELGIUM,BRUSSELS,BRU,auto(score=18.0),Brussels Airport,True
+BELGIUM,CHARLEROI,CRL,auto(score=20.0),Brussels South Charleroi Airport,True
+BELGIUM,KORTRIJK/WEVELGEM,KJK,auto(score=14.0),Kortrijk-Wevelgem International Airport,False
+BELGIUM,LIEGE,LGG,auto(score=14.0),Liège Airport,False
+BELGIUM,OSTEND,OST,auto(score=15.0),Ostend-Bruges International Airport,False
+BERMUDA,BERMUDA,BDA,auto(score=18.0),L.F. Wade International Airport,True
+BOSNIA-HERZEGOVINA,BANJA LUKA,BNX,auto(score=15.0),Banja Luka International Airport,False
+BOSNIA-HERZEGOVINA,MOSTAR,OMO,auto(score=17.0),Mostar International Airport,False
+BOSNIA-HERZEGOVINA,SARAJEVO,SJJ,auto(score=20.0),Sarajevo International Airport,True
+BOSNIA-HERZEGOVINA,TUZLA,TZL,auto(score=18.0),Tuzla International Airport,True
+BRAZIL,BRASILIA,BSB,auto(score=20.0),Presidente Juscelino Kubitschek International Airport,True
+BRAZIL,RIO DE JANEIRO (GALEAO),GIG,auto(score=22.0),Rio de Janeiro Galeão – Tom Jobim International Airport,True
+BRAZIL,SAO PAULO (GUARULHOS),GRU,auto(score=18.7),São Paulo/Guarulhos–Governor André Franco Montoro International Airport,True
+BRUNEI,BANDAR SERI BEGAWAN,BWN,auto(score=24.0),Brunei International Airport,True
+BULGARIA,BURGAS,BOJ,auto(score=20.0),Burgas Airport,True
+BULGARIA,PLOVDIV,PDV,auto(score=20.0),Plovdiv International Airport,True
+BULGARIA,SOFIA,SOF,auto(score=20.0),Sofia Airport,True
+BULGARIA,VARNA,VAR,auto(score=20.0),Varna Airport,True
+CANADA,CALGARY,YYC,auto(score=20.0),Calgary International Airport,True
+CANADA,GANDER,YQX,auto(score=16.0),Gander International Airport,False
+CANADA,GOOSE BAY,YYR,auto(score=18.0),Goose Bay Airport,False
+CANADA,HALIFAX INT,YHZ,auto(score=20.0),Halifax / Stanfield International Airport,True
+CANADA,MONTREAL (DORVAL),YUL,auto(score=20.0),Montreal / Pierre Elliott Trudeau International Airport,True
+CANADA,OTTAWA INTERNATIONAL,YOW,auto(score=20.0),Ottawa Macdonald-Cartier International Airport,True
+CANADA,QUEBEC,YQB,auto(score=20.0),Quebec Jean Lesage International Airport,True
+CANADA,ST JOHNS,YYT,auto(score=15.0),St. John's International Airport,True
+CANADA,TORONTO,YYZ,auto(score=20.0),Toronto Pearson International Airport,True
+CANADA,VANCOUVER,YVR,auto(score=20.0),Vancouver International Airport,True
+CAPE VERDE ISLANDS,BOA VISTA (RABIL),BVC,auto(score=20.0),Aristides Pereira International Airport,True
+CAPE VERDE ISLANDS,ILHA DO SAL C.VERDE,SID,auto(score=10.5),Amílcar Cabral International Airport,True
+CAYMAN ISLANDS,GRAND CAYMAN,GCM,auto(score=18.0),Owen Roberts International Airport,True
+CENTRAL AFRICAN REPUBLIC,BANGUI,BGF,auto(score=20.0),Bangui M'Poko International Airport,True
+CHAD,NDJAMENA,NDJ,auto(score=18.0),N'Djamena International Airport,True
+CHILE,SANTIAGO DE CHILE,SCL,auto(score=15.0),Comodoro Arturo Merino Benítez International Airport,True
+CHINA,BEIJING,PEK,manual,Beijing Capital International Airport,True
+CHINA,BEIJING DAXING INTERNATIONAL AIRPORT,PKX,auto(score=20.0),Beijing Daxing International Airport,True
+CHINA,CHANGSHA HUANGHUA INTERNATIONAL AIRPORT,CSX,auto(score=20.0),Changsha Huanghua International Airport,True
+CHINA,CHENGDU TIANFU,TFU,auto(score=20.0),Chengdu Tianfu International Airport,True
+CHINA,CHONGQING JIANGBEI INTERNATIONAL,CKG,auto(score=20.0),Chongqing Jiangbei International Airport,True
+CHINA,GUANGZHOU BAIYUN INTERNATIONAL,CAN,auto(score=20.0),Guangzhou Baiyun International Airport,True
+CHINA,HAIKOU,HAK,auto(score=20.0),Haikou Meilan International Airport,True
+CHINA,QINGDAO,TAO,auto(score=20.0),Qingdao Jiaodong International Airport,True
+CHINA,SANYA PHOENIX INTERNATIONAL,SYX,auto(score=20.0),Sanya Phoenix International Airport,True
+CHINA,SHANGHAI (PU DONG),PVG,auto(score=13.3),Shanghai Pudong International Airport,True
+CHINA,SHENZHEN (HUANGTIAN),SZX,auto(score=20.0),Shenzhen Bao'an International Airport,True
+CHINA,TIANJIN,TSN,auto(score=20.0),Tianjin Binhai International Airport,True
+CHINA,WUHAN TIANHE INTERNATIONAL,WUH,auto(score=20.0),Wuhan Tianhe International Airport,True
+CHINA,XIAN XIANYANG,XIY,auto(score=18.0),Xi'an Xianyang International Airport,True
+CHINA,ZHENGZHOU XINZHENG,CGO,auto(score=20.0),Zhengzhou Xinzheng International Airport,True
+COLOMBIA,BOGOTA,BOG,auto(score=20.0),El Dorado International Airport,True
+COSTA RICA,LIBERIA,LIR,auto(score=20.0),Daniel Oduber Quirós International Airport,True
+COSTA RICA,SAN JOSE COST RICA,SJO,auto(score=17.0),Juan Santamaría International Airport,True
+CROATIA,BRAC (BOL),BWK,auto(score=14.0),Brač Airport,False
+CROATIA,DUBROVNIK,DBV,auto(score=20.0),Dubrovnik Ruđer Bošković Airport,True
+CROATIA,OSIJEK,OSI,auto(score=19.0),Osijek Airport,True
+CROATIA,PULA,PUY,auto(score=20.0),Pula Airport,True
+CROATIA,RIJEKA,RJK,auto(score=20.0),Rijeka Airport,True
+CROATIA,SPLIT,SPU,auto(score=20.0),Split Saint Jerome Airport,True
+CROATIA,ZADAR,ZAD,auto(score=20.0),Zadar Airport,True
+CROATIA,ZAGREB,ZAG,auto(score=18.0),Zagreb Franjo Tuđman International Airport,True
+CUBA,VARADERO,VRA,auto(score=18.0),Juan Gualberto Gomez International Airport,True
+CYPRUS,AKROTIRI,AKT,auto(score=14.0),RAF Akrotiri,False
+CYPRUS,LARNACA,LCA,auto(score=20.0),Larnaca International Airport,True
+CYPRUS,PAPHOS,PFO,auto(score=20.0),Paphos International Airport,True
+CZECH REPUBLIC,BRNO (TURANY),BRQ,auto(score=19.0),Brno-Tuřany Airport,True
+CZECH REPUBLIC,KUNOVICE,UHE,auto(score=12.0),Kunovice Airport,False
+CZECH REPUBLIC,OSTRAVA,OSR,auto(score=18.0),Leoš Janáček Airport Ostrava,True
+CZECH REPUBLIC,PARDUBICE,PED,auto(score=17.0),Pardubice Airport,False
+CZECH REPUBLIC,PRAGUE,PRG,auto(score=20.0),Václav Havel Airport Prague,True
+DENMARK,AALBORG,AAL,auto(score=20.0),Aalborg Airport,True
+DENMARK,AARHUS (TIRSTRUP),AAR,auto(score=20.0),Aarhus Airport,True
+DENMARK,BILLUND,BLL,auto(score=20.0),Billund Airport,True
+DENMARK,COPENHAGEN,CPH,auto(score=20.0),Copenhagen Kastrup Airport,True
+DENMARK,ESBJERG,EBJ,auto(score=16.0),Esbjerg Airport,False
+DENMARK,KARUP,KRP,auto(score=16.0),Midtjyllands Airport / Air Base Karup,False
+DENMARK,ODENSE,ODE,auto(score=17.0),Odense Hans Christian Andersen Airport,False
+DENMARK,ROSKILDE,RKE,auto(score=16.0),Copenhagen Roskilde Airport,False
+DENMARK,SONDERBORG,SGD,auto(score=14.0),Sønderborg Airport,False
+DOMINICAN REPUBLIC,LA ROMANA,LRM,auto(score=20.0),Casa De Campo International Airport,True
+DOMINICAN REPUBLIC,PUNTA CANA,PUJ,auto(score=22.0),Punta Cana International Airport,True
+EGYPT,CAIRO,CAI,auto(score=20.0),Cairo International Airport,True
+EGYPT,CAIRO WEST AFB,,manual,,False
+EGYPT,HURGHADA,HRG,auto(score=20.0),Hurghada International Airport,True
+EGYPT,LUXOR,LXR,auto(score=20.0),Luxor International Airport,True
+EGYPT,MARSA ALAM,RMF,auto(score=22.0),Marsa Alam International Airport,True
+EGYPT,SHARM EL SHEIKH (OPHIRA),SSH,auto(score=21.5),Sharm El Sheikh International Airport,True
+EGYPT,SPHINX INTERNATIONAL,SPX,auto(score=18.0),Sphinx International Airport,True
+EGYPT,TABA,TCP,auto(score=16.0),Taba International Airport,False
+ESTONIA,PARNU,EPU,auto(score=16.0),Pärnu Airport,False
+ESTONIA,TALLIN,TLL,manual,Lennart Meri Tallinn Airport,True
+ETHIOPIA,ADDIS ABABA,ADD,auto(score=22.0),Addis Ababa Bole International Airport,True
+FAROE ISLANDS,VAGAR,FAE,auto(score=20.0),Vágar Airport,True
+FINLAND,ENONTEKIO,ENF,auto(score=16.0),Enontekio Airport,False
+FINLAND,HELSINKI,HEL,auto(score=20.0),Helsinki Vantaa Airport,True
+FINLAND,IVALO,IVL,auto(score=20.0),Ivalo Airport,True
+FINLAND,KITTILA,KTT,auto(score=17.0),Kittilä International Airport,False
+FINLAND,KUOPIO,KUO,auto(score=20.0),Kuopio Airport,True
+FINLAND,KUUSAMO,KAO,auto(score=16.0),Kuusamo Airport,False
+FINLAND,MARIEHAMN,MHQ,auto(score=16.0),Mariehamn Airport,False
+FINLAND,ROVANIEMI,RVN,auto(score=20.0),Rovaniemi Airport,True
+FINLAND,TAMPERE,TMP,auto(score=20.0),Tampere-Pirkkala Airport,True
+FRANCE,AJACCIO,AJA,auto(score=19.0),Ajaccio Napoléon Bonaparte airport,True
+FRANCE,ANNECY,NCY,auto(score=16.0),Annecy Meythet airport,False
+FRANCE,AUXERRE,AUF,auto(score=14.0),Auxerre Branches airport,False
+FRANCE,AVIGNON,AVN,auto(score=16.0),Avignon Caumont airport,False
+FRANCE,BASTIA,BIA,auto(score=20.0),Bastia-Poretta International airport,True
+FRANCE,BEAUVAIS,BVA,auto(score=20.0),Beauvais-Tillé airport,True
+FRANCE,BERGERAC,EGC,auto(score=19.0),Bergerac Dordogne-Périgord airport,True
+FRANCE,BEZIERS,BZR,auto(score=16.0),Béziers Vias airport,False
+FRANCE,BIARRITZ,BIQ,auto(score=19.0),Biarritz Pays Basque airport,True
+FRANCE,BORDEAUX,BOD,auto(score=20.0),Bordeaux–Mérignac Airport,True
+FRANCE,BREST,BES,auto(score=17.0),Brest Bretagne airport,False
+FRANCE,BRIVE-LA-GAILLARDE,BVE,auto(score=16.0),Brive Souillac airport,False
+FRANCE,CAEN,CFR,auto(score=16.0),Caen Carpiquet airport,False
+FRANCE,CALVI,CLY,auto(score=16.0),Calvi Sainte Catherine Airport,False
+FRANCE,CANNES,CEQ,auto(score=14.0),Cannes Mandelieu Airport,False
+FRANCE,CARCASSONNE,CCF,auto(score=16.0),Carcassonne Salvaza Airport,False
+FRANCE,CHALONS (VATRY),XCR,auto(score=16.0),Chalons Vatry airport,False
+FRANCE,CHAMBERY,CMF,auto(score=19.0),Chambéry Aix les Bains airport,True
+FRANCE,CLERMONT FERRAND,CFE,auto(score=22.0),Clermont-Ferrand Auvergne airport,True
+FRANCE,DEAUVILLE,DOL,auto(score=19.0),Deauville Normandie airport,True
+FRANCE,DIJON,DIJ,auto(score=14.0),Dijon Longvic airport,False
+FRANCE,DINARD,DNR,auto(score=14.0),Dinard Pleurtuit Saint-Malo airport,False
+FRANCE,DOLE,DLE,auto(score=16.0),Dole Tavaux Airport,False
+FRANCE,FIGARI,FSC,auto(score=20.0),Figari Sud-Corse Airport,True
+FRANCE,GRENOBLE,GNB,auto(score=19.0),Grenoble Alpes Isère Airport,True
+FRANCE,GUYANCOURT,,manual,,False
+FRANCE,LA ROCHELLE,LRH,auto(score=19.0),La Rochelle Île de Ré Airport,True
+FRANCE,LE MANS,LME,auto(score=14.0),Le Mans-Arnage Airport,False
+FRANCE,LE TOUQUET,LTQ,auto(score=14.0),Le Touquet-Côte d'Opale Airport,False
+FRANCE,LILLE,LIL,auto(score=18.0),Lille Airport,True
+FRANCE,LIMOGES,LIG,auto(score=19.0),Limoges Airport,True
+FRANCE,LORIENT,LRT,auto(score=17.0),Lorient South Brittany (Bretagne Sud) Airport,True
+FRANCE,LYON,LYS,auto(score=18.0),Lyon Saint-Exupéry Airport,True
+FRANCE,LYON(BRON),LYN,auto(score=14.0),Lyon Bron Airport,False
+FRANCE,MARSEILLE,MRS,auto(score=18.0),Marseille Provence Airport,True
+FRANCE,MONTPELLIER,MPL,auto(score=20.0),Montpellier-Méditerranée Airport,True
+FRANCE,MULHOUSE HABSHEIM,,manual,,False
+FRANCE,NANTES,NTE,auto(score=20.0),Nantes Atlantique Airport,True
+FRANCE,NICE,NCE,auto(score=20.0),Nice-Côte d'Azur Airport,True
+FRANCE,NIMES,FNI,auto(score=16.0),Nîmes-Arles-Camargue Airport,False
+FRANCE,PARIS (CHARLES DE GAULLE),CDG,auto(score=20.0),Charles de Gaulle International Airport,True
+FRANCE,PARIS (LE BOURGET),LBG,auto(score=15.0),Paris-Le Bourget International Airport,False
+FRANCE,PARIS (ORLY),ORY,auto(score=22.0),Paris-Orly Airport,True
+FRANCE,PAU,PUF,auto(score=16.0),Pau Pyrénées Airport,False
+FRANCE,PERPIGNAN,PGF,auto(score=19.0),Perpignan-Rivesaltes (Llabanère) Airport,True
+FRANCE,POITIERS,PIS,auto(score=19.0),Poitiers-Biard Airport,True
+FRANCE,QUIMPER,UIP,auto(score=14.0),Quimper-Cornouaille Airport,False
+FRANCE,RENNES,RNS,auto(score=17.0),Rennes-Saint-Jacques Airport,True
+FRANCE,RODEZ,RDZ,auto(score=19.0),Rodez–Aveyron Airport,True
+FRANCE,ST ETIENNE,EBU,manual,Saint-Étienne-Bouthéon Airport,False
+FRANCE,STRASBOURG,SXB,auto(score=20.0),Strasbourg Airport,True
+FRANCE,TARBES-LOURDES INTERNATIONAL,LDE,auto(score=21.0),Tarbes-Lourdes-Pyrénées Airport,True
+FRANCE,TOULON / HYERES,TLN,auto(score=16.0),Toulon-Hyères Airport,False
+FRANCE,TOULOUSE (BLAGNAC),TLS,auto(score=22.0),Toulouse-Blagnac Airport,True
+FRANCE,TOURS,TUF,auto(score=19.0),Tours Val de Loire Airport,True
+FRANCE,VALENCE,VAF,auto(score=12.0),Valence-Chabeuil Airport,False
+GAMBIA,BANJUL,BJL,auto(score=20.0),Banjul International Airport,True
+GEORGIA,TBILISI,TBS,auto(score=20.0),Tbilisi International Airport,True
+GERMANY,BERLIN BRANDENBURG,BER,auto(score=20.0),Berlin Brandenburg Airport,True
+GERMANY,BRAUNSCHWEIG,BWE,auto(score=14.0),Braunschweig-Wolfsburg Airport,False
+GERMANY,BREMEN,BRE,auto(score=17.0),Bremen Airport,False
+GERMANY,COLOGNE BONN,CGN,auto(score=20.0),Cologne Bonn Airport,True
+GERMANY,DORTMUND,DTM,auto(score=20.0),Dortmund Airport,True
+GERMANY,DRESDEN,DRS,auto(score=20.0),Dresden Airport,True
+GERMANY,DUSSELDORF,DUS,auto(score=20.0),Düsseldorf Airport,True
+GERMANY,EGELSBACH,,manual,,False
+GERMANY,ERFURT,ERF,auto(score=20.0),Erfurt-Weimar Airport,True
+GERMANY,FRANKFURT MAIN,FRA,auto(score=20.0),Frankfurt Main Airport,True
+GERMANY,FRIEDRICHSHAFEN,FDH,auto(score=17.0),Bodensee Airport Friedrichshafen,False
+GERMANY,HAHN,HHN,auto(score=15.0),Frankfurt-Hahn Airport,False
+GERMANY,HAMBURG,HAM,auto(score=20.0),Hamburg Helmut Schmidt Airport,True
+GERMANY,HANOVER,HAJ,manual,Hannover Airport,True
+GERMANY,INGOLSTADT-MANCHING,IGS,auto(score=14.0),Ingolstadt Manching Airport,False
+GERMANY,KARLSRUHE/BADEN BADEN,FKB,auto(score=18.0),Karlsruhe Baden-Baden Airport,True
+GERMANY,LAHR,LHA,auto(score=14.0),Lahr Airport,False
+GERMANY,LEIPZIG,LEJ,auto(score=18.0),Leipzig/Halle Airport,True
+GERMANY,LUBECK,LBC,auto(score=16.0),Lübeck Blankensee Airport,False
+GERMANY,MEMMINGEN ALLGAU,FMM,auto(score=20.0),Memmingen Allgau Airport,True
+GERMANY,MUNICH,MUC,auto(score=20.0),Munich Airport,True
+GERMANY,MUNSTER-OSNABRUCK,FMO,auto(score=18.0),Münster Osnabrück Airport,True
+GERMANY,NIEDERRHEIN,NRN,auto(score=15.0),Weeze (Niederrhein) Airport,False
+GERMANY,NUREMBERG,NUE,auto(score=20.0),Nuremberg Airport,True
+GERMANY,PADERBORN,PAD,auto(score=18.0),Paderborn Lippstadt Airport,True
+GERMANY,ROSTOCK-LAAGE,RLG,auto(score=19.0),Rostock-Laage Airport,True
+GERMANY,SCHWABISCH HALL HESSENTAL,,manual,,False
+GERMANY,STUTTGART,STR,auto(score=20.0),Stuttgart Airport,True
+GERMANY,WESTERLAND (SYLT),GWT,auto(score=16.0),Westerland Sylt Airport,False
+GHANA,ACCRA,ACC,auto(score=20.0),Kotoka International Airport,True
+GHANA,KUMASI,KMS,auto(score=20.0),Prempeh I International Airport,True
+GIBRALTAR,GIBRALTAR,GIB,auto(score=20.0),Gibraltar Airport,True
+GREECE,ATHENS,ATH,auto(score=18.0),Athens Eleftherios Venizelos International Airport,True
+GREECE,CHANIA,CHQ,auto(score=18.0),Chania International Airport,True
+GREECE,CORFU,CFU,auto(score=20.0),Corfu Ioannis Kapodistrias International Airport,True
+GREECE,HERAKLION,HER,auto(score=20.0),Heraklion International Nikos Kazantzakis Airport,True
+GREECE,KALAMATA,KLX,auto(score=19.0),Kalamata Airport,True
+GREECE,KAVALA,KVA,auto(score=20.0),Kavala Alexander the Great International Airport,True
+GREECE,KEFALLINIA,EFL,auto(score=20.0),"Kefalonia International Airport ""Anna Pollatou""",True
+GREECE,KOS,KGS,auto(score=20.0),"Kos International Airport ""Ippokratis""",True
+GREECE,LEMNOS,LXS,manual,Limnos Airport,False
+GREECE,MIKONOS,JMK,manual,Mykonos Island National Airport,True
+GREECE,MYTILINI,MJT,manual,Mytilene International Airport,True
+GREECE,NEA ANCHIALOS,VOL,auto(score=18.0),Nea Anchialos National Airport,False
+GREECE,PREVEZA,PVK,auto(score=19.0),Aktion National Airport,True
+GREECE,RHODES,RHO,auto(score=20.0),"Rhodes International Airport ""Diagoras""",True
+GREECE,SALONIKA,SKG,manual,Thessaloniki Macedonia International Airport,True
+GREECE,SAMOS,SMI,auto(score=19.0),Samos Airport,True
+GREECE,SKIATHOS,JSI,auto(score=19.0),Skiathos Island National Airport,True
+GREECE,THIRA (SANTORINI),JTR,auto(score=15.0),Santorini International Airport,True
+GREECE,ZAKINTHOS,ZTH,auto(score=18.0),"Zakynthos International Airport ""Dionysios Solomos""",True
+GREENLAND,SONDRE STROMFJORD,SFJ,manual,Kangerlussuaq International Airport,True
+GRENADA,GRENADA,GND,manual,Maurice Bishop International Airport,True
+GUYANA,GEORGETOWN (GUYANA),GEO,auto(score=15.0),Cheddi Jagan International Airport,True
+HONG KONG,HONG KONG (CHEK LAP KOK),HKG,auto(score=22.0),Hong Kong International Airport,True
+HUNGARY,BUDAPEST,BUD,auto(score=20.0),Budapest Liszt Ferenc International Airport,True
+HUNGARY,DEBRECEN,DEB,auto(score=20.0),Debrecen International Airport,True
+HUNGARY,SARMELLEK/BALATON,SOB,auto(score=11.0),Hévíz–Balaton Airport,False
+ICELAND,AKUREYRI,AEY,auto(score=20.0),Akureyri International Airport,True
+ICELAND,EGILSSTADIR,EGS,manual,Egilsstaðir Airport,False
+ICELAND,KEFLAVIK,KEF,auto(score=18.0),Keflavik International Airport,True
+INDIA,AHMEDABAD,AMD,auto(score=20.0),Sardar Vallabh Patel International Airport,True
+INDIA,AMRITSAR,ATQ,auto(score=20.0),Sri Guru Ram Das Ji International Airport,True
+INDIA,BANGALORE (BENGALURU),BLR,auto(score=20.0),Kempegowda International Airport Bengaluru,True
+INDIA,CHENNAI,MAA,auto(score=20.0),Chennai International Airport,True
+INDIA,COCHIN,COK,auto(score=18.0),Cochin International Airport,True
+INDIA,DELHI,DEL,auto(score=20.0),Indira Gandhi International Airport,True
+INDIA,GOA,GOI,auto(score=18.0),Goa Dabolim International Airport,True
+INDIA,GOA INTERNATIONAL,GOI,auto(score=18.0),Goa Dabolim International Airport,True
+INDIA,HYDERABAD ( RAJIV GHANDI ),HYD,auto(score=16.7),Rajiv Gandhi International Airport,True
+INDIA,JAIPUR,JAI,auto(score=20.0),Jaipur International Airport,True
+INDIA,MUMBAI,BOM,auto(score=20.0),Chhatrapati Shivaji Maharaj International Airport,True
+IRAN,TEHRAN IMAM KHOMEINI,IKA,auto(score=20.0),Imam Khomeini International Airport,True
+IRAQ,BAGHDAD INT,BGW,auto(score=20.0),Baghdad International Airport / New Al Muthana Air Base,True
+IRAQ,ERBIL INTERNATIONAL,EBL,auto(score=18.0),Erbil International Airport,True
+IRISH REPUBLIC,CORK,ORK,auto(score=20.0),Cork International Airport,True
+IRISH REPUBLIC,DONEGAL,CFN,auto(score=19.0),Donegal Airport,True
+IRISH REPUBLIC,DUBLIN,DUB,auto(score=20.0),Dublin Airport,True
+IRISH REPUBLIC,IRELAND WEST(KNOCK),NOC,auto(score=18.0),Ireland West Airport Knock,True
+IRISH REPUBLIC,KERRY COUNTY,KIR,auto(score=12.0),Kerry Airport,True
+IRISH REPUBLIC,SHANNON,SNN,auto(score=20.0),Shannon Airport,True
+IRISH REPUBLIC,WATERFORD,WAT,auto(score=17.0),Waterford Airport,True
+ISLE OF CURACAO NETH.ANTILLES,ARUBA,AUA,manual,Queen Beatrix International Airport,True
+ISLE OF DIEGO GARCIA,DIEGO GARGIA,NKW,auto(score=9.0),Naval Support Facility Diego Garcia,False
+ISRAEL,RAMON,ETM,auto(score=18.0),Ramon International Airport,True
+ISRAEL,TEL AVIV,TLV,auto(score=22.0),Ben Gurion International Airport,True
+ITALY,ALGHERO (FERTILIA),AHO,auto(score=19.0),Alghero-Fertilia Airport,True
+ITALY,ANCONA,AOI,auto(score=17.0),Marche Airport,True
+ITALY,BARI (PALESE),BRI,auto(score=20.0),Bari Karol Wojtyła International Airport,True
+ITALY,BERGAMO,BGY,auto(score=18.0),Il Caravaggio International Airport,True
+ITALY,BOLOGNA,BLQ,auto(score=20.0),Bologna Guglielmo Marconi Airport,True
+ITALY,BOLZANO,BZO,auto(score=16.0),Bolzano Airport,False
+ITALY,BRINDISI,BDS,auto(score=20.0),Brindisi Airport,True
+ITALY,CAGLIARI (ELMAS),CAG,auto(score=20.0),Cagliari Elmas Airport,True
+ITALY,CATANIA (FONTANAROSSA),CTA,auto(score=20.0),Catania-Fontanarossa Airport,True
+ITALY,COMISO,CIY,auto(score=19.0),Comiso Airport,True
+ITALY,CUNEO,CUF,auto(score=14.0),Cuneo International Airport,False
+ITALY,FLORENCE,FLR,auto(score=18.0),"Florence Airport, Peretola",True
+ITALY,FORLI,FRL,auto(score=16.0),Forlì-Luigi Ridolfi International Airport,False
+ITALY,GENOA,GOA,auto(score=18.0),Genoa Cristoforo Colombo Airport,True
+ITALY,GROSETTO,GRS,manual,Grosseto Corrado Baccarini Air Base / Grosseto Airport,False
+ITALY,LAMETIA-TERME,SUF,auto(score=15.0),Lamezia Terme Sant'Eufemia International Airport,True
+ITALY,MILAN (LINATE),LIN,manual,Milano Linate Airport,True
+ITALY,MILAN (MALPENSA),MXP,auto(score=18.0),Milan Malpensa International Airport,True
+ITALY,NAPLES,NAP,auto(score=18.0),Naples International Airport,True
+ITALY,OLBIA,OLB,auto(score=20.0),Olbia Costa Smeralda Airport,True
+ITALY,PALERMO,PMO,auto(score=20.0),Falcone–Borsellino Airport,True
+ITALY,PARMA,PMF,auto(score=19.0),Parma Airport,True
+ITALY,PERUGIA,PEG,auto(score=20.0),Perugia San Francesco d'Assisi – Umbria International Airport,True
+ITALY,PESCARA,PSR,auto(score=20.0),Abruzzo Airport,True
+ITALY,PISA,PSA,auto(score=20.0),Pisa International Airport,True
+ITALY,REGGIO,REG,auto(score=19.0),Reggio Calabria Airport,True
+ITALY,RIMINI,RMI,auto(score=17.0),Federico Fellini International Airport,False
+ITALY,ROME (CIAMPINO),CIA,auto(score=15.0),Ciampino–G. B. Pastine International Airport,True
+ITALY,ROME (FIUMICINO),FCO,auto(score=20.0),Rome–Fiumicino Leonardo da Vinci International Airport,True
+ITALY,SALERNO COSTA AMALFI,QSR,auto(score=19.0),Salerno Costa d'Amalfi Airport,True
+ITALY,TRAPANI,TPS,auto(score=19.0),Vincenzo Florio Airport Trapani-Birgi,True
+ITALY,TREVISO,TSF,auto(score=20.0),Treviso Airport,True
+ITALY,TRIESTE (RONCHI DEI LEGIONARI),TRS,auto(score=26.0),Trieste Airport,True
+ITALY,TURIN,TRN,auto(score=18.0),Turin Airport,True
+ITALY,VENICE,VCE,manual,Venice Marco Polo Airport,True
+ITALY,VERONA VILLAFRANCA,VRN,auto(score=18.0),Verona Villafranca Valerio Catullo Airport,True
+JAMAICA,KINGSTON,KIN,auto(score=20.0),Norman Manley International Airport,True
+JAMAICA,MONTEGO BAY,MBJ,auto(score=22.0),Sangster International Airport,True
+JAPAN,NAGOYA,NKM,auto(score=16.0),Nagoya Airport / JASDF Komaki Air Base,False
+JAPAN,TOKYO (HANEDA),HND,auto(score=20.0),Tokyo Haneda International Airport,True
+JAPAN,TOKYO (NARITA),NRT,auto(score=20.0),Narita International Airport,True
+JORDAN,AMMAN,AMM,auto(score=20.0),Queen Alia International Airport,True
+JORDAN,AMMAN (KING HUSSEIN),AQJ,auto(score=14.7),King Hussein International Airport,True
+JORDAN,AQABA,AQJ,auto(score=20.0),King Hussein International Airport,True
+KAZAKHSTAN,AKTAU,SCO,auto(score=20.0),Aktau International Airport,True
+KAZAKHSTAN,ALMATY,ALA,auto(score=20.0),Almaty International Airport,True
+KAZAKHSTAN,GURYEV,GUW,manual,Atyrau International Airport,True
+KAZAKHSTAN,NURSULTAN NAZERBAYEV INTERNATIONAL,NQZ,auto(score=13.0),Nursultan Nazarbayev International Airport,True
+KENYA,NAIROBI,NBO,auto(score=20.0),Jomo Kenyatta International Airport,True
+KOSOVO,PRISTINA,PRN,auto(score=18.0),Priština Adem Jashari International Airport,True
+KUWAIT,KUWAIT,KWI,auto(score=20.0),Kuwait International Airport,True
+LATVIA,RIGA,RIX,auto(score=20.0),Riga International Airport,True
+LEBANON,BEIRUT,BEY,auto(score=20.0),Beirut Rafic Hariri International Airport,True
+LIBYA,TRIPOLI (MITIGA INTERNATIONAL),MJI,auto(score=20.0),Mitiga International Airport,True
+LITHUANIA,KAUNAS,KUN,auto(score=17.0),Kaunas International Airport,False
+LITHUANIA,PALANGA,PLQ,auto(score=20.0),Palanga International Airport,True
+LITHUANIA,SIAULIAI,SQQ,auto(score=14.0),Šiauliai International Airport,False
+LITHUANIA,VILNIUS,VNO,auto(score=20.0),Vilnius International Airport,True
+LUXEMBOURG,LUXEMBOURG,LUX,auto(score=20.0),Luxembourg-Findel International Airport,True
+MACEDONIA,OHRID,OHD,auto(score=20.0),Ohrid St. Paul the Apostle Airport,True
+MACEDONIA,SKOPJE,SKP,auto(score=18.0),Skopje International Airport,True
+MALAWI,LILONGWE,LLW,auto(score=18.0),Kamuzu International Airport,True
+MALAYSIA,KUALA LUMPUR (SEPANG),KUL,auto(score=20.0),Kuala Lumpur International Airport,True
+MALDIVE ISLANDS,MALE INTERNATIONAL,MLE,auto(score=20.0),Velana International Airport,True
+MALTA,MALTA,MLA,auto(score=18.0),Malta International Airport,True
+MAURITIUS,MAURITIUS,MRU,manual,Sir Seewoosagur Ramgoolam International Airport,True
+MEXICO,CANCUN,CUN,auto(score=20.0),Cancún International Airport,True
+MEXICO,MEXICO CITY,MEX,auto(score=22.0),Mexico City Benito Juárez International Airport,True
+MEXICO,PUERTO VALLARTA,PVR,auto(score=22.0),Puerto Vallarta International Airport,True
+MOROCCO,AGADIR (AL MASSIRA),AGA,auto(score=20.0),Al Massira Airport,True
+MOROCCO,CASABLANCA MOHAMED V,CMN,auto(score=15.0),Mohammed V International Airport,True
+MOROCCO,ESSAOUIRA,ESU,auto(score=19.0),Essaouira-Mogador Airport,True
+MOROCCO,FEZ,FEZ,manual,Fes Saïss International Airport,True
+MOROCCO,MARRAKESH,RAK,auto(score=20.0),Marrakesh Menara Airport,True
+MOROCCO,OUARZAZATE,OZZ,auto(score=20.0),Ouarzazate International Airport,True
+MOROCCO,RABAT,RBA,auto(score=20.0),Rabat-Salé Airport,True
+MOROCCO,TANGIERS (IBN BATUTA),TNG,auto(score=11.3),Tangier Ibn Battuta Airport,True
+MOROCCO,TETOUAN,TTU,auto(score=20.0),Sania Ramel Airport,True
+MOROCCO,VILLA CISNEROS W SAHARA,VIL,manual,Dakhla Airport,True
+NETHERLANDS,AMSTERDAM,AMS,auto(score=20.0),Amsterdam Airport Schiphol,True
+NETHERLANDS,EINDHOVEN,EIN,auto(score=20.0),Eindhoven Airport,True
+NETHERLANDS,GRONINGEN,GRQ,auto(score=17.0),Groningen Airport Eelde,False
+NETHERLANDS,MAASTRICHT,MST,auto(score=17.0),Maastricht Aachen Airport,False
+NETHERLANDS,ROTTERDAM,RTM,auto(score=20.0),Rotterdam The Hague Airport,True
+NIGERIA,ABUJA,ABV,auto(score=20.0),Nnamdi Azikiwe International Airport,True
+NIGERIA,LAGOS,LOS,auto(score=20.0),Murtala Muhammed International Airport,True
+NORWAY,ALESUND,AES,auto(score=20.0),Ålesund Airport,True
+NORWAY,BARDUFOSS,BDU,auto(score=14.0),Bardufoss Airport,False
+NORWAY,BERGEN,BGO,auto(score=20.0),"Bergen Airport, Flesland",True
+NORWAY,BODO,BOO,manual,Bodø Airport,True
+NORWAY,EVENES,EVE,auto(score=20.0),Harstad/Narvik Airport,True
+NORWAY,FLORO,FRO,auto(score=14.0),Florø Airport,False
+NORWAY,HAUGESUND,HAU,auto(score=17.0),"Haugesund Airport, Karmøy",True
+NORWAY,KRISTIANSAND (KJEVIK),KRS,auto(score=22.0),Kristiansand Airport,True
+NORWAY,LONGYEARBYEN (SVALBARD),LYR,auto(score=19.0),"Svalbard Airport, Longyear",True
+NORWAY,MOLDE,MOL,auto(score=14.0),"Molde Airport, Årø",False
+NORWAY,OSLO (GARDERMOEN),OSL,auto(score=22.0),Oslo-Gardermoen International Airport,True
+NORWAY,SANDEFJORD(TORP),TRF,auto(score=19.0),"Sandefjord Airport, Torp",False
+NORWAY,STAVANGER,SVG,auto(score=20.0),"Stavanger Airport, Sola",True
+NORWAY,TROMSOE,TOS,manual,Tromsø Airport,True
+NORWAY,TRONDHEIM (VAERNES),TRD,auto(score=15.0),"Trondheim Airport, Værnes",True
+OIL RIGS,OIL RIGS,,manual,,False
+OMAN,MUSCAT,MCT,auto(score=20.0),Muscat International Airport,True
+PAKISTAN,BENAZIR BHUTTO INTERNATIONAL AIRPORT,SKZ,auto(score=12.0),Begum Nusrat Bhutto International Airport Sukkur,True
+PAKISTAN,ISLAMABAD INTERNATIONAL AIRPORT,ISB,auto(score=18.0),Islamabad International Airport,True
+PAKISTAN,LAHORE,LHE,auto(score=20.0),Allama Iqbal International Airport,True
+PERU,JORGE CHAVEZ INTERNATIONAL,LIM,auto(score=18.0),Jorge Chávez International Airport,True
+POLAND,BYDGOSZCZ,BZG,auto(score=16.0),Ignacy Jan Paderewski Bydgoszcz Airport,False
+POLAND,GDANSK,GDN,auto(score=20.0),Gdańsk Lech Wałęsa Airport,True
+POLAND,KATOWICE,KTW,auto(score=20.0),Katowice Wojciech Korfanty International Airport,True
+POLAND,KRAKOW,KRK,auto(score=18.0),Kraków John Paul II International Airport,True
+POLAND,LODZ LUBLINEK,LCJ,auto(score=10.0),Łódź Władysław Reymont Airport,False
+POLAND,LUBLIN (PORT LOTNICZY),LUZ,manual,Lublin Airport,True
+POLAND,POZNAN,POZ,auto(score=20.0),Poznań-Ławica Airport,True
+POLAND,RADOM SADKOW,RDO,auto(score=16.0),Warsaw Radom Airport,False
+POLAND,RZESZOW,RZE,auto(score=18.0),Rzeszów-Jasionka Airport,True
+POLAND,SZCZECIN (GOLENOW),SZZ,auto(score=15.0),Solidarity Szczecin–Goleniów Airport,True
+POLAND,SZYMANY (MAZURY),SZY,auto(score=19.0),Olsztyn-Mazury Airport,True
+POLAND,WARSAW (CHOPIN),WAW,auto(score=20.0),Warsaw Chopin Airport,True
+POLAND,WARSAW (MODLIN MASOVIA),WMI,manual,Warsaw Modlin Airport,False
+POLAND,WROCLAW,WRO,auto(score=18.0),Copernicus Wrocław Airport,True
+PORTUGAL(EXCLUDING MADEIRA),AZORES LAJES TERCEIRA ISLAND,TER,auto(score=14.5),Lajes Airport,True
+PORTUGAL(EXCLUDING MADEIRA),AZORES PONTA DELGADA,PDL,auto(score=18.7),João Paulo II Airport,True
+PORTUGAL(EXCLUDING MADEIRA),BEJA,BYJ,auto(score=14.0),Beja Airport / Airbase,False
+PORTUGAL(EXCLUDING MADEIRA),CASCAIS,CAT,auto(score=16.0),Cascais Airport,False
+PORTUGAL(EXCLUDING MADEIRA),FARO,FAO,auto(score=20.0),Faro - Gago Coutinho International Airport,True
+PORTUGAL(EXCLUDING MADEIRA),LISBON,LIS,auto(score=20.0),Lisbon Humberto Delgado Airport,True
+PORTUGAL(EXCLUDING MADEIRA),OPORTO (PORTUGAL),OPO,manual,Francisco de Sá Carneiro Airport,True
+PORTUGAL(MADEIRA),FUNCHAL,FNC,auto(score=20.0),Cristiano Ronaldo International Airport,True
+PORTUGAL(MADEIRA),PORTO SANTO,PXO,manual,Porto Santo Airport,False
+QATAR,DOHA HAMAD,DOH,auto(score=20.0),Hamad International Airport,True
+QATAR,DOHA INTERNATIONAL,DIA,manual,Doha International Airport,False
+REPUBLIC OF KOREA,SEOUL (INCHEON),ICN,auto(score=20.0),Incheon International Airport,True
+REPUBLIC OF MOLDOVA,CHISINAU (KISHINEV),RMO,auto(score=12.0),Chişinău International Airport,False
+REPUBLIC OF MOLDOVA,CHISINAU INTERNATIONAL,RMO,auto(score=17.0),Chişinău International Airport,False
+REPUBLIC OF MONTENEGRO,PODGORICA,TGD,auto(score=20.0),Podgorica Airport / Podgorica Golubovci Airbase,True
+REPUBLIC OF MONTENEGRO,TIVAT,TIV,auto(score=16.0),Tivat Airport,False
+REPUBLIC OF SERBIA,BELGRADE,BEG,auto(score=20.0),Belgrade Nikola Tesla Airport,True
+REPUBLIC OF SOUTH AFRICA,CAPE TOWN,CPT,auto(score=22.0),Cape Town International Airport,True
+REPUBLIC OF SOUTH AFRICA,DURBAN,DUR,auto(score=20.0),King Shaka International Airport,True
+REPUBLIC OF SOUTH AFRICA,JOHANNESBURG,JNB,auto(score=20.0),O.R. Tambo International Airport,True
+ROMANIA,BACAU,BCM,auto(score=20.0),Bacău George Enescu International  Airport,True
+ROMANIA,BRASOV-GHIMBAV,GHV,auto(score=22.0),Brașov-Ghimbav International Airport,True
+ROMANIA,BUCHAREST (BANEASA),BBU,auto(score=17.0),Bucharest Băneasa Aurel Vlaicu International Airport,False
+ROMANIA,BUCHAREST (OTOPENI),OTP,auto(score=20.0),Bucharest Henri Coandă International Airport,True
+ROMANIA,CLUJ NAPOCA,CLJ,auto(score=22.0),Avram Iancu Cluj International Airport,True
+ROMANIA,CONSTANTA,CND,auto(score=20.0),Mihail Kogălniceanu International Airport,True
+ROMANIA,CRAIOVA,CRA,auto(score=20.0),Craiova International Airport,True
+ROMANIA,IASI,IAS,auto(score=20.0),Iaşi International Airport,True
+ROMANIA,ORADEA,OMR,auto(score=20.0),Oradea International Airport,True
+ROMANIA,SATU MARE,SUJ,auto(score=21.0),Satu Mare International Airport,True
+ROMANIA,SIBIU,SBZ,auto(score=20.0),Sibiu International Airport,True
+ROMANIA,SUCEAVA,SCV,auto(score=20.0),Suceava Ștefan cel Mare International Airport,True
+ROMANIA,TIMISOARA,TSR,auto(score=20.0),Timișoara Traian Vuia International Airport,True
+ROMANIA,TIRGU MURES,TGM,auto(score=12.0),Târgu Mureş Transilvania International Airport,True
+RWANDA,KIGALI,KGL,auto(score=20.0),Kigali International Airport,True
+SAINT KITTS AND NEVIS,ST KITTS,SKB,manual,Robert L. Bradshaw International Airport,True
+SAINT VINCENT AND THE GRENADINES,E T JOSHUA,SVD,manual,Argyle International Airport,True
+SAUDI ARABIA,DAMMAM,DMM,auto(score=20.0),King Fahd International Airport,True
+SAUDI ARABIA,JEDDAH,JED,auto(score=20.0),King Abdulaziz International Airport,True
+SAUDI ARABIA,MEDINA,MED,auto(score=20.0),Prince Mohammad Bin Abdulaziz Airport,True
+SAUDI ARABIA,NEOM BAY,NUM,auto(score=15.0),Neom Bay Airport,False
+SAUDI ARABIA,RIYADH,RUH,auto(score=20.0),King Khalid International Airport,True
+SENEGAL,DAKAR (BLAISE DIAGNE),DSS,auto(score=20.0),Blaise Diagne International Airport,True
+SIERRA LEONE,FREETOWN,FNA,auto(score=20.0),Lungi International Airport,True
+SINGAPORE,SINGAPORE,SIN,auto(score=20.0),Singapore Changi Airport,True
+SLOVAK REPUBLIC,BRATISLAVA,BTS,auto(score=20.0),M. R. Štefánik Airport,True
+SLOVAK REPUBLIC,KOSICE,KSC,auto(score=19.0),Košice International Airport,True
+SLOVAK REPUBLIC,TATRY-POPRAD,TAT,auto(score=19.0),Poprad-Tatry Airport,True
+SLOVENIA,LJUBLJANA,LJU,auto(score=18.0),Ljubljana Jože Pučnik Airport,True
+SLOVENIA,MARIBOR,MBX,auto(score=16.0),Maribor Edvard Rusjan Airport,False
+SPAIN,A CORUNA,LCG,auto(score=17.0),A Coruña Airport,True
+SPAIN,ALBACETE,ABC,auto(score=14.0),Albacete Airport / Los Llanos Air Base,False
+SPAIN,ALICANTE,ALC,auto(score=20.0),Alicante-Elche Miguel Hernández Airport,True
+SPAIN,ALMERIA,LEI,auto(score=19.0),Almería Airport,True
+SPAIN,ASTURIAS,OVD,auto(score=18.0),Asturias Airport,True
+SPAIN,BADAJOZ,BJZ,auto(score=19.0),Badajoz Airport,True
+SPAIN,BARCELONA,BCN,auto(score=20.0),Josep Tarradellas Barcelona-El Prat Airport,True
+SPAIN,BILBAO,BIO,auto(score=20.0),Bilbao Airport,True
+SPAIN,BURGOS,RGS,auto(score=17.0),Burgos Airport,True
+SPAIN,CASTELLON COSTA AZAHAR,CDT,auto(score=16.0),Castellón-Costa Azahar Airport,False
+SPAIN,CASTELLÓN COSTA AZAHAR,CDT,auto(score=16.0),Castellón-Costa Azahar Airport,False
+SPAIN,CUIDAD REAL,CQM,manual,Ciudad Real International Airport,False
+SPAIN,GIRONA,GRO,auto(score=20.0),Girona-Costa Brava Airport,True
+SPAIN,GRANADA,GRX,auto(score=19.0),F.G.L. Airport Granada-Jaén Airport,True
+SPAIN,IBIZA,IBZ,auto(score=20.0),Ibiza Airport,True
+SPAIN,JEREZ,XRY,auto(score=19.0),Jerez Airport,True
+SPAIN,LEON,LEN,auto(score=17.0),León Airport,True
+SPAIN,LOGRONO-AGONCILLO,RJL,auto(score=16.0),Logroño-Agoncillo Airport,False
+SPAIN,MADRID,MAD,auto(score=20.0),Adolfo Suárez Madrid–Barajas Airport,True
+SPAIN,MAHON,MAH,auto(score=20.0),Menorca Airport,True
+SPAIN,MALAGA,AGP,auto(score=20.0),Málaga-Costa del Sol Airport,True
+SPAIN,MURCIA INTERNATIONAL,RMU,auto(score=15.0),Region of Murcia International Airport,False
+SPAIN,MURCIA SAN JAVIER,MJV,manual [code not in OurAirports],,True
+SPAIN,PALMA DE MALLORCA,PMI,auto(score=22.0),Palma de Mallorca Airport,True
+SPAIN,PAMPLONA,PNA,auto(score=16.0),Pamplona Airport,False
+SPAIN,REUS,REU,auto(score=20.0),Reus Airport,True
+SPAIN,SALAMANCA,SLM,auto(score=16.0),Salamanca Airport,False
+SPAIN,SAN SEBASTIAN,EAS,manual,San Sebastián Airport,False
+SPAIN,SANTANDER,SDR,auto(score=19.0),Seve Ballesteros-Santander Airport,True
+SPAIN,SANTIAGO DE COMPOSTELA (SPAIN),SCQ,auto(score=15.7),Santiago-Rosalía de Castro Airport,False
+SPAIN,SEVILLE,SVQ,auto(score=20.0),Seville Airport,True
+SPAIN,VALENCIA,VLC,auto(score=20.0),Valencia Airport,True
+SPAIN,VALLADOLID,VLL,auto(score=19.0),Valladolid Airport,True
+SPAIN,VIGO,VGO,auto(score=19.0),Vigo Airport,True
+SPAIN,VITORIA,VIT,auto(score=17.0),Vitoria Airport,True
+SPAIN,ZARAGOZA,ZAZ,auto(score=20.0),Zaragoza Airport,True
+SPAIN(CANARY ISLANDS),ARRECIFE,ACE,auto(score=18.0),César Manrique-Lanzarote Airport,True
+SPAIN(CANARY ISLANDS),FUERTEVENTURA,FUE,auto(score=18.0),Fuerteventura Airport,True
+SPAIN(CANARY ISLANDS),LAS PALMAS,LPA,auto(score=18.0),Gran Canaria Airport,True
+SPAIN(CANARY ISLANDS),SANTA CRUZ DE LA PALMA,SPC,auto(score=17.7),La Palma Airport,True
+SPAIN(CANARY ISLANDS),TENERIFE (NORTE LOS RODEOS),TFN,auto(score=17.0),Tenerife Norte-Ciudad de La Laguna Airport,False
+SPAIN(CANARY ISLANDS),TENERIFE (SURREINA SOFIA),TFS,auto(score=16.7),Tenerife Sur Airport,True
+SRI LANKA,COLOMBO,CMB,auto(score=20.0),Bandaranaike International Colombo Airport,True
+ST LUCIA,ST LUCIA (HEWANORRA),UVF,auto(score=11.3),Hewanorra International Airport,True
+SWEDEN,ARVIDSJAUR,AJR,auto(score=16.0),Arvidsjaur Airport,False
+SWEDEN,GOTEBORG (LANDVETTER),GOT,auto(score=20.0),Göteborg Landvetter Airport,True
+SWEDEN,HALMSTAD,HAD,auto(score=16.0),Halmstad Airport,False
+SWEDEN,HELSINGBORG-ANGELHOLM,AGH,auto(score=16.0),Ängelholm-Helsingborg Airport,False
+SWEDEN,JONKOPING,JKG,auto(score=16.0),Jönköping Airport,False
+SWEDEN,LULEA,LLA,auto(score=20.0),Luleå Airport,True
+SWEDEN,MALMO,MMX,auto(score=20.0),Malmö Sturup Airport,True
+SWEDEN,OREBRO,ORB,auto(score=16.0),Örebro Airport,False
+SWEDEN,OSTERSUND / FROSON,OSD,auto(score=19.0),Åre Östersund Airport,True
+SWEDEN,PAJALA YLLAS,PJA,auto(score=9.5),Pajala Airport,False
+SWEDEN,SCANDINAVIAN MOUNTAINS AIRPORT,SCR,auto(score=15.0),Scandinavian Mountains Airport,False
+SWEDEN,STOCKHOLM (ARLANDA),ARN,auto(score=20.0),Stockholm-Arlanda Airport,True
+SWEDEN,STOCKHOLM (BROMMA),BMA,auto(score=16.0),Stockholm-Bromma Airport,False
+SWEDEN,VASTERAS,VST,auto(score=17.0),Stockholm Västerås Airport,False
+SWEDEN,VAXJO,VXO,auto(score=19.0),Växjö Kronoberg Airport,True
+SWEDEN,VISBY,VBY,auto(score=20.0),Visby Airport,True
+SWITZERLAND,ALTENRHEIN,ACH,auto(score=14.0),Sankt Gallen Altenrhein Airport,False
+SWITZERLAND,BALE MULHOUSE,BSL,manual,EuroAirport Basel–Mulhouse–Freiburg,True
+SWITZERLAND,BERNE,BRN,manual,Bern Airport,True
+SWITZERLAND,GENEVA,GVA,auto(score=20.0),Geneva International Airport,True
+SWITZERLAND,PAYERNE,VIP,auto(score=14.0),Payerne Air Base,False
+SWITZERLAND,SAMEDAN/ST MORITZ,SMV,manual,Engadin Airport,False
+SWITZERLAND,SION,SIR,auto(score=14.0),Sion Airport,False
+SWITZERLAND,ZURICH,ZRH,auto(score=20.0),Zürich Airport,True
+TAIWAN,TAIPEI,TPE,manual,Taiwan Taoyuan International Airport,True
+THAILAND,BANGKOK SUVARNABHUMI,BKK,auto(score=20.0),Suvarnabhumi Airport,True
+THAILAND,PHUKET,HKT,auto(score=20.0),Phuket International Airport,True
+TRINIDAD AND TOBAGO,PORT OF SPAIN,POS,auto(score=22.0),Piarco International Airport,True
+TRINIDAD AND TOBAGO,TOBAGO,TAB,auto(score=18.0),A.N.R. Robinson International Airport,True
+TUNISIA,ENFIDHA - HAMMAMET INTL,NBE,auto(score=19.0),Enfidha - Hammamet International Airport,True
+TUNISIA,JERBA,DJE,manual,Djerba Zarzis International Airport,True
+TUNISIA,TUNIS,TUN,auto(score=20.0),Tunis Carthage International Airport,True
+TURKEY,ADANA,ADA,auto(score=13.5),Adana Şakirpaşa Airport,True
+TURKEY,ANKARA (ESENBOGA),ESB,auto(score=20.0),Esenboğa International Airport,True
+TURKEY,ANTALYA,AYT,auto(score=20.0),Antalya International Airport,True
+TURKEY,BODRUM (MILAS),BJV,auto(score=20.0),Milas Bodrum International Airport,True
+TURKEY,CUKUROVA,COV,auto(score=15.0),Çukurova International Airport,False
+TURKEY,DALAMAN,DLM,auto(score=20.0),Dalaman International Airport,True
+TURKEY,GAZIANTEP,GZT,auto(score=20.0),Gaziantep Oğuzeli International Airport,True
+TURKEY,ISTANBUL,IST,manual,İstanbul Airport,True
+TURKEY,ISTANBUL (SABIHA GOKCEN),SAW,auto(score=20.0),Istanbul Sabiha Gökçen International Airport,True
+TURKEY,ISTANBUL ATATURK,ISL,auto(score=15.0),İstanbul Atatürk Airport,False
+TURKEY,IZMIR (ADNAN MENDERES),ADB,auto(score=18.0),Adnan Menderes International Airport,True
+TURKEY,KAYSERI  ERKILET,ASR,auto(score=20.0),Kayseri Erkilet International Airport,True
+TURKEY,NEVSEHIR KAPADOKYA,NAV,auto(score=20.0),Nevşehir Kapadokya Airport,True
+TURKEY,SAMSUN CARSAMBA,SZF,auto(score=19.0),Samsun-Çarşamba Airport,True
+TURKEY,TRABZON,TZX,auto(score=19.0),Trabzon International Airport,True
+TURKMENISTAN,ASHKHABAD,ASB,manual,Ashgabat International Airport,True
+TURKS AND CAICOS ISLANDS,PROVIDENCIALES,PLS,auto(score=20.0),Providenciales International Airport,True
+UGANDA,ENTEBBE,EBB,auto(score=20.0),Entebbe International Airport,True
+UNITED ARAB EMIRATES,ABU DHABI - BATEEN,AZI,manual,Al Bateen Executive Airport,False
+UNITED ARAB EMIRATES,ABU DHABI INTERNATIONAL,AUH,auto(score=22.0),Zayed International Airport,True
+UNITED ARAB EMIRATES,AL AIN,AAN,auto(score=22.0),Al Ain International Airport,True
+UNITED ARAB EMIRATES,DUBAI,DXB,auto(score=20.0),Dubai International Airport,True
+UNITED ARAB EMIRATES,DUBAI (WORLD CENTRAL),DWC,auto(score=17.0),Al Maktoum International Airport,False
+UNITED ARAB EMIRATES,SHARJAH,SHJ,auto(score=20.0),Sharjah International Airport,True
+USA,ATLANTA,ATL,auto(score=20.0),Hartsfield Jackson Atlanta International Airport,True
+USA,AUSTIN (BERGSTROM),AUS,auto(score=20.0),Austin Bergstrom International Airport,True
+USA,BALTIMORE,BWI,auto(score=20.0),Baltimore/Washington International Thurgood Marshall Airport,True
+USA,BANGOR,BGR,auto(score=19.0),Bangor International Airport,True
+USA,BOSTON,BOS,auto(score=20.0),Boston Logan International Airport,True
+USA,BUFFALO,BUF,auto(score=20.0),Buffalo Niagara International Airport,True
+USA,BURLINGTON (IOWA),BRL,auto(score=19.0),Southeast Iowa Regional Airport,True
+USA,CAMP SPRINGS (ANDREWS AFB),ADW,auto(score=13.5),Joint Base Andrews,False
+USA,CHARLESTON,CHS,auto(score=20.0),Charleston International Airport,True
+USA,CHARLOTTE,CLT,auto(score=20.0),Charlotte Douglas International Airport,True
+USA,CHATTANOOGA,CHA,auto(score=19.0),Chattanooga Metropolitan Airport (Lovell Field),True
+USA,CHICAGO (O'HARE),ORD,auto(score=20.0),Chicago O'Hare International Airport,True
+USA,CINCINNATI,CVG,auto(score=20.0),Cincinnati Northern Kentucky International Airport,True
+USA,COLUMBIA,CAE,auto(score=19.0),Columbia Metropolitan Airport,True
+USA,DALLAS/FORT WORTH,DFW,auto(score=24.0),Dallas Fort Worth International Airport,True
+USA,DENVER INTERNATIONAL,DEN,auto(score=20.0),Denver International Airport,True
+USA,DETROIT,DTW,auto(score=20.0),Detroit Metropolitan Wayne County Airport,True
+USA,FORT LAUDERDALE,FLL,auto(score=22.0),Fort Lauderdale Hollywood International Airport,True
+USA,HOUSTON,IAH,manual,George Bush Intercontinental Airport,True
+USA,KANSAS CITY,MCI,auto(score=22.0),Kansas City International Airport,True
+USA,LAS VEGAS,LAS,auto(score=22.0),Harry Reid International Airport,True
+USA,LOS ANGELES INTERNATIONAL,LAX,auto(score=22.0),Los Angeles International Airport,True
+USA,MELBOURNE FLATS,MLB,auto(score=14.0),Melbourne Orlando International Airport,True
+USA,MEMPHIS,MEM,auto(score=20.0),Frederick W. Smith International Airport,True
+USA,MIAMI INTERNATIONAL,MIA,auto(score=20.0),Miami International Airport,True
+USA,MINNEAPOLIS-ST PAUL,MSP,auto(score=16.7),Minneapolis–Saint Paul International Airport / Wold–Chamberlain Field,True
+USA,NASHVILLE METROPOLITAN,BNA,auto(score=15.0),Nashville International Airport,True
+USA,NEW ORLEANS,MSY,auto(score=22.0),Louis Armstrong New Orleans International Airport,True
+USA,NEW YORK (JF KENNEDY),JFK,auto(score=19.5),John F. Kennedy International Airport,True
+USA,NEW YORK (NEWARK),EWR,auto(score=20.0),Newark Liberty International Airport,True
+USA,NEWBURGH/USA,SWF,auto(score=14.0),New York Stewart International Airport,True
+USA,ORLANDO,MCO,auto(score=20.0),Orlando International Airport,True
+USA,PHILADELPHIA INTERNATIONAL,PHL,auto(score=20.0),Philadelphia International Airport,True
+USA,PHOENIX,PHX,auto(score=20.0),Phoenix Sky Harbor International Airport,True
+USA,PITTSBURGH,PIT,auto(score=20.0),Pittsburgh International Airport,True
+USA,PORTLAND (OREGON),PDX,auto(score=15.0),Portland International Airport,True
+USA,PORTSMOUTH (USA),PSM,auto(score=11.0),Portsmouth International Airport at Pease,False
+USA,RALEIGH,RDU,auto(score=20.0),Raleigh-Durham International Airport,True
+USA,SALT LAKE CITY,SLC,auto(score=24.0),Salt Lake City International Airport,True
+USA,SAN DIEGO,SAN,auto(score=22.0),San Diego International Airport,True
+USA,SAN FRANCISCO,SFO,auto(score=22.0),San Francisco International Airport,True
+USA,SAN JOSE,SJC,auto(score=22.0),Mineta San Jose International Airport,True
+USA,SEATTLE (BOEING FLD INT),BFI,manual,King County International Airport - Boeing Field,False
+USA,SEATTLE (TACOMA),SEA,auto(score=15.0),Seattle–Tacoma International Airport,True
+USA,ST LOUIS (LAMBERT),STL,auto(score=22.0),St. Louis Lambert International Airport,True
+USA,TAMPA,TPA,auto(score=20.0),Tampa International Airport,True
+USA,WASHINGTON (DULLES),IAD,auto(score=20.0),Washington Dulles International Airport,True
+USA,WEST PALM BEACH,PBI,manual [code not in OurAirports],,True
+UZBEKISTAN,TASHKENT,TAS,auto(score=20.0),Tashkent International Airport,True
+VENEZUELA,CARACAS,CCS,auto(score=18.0),Maiquetía Simón Bolívar International Airport,True
+VIETNAM,HANOI,HAN,auto(score=20.0),Noi Bai International Airport,True
+VIETNAM,HO CHI MINH CITY,SGN,auto(score=26.0),Tan Son Nhat International Airport,True
+ZIMBABWE,ROBERT GABRIEL MUGABE INTERNATIONAL,HRE,auto(score=18.0),Robert Gabriel Mugabe International Airport,True

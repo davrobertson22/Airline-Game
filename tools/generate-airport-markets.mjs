@@ -17,7 +17,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // saves read airportMarkets.js, new games airportMarketsV2.js.
 const TABLES = [
   { model: 1, file: 'airportMarkets.js', note: 'classic demand model (saves without state.demandModel)' },
-  { model: 2, file: 'airportMarketsV2.js', note: 'demand model v2 (new games, state.demandModel === 2)' },
+  { model: 2, file: 'airportMarketsV2.js', note: 'demand model v2 (games started on it, state.demandModel === 2)' },
+  { model: 3, file: 'airportMarketsV3.js', note: 'demand model v3 (new games, state.demandModel === 3)' },
 ];
 
 for (const { model, file, note } of TABLES) {
