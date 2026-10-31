@@ -8,6 +8,8 @@ import { formatMoney, formatGameDate } from '../utils/simulation.js';
 import { useAirlineAlerts } from '../utils/airlineAlerts.js';
 import { peekNavFilter, requestNav } from '../utils/navIntent.js';
 import { peekDepartureBoardRequest } from './Departures.jsx';
+import { openAlertSettings } from '../utils/alertPrefs.js';
+import { BellIcon } from './Icons.jsx';
 import { financeGroupOf } from './Finance.jsx';
 import {
   CoinsIcon, SettingsIcon, CloseIcon, SaveIcon, FolderOpenIcon,
@@ -364,7 +366,7 @@ export default function MapShell({
       <div className="ms-top">
         <button type="button" className="ms-crest" onClick={onBranding} title="Edit airline branding">
           <span className="ms-crest-logo">
-            <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={52} radius={10} accentColor={state.logoColor} />
+            <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={52} radius={10} accentColor={state.logoColor} bgColor={state.logoBg} />
           </span>
           <span className="ms-crest-plate">
             <span className="ms-crest-name">{state.airlineName}</span>
@@ -499,6 +501,9 @@ export default function MapShell({
               <span className="ms-menu-glyph" style={{ color: '#ff5e5b' }}>♥</span><span>Support Tailwinds</span>
             </a>
           )}
+          <button role="menuitem" data-alert-settings onClick={() => { setMenu(null); openAlertSettings(); }}>
+            <BellIcon size={15} /><span>Pop-up alerts</span>
+          </button>
           <button role="menuitem" data-layout-switch="classic" onClick={() => { setMenu(null); dismissHint(); onClassic(); }}>
             <span className="ms-menu-glyph">▤</span><span>Back to classic layout</span>
           </button>

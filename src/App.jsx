@@ -15,7 +15,7 @@ import Fleet from './components/Fleet.jsx';
 import Routes from './components/Routes.jsx';
 import Marketplace from './components/Marketplace.jsx';
 import Finance from './components/Finance.jsx';
-import { DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
+import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
 import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 import HubManagement from './components/HubManagement.jsx';
 import Reputation from './components/Reputation.jsx';
@@ -36,6 +36,7 @@ import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 import BrandingModal from './components/BrandingModal.jsx';
 import { BRANDING_OPEN_EVENT } from './utils/openBranding.js';
+import { openAlertSettings, tagWeeklyBatch } from './utils/alertPrefs.js';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
 import useNavFavourites from './hooks/useNavFavourites.js';
@@ -231,12 +232,21 @@ function AppInner() {
     }
   }, [state.phase]);
 
-  // Fire pending toasts from the reducer
+  // Fire pending toasts from the reducer.
+  // A batch that arrives WITH a new game week came from the weekly tick: it is
+  // tagged `alert` so the player's pop-up settings can hide it (ToastSystem /
+  // utils/alertPrefs.js). A batch in the same week answers something the player
+  // just did ("Not enough cash") and always shows. The first batch after the
+  // screen mounts counts as weekly — it is what piled up while they were away.
+  const toastWeekRef = useRef(null);
+  const toastWeekKey = `${state.year}:${state.week}`;
   useEffect(() => {
+    const prevWeekKey = toastWeekRef.current;
+    toastWeekRef.current = toastWeekKey;
     if (!state.pendingToasts?.length) return;
-    state.pendingToasts.forEach(t => addToast(t));
+    tagWeeklyBatch(prevWeekKey, toastWeekKey, state.pendingToasts).forEach(t => addToast(t));
     dispatch({ type: 'CLEAR_TOASTS' });
-  }, [state.pendingToasts]);
+  }, [state.pendingToasts, toastWeekKey]);
 
   const WEEK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
   const LS_KEY = 'airline_next_week_at';
@@ -548,6 +558,7 @@ function AppInner() {
           airlineName={state.airlineName}
           logoId={state.logoId}
           logoColor={state.logoColor}
+          logoBg={state.logoBg}
           customLogo={state.customLogo}
           onContinue={() => dispatch({ type: 'ACKNOWLEDGE_VICTORY' })}
           onNewGame={handleReset}
@@ -561,6 +572,7 @@ function AppInner() {
           airlineName={state.airlineName}
           logoId={state.logoId}
           logoColor={state.logoColor}
+          logoBg={state.logoBg}
           customLogo={state.customLogo}
           onReview={() => dispatch({ type: 'ACKNOWLEDGE_RUN_END' })}
           onNewGame={handleReset}
@@ -651,7 +663,7 @@ function AppInner() {
             cursor: 'pointer', color: 'inherit',
           }}
         >
-          <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} />
+          <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} bgColor={state.logoBg} />
           <div className="topbar-airline">{state.airlineName}</div>
         </button>
         <div className="topbar-spacer" />
@@ -702,6 +714,16 @@ function AppInner() {
         >
           <GlobeIcon size={13} /><span className="topbar-mapview-label">Map view</span>
           {layoutInvite && <span className="new-dot new-dot-corner" aria-label="new" />}
+        </button>
+        <button
+          className="btn btn-ghost"
+          data-alert-settings
+          style={{ fontSize: 12, padding: '5px 9px', display: 'inline-flex', alignItems: 'center' }}
+          onClick={openAlertSettings}
+          title="Pop-up alerts — choose which weekly pop-ups show (Delete clears them all)"
+          aria-label="Pop-up alerts"
+        >
+          <BellIcon size={13} />
         </button>
         <button
           className="btn btn-ghost"
@@ -773,6 +795,9 @@ function AppInner() {
                   </>)}
                   <button role="menuitem" data-layout-switch="map" onClick={() => switchLayout('map')}>
                     <GlobeIcon size={14} /> Try map view <span className="beta-chip">Beta</span>
+                  </button>
+                  <button role="menuitem" data-alert-settings onClick={() => { setShowMobileMenu(false); openAlertSettings(); }}>
+                    <BellIcon size={14} /> Pop-up alerts
                   </button>
                   <button role="menuitem" onClick={() => { setShowTour(true); setShowMobileMenu(false); }}>
                     <span style={{ width: 14, textAlign: 'center', fontWeight: 700 }}>?</span> How to play
@@ -977,7 +1002,7 @@ function AppInner() {
 // playing — the run is the unit, and "Review the board" leaves the final week
 // on screen with the clock stopped.
 
-export function FinalCallOverlay({ stats, airlineName, logoId, logoColor, customLogo, onReview, onNewGame }) {
+export function FinalCallOverlay({ stats, airlineName, logoId, logoColor, logoBg, customLogo, onReview, onNewGame }) {
   const s = stats ?? {};
   const rank  = s.rank ?? 1;
   const field = s.fieldSize ?? 1;
@@ -1010,7 +1035,7 @@ export function FinalCallOverlay({ stats, airlineName, logoId, logoColor, custom
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} />
+          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} bgColor={logoBg} />
         </div>
 
         <h2 style={{ fontSize: 25, marginBottom: 8, color: accent, lineHeight: 1.25 }}>
@@ -1097,7 +1122,7 @@ function VictoryStat({ label, value }) {
   );
 }
 
-export function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLogo, onContinue, onNewGame }) {
+export function VictoryOverlay({ stats, airlineName, logoId, logoColor, logoBg, customLogo, onContinue, onNewGame }) {
   const s = stats ?? {};
   return (
     <div style={{
@@ -1111,7 +1136,7 @@ export function VictoryOverlay({ stats, airlineName, logoId, logoColor, customLo
       }}>
         <div style={{ marginBottom: 8, color: 'var(--accent)' }}><TrophyIcon size={52} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} />
+          <AirlineLogo id={logoId} customSrc={customLogo} size={44} radius={8} accentColor={logoColor} bgColor={logoBg} />
         </div>
         <h2 style={{ fontSize: 26, marginBottom: 6, color: 'var(--green)' }}>You Control the Skies</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4, lineHeight: 1.5 }}>
