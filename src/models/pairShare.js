@@ -64,6 +64,7 @@ import {
   routePairKey,
   stateSensReduction,
   stateTravelPartnerFields,
+  stateLoyaltyFields,
   stateBrandReach,
   stateLoungeFields,
   stateGroundHandlingFields,
@@ -203,7 +204,7 @@ export function buildPlayerPairOffer(state, pairRoutes) {
     // Travel partners (cruise / tours lift leisure, hotels / ride share lift
     // business). Same reason again: an offer without them previews a partnered
     // airline as if it had none.
-    ...stateTravelPartnerFields(state, r0.origin, r0.destination),
+    ...stateTravelPartnerFields(state, r0.origin, r0.destination), ...stateLoyaltyFields(state, r0.origin, r0.destination),
   };
 }
 
@@ -896,6 +897,8 @@ export function projectRouteAddition(state, spec) {
       // attaches the same fields.
       ...stateTravelPartnerFields(state, origin, destination, gameDate?.month ?? null),
       ...(state.partnershipsWorld === true ? { travelPartnerTrack: true } : {}),
+      // Loyalty-pools member standing (share term only) — the tick attaches it.
+      ...stateLoyaltyFields(state, origin, destination),
       ...(hcf ? { hubCostFactors: hcf } : {}),
       // Self-handling factor, with the route being launched counted against the
       // station's capacity — the tick will see it in the schedule next week.

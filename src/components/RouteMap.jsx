@@ -8,6 +8,9 @@ import {
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, routeStops, isMultiStop,
 } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { loyaltyCityTable } from '../utils/simulation.js';
+import { loyaltyProgramOn } from '../models/loyaltyPools.js';
+import { loyaltyMapPoints, LOYALTY_MAP_KEY, LOYALTY_FILL } from './loyaltyMapCore.js';
 import { getAlliance } from '../data/alliances.js';
 import { HUB_TIERS } from '../models/demand.js';
 import { Glyph } from './Icons.jsx';
@@ -612,6 +615,14 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   // and a map you cannot read is not more information than one you can.
   const [showRivals,    setShowRivals]    = useState(false);
   const [showCargo,     setShowCargo]     = useState(true);
+  // Loyalty layer (city-loyalty games): off by default, remembered per browser.
+  const [showLoyalty, setShowLoyalty] = useState(() => {
+    try { return localStorage.getItem(LOYALTY_MAP_KEY) === 'on'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(LOYALTY_MAP_KEY, showLoyalty ? 'on' : 'off'); } catch { /* private mode */ }
+  }, [showLoyalty]);
+  const loyaltyLayersRef = useRef([]);
   const [showCharters,  setShowCharters]  = useState(true);
   const [acTypeFilter,  setAcTypeFilter]  = useState('all');  // 'all' | aircraft typeId
   const [airportFilter, setAirportFilter] = useState('all');  // 'all' | IATA code
@@ -1076,6 +1087,33 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       }
     }
   }, [partnerRouteData, showAlliance, showCodeshare, showRivals, selectedId, focusAirport, mapReady, airportFilter]);
+
+  // Loyalty layer points (empty when off) — loyaltyMapCore.js.
+  const loyaltyWorld = state.loyaltyPoolsWorld === true;
+  const loyaltyPoints = useMemo(() => (loyaltyWorld && showLoyalty
+    ? loyaltyMapPoints(loyaltyCityTable(state), loyaltyProgramOn(state.loyalty))
+    : []), [loyaltyWorld, showLoyalty, state]);   // eslint-disable-line
+
+  // 4d. Loyalty layer: one circle per city, sized by its frequent flyers and
+  // filled by your share of them. Drawn under the lines.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
+    loyaltyLayersRef.current.forEach(l => map.removeLayer(l));
+    loyaltyLayersRef.current = [];
+    for (const p of loyaltyPoints) {
+      const c = L.circleMarker([p.lat, p.lon], {
+        radius: p.radius, color: p.stroke, weight: 2, opacity: 0.95,
+        dashArray: p.dashed ? '3 3' : null,
+        fillColor: p.fill, fillOpacity: p.fillOpacity,
+      });
+      c.bindTooltip(p.tip, { sticky: true, className: 'game-tooltip', offset: [15, 0] });
+      c.addTo(map);
+      c.bringToBack();
+      loyaltyLayersRef.current.push(c);
+    }
+  }, [loyaltyPoints, mapReady]);
 
   // 4c. Sync cargo route overlay (amber, distinct from green/red passenger lines)
   useEffect(() => {
@@ -1569,6 +1607,15 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
             onClick={toggleAirports}
             title={showAirports ? 'Hide the airports you don\'t fly to' : 'Show every airport you can fly to'}
           >Airports</button>
+          {loyaltyWorld && (
+            <button
+              className={`map-bleed-chip${showLoyalty ? ' on' : ''}`}
+              aria-pressed={showLoyalty}
+              data-map-loyalty-toggle
+              onClick={() => setShowLoyalty(v => !v)}
+              title={showLoyalty ? 'Hide the loyalty layer' : 'Show who holds each city\u2019s frequent flyers'}
+            >🎟️ Loyalty</button>
+          )}
           {selectedId != null && (
             <button className="map-bleed-chip on" onClick={clearFocus}>
               <Glyph e="✕" /> Focus
@@ -1698,6 +1745,27 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#b4c2d4', display: 'inline-block' }} />
               All airports
             </button>
+
+            {/* Loyalty layer — city-loyalty games only */}
+            {loyaltyWorld && (
+              <button
+                onClick={() => setShowLoyalty(v => !v)}
+                aria-pressed={showLoyalty}
+                data-map-loyalty-toggle
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  opacity: showLoyalty ? 1 : 0.4, transition: 'opacity 0.15s',
+                  color: 'var(--text-muted)', fontSize: 11,
+                }}
+                title={showLoyalty
+                  ? 'Hide the loyalty layer'
+                  : 'Show who holds each city\u2019s frequent flyers: bigger circles are bigger cities, fuller ones are where more of them carry your card; green rings are growing, red are draining, dashed are shopping around'}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: LOYALTY_FILL, opacity: 0.8, border: '1.5px solid #38d39f', display: 'inline-block' }} />
+                Loyalty
+              </button>
+            )}
 
             {/* Cargo toggle — only when cargo routes exist */}
             {cargoRoutes.length > 0 && (

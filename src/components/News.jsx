@@ -130,6 +130,20 @@ function compose(item) {
       };
     }
 
+    // City loyalty (models/loyaltyPools.js): your own devaluation, and a status
+    // match of an AI carrier's members after theirs.
+    case 'loyalty_devalued':
+      return {
+        headline: `You devalued your loyalty program${d.cut ? ` by ${(d.cut * 100).toFixed(1)} points` : ''}`,
+        sub: `Members now earn ${((d.generosity ?? 0) * 100).toFixed(1)}%. Expect defections and a reputation hit for 12 weeks.`,
+        standalone: true,
+      };
+    case 'status_match':
+      return {
+        headline: `You status-matched ${(d.members ?? 0).toLocaleString()} of ${d.rival ?? 'a rival'}'s members`,
+        sub: 'They stay if your program is the better one in their city.',
+        standalone: true,
+      };
     case 'competitor_note':
       return { headline: '', sub: d.description ?? null, standalone: true };
 

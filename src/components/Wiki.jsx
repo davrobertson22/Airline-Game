@@ -364,6 +364,18 @@ const WIKI = [
       { p: 'Beyond the weekly investment, members **earn points on every flight** which accrue as a **points liability**: a real debt you repay over the following months as award seats. A growing program looks cheap early because redemptions lag earn; the bill arrives later. Roughly 20% of points expire unused (breakage), which is where a well-run program eventually finds its margin.' },
       { p: '**Defunding a mature program is painful**: elite members defect fast, maturity unwinds four times faster than it was built, and outstanding points must still be honoured.' },
       { tip: 'Expect the program to be a net cost for its first year or more. It pays for itself once maturity unlocks the full demand shield, commit early, budget for the long haul, and don\'t start it during a cash crunch.' },
+      { h: 'City loyalty (games started from 31 October 2026)' },
+      { p: 'New games replace the budget with **city loyalty**. Frequent flyers live in cities, and every airline flying there competes for them, the AI carriers included. Make your program worth joining, fly your members reliably, and don\'t cut it once they have.' },
+      { ul: [
+        '**One dial: generosity**, the share of the fare members earn back (3–12%). Raising it is free. **Lowering it is a devaluation**: members walk out, every city you fly shops around for 8 weeks, and reputation takes a hit for 12. You can take a raise back within 4 weeks without penalty. Points already earned keep their value either way.',
+        'Your **pull on a city** is the seats you fly from it times what your program is worth there. The checklist: generosity, a **lounge members can use** in that city, a **checked bag included**, **premium cabins**, an **alliance**, **how many places you fly** from the city, **travel partners** working there (hotels and ride share count most), and being **on time**. Most travellers carry no card at all unless a program is worth it.',
+        '**AI carriers run programs too.** Premium and full-service carriers are strongest at their own hubs; budget carriers barely bother. You won\'t take a fortress hub from its owner, but you can own the cities around it.',
+        'Members only decide **which airline** people fly. They never add travellers to a market: on a route nobody else flies the program does nothing; where you compete, members (above all elites) choose you and shrug off a cheaper fare.',
+        '**Elites** are a slice of members that grows with maturity and counts three times over. Below 80% on time they start to leave.',
+        '**The status year**: every December elites requalify against the flying you kept up in their city. Cut a city\'s routes and its elites leave with them.',
+        '**Status match**: when an AI carrier devalues its program, you have 3 weeks to honour its members\' status in the cities you both fly and take half of those walking out. It costs money, and they only stay if your program is the better one there.',
+        'Turn on the **Loyalty** layer on the Network map to see who holds each city\'s frequent flyers.',
+      ] },
     ],
   },
   {

@@ -20,7 +20,7 @@ import {
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateSensReduction, CLASS_FARE_MULTIPLIERS,
-  stateTravelPartnerFields, routeStops,
+  stateTravelPartnerFields, stateLoyaltyFields, routeStops,
 } from '../utils/simulation.js';
 import {
   TRAVEL_PARTNER_MAP, TP_TYPES, travelPartnerCovers, travelPartnerInSeason, travelLiftScale, seasonLabel,
@@ -357,7 +357,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // wrongly on the one screen built to answer it.
           loungeAppeal:      stateLoungeFields(state, origin, dest).loungeAppeal,
           // Travel partners — the segment lifts the tick attaches.
-          ...stateTravelPartnerFields(state, origin, dest),
+          ...stateTravelPartnerFields(state, origin, dest), ...stateLoyaltyFields(state, origin, dest),
           // See the note on combinedOffer below: without this the share panel
           // scores a brand-new airline as an established one. The campaign lift
           // and the loyalty/reputation elasticity blunting are attached for the
@@ -450,7 +450,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           // for the same reason: the single-tail offer above carries all four,
           // and a pair should not be scored differently for having two tails.
           loungeAppeal: stateLoungeFields(state, origin, dest).loungeAppeal,
-          ...stateTravelPartnerFields(state, origin, dest),
+          ...stateTravelPartnerFields(state, origin, dest), ...stateLoyaltyFields(state, origin, dest),
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost: playerCampaignBoost(state, origin, dest),
           brandReach: stateBrandReach(state, maxHubBonus, false, [origin, dest]),
@@ -486,7 +486,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
       // Fallback for routes the engine skipped (grounded / dormant-seasonal) —
       // same labor / utilization / satisfaction inputs the engine uses.
       const result = simulateRoute(
-        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateTravelPartnerFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
+        { ...route, ...stateLoungeFields(state, route.origin, route.destination), ...stateTravelPartnerFields(state, route.origin, route.destination), ...stateLoyaltyFields(state, route.origin, route.destination), ...stateGroundHandlingFields(state, route.origin, route.destination), ...stateCateringFields(state, route) },
         // The live fuel multiplier (price × burn), never a bare 1.0: the
         // fallback preview must agree with the tick like every other one.
         aircraft, gameDate, state.labor ?? null, fuelSimMultiplierOf(state),
