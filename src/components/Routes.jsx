@@ -41,7 +41,7 @@ import {
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
-  buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, routesCommittedTo, blockHourFit,
+  buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, committedPeakBlockHoursIn, routesCommittedTo, blockHourFit,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport,
   routePairKey,
 } from '../utils/simulation.js';
@@ -2726,6 +2726,10 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // grounded airframe as if it were spare metal and the reducer took the load.
   const usedBlockHrsFor = (a) =>
     committedPeakBlockHours(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? [], state.charters ?? []);
+  // …and in the months a route would fly. A tail full May–Oct is free Nov–Apr,
+  // and ADD_ROUTE (blockHourFit with the route's months) accepts it there.
+  const usedBlockHrsIn = (a, months) =>
+    committedPeakBlockHoursIn(a?.id, getAircraftType(a?.typeId), routes, state.cargoRoutes ?? [], months, state.charters ?? []);
 
   // Freighters can't fly passenger routes (the reducer rejects them) — keep them
   // out of this form entirely; they're managed in the cargo planner.
@@ -2775,10 +2779,13 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // Reserves stay in the list — deploying one is legal, it just ends the
   // standby — but they sort last so the picker never lands on a paid-for
   // standby cover by default.
+  // Hours are read in the chosen operating window, so picking Nov–Apr brings
+  // back a tail whose summer is fully booked (JackG207174, Headwinds Discord, 2 Nov 2026).
+  const seasonMonths = routeActiveMonths({ season });
   const pickerFleet = paxFleet
-    .filter(a => hasHours(a) && canServePair(a))
+    .filter(a => usedBlockHrsIn(a, seasonMonths) < MAX_WEEKLY_BLOCK_HOURS && canServePair(a))
     .sort((a, b) => (Number(isReserve(a)) - Number(isReserve(b)))
-      || (usedBlockHrsFor(a) - usedBlockHrsFor(b)));
+      || (usedBlockHrsIn(a, seasonMonths) - usedBlockHrsIn(b, seasonMonths)));
 
   // Changing the origin/destination can strand the current selection (its
   // network no longer touches the pair) — fall back to the best remaining one.
@@ -2979,7 +2986,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
               {aircraftId === '' && pickerFleet.length > 0 && <option value="">— Select aircraft —</option>}
               {pickerFleet.map(a => {
                 const t    = getAircraftType(a.typeId);
-                const used = usedBlockHrsFor(a);
+                const used = usedBlockHrsIn(a, seasonMonths);
                 const rem  = MAX_WEEKLY_BLOCK_HOURS - used;
                 const full = rem <= 0;
                 const cfg  = a.config;

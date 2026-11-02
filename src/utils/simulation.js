@@ -1882,16 +1882,26 @@ export function scheduleTrimMessage(notice) {
  *   connectivityOk, hoursOk, rangeOk, eligible }, idle airframes first then most-spare.
  */
 export function deployableFleetForRoute({
-  fleet = [], existingRoutes = [], charters = [], typeId, origin, dest, distKm, weeklyFrequency,
+  fleet = [], existingRoutes = [], cargoRoutes = [], charters = [], typeId, origin, dest, distKm, weeklyFrequency,
+  months = null,
 }) {
   const type = getAircraftType(typeId);
   if (!type) return [];
   const newBH = weeklyBlockHours(distKm, weeklyFrequency, type);
+  // months: the 1-indexed months the new route would fly. Given, a tail is
+  // charged its busiest of THOSE months — ADD_ROUTE's own reading (blockHourFit
+  // with the route's months), so a tail full May–Oct is free for a Nov–Apr
+  // route (JackG207174, Headwinds Discord, 2 Nov 2026). Omitted, every committed
+  // route is charged whatever its season — the reading the freight guard still
+  // takes, so the cargo planner passes none.
+  const seasonal = Array.isArray(months) && months.length > 0;
   return fleet
     .filter(a => a.typeId === typeId && !isOutOfService(a) && a.status !== 'retired')
     .map(a => {
-      const acRoutes = routesCommittedTo(a.id, existingRoutes, [], charters);
-      const usedBH   = acRoutes.reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
+      const acRoutes = routesCommittedTo(a.id, existingRoutes, cargoRoutes, charters);
+      const usedBH   = seasonal
+        ? committedPeakBlockHoursIn(a.id, type, existingRoutes, cargoRoutes, months, charters)
+        : acRoutes.reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
       // Every stop counts, tag stops included — the same reading ADD_ROUTE's
       // connectivity guard takes (routeStops). Counting only the endpoints
       // ruled out a tail that flies THROUGH the origin on a multi-stop route,
