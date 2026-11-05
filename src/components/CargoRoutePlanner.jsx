@@ -4,11 +4,12 @@ import { useGame, slotsUsedAt as slotsUsedAtEngine, cargoRouteDenial } from '../
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
-import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
+import { simulateCargoNetwork, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
 import { Glyph } from './Icons.jsx';
+import { connectingFreightTitle } from '../utils/connectingFreight.js';
 import { consumeNavFilter, requestNav } from '../utils/navIntent.js';
 import { navPathFor } from '../navPath.js';
 import ReserveNotice from './ReserveNotice.jsx';
@@ -205,7 +206,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
 
   // Your freighters already flying this lane (either direction). New capacity
   // on the pair shares ONE demand pool with them — the projection below and the
-  // weekly tick both use cargoLaneAllocations, so what you see is what you get.
+  // weekly tick both use simulateCargoNetwork, so what you see is what you get.
   const laneRoutes = useMemo(() =>
     (state.cargoRoutes ?? []).filter(r =>
       (r.origin === origin && r.destination === dest) || (r.origin === dest && r.destination === origin)),
@@ -324,23 +325,31 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
     const ac    = { id: 'p', typeId: selectedTypeId, ageWeeks: 0,
       rangeMod: forecastRangeMod(type, quotedReach) };
     if (routeData.dist > quotedReach) return null;
-    // Joining a lane you already fly: project THIS aircraft's slice of the
-    // shared pool, not the full market (the same math the weekly tick runs).
-    let override = null, overrideLaunch = null;
-    if (laneRoutes.length > 0) {
-      const fleetPlus = [...state.fleet, ac];
-      // Include rival freighters so the projected slice matches the contested
-      // tick — a lane a rival already flies is not yours alone.
-      const cargoOpts = { gameDate: gd, competitors: state.competitors };
-      override       = cargoLaneAllocations([...laneRoutes, route], fleetPlus, 1.0, cargoOpts).get('p') ?? null;
-      overrideLaunch = cargoLaneAllocations([...laneRoutes, { ...route, weeksOpen: 0 }], fleetPlus, 1.0, cargoOpts).get('p') ?? null;
-    }
-    const result       = simulateCargoRoute(route, ac, gd, null, 1.0, 1.0, override);
-    const resultLaunch = simulateCargoRoute({ ...route, weeksOpen: 0 }, ac, gd, null, 1.0, 1.0, overrideLaunch);
+    // The whole freight network with this route added — the weekly tick's own
+    // simulateCargoNetwork. Joining a lane you already fly projects THIS
+    // aircraft's slice of the shared (and rival-contested) pool, and a route
+    // that meets your other freighter routes at an airport picks up connecting
+    // freight — and adds connecting freight to those routes too.
+    const existing  = state.cargoRoutes ?? [];
+    const fleetPlus = [...state.fleet, ac];
+    const cargoOpts = { gameDate: gd, competitors: state.competitors };
+    const after        = simulateCargoNetwork([...existing, route], fleetPlus, cargoOpts);
+    const result       = after.results.get('p') ?? null;
+    const resultLaunch = simulateCargoNetwork([...existing, { ...route, weeksOpen: 0 }], fleetPlus, cargoOpts).results.get('p') ?? null;
     if (!result) return null;
+    // Connecting freight the new route brings to your OTHER freighter routes:
+    // the network's revenue on them, after minus before.
+    let networkGain = 0;
+    if ((result.connectingTonnes ?? 0) > 0) {
+      const before = simulateCargoNetwork(existing, state.fleet, cargoOpts).results;
+      for (const r of existing) {
+        const a = after.results.get(r.id), b = before.get(r.id);
+        if (a && b) networkGain += (a.revenue - a.totalOpCost) - (b.revenue - b.totalOpCost);
+      }
+    }
     const netProfit = result.profit - type.weeklyLease; // approx (excludes landing/maint; shown separately)
-    return { result, resultLaunch, type, netProfit, shared: laneRoutes.length > 0 };
-  }, [routeData, selectedTypeId, frequency, effectiveYield, origin, dest, laneRoutes, state.fleet, gd.month]);
+    return { result, resultLaunch, type, netProfit, networkGain, shared: laneRoutes.length > 0 };
+  }, [routeData, selectedTypeId, frequency, effectiveYield, origin, dest, laneRoutes, state.fleet, state.cargoRoutes, state.competitors, gd.month]);
 
   function handleOpenRoute(aircraftId) {
     openAttempt.current = {
@@ -537,6 +546,14 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                         {cell.sub && <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>{cell.sub}</div>}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Connecting freight */}
+                {simulation?.result?.connectingTonnes > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -6, marginBottom: 14, lineHeight: 1.5 }} title={connectingFreightTitle(simulation.result)}>
+                    <Glyph e="🔗" size={12} /> Includes <strong style={{ color: 'var(--green)' }}>{simulation.result.connectingTonnes.toLocaleString()} t</strong> of connecting freight ({formatMoney(simulation.result.connectingRevenue)}/wk) — freight between your other airports that changes freighters where this route meets your network.
+                    {simulation.networkGain > 0 && <> It also adds <strong style={{ color: 'var(--green)' }}>+{formatMoney(simulation.networkGain)}/wk</strong> to the freighter routes it connects with.</>}
                   </div>
                 )}
 

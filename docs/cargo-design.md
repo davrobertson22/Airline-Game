@@ -149,3 +149,11 @@ built for Headwinds' human rivals); Tailwinds' AI now publishes on it.
 - **Flag:** `state.rivalFreight` — set on every new game unless switched off at setup
   ("Rivals fly freight"). Older saves have no flag and keep an uncontested freight market.
 - **Tests:** `tools/competitor-cargo-test.mjs`, `tools/competitor-cargo-ui-test.mjs`.
+
+---
+
+## Update (Nov 2026): freight connections — BUILT
+
+Superseding "Cargo in the network" in §4: freight now connects at any airport where
+the player flies ≥2 freighter routes (local first, circuity ≤ 1.3, one pool per O&D).
+See `cargo-connections-design.md`.

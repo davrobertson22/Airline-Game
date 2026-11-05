@@ -5,8 +5,9 @@ import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { groundedTitle } from '../data/maintenance.js';
-import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
+import { simulateCargoRoute, simulateCargoNetwork, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
+import { connectingFreightTitle } from '../utils/connectingFreight.js';
 import OutOfRangeBadge from './OutOfRangeBadge.jsx';
 import { useToast } from './ToastSystem.jsx';
 import NumberStepper from './NumberStepper.jsx';
@@ -64,11 +65,17 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
   const allRows = useMemo(() => {
     // Same-lane pooling: mirror the weekly tick so the list shows each route's
     // SHARE of a shared lane, not N copies of the full market.
-    const alloc = cargoLaneAllocations(cargoRoutes, fleet, 1.0, { gameDate: gd, competitors: state.competitors });
+    // The whole network in one pass (the tick's own simulateCargoNetwork), so
+    // freight connecting through your airports shows on the legs that carry it.
+    const net   = simulateCargoNetwork(cargoRoutes, fleet, { gameDate: gd, competitors: state.competitors });
+    const alloc = net.allocations;
     return cargoRoutes.map(route => {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
       const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
-      const sim      = aircraft ? simulateCargoRoute(route, aircraft, gd, null, 1.0, 1.0, alloc.get(route.id) ?? null) : null;
+      // A tail in a check flies nothing this week; the row still shows what the
+      // route earns when it is back, as before.
+      const sim      = net.results.get(route.id)
+        ?? (aircraft ? simulateCargoRoute(route, aircraft, gd, null, 1.0, 1.0, alloc.get(route.id) ?? null) : null);
       // "Shared lane" is about YOUR freighters sharing a pool; a lane a rival
       // contests gets an allocation too, but that's the rivals chip below.
       return { route, aircraft, type, sim,
@@ -131,6 +138,7 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
   const totalRev    = rows.reduce((s, r) => s + (r.sim?.revenue ?? 0), 0);
   const totalProfit = rows.reduce((s, r) => s + (r.sim?.profit ?? 0), 0);
   const totalTonnes = rows.reduce((s, r) => s + (r.sim?.tonnes ?? 0), 0);
+  const totalConnRev = rows.reduce((s, r) => s + (r.sim?.connectingRevenue ?? 0), 0);
 
   return (
     <div>
@@ -147,6 +155,12 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
         </div>
         <div><span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Tonnes / wk</span><div style={{ fontWeight: 700, fontSize: 15, color: ACCENT }}>{totalTonnes.toLocaleString()}</div></div>
         <div><span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Freight revenue</span><div style={{ fontWeight: 700, fontSize: 15, color: 'var(--green)' }}>{formatMoney(totalRev)}</div></div>
+        {totalConnRev > 0 && (
+          <div title="Freight connecting between two of your freighter routes at an airport they share — it fills payload the local freight leaves empty">
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>of which connecting</span>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--green)' }}>{formatMoney(totalConnRev)}</div>
+          </div>
+        )}
         <div><span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Var. profit / wk</span><div style={{ fontWeight: 700, fontSize: 15, color: totalProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>{(totalProfit >= 0 ? '+' : '') + formatMoney(totalProfit)}</div></div>
         {!hideViewToggle && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 2 }}>
@@ -168,6 +182,22 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
         ? <CargoTable rows={rows} controls={controls} />
         : rows.map(r => <CargoRouteCard key={r.route.id} {...r} controls={controls} />)}
     </div>
+  );
+}
+
+// ─── Connecting freight on a leg ────────────────────────────────────────────────
+// Freight between two of your OTHER airports that rides this leg through an
+// airport where your freighter routes meet (simulateCargoNetwork). The tooltip
+// lists the markets, biggest first.
+export function ConnectingFreightChip({ sim, style }) {
+  if (!(sim?.connectingTonnes > 0)) return null;
+  return (
+    <span
+      style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(63,185,80,0.12)', color: 'var(--green)', border: '1px solid rgba(63,185,80,0.35)', textTransform: 'uppercase', letterSpacing: '.04em', ...style }}
+      title={connectingFreightTitle(sim)}
+    >
+      <Glyph e="🔗" /> +{sim.connectingTonnes.toLocaleString()} t connecting
+    </span>
   );
 }
 
@@ -363,6 +393,7 @@ function CargoTableRow({ row, zebra, expanded, onToggleExpand, controls }) {
             </span>
           )}
           <CargoRivalsChip rivals={rivals} style={{ marginLeft: 6 }} />
+          <ConnectingFreightChip sim={sim} style={{ marginLeft: 6 }} />
         </td>
         <td style={{ ...RIGHT, color: 'var(--text-muted)' }}>{sim ? `${sim.distance.toLocaleString()} km` : '—'}</td>
         <td style={RIGHT}>{route.weeklyFrequency}×</td>
@@ -472,6 +503,7 @@ function CargoRouteCard({ route, aircraft, type, sim, pooled, rivals, controls }
               </span>
             )}
             <CargoRivalsChip rivals={rivals} />
+            <ConnectingFreightChip sim={sim} />
             {aircraft?.status === 'grounded' && (
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,

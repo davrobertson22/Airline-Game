@@ -13,7 +13,7 @@ import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
   maintenanceMultiplier, ageLabel,
-  simulateRoute, simulateCargoRoute, cargoLaneAllocations, weeklyBlockHours, currentGameDate,
+  simulateRoute, simulateCargoRoute, simulateCargoNetwork, weeklyBlockHours, currentGameDate,
   maxWeeklyBlockHoursFor, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
@@ -729,9 +729,13 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   // the two, exactly as the utilisation reading and the weekly tick see it.
   const cargoRoutes    = state.cargoRoutes ?? [];
   const evModel        = useMemo(() => buildEventDemandModel(state.activeEvents), [state.activeEvents]);
-  const cargoAlloc     = useMemo(() => cargoLaneAllocations(cargoRoutes, state.fleet ?? [], 1.0, {
+  // The whole freight network (the tick's simulateCargoNetwork): lane pooling,
+  // rival contest and freight connecting through your airports.
+  const cargoNet       = useMemo(() => simulateCargoNetwork(cargoRoutes, state.fleet ?? [], {
     gameDate: gd, demandMultFor: (o, d) => evModel.multFor(o, d), competitors: state.competitors ?? [],
-  }), [cargoRoutes, state.fleet, state.competitors, evModel, gd.month]);
+    labor: state.labor ?? null, fuelMultiplier: fuelMult,
+  }), [cargoRoutes, state.fleet, state.competitors, state.labor, fuelMult, evModel, gd.month]);
+  const cargoAlloc     = cargoNet.allocations;
   const aircraftRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === aircraft.id);
   const routeResults   = aircraftRoutes.map(r => {
     const evMult = evModel.multFor(r.origin, r.destination);
@@ -739,8 +743,8 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
     // the tick uses, so these rows agree with the freight table and the tick
     // instead of claiming the whole uncontested lane.
     const result = r.cargo
-      ? simulateCargoRoute(r, aircraft, gd, state.labor ?? null, fuelMult, evMult,
-          cargoAlloc.get(r.id) ?? null)
+      ? (cargoNet.results.get(r.id) ?? simulateCargoRoute(r, aircraft, gd, state.labor ?? null, fuelMult, evMult,
+          cargoAlloc.get(r.id) ?? null))
       : simulateRoute(
           { ...r, ...stateLoungeFields(state, r.origin, r.destination), ...stateGroundHandlingFields(state, r.origin, r.destination), ...stateCateringFields(state, r) },
           aircraft, gd, state.labor ?? null,
