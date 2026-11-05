@@ -9,6 +9,7 @@ import { useAirlineAlerts } from '../utils/airlineAlerts.js';
 import { peekNavFilter, requestNav } from '../utils/navIntent.js';
 import { peekDepartureBoardRequest } from './Departures.jsx';
 import { openAlertSettings } from '../utils/alertPrefs.js';
+import { DemandWorldShare } from './DemandWorldPanels.jsx';
 import { BellIcon } from './Icons.jsx';
 import { financeGroupOf } from './Finance.jsx';
 import {
@@ -495,6 +496,8 @@ export default function MapShell({
               <button key={v} className={basemap === v ? 'active' : ''} aria-pressed={basemap === v} onClick={() => setBasemap(v)}>{l}</button>
             ))}
           </div>
+          {/* Randomized games: the world number, to share (Discord 2026-11-05). */}
+          {state?.demandWorld && (<><div className="ms-menu-sep" /><DemandWorldShare world={state.demandWorld} variant="menu" /></>)}
           <div className="ms-menu-sep" />
           <button role="menuitem" onClick={() => { setMenu(null); onBranding(); }}>
             <span className="ms-menu-glyph">✎</span><span>Airline branding</span>

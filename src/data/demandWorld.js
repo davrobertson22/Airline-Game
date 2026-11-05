@@ -209,6 +209,137 @@ export function isDemandWorld(w) {
     && w.norm > 0 && (w.tiers == null || typeof w.tiers === 'object');
 }
 
+/**
+ * An airport's traffic multiplier in `world`, without making it the active
+ * world. The setup screen's preview reads rolls through this, so looking at a
+ * world before launch never touches the tier overrides a running game uses.
+ */
+export function worldFactor(world, code) {
+  if (!isDemandWorld(world) || !code) return 1;
+  const key = metroPrimary(code);
+  return getAirport(key) ? rawRoll(world.seed, key) / world.norm : 1;
+}
+
+// ── Sharing a world ───────────────────────────────────────────────────────────
+// Discord, 2026-11-05 (VodkaOnFire): the world number vanished once the game
+// began, so it had to be copied before launch. A world is its number AND the
+// mega setting, so the share line carries both, worded so that pasting it into
+// the setup screen's World # field restores the pair.
+const MEGA_CAP_LABEL = { true: 'more megas allowed', false: 'megas capped' };
+
+/** "Tailwinds world #123456 · megas capped". */
+export function demandWorldShareText(world) {
+  if (!isDemandWorld(world)) return '';
+  return `Tailwinds world #${world.seed} · ${MEGA_CAP_LABEL[!!world.uncapMegas]}`;
+}
+
+/** The mega setting in words, for labels. */
+export function megaCapLabel(uncapMegas) { return MEGA_CAP_LABEL[!!uncapMegas]; }
+
+/**
+ * Read a pasted share line (or a bare number) back into `{ seed, uncapMegas }`.
+ * `uncapMegas` is undefined when the text does not say. Null when no seed.
+ */
+export function parseDemandWorldShare(text) {
+  const t = String(text ?? '');
+  const m = t.match(/#\s*(\d+)/) ?? t.match(/(\d+)/);
+  const seed = m ? cleanDemandSeed(m[1]) : null;
+  if (seed == null) return null;
+  const uncapMegas = /more\s+megas/i.test(t) ? true : /megas\s+capped/i.test(t) ? false : undefined;
+  return { seed, uncapMegas };
+}
+
+// ── Auto-roller ───────────────────────────────────────────────────────────────
+// Discord, 2026-11-05 (VodkaOnFire): "roll until a couple of airports I pick
+// roll high". The player sets a few conditions on named airports and the setup
+// screen rolls worlds until one meets them all. It only searches the dice; it
+// never edits a world, so every world it finds is one anyone could roll.
+
+/** The rule kinds the auto-roller understands. */
+export const WORLD_RULE_OPS = ['atLeast', 'atMost', 'tier'];
+
+/** The raw multiplier range an airport can roll (its metro primary's real tier), before normalising. */
+export function rollRangeOf(code) {
+  const tier = baseTierOf(metroPrimary(code)) ?? 'regional';
+  return DEMAND_ROLL_RANGE[tier] ?? DEMAND_ROLL_RANGE.regional;
+}
+
+/**
+ * Whether a rule can ever be met, judged on the airport's roll range with a
+ * margin for the normaliser. Lets the screen say "LHR can't roll +40%" instead
+ * of rolling 50,000 worlds to find out.
+ */
+export function ruleReachable(rule) {
+  if (!rule || !getAirport(rule.code)) return false;
+  const [lo, hi] = rollRangeOf(rule.code);
+  if (rule.op === 'atLeast') return 1 + rule.pct / 100 <= hi / NORM_FLOOR;
+  if (rule.op === 'atMost')  return 1 + rule.pct / 100 >= lo / NORM_CEIL;
+  if (rule.op === 'tier') {
+    if (isMetroSecondary(rule.code)) return rule.tier === baseTierOf(rule.code);
+    const real = baseTierOf(rule.code);
+    if (rule.tier === real) return true;
+    // One step per world: regional ↔ major ↔ mega.
+    return (real === 'major') || (real === 'regional' && rule.tier === 'major') || (real === 'mega' && rule.tier === 'major');
+  }
+  return false;
+}
+
+// The normaliser is a traffic-weighted mean of rolls that all sit in 0.5…2.0
+// and is dominated by the megas and majors, so it never leaves this band. Used
+// only to throw seeds away early; every kept seed is checked exactly.
+const NORM_FLOOR = 0.8;
+const NORM_CEIL  = 1.25;
+
+/**
+ * Build a searcher over `markets` (AIRPORT_MARKETS). `test(seed, rules)` returns
+ * the rolled world when every rule holds, else null. Cheap on a miss: the
+ * airports named in the rules are rolled first, the normaliser only when they
+ * might pass, and the full world (tier lines) only when a tier rule needs it.
+ */
+export function worldSearcher(markets = {}, options = {}) {
+  const uncapMegas = !!options.uncapMegas;
+  const keys = [], weights = [];
+  const seen = new Set();
+  let den = 0;
+  for (const a of AIRPORTS) {
+    const key = metroPrimary(a.code);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const w = marketPax(markets[key] ?? markets[a.code]);
+    if (w > 0) { keys.push(key); weights.push(w); }
+    den += w;
+  }
+  const normOf = (seed) => {
+    let num = 0;
+    for (let i = 0; i < keys.length; i++) num += weights[i] * rawRoll(seed, keys[i]);
+    return den > 0 ? Math.round((num / den) * 1e6) / 1e6 : 1;
+  };
+  return {
+    test(seed, rules) {
+      const pctRules = rules.filter(r => r.op === 'atLeast' || r.op === 'atMost');
+      const raws = pctRules.map(r => rawRoll(seed, metroPrimary(r.code)));
+      for (let i = 0; i < pctRules.length; i++) {
+        const want = 1 + pctRules[i].pct / 100;
+        if (pctRules[i].op === 'atLeast' && raws[i] / NORM_FLOOR < want) return null;
+        if (pctRules[i].op === 'atMost'  && raws[i] / NORM_CEIL  > want) return null;
+      }
+      const norm = normOf(seed);
+      for (let i = 0; i < pctRules.length; i++) {
+        // Compare whole percents, as the screens show them: "+20%" means +20%.
+        const pct = Math.round((raws[i] / norm - 1) * 100);
+        if (pctRules[i].op === 'atLeast' && pct < pctRules[i].pct) return null;
+        if (pctRules[i].op === 'atMost'  && pct > pctRules[i].pct) return null;
+      }
+      const world = rollDemandWorld(seed, { uncapMegas }, markets);
+      for (const r of rules) {
+        if (r.op !== 'tier') continue;
+        if ((world.tiers[r.code] ?? baseTierOf(r.code)) !== r.tier) return null;
+      }
+      return world;
+    },
+  };
+}
+
 // ── Active world (module state, set from game state like the era setters) ─────
 let _activeKey = '';
 let _activeSeed = null;

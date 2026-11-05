@@ -8,6 +8,7 @@ import { Glyph } from './Icons.jsx';
 import FuelBasisChip from './FuelBasisChip.jsx';
 import TierBadge from './TierBadge.jsx';
 import AllAirportsTable from './AllAirportsTable.jsx';
+import { DemandWorldShare } from './DemandWorldPanels.jsx';
 import { stationFuelBasis, fuelStationsOn } from '../data/fuelStations.js';
 
 // Tier badge styling
@@ -453,6 +454,8 @@ export default function Airports() {
               {' · '}{formatMoney(totalWeeklyFees * 4)}/month
             </div>
           )}
+          {/* Randomized games: the world number, to share (Discord 2026-11-05). */}
+          <DemandWorldShare world={state.demandWorld} />
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
           Each gate: {SLOTS_PER_GATE} slots / wk<br />

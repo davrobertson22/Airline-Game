@@ -12,7 +12,8 @@ import SaveLoadModal from './SaveLoadModal.jsx';
 import { useCloudSignInReturn } from '../cloud/useCloudSignInReturn.js';
 import { cloudSavesEnabled } from '../cloud/cloudConfig.js';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE } from '../data/demandWorld.js';
+import { rollDemandWorld, newDemandSeed, cleanDemandSeed, DEMAND_ROLL_RANGE, worldFactor, demandWorldShareText, parseDemandWorldShare } from '../data/demandWorld.js';
+import { WorldPreview, AutoRoller, useCopyText, fmtRollPct } from './DemandWorldPanels.jsx';
 import { loadAirportMarkets } from './AllAirportsTable.jsx';
 import { DEMAND_MODEL_LATEST } from '../utils/market.js';
 import { parseRivalSet, splitRivalSet, exampleRivalSet, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
@@ -99,6 +100,13 @@ export default function SetupScreen() {
   const [uncapMegas,        setUncapMegas]        = useState(false);
   const [demandSeed,        setDemandSeed]        = useState(() => String(newDemandSeed()));
   const [rolling,           setRolling]           = useState(false);
+  // Looking at a world before launch (Discord 2026-11-05, VodkaOnFire). Once
+  // opened, the preview follows the World # and mega setting as they change.
+  const [previewOn,         setPreviewOn]         = useState(false);
+  const [preview,           setPreview]           = useState(null);   // { key, world }
+  const [previewError,      setPreviewError]      = useState(false);
+  const [showRoller,        setShowRoller]        = useState(false);
+  const [worldCopied,       copyText]             = useCopyText();
   // Rivals (models/rivalSets.js): the random field, or a pasted custom set.
   const [rivalSource,       setRivalSource]       = useState('random');   // 'random' | 'custom'
   const [rivalText,         setRivalTextRaw]      = useState(() => {
@@ -148,6 +156,34 @@ export default function SetupScreen() {
 
   const seedValue   = cleanDemandSeed(demandSeed);
   const seedInvalid = demandMode === 'random' && seedValue == null;
+  const worldKey    = seedValue != null ? `${seedValue}|${uncapMegas ? 1 : 0}` : null;
+  // The rolled world for the current number and setting, or null.
+  const previewWorld = demandMode === 'random' && preview && preview.key === worldKey ? preview.world : null;
+  const loadMarkets  = () => loadAirportMarkets(DEMAND_MODEL_LATEST).then(m => m.AIRPORT_MARKETS);
+
+  useEffect(() => {
+    if (!previewOn || demandMode !== 'random' || worldKey == null || preview?.key === worldKey) return;
+    let live = true;
+    setPreviewError(false);
+    // A short wait, so typing a number doesn't roll a world per keystroke.
+    const t = setTimeout(() => {
+      loadMarkets()
+        .then(markets => { if (live) setPreview({ key: worldKey, world: rollDemandWorld(seedValue, { uncapMegas }, markets) }); })
+        .catch(() => { if (live) setPreviewError(true); });
+    }, 200);
+    return () => { live = false; clearTimeout(t); };
+  }, [previewOn, demandMode, worldKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pasting a shared line ("Tailwinds world #123456 · megas capped") into the
+  // World # field restores the number and the mega setting together.
+  function pasteWorld(e) {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const parsed = parseDemandWorldShare(text);
+    if (!parsed) return;
+    e.preventDefault();
+    setDemandSeed(String(parsed.seed));
+    if (parsed.uncapMegas !== undefined) setUncapMegas(parsed.uncapMegas);
+  }
 
   // Custom rival set: checked as the player types, the same check START_GAME runs.
   const rivalParse   = rivalSource === 'custom' ? parseRivalSet(rivalText) : null;
@@ -172,7 +208,8 @@ export default function SetupScreen() {
       try {
         // A new game runs the latest demand model, so its tiers roll off those markets.
         const { AIRPORT_MARKETS } = await loadAirportMarkets(DEMAND_MODEL_LATEST);
-        demandWorld = rollDemandWorld(seedValue, { uncapMegas }, AIRPORT_MARKETS);
+        // The world the player previewed is the world they get: same roll, no second pass.
+        demandWorld = previewWorld ?? rollDemandWorld(seedValue, { uncapMegas }, AIRPORT_MARKETS);
       } catch (_) {
         setRolling(false);
         return;   // offline mid-load: stay on the Launch step, the button still works
@@ -311,6 +348,11 @@ export default function SetupScreen() {
               onChange={e => setHubSearch(e.target.value)}
               style={{ marginBottom: 6 }}
             />
+            {previewWorld && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                🎲 Showing each airport's traffic roll and tier in world #{previewWorld.seed}.
+              </div>
+            )}
 
             {/* Scrollable airport list */}
             <div style={{
@@ -381,13 +423,21 @@ export default function SetupScreen() {
                             {a.name}
                           </span>
                         </span>
+                        {previewWorld && (() => {
+                          const pct = Math.round((worldFactor(previewWorld, a.code) - 1) * 100);
+                          return (
+                            <span style={{ fontSize: 11, fontWeight: 600, minWidth: 38, textAlign: 'right', color: pct > 0 ? 'var(--green)' : pct < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                              {fmtRollPct(pct)}
+                            </span>
+                          );
+                        })()}
                         <span style={{
                           fontSize: 10,
                           color: 'var(--text-muted)',
                           textTransform: 'uppercase',
                           letterSpacing: '.4px',
                         }}>
-                          {a.tier}
+                          {previewWorld?.tiers?.[a.code] ?? a.tier}
                         </span>
                         {selected && (
                           <span style={{ color: 'var(--accent)', fontSize: 14, marginLeft: 4 }}><Glyph e="✓" /></span>
@@ -757,7 +807,7 @@ export default function SetupScreen() {
                   A multi-airport city rolls once for all its airports. The world's total passengers stay at
                   their real-world level, so demand moves between cities rather than appearing from nowhere.
                   Airports that boom or slump far enough change tier, which moves their gate and landing fees.
-                  Your hub's roll is revealed when you launch.
+                  Preview the world to see how your hub and the big airports rolled, or launch blind.
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={uncapMegas} onChange={e => setUncapMegas(e.target.checked)} />
@@ -772,10 +822,17 @@ export default function SetupScreen() {
                   <span style={{ fontSize: 12, color: 'var(--text)' }}>World #</span>
                   <input type="text" inputMode="numeric" value={demandSeed}
                     onChange={e => setDemandSeed(e.target.value.replace(/[^0-9]/g, ''))}
+                    onPaste={pasteWorld}
                     style={{ width: 120 }} aria-label="World seed" />
                   <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
                     onClick={() => setDemandSeed(String(newDemandSeed()))}>
                     <Glyph e="🎲" /> Reroll
+                  </button>
+                  <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                    disabled={seedValue == null}
+                    title="Copy this world to share it. Pasting it into World # restores the number and the mega setting."
+                    onClick={() => copyText(demandWorldShareText({ seed: seedValue, norm: 1, uncapMegas }))}>
+                    <Glyph e="📋" /> {worldCopied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
                 <div style={{ fontSize: 11, color: seedInvalid ? 'var(--danger, #e5484d)' : 'var(--text-muted)', marginTop: 4 }}>
@@ -783,6 +840,33 @@ export default function SetupScreen() {
                     ? 'Enter a world number of 1 or more.'
                     : 'Share the number to let a friend play the same world. Same number and mega setting, same world.'}
                 </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  {!previewOn && (
+                    <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                      disabled={seedValue == null} onClick={() => setPreviewOn(true)}>
+                      <Glyph e="🔍" /> Preview this world
+                    </button>
+                  )}
+                  {!showRoller && (
+                    <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
+                      onClick={() => setShowRoller(true)}>
+                      <Glyph e="🎯" /> Roll until…
+                    </button>
+                  )}
+                </div>
+                {previewOn && seedValue != null && (
+                  <WorldPreview world={previewWorld} hub={hub} busy={!previewWorld && !previewError} error={previewError}
+                    onPickHub={() => setStep(2)} onHide={() => setPreviewOn(false)} />
+                )}
+                {showRoller && (
+                  <AutoRoller hub={hub} uncapMegas={uncapMegas} loadMarkets={loadMarkets}
+                    onFound={(world) => {
+                      setPreview({ key: `${world.seed}|${world.uncapMegas ? 1 : 0}`, world });
+                      setUncapMegas(world.uncapMegas);
+                      setDemandSeed(String(world.seed));
+                      setPreviewOn(true);
+                    }} />
+                )}
               </div>
             )}
           </div>
