@@ -8,7 +8,7 @@ import {
   formatMoney, formatPercent, currentGameDate,
   defaultConfig, configBodies, configSpaceQualityBonus, defaultClassPrices,
   CLASS_FARE_MULTIPLIERS, CLASS_SPACE_MULTIPLIERS,
-  buildEventDemandModel, deployableFleetForRoute, deploymentShortfall, MAX_WEEKLY_BLOCK_HOURS,
+  buildEventDemandModel, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor,
   maxFrequency, SLOTS_PER_GATE, isRouteActive, routeActiveMonths, committedBlockHoursByMonth,
   effectiveRangeKm, forecastRangeMod, calendarYear,
   stateCateringCapReport,
@@ -448,6 +448,7 @@ function CabinConfigPanel({ type, config, onChange, source, onSourceChange, flee
 
 export default function RoutePlanner() {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const addToast = useToast();
 
   const [mode, setMode] = useState('passenger');
@@ -627,7 +628,7 @@ export default function RoutePlanner() {
   }, [routeData, reachByType, state.startYear, state.year]);
 
   // Hard ceiling on flights/week for this aircraft on this route: one airframe
-  // has MAX_WEEKLY_BLOCK_HOURS flying hours a week, so longer sectors fit fewer
+  // has bhCap flying hours a week (100 in new games, 140 in older saves), so longer sectors fit fewer
   // round trips. The slider is capped here so you can't plan an impossible
   // schedule; the default of 7 is simply one departure per day.
   const freqCap = useMemo(() => {
@@ -635,8 +636,8 @@ export default function RoutePlanner() {
     if (!routeData || !t) return 14;
     // No fixed 14/wk ceiling — the engine has none, so the launch form must not
     // invent one that UPDATE_FREQUENCY then lets you walk past.
-    return Math.max(1, maxFrequency(routeData.dist, t));
-  }, [routeData, selectedTypeId]);
+    return Math.max(1, maxFrequency(routeData.dist, t, bhCap));
+  }, [routeData, selectedTypeId, bhCap]);
 
   useEffect(() => {
     if (frequency > freqCap) setFrequency(freqCap);
@@ -644,7 +645,7 @@ export default function RoutePlanner() {
 
   // Aircraft that can actually be DEPLOYED to this lane, by type — includes
   // planes already flying another route but with spare block-hours that touch an
-  // endpoint (the engine caps one plane at 140h/wk across routes, not one route).
+  // endpoint (the engine caps one plane at bhCap h/wk across routes, not one route).
   const deployableByType = useMemo(() => {
     if (!routeData) return {};
     const map = {};
@@ -661,10 +662,11 @@ export default function RoutePlanner() {
         // The operating window: a tail full May–Oct has the hours for a Nov–Apr
         // route, and ADD_ROUTE agrees. Year-round asks for every month's peak.
         months:         routeActiveMonths({ origin, destination: dest, season }),
+        capHours:       bhCap,
       });
     }
     return map;
-  }, [state.fleet, state.routes, state.cargoRoutes, state.charters, reachableTypes, routeData, origin, dest, frequency, season]);
+  }, [state.fleet, state.routes, state.cargoRoutes, state.charters, reachableTypes, routeData, origin, dest, frequency, season, bhCap]);
 
   // Types you own, whatever state they're in.
   const ownedTypeIds = useMemo(
@@ -1222,7 +1224,10 @@ export default function RoutePlanner() {
                       const priceDiff = Math.round((estPrice / routeData.refP - 1) * 100);
                       return (
                         <tr key={c.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{c.name}</td>
+                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>
+                            {c.name}
+                            {cfg.via && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }} title="A refuelling stop on the way: passengers stay on board">· stops at {cfg.via}</span>}
+                          </td>
                           <td style={{ padding: '8px 12px' }}><TierBadge tier={c.tier} /></td>
                           <td style={{ padding: '8px 12px' }}>{cfg.frequency}× each way</td>
                           <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{(estSeats * 2).toLocaleString()} / wk</td>
@@ -1306,7 +1311,7 @@ export default function RoutePlanner() {
                   <div>
                     <div className="form-label" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                       Flights / week
-                      <InfoTip text={`Each aircraft can fly ${MAX_WEEKLY_BLOCK_HOURS} hours a week, so this route fits at most ${freqCap} round trips per aircraft. 7 means one departure a day. Flying near the max is fine, but a fleet with zero slack is more prone to delays.`} />
+                      <InfoTip text={`Each aircraft can fly ${bhCap} hours a week, so this route fits at most ${freqCap} round trips per aircraft. 7 means one departure a day. Flying near the max is fine, but a fleet with zero slack is more prone to delays.`} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input
@@ -1873,7 +1878,7 @@ export default function RoutePlanner() {
                                   return <>Your {name}{owned > 1 ? 's reach' : ' reaches'} {Math.round(reachKmFor(simulation.type)).toLocaleString()} km as configured — {origin}–{dest} is {laneKm} km. Fit range-extending wingtips, lighten the cabin, or lease a longer-legged aircraft.</>;
                                 case 'no-hours':
                                   return short.outOfRange > 0
-                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km) as configured, and {short.inRange === 1 ? 'it is' : 'they are'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk). The other {short.outOfRange} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most — lighten a cabin or fit range-extending wingtips to bring one into reach, or lease another {name}.</>
+                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km) as configured, and {short.inRange === 1 ? 'it is' : 'they are'} at full utilisation ({bhCap}h/wk). The other {short.outOfRange} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most — lighten a cabin or fit range-extending wingtips to bring one into reach, or lease another {name}.</>
                                     : (() => {
                                         // A seasonal tail is only full in some months. Say which
                                         // months it is free, so the fix on screen is the operating
@@ -1882,11 +1887,11 @@ export default function RoutePlanner() {
                                         const add = pool[0]?.newBlockHrs ?? 0;
                                         const free = short.reachable.map(a => {
                                           const byM = committedBlockHoursByMonth(a.id, simulation.type, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
-                                          return { a, months: ALL_MONTHS.filter(m => byM[m - 1] + add <= MAX_WEEKLY_BLOCK_HOURS + 1e-6) };
+                                          return { a, months: ALL_MONTHS.filter(m => byM[m - 1] + add <= bhCap + 1e-6) };
                                         }).sort((x, y) => y.months.length - x.months.length)[0];
                                         return free && free.months.length > 0
                                           ? <>{free.a.tailNumber || free.a.name} is full in some months but has the hours for this route in {monthRunsLabel(free.months)}. Set the Operating window above to those months to fly it then — or lease another {name} to fly it year-round.</>
-                                          : <>Your {name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another route. Lease another {name} to open this route.</>;
+                                          : <>Your {name}{owned > 1 ? 's are' : ' is'} at full utilisation ({bhCap}h/wk) — no spare hours for another route. Lease another {name} to open this route.</>;
                                       })();
                                 case 'other-networks':
                                   return short.outOfRange > 0

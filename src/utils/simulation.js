@@ -1259,6 +1259,30 @@ export function routeQualityBreakdown(route, aircraft, state) {
 /** Hard cap: an aircraft cannot fly more than this many block-hours per week. */
 export const MAX_WEEKLY_BLOCK_HOURS = 140;
 
+// Games started from this update on cap SCHEDULING at 100h/wk instead — 14.3h
+// a day against the classic cap's 20h, which no real airline sustains (a
+// hard-run A321 or 737 does ~9-11h). Same rule and figure as Headwinds' New
+// World Restrictions (constant name kept for parity with that engine).
+// GRANDFATHERED: the cap is only ever enforced at action time (ADD_ROUTE /
+// frequency INCREASES / swaps / charters), never by the weekly tick, so a tail
+// already above it — an acquired rival's schedule, say — keeps flying every
+// route it has. It just can't add more, and its frequency changes are a one-way
+// ratchet down. planCovers, fleetAvgUtilization and the over-cap trim stay on
+// the physical 140h: reserve covers must be able to replicate a grandfathered
+// schedule, and crew-morale pressure is about hours actually flown.
+export const NWR_MAX_WEEKLY_BLOCK_HOURS = 100;
+
+/**
+ * The scheduling cap in force for this game. New games carry
+ * `realisticUtilization: true` (set in START_GAME); saves from before it carry
+ * nothing and keep 140h for life. `newWorldRestrictions` is honoured too so a
+ * state shaped like a Headwinds NWR world reads the same figure.
+ */
+export function maxWeeklyBlockHoursFor(state) {
+  return (state?.realisticUtilization || state?.newWorldRestrictions)
+    ? NWR_MAX_WEEKLY_BLOCK_HOURS : MAX_WEEKLY_BLOCK_HOURS;
+}
+
 /**
  * Minimum weekly block-hours left before an airframe is worth calling "spare".
  * A plane with 1-2 hours free can't actually absorb another sector, so counting
@@ -1350,11 +1374,12 @@ export function weeklyBlockHours(distKm, weeklyFrequency, type) {
 }
 
 /**
- * Maximum weekly frequency that keeps block-hours within the 140h cap.
+ * Maximum weekly frequency that keeps block-hours within the cap.
+ * Pass maxWeeklyBlockHoursFor(state) as capHours for the game's own cap.
  */
-export function maxFrequency(distKm, type) {
+export function maxFrequency(distKm, type, capHours = MAX_WEEKLY_BLOCK_HOURS) {
   const bt = blockTimeHours(distKm, type);
-  return bt > 0 ? Math.floor(MAX_WEEKLY_BLOCK_HOURS / (bt * 2)) : 0;
+  return bt > 0 ? Math.floor(capHours / (bt * 2)) : 0;
 }
 
 /**
@@ -1883,7 +1908,7 @@ export function scheduleTrimMessage(notice) {
  */
 export function deployableFleetForRoute({
   fleet = [], existingRoutes = [], cargoRoutes = [], charters = [], typeId, origin, dest, distKm, weeklyFrequency,
-  months = null,
+  months = null, capHours = MAX_WEEKLY_BLOCK_HOURS,
 }) {
   const type = getAircraftType(typeId);
   if (!type) return [];
@@ -1908,7 +1933,7 @@ export function deployableFleetForRoute({
       // which the engine would have accepted (Ringwraith, Discord, 15 Sep 2026).
       const served   = new Set(acRoutes.flatMap(r => routeStops(r)));
       const connectivityOk = acRoutes.length === 0 || served.has(origin) || served.has(dest);
-      const hoursOk  = usedBH + newBH <= MAX_WEEKLY_BLOCK_HOURS + 1e-6;
+      const hoursOk  = usedBH + newBH <= capHours + 1e-6;
       // Range is per AIRFRAME: two tails of the same type differ once one has
       // sharklets or an uprated engine. Own one modded jet and one stock, and the
       // stock one must not be counted as "ready" for a lane only the modded one
@@ -1925,7 +1950,7 @@ export function deployableFleetForRoute({
         // them and keep them out of the plain "idle" counters.
         reserve:       isReserve(a),
         usedBlockHrs:  usedBH,
-        spareBlockHrs: Math.max(0, MAX_WEEKLY_BLOCK_HOURS - usedBH),
+        spareBlockHrs: Math.max(0, capHours - usedBH),
         newBlockHrs:   newBH,
         connectivityOk,
         hoursOk,
@@ -1933,7 +1958,7 @@ export function deployableFleetForRoute({
         // Usable spare: 1-2 free hours is not real availability (see
         // MIN_SPARE_BLOCK_HOURS). Drives the "with spare hours" counters and
         // the free-hours labels in the route pickers.
-        hasUsableSpare: (MAX_WEEKLY_BLOCK_HOURS - usedBH) > MIN_SPARE_BLOCK_HOURS,
+        hasUsableSpare: (capHours - usedBH) > MIN_SPARE_BLOCK_HOURS,
         eligible:      connectivityOk && hoursOk && rangeOk,
       };
     })

@@ -50,8 +50,7 @@ import { getAircraftType } from '../data/aircraft.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import {
   defaultConfig, defaultClassPrices, effectiveRangeKm, forecastRangeMod, maxFrequency, routeActiveMonths,
-  newAircraftConfig,
-} from '../utils/simulation.js';
+  newAircraftConfig, maxWeeklyBlockHoursFor } from '../utils/simulation.js';
 import { projectRouteAddition } from './pairShare.js';
 
 /** Ranking order for the tail a type would actually fly on: free idle, then in
@@ -146,7 +145,7 @@ export function rankAircraftForRoute(state, {
 
     // Per-type frequency ceiling. Asking for 14× on a type that fits 6 rotations
     // a week is not a forecast, it is a different route.
-    const cap  = Math.max(1, maxFrequency(distKm, type, capHours));
+    const cap  = Math.max(1, maxFrequency(distKm, type, capHours ?? maxWeeklyBlockHoursFor(state)));
     const freq = Math.max(1, Math.min(weeklyFrequency, cap));
 
     const avail = availabilityFor ? (availabilityFor(type.id) ?? {}) : {};

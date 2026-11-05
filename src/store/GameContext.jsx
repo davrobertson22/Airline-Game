@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useS
 import { normalizeLivery, isLiveryShaped } from '../data/livery.js';
 import {
   weeklyTick, defaultConfig,
-  weeklyBlockHours, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, routeDistanceKm,
+  weeklyBlockHours, maxWeeklyBlockHoursFor, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, cabinRangeFix, newAircraftConfig, grandfatherRouteRanges, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
   routeStops, routeLegs, routeSegments, routeSegmentKey, isMultiStop,
@@ -283,10 +283,17 @@ export function transferCompatibility(state, fromAircraftId, toAircraftId) {
 
   // Block hours on the new type — per-month peak, so counter-seasonal routes
   // that never overlap can share the budget (mirrors ADD_ROUTE).
-  const peakBlockHrs = Math.max(...Array.from({ length: 12 }, (_, i) => i + 1).map(m => all
+  const peakFor = (type) => Math.max(...Array.from({ length: 12 }, (_, i) => i + 1).map(m => all
     .filter(r => isRouteActive(r, m))
-    .reduce((s, r) => s + routeBlockHours(r, toType, r.weeklyFrequency), 0)));
-  if (peakBlockHrs > MAX_WEEKLY_BLOCK_HOURS) return { ok: false, reason: 'Too slow — exceeds weekly block hours' };
+    .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0)));
+  const peakBlockHrs = peakFor(toType);
+  // Grandfather rule (the 100h cap of newer games can sit BELOW a schedule that
+  // is legally flying, e.g. one inherited in an acquisition): a transfer that
+  // doesn't increase the hours already being flown — onto an equal-or-faster
+  // type — is always allowed. Only a transfer that would GROW the schedule's
+  // hours must fit under the game's cap. (Mirrors Headwinds.)
+  if (peakBlockHrs > maxWeeklyBlockHoursFor(state) && peakBlockHrs > peakFor(fromType))
+    return { ok: false, reason: 'Too slow — exceeds weekly block hours' };
 
   return { ok: true };
 }
@@ -358,7 +365,7 @@ export function reassignCompatibility(state, routeId, toAircraftId) {
     .filter(r => isRouteActive(r, m))
     .reduce((s, r) => s + routeBlockHours(r, toType, r.weeklyFrequency), 0)));
   const peak = peakOf(withRoute);
-  if (peak > MAX_WEEKLY_BLOCK_HOURS) {
+  if (peak > maxWeeklyBlockHoursFor(state)) {
     return { ok: false, reason: 'No spare block hours on that aircraft' };
   }
 
@@ -557,7 +564,7 @@ export function cargoRouteDenial(state, { origin, destination, aircraftId, weekl
 
   const committed = routesCommittedTo(aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
   const existingBlockHrs = committed.reduce((sum, r) => sum + routeBlockHours(r, type, r.weeklyFrequency), 0);
-  if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > MAX_WEEKLY_BLOCK_HOURS)
+  if (existingBlockHrs + weeklyBlockHours(dist, weeklyFrequency, type) > maxWeeklyBlockHoursFor(state))
     return deny('hours', `${aircraft.name} doesn't have ${weeklyFrequency} more round trips of block hours this week.`);
 
   if (committed.length > 0) {
@@ -734,14 +741,14 @@ export function frequencyChangeBlockReason(state, routeId, newFreq) {
   const peakOn = (t, list) => Math.max(0, ...months.map(m =>
     list.filter(r => isRouteActive(r, m)).reduce((s, r) =>
       s + routeBlockHours(r, t, freqOf(r)), 0)));
-  if (peakOn(type, acRoutes) > MAX_WEEKLY_BLOCK_HOURS) return "Aircraft's weekly block-hour limit";
+  if (peakOn(type, acRoutes) > maxWeeklyBlockHoursFor(state)) return "Aircraft's weekly block-hour limit";
   // If this route is out on COVER, the extra frequency comes home to the
   // original tail when the cover ends — so it has to fit there too.
   if (route.coverForAircraftId) {
     const orig     = state.fleet.find(a => a.id === route.coverForAircraftId);
     const origType = orig ? getAircraftType(orig.typeId) : null;
     if (origType && peakOn(origType, routesCommittedTo(orig.id, state.routes, state.cargoRoutes ?? [], state.charters ?? []))
-          > MAX_WEEKLY_BLOCK_HOURS) {
+          > maxWeeklyBlockHoursFor(state)) {
       return "Aircraft's weekly block-hour limit";
     }
   }
@@ -956,6 +963,7 @@ export function addRouteBlockReason(state, action) {
   // blockHourFit is the shared reading: the Add Flights form calls it too, so a
   // bar that says "fits" cannot be met by a refusal here.
   const acRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
+  const maxBlockHrs = maxWeeklyBlockHoursFor(state);
   const fit = blockHourFit({
     aircraftId: action.aircraftId, type,
     routes: state.routes, cargoRoutes: state.cargoRoutes ?? [],
@@ -963,10 +971,10 @@ export function addRouteBlockReason(state, action) {
     months: newMonths,
     hoursPerFlight: blockTimeHours(dist, type) * 2,
     weeklyFrequency,
-    capHours: MAX_WEEKLY_BLOCK_HOURS,
+    capHours: maxBlockHrs,
   });
   if (!fit.fits) {
-    return `${tail} has no spare flying hours — this would need ${Math.round(fit.totalHours)}h/wk against a ${MAX_WEEKLY_BLOCK_HOURS}h limit`;
+    return `${tail} has no spare flying hours — this would need ${Math.round(fit.totalHours)}h/wk against a ${maxBlockHrs}h limit`;
   }
 
   // ── Network connectivity: a plane that already flies can only extend its ───
@@ -1041,7 +1049,7 @@ export function cargoFrequencyChangeBlockReason(state, routeId, newFreq) {
   const otherBlockHrs = routesCommittedTo(route.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
     .filter(r => r.id !== route.id)
     .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
-  if (otherBlockHrs + routeBlockHours(route, type, target) > MAX_WEEKLY_BLOCK_HOURS)
+  if (otherBlockHrs + routeBlockHours(route, type, target) > maxWeeklyBlockHoursFor(state))
     return "Freighter's weekly block-hour limit — add another freighter for more frequency";
 
   // Gate slots at each endpoint, counted across passenger + cargo ops.
@@ -1126,10 +1134,10 @@ export function charterAcceptBlockReason(state, offerId, aircraftId) {
     hoursPerFlight: Math.max(missionHrs, ferryHrs),
     weeklyFrequency: 1,
     ignoreSeason: true,
-    capHours: MAX_WEEKLY_BLOCK_HOURS,
+    capHours: maxWeeklyBlockHoursFor(state),
   });
   if (!fit.fits) {
-    return `${tail} has no spare flying hours — this contract would need ${Math.round(fit.totalHours)}h/wk against a ${MAX_WEEKLY_BLOCK_HOURS}h limit`;
+    return `${tail} has no spare flying hours — this contract would need ${Math.round(fit.totalHours)}h/wk against a ${maxWeeklyBlockHoursFor(state)}h limit`;
   }
 
   // Permits at the ends you do not already serve, paid on signature.
@@ -1952,12 +1960,16 @@ function reducer(state, action) {
           keepOne: !_adding,
         });
         const skipped = [];
+        let viaStops = 0;
         // "random" logos are drawn from the ones the field uses least.
         const _logosInUse = _adding ? _randomField.map(c => c.logoId) : [];
         const built = starters.map((r, i) => {
-          const { _skippedRoutes, ...c } = buildRivalFromSpec(r, { idSeed: i, takenLogos: _logosInUse });
+          // New games fly listed routes through a refuelling stop when nothing
+          // of the era reaches nonstop (rivalStopsWorld, below).
+          const { _skippedRoutes, _viaStop, ...c } = buildRivalFromSpec(r, { idSeed: i, takenLogos: _logosInUse, stops: true });
           _logosInUse.push(c.logoId);
           if (_skippedRoutes?.length) skipped.push(`${c.name}: ${_skippedRoutes.join(', ')}`);
+          viaStops += _viaStop?.length ?? 0;
           return c;
         });
         if (byChance > 0) {
@@ -1965,9 +1977,15 @@ function reducer(state, action) {
           _setToasts.push({ type: 'info', title: 'Your rival set rolled the dice', duration: 10000,
             message: `${made} of the ${byChance} airline${byChance === 1 ? '' : 's'} with a chance to appear ${made === 1 ? 'is' : 'are'} in this game${missed > 0 ? `; ${missed} sat it out` : ''}.` });
         }
-        if (skipped.length) {
-          _setToasts.push({ type: 'info', title: 'Some rival routes left out', duration: 12000,
-            message: `No aircraft of the era (or of the airline's chosen fleet) can fly ${skipped.length === 1 ? 'these' : 'some'} listed routes, so they start without them. ${skipped.slice(0, 4).join(' · ')}${skipped.length > 4 ? ' …' : ''}` });
+        if (skipped.length || viaStops > 0) {
+          const viaLine = viaStops > 0
+            ? `${viaStops} listed route${viaStops === 1 ? '' : 's'} start${viaStops === 1 ? 's' : ''} with a refuelling stop on the way, and go${viaStops === 1 ? 'es' : ''} nonstop once an aircraft can.`
+            : '';
+          const waitLine = skipped.length
+            ? `Nothing of the era can reach ${skipped.length === 1 ? 'these' : 'some'} listed routes yet, even with a stop; each airline opens them once an aircraft can. ${skipped.slice(0, 4).join(' · ')}${skipped.length > 4 ? ' …' : ''}`
+            : '';
+          _setToasts.push({ type: 'info', title: skipped.length ? 'Some rival routes are waiting on aircraft' : 'Some rival routes stop to refuel', duration: 12000,
+            message: [viaLine, waitLine].filter(Boolean).join(' ') });
         }
         if (action.rivalMode === 'add') {
           const taken = new Set(built.map(c => c.name.toLowerCase()));
@@ -2040,6 +2058,10 @@ function reducer(state, action) {
         // ever brought across, reconcileState seeds it fully staffed for the
         // fleet it already flies (see ensureCrewSeeded), never with nobody.
         crewPipeline: true,
+        // Realistic utilisation: aircraft schedule up to 100 block hours a week
+        // (maxWeeklyBlockHoursFor), not the classic 140. New games only, like
+        // the crew pipeline — saves without the flag keep 140h for life.
+        realisticUtilization: true,
         // Travel partnerships (data/travelPartners.js): new games only, like the
         // crew pipeline. Existing saves carry no flag and never offer partners.
         partnershipsWorld: true,
@@ -2061,6 +2083,11 @@ function reducer(state, action) {
         // airline in the world sells connections over its hubs, not just you.
         // Always on in Tailwinds — new games here, old saves in reconcileState.
         rivalItineraries: true,
+        // Rival refuelling stops (models/rivalStops.js): AI carriers fly an
+        // out-of-range route through one stop, go nonstop when an aircraft
+        // can, and keep a rival set's listed routes as goals. NEW games only —
+        // existing saves carry no flag and never route through a stop.
+        rivalStopsWorld: true,
         // Market development (docs/market-development-design.md): a city pair's
         // market grows with the service it gets and fades slowly when that
         // service leaves. NEW games only — existing saves carry no flag and keep
@@ -3602,7 +3629,7 @@ function reducer(state, action) {
       //    legs-aware (and including any a reserve is covering for it) ──
       const existingBlockHrs = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
         .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
-      if (existingBlockHrs + routeBlockHours(proto, type, weeklyFrequency) > MAX_WEEKLY_BLOCK_HOURS) return state;
+      if (existingBlockHrs + routeBlockHours(proto, type, weeklyFrequency) > maxWeeklyBlockHoursFor(state)) return state;
 
       // ── Connectivity: a plane already flying can only extend from a served stop ──
       const aircraftRoutes = routesCommittedTo(action.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? []);
@@ -3806,7 +3833,7 @@ function reducer(state, action) {
         const otherBlockHrs = routesCommittedTo(targetRoute.aircraftId, state.routes, state.cargoRoutes ?? [], state.charters ?? [])
           .filter(r => r.id !== targetRoute.id)
           .reduce((s, r) => s + routeBlockHours(r, type, r.weeklyFrequency), 0);
-        if (otherBlockHrs + routeBlockHours(targetRoute, type, newFreq) > MAX_WEEKLY_BLOCK_HOURS) return state;
+        if (otherBlockHrs + routeBlockHours(targetRoute, type, newFreq) > maxWeeklyBlockHoursFor(state)) return state;
 
         const gates = state.gates ?? {};
         const allOps = [...state.routes, ...(state.cargoRoutes ?? []), ...activeCharterOps(state.charters ?? [])];
@@ -4005,7 +4032,7 @@ function reducer(state, action) {
         hoursPerFlight: routeBlockHours(c, type, c.weeklyFrequency),
         weeklyFrequency: 1,
         ignoreSeason: true,
-        capHours: MAX_WEEKLY_BLOCK_HOURS,
+        capHours: maxWeeklyBlockHoursFor(state),
       });
       if (!fit.fits) return state;
 
@@ -4923,12 +4950,27 @@ function reducer(state, action) {
       for (const [key, cfg] of Object.entries(target.routes ?? {})) {
         const [a, b] = key.split('-');
         const refP   = mktReferencePrice(a, b);
-        const dist   = routeDistanceKm(a, b);
+        // A rival route through a refuelling stop (models/rivalStops.js) comes
+        // over as a multi-stop route A → S → B: same airframe, same stop, and
+        // the two short markets on the way are yours to sell as well.
+        const via    = typeof cfg.via === 'string' && cfg.via !== a && cfg.via !== b ? cfg.via : null;
+        const dist   = via ? routeDistanceKm(a, via) + routeDistanceKm(via, b) : routeDistanceKm(a, b);
         const basePrice = Math.round(refP * (cfg.priceMultiplier ?? 1));
+        const tagFields = () => {
+          const proto = { origin: a, destination: b, stops: [a, via, b] };
+          const segmentPrices = {};
+          for (const seg of routeSegments(proto)) {
+            const isThrough = (seg.from === a && seg.to === b) || (seg.from === b && seg.to === a);
+            const eco = isThrough ? basePrice : Math.max(1, Math.round(mktReferencePrice(seg.from, seg.to)));
+            segmentPrices[routeSegmentKey(seg.from, seg.to)] = defaultClassPrices(eco);
+          }
+          return { stops: [a, via, b], segmentPrices };
+        };
 
         const addRoute = (opId, freq) => {
           slotsByAirport[a] = (slotsByAirport[a] ?? 0) + freq;
           slotsByAirport[b] = (slotsByAirport[b] ?? 0) + freq;
+          if (via) slotsByAirport[via] = (slotsByAirport[via] ?? 0) + freq * 2;
           inheritedRoutes.push({
             id:              uid(),
             origin:          a,
@@ -4938,7 +4980,7 @@ function reducer(state, action) {
             hub:             state.hub,
             weeksOpen:       0,
             inherited:       true,
-            _basePrice:      basePrice,   // transient: folded into routePricing below
+            ...(via ? tagFields() : { _basePrice: basePrice }),   // _basePrice transient: folded into routePricing below
           });
         };
 
@@ -5003,7 +5045,8 @@ function reducer(state, action) {
       const inheritedCatering = normalizeCateringLevel(state.defaultCateringLevel);
       for (const r of inheritedRoutes) {
         const key = routePairKey(r.origin, r.destination);
-        if (!acquiredPricing[key])  acquiredPricing[key]  = defaultClassPrices(r._basePrice);
+        // Multi-stop routes (an inherited refuelling stop) carry their own segment fares.
+        if (r._basePrice != null && !acquiredPricing[key])  acquiredPricing[key]  = defaultClassPrices(r._basePrice);
         if (!acquiredCatering[key]) acquiredCatering[key] = inheritedCatering;
         delete r._basePrice;
       }
@@ -6106,6 +6149,8 @@ function reducer(state, action) {
           ...(state.rivalStartupCap ? { startupCap: state.rivalStartupCap } : {}),
           // Rivals' freight arms contest the player's freighters (setup option).
           cargo:             state.rivalFreight === true,
+          // Refuelling stops + listed routes as goals (new games only).
+          stopsWorld:        state.rivalStopsWorld === true,
           playerCargoRoutes: state.cargoRoutes ?? [],
           playerFleet:       state.fleet ?? [],
           // Production-line games: rivals order aircraft off the shared lines

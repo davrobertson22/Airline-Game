@@ -37,7 +37,7 @@ import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { projectRouteAddition } from '../models/pairShare.js';
 import {
   distanceKm, referencePrice, simulateRoute, formatMoney, formatPercent,
-  weeklyBlockHours, blockTimeHours, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, MIN_SPARE_BLOCK_HOURS, SLOTS_PER_GATE,
+  weeklyBlockHours, blockTimeHours, maxFrequency, maxWeeklyBlockHoursFor, MIN_SPARE_BLOCK_HOURS, SLOTS_PER_GATE,
   routeDistanceKm, currentGameDate, effectiveRangeKm,
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
@@ -199,6 +199,7 @@ function groupRoutes(routes) {
 
 export default function Routes() {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const confirm = useConfirm();
   const addToast = useToast();
   // NO_CARGO, not `= []`: a fresh empty array every render is a new dependency
@@ -283,13 +284,13 @@ export default function Routes() {
     const used = new Map(fleet.map(a => [a.id,
       committedPeakBlockHours(a.id, getAircraftType(a.typeId), routes, state.cargoRoutes ?? [], state.charters ?? [])]));
     return {
-      availableFleet: fleet.filter(a => used.get(a.id) < MAX_WEEKLY_BLOCK_HOURS),
+      availableFleet: fleet.filter(a => used.get(a.id) < bhCap),
       // An airframe only counts as having "spare hours" if there's enough left to
       // actually absorb another sector — 1h free is not spare capacity in any
       // meaningful sense (see MIN_SPARE_BLOCK_HOURS in simulation.js).
-      spareFleet: fleet.filter(a => a.status !== 'idle' && (MAX_WEEKLY_BLOCK_HOURS - used.get(a.id)) > MIN_SPARE_BLOCK_HOURS),
+      spareFleet: fleet.filter(a => a.status !== 'idle' && (bhCap - used.get(a.id)) > MIN_SPARE_BLOCK_HOURS),
     };
-  }, [fleet, routes, state.cargoRoutes, state.charters]);
+  }, [fleet, routes, state.cargoRoutes, state.charters, bhCap]);
   // Reserves stand by on purpose — they aren't part of the "idle, earning
   // nothing" nudge (Fleet tab has a Reserve chip for them).
   const idleCount      = fleet.filter(a => a.status === 'idle' && !isReserve(a)).length;
@@ -2598,6 +2599,7 @@ function FrequencyStepper({ route }) {
 
 function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPriceChange }) {
   const { state } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const curMonth = currentGameDate(state).month;
   const isDormant = !!route.season && !isRouteActive(route, curMonth);
   const [showPricing, setShowPricing] = useState(false);
@@ -2605,7 +2607,7 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
   const loadColor = result
     ? (result.loadFactor > 0.7 ? 'var(--green)' : result.loadFactor > 0.4 ? 'var(--yellow)' : 'var(--red)')
     : 'var(--text-muted)';
-  const bhPct   = blockHrs / MAX_WEEKLY_BLOCK_HOURS;
+  const bhPct   = blockHrs / bhCap;
   const bhColor = bhPct >= 0.95 ? 'var(--red)' : bhPct >= 0.75 ? 'var(--yellow)' : 'var(--text-muted)';
   const seatsPerWk = (type?.seats ?? 0) * route.weeklyFrequency;
 
@@ -2712,6 +2714,7 @@ function AircraftRow({ route, aircraft, type, result, blockHrs, onClose, onPrice
 
 export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const { fleet, routes, hub, gates = {}, cargoRoutes = [], hubs = EMPTY_HUBS } = state;
 
   const isAddingFlights = initialOrigin != null && initialDest != null;
@@ -2734,7 +2737,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // Freighters can't fly passenger routes (the reducer rejects them) — keep them
   // out of this form entirely; they're managed in the cargo planner.
   const paxFleet = fleet.filter(a => !getAircraftType(a.typeId)?.freighter);
-  const hasHours = (a) => usedBlockHrsFor(a) < MAX_WEEKLY_BLOCK_HOURS;
+  const hasHours = (a) => usedBlockHrsFor(a) < bhCap;
   // Airports an aircraft already serves. The reducer only lets a plane pick up
   // an extra route that touches one of them; an idle plane (no routes) is free
   // to go anywhere. Used to keep ineligible airframes out of the picker.
@@ -2783,7 +2786,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
   // back a tail whose summer is fully booked (JackG207174, Headwinds Discord, 2 Nov 2026).
   const seasonMonths = routeActiveMonths({ season });
   const pickerFleet = paxFleet
-    .filter(a => usedBlockHrsIn(a, seasonMonths) < MAX_WEEKLY_BLOCK_HOURS && canServePair(a))
+    .filter(a => usedBlockHrsIn(a, seasonMonths) < bhCap && canServePair(a))
     .sort((a, b) => (Number(isReserve(a)) - Number(isReserve(b)))
       || (usedBlockHrsIn(a, seasonMonths) - usedBlockHrsIn(b, seasonMonths)));
 
@@ -2849,16 +2852,16 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
     months: newMonths,
     hoursPerFlight: type && dist ? blockTimeHours(dist, type) * 2 : 0,
     weeklyFrequency: Number(frequency) || 0,
-    capHours: MAX_WEEKLY_BLOCK_HOURS,
+    capHours: bhCap,
   });
   const existingBlockHrs = fit.existingHours;
   const newBlockHrs      = fit.addedHours;
   const totalBlockHrs    = fit.totalHours;
   const blockOk          = newBlockHrs === 0 || fit.fits;
-  const routeMaxFreq     = type && dist ? maxFrequency(dist, type) : 21;
+  const routeMaxFreq     = type && dist ? maxFrequency(dist, type, bhCap) : 21;
   const capacityMaxFreq  = type && dist ? fit.maxFrequency : 21;
   const freqLimit  = Math.min(routeMaxFreq, Math.max(0, capacityMaxFreq));
-  const blockPct   = totalBlockHrs / MAX_WEEKLY_BLOCK_HOURS;
+  const blockPct   = totalBlockHrs / bhCap;
   const blockColor = blockPct >= 1 ? 'var(--red)' : blockPct >= 0.8 ? 'var(--yellow)' : 'var(--green)';
 
   // Gate / slot checks
@@ -2987,7 +2990,7 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
               {pickerFleet.map(a => {
                 const t    = getAircraftType(a.typeId);
                 const used = usedBlockHrsIn(a, seasonMonths);
-                const rem  = MAX_WEEKLY_BLOCK_HOURS - used;
+                const rem  = bhCap - used;
                 const full = rem <= 0;
                 const cfg  = a.config;
                 const seats = cfg
@@ -3103,14 +3106,14 @@ export function AddRouteForm({ onClose, initialOrigin, initialDest }) {
                 )}
               </span>
               <span style={{ color: blockColor, fontWeight: 600 }}>
-                {totalBlockHrs.toFixed(1)} / {MAX_WEEKLY_BLOCK_HOURS}h
+                {totalBlockHrs.toFixed(1)} / {bhCap}h
                 {!blockOk && ` · max freq: ${freqLimit}×`}
               </span>
             </div>
             <div style={{ height: 4, borderRadius: 2, background: 'var(--surface3)', overflow: 'hidden', position: 'relative' }}>
               <div style={{ position: 'absolute', height: '100%', width: `${Math.min(100, blockPct * 100)}%`, background: blockColor, borderRadius: 2 }} />
               {existingBlockHrs > 0 && (
-                <div style={{ position: 'absolute', height: '100%', width: `${Math.min(100, (existingBlockHrs / MAX_WEEKLY_BLOCK_HOURS) * 100)}%`, background: 'var(--text-dim)', borderRadius: 2 }} />
+                <div style={{ position: 'absolute', height: '100%', width: `${Math.min(100, (existingBlockHrs / bhCap) * 100)}%`, background: 'var(--text-dim)', borderRadius: 2 }} />
               )}
             </div>
           </div>

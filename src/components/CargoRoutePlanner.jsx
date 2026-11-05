@@ -4,7 +4,7 @@ import { useGame, slotsUsedAt as slotsUsedAtEngine, cargoRouteDenial } from '../
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
-import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, MAX_WEEKLY_BLOCK_HOURS, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
+import { simulateCargoRoute, cargoLaneAllocations, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
@@ -131,6 +131,7 @@ const ACCENT = '#e8833a';
  */
 export default function CargoRoutePlanner({ mode, setMode, embedded = false, initialOrigin = '', initialDest = '', onOpened }) {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
 
   // Prefill is read at mount only; the caller keys the element on the lane, so
   // picking a different route mounts a fresh planner rather than yanking the
@@ -176,7 +177,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
   const gd = currentGameDate(state);
   const ready         = !!(originAirport && destAirport);
 
-  // One freighter has MAX_WEEKLY_BLOCK_HOURS flying hours a week — long sectors
+  // One freighter has bhCap flying hours a week (100 new games, 140 older saves) — long sectors
   // fit fewer round trips, so the frequency slider is capped at what one
   // airframe can actually fly.
   const freqCap = useMemo(() => {
@@ -185,8 +186,8 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
     // No fixed 14/wk ceiling: the engine has none (only block hours and gate
     // slots), so a short lane could take 20+ flights once opened but not at
     // launch (Barca, Discord 2026-09-30). Port from Headwinds.
-    return Math.max(1, maxFrequency(routeDistance(origin, dest), t));
-  }, [ready, origin, dest, selectedTypeId]);
+    return Math.max(1, maxFrequency(routeDistance(origin, dest), t, bhCap));
+  }, [ready, origin, dest, selectedTypeId, bhCap]);
   // What the slider SHOWS is what gets projected and dispatched. The raw
   // value survives a lane change (7× on a short hop), so a long lane showed
   // "3×" while the projection and the launch still used 7.
@@ -291,7 +292,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
   // Freighters that can be deployed to THIS lane, by type. Includes aircraft
   // already flying another route but with spare block-hours that touch an
   // endpoint — the engine lets one freighter fly several routes up to the
-  // 140h/wk cap, so the planner should too (not idle-only).
+  // weekly block-hour cap, so the planner should too (not idle-only).
   const deployableByType = useMemo(() => {
     if (!routeData) return {};
     const map = {};
@@ -304,10 +305,11 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
         origin, dest,
         distKm:         routeData.dist,
         weeklyFrequency: frequency,
+        capHours:       bhCap,
       });
     }
     return map;
-  }, [state.fleet, state.cargoRoutes, reachableTypes, routeData, origin, dest, frequency]);
+  }, [state.fleet, state.cargoRoutes, reachableTypes, routeData, origin, dest, frequency, bhCap]);
 
   const simulation = useMemo(() => {
     if (!routeData || !selectedTypeId) return null;
@@ -594,8 +596,8 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
                                   return <>Your {name}{owned > 1 ? 's reach' : ' reaches'} {Math.round(reachKmFor(simulation.type)).toLocaleString()} km as configured — {origin}–{dest} is {laneKm} km. Lease a longer-legged freighter.</>;
                                 case 'no-hours':
                                   return short.outOfRange > 0
-                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km), and {short.inRange === 1 ? 'it is' : 'they are'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk). The other {short.outOfRange} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most. Lease another {name}.</>
-                                    : <>Your {name}{owned > 1 ? 's are' : ' is'} at full utilisation ({MAX_WEEKLY_BLOCK_HOURS}h/wk) — no spare hours for another lane. Lease another {name} to open this route.</>;
+                                    ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km), and {short.inRange === 1 ? 'it is' : 'they are'} at full utilisation ({bhCap}h/wk). The other {short.outOfRange} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most. Lease another {name}.</>
+                                    : <>Your {name}{owned > 1 ? 's are' : ' is'} at full utilisation ({bhCap}h/wk) — no spare hours for another lane. Lease another {name} to open this route.</>;
                                 case 'other-networks':
                                   return short.outOfRange > 0
                                     ? <>Only {short.inRange} of your {owned} {name}s ({tailNames(short.reachable)}) reach{short.inRange === 1 ? 'es' : ''} {origin}–{dest} ({laneKm} km), and {short.inRange === 1 ? 'it is' : 'they are'} flying other networks — a freighter can only add a lane that touches an airport it already serves. Your other {short.outOfRange}{short.idleOutOfRange > 0 ? ` (${short.idleOutOfRange} idle)` : ''} get{short.outOfRange === 1 ? 's' : ''} {short.bestShortReachKm.toLocaleString()} km at most. Route {tailNames(short.reachable)} through {origin} or {dest} first, or lease another.</>

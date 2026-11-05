@@ -59,7 +59,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/glossary.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-04",
-    "dateModified": "2026-10-13",
+    "dateModified": "2026-10-29",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -135,13 +135,13 @@
       <dd>The time an aircraft spends on the ground between flights — unloading, cleaning, boarding, and preparing to depart again. In Tailwinds it is fixed by aircraft size, from about 30 minutes for a turboprop to two hours for a double-decker, and it counts against the aircraft's weekly block hours. That is why an aircraft flying many short sectors runs out of hours sooner than its distance flown suggests.</dd>
 
       <dt>Block time</dt>
-      <dd>The total time a flight takes from leaving the departure gate to arriving at the destination gate, including taxi time on the ground. In Tailwinds each sector's block time is its flying time at the aircraft's cruise speed plus the turnaround, and no aircraft can fly more than 140 block hours a week. Block time therefore sets how many flights a week an aircraft can fly on a route.</dd>
+      <dd>The total time a flight takes from leaving the departure gate to arriving at the destination gate, including taxi time on the ground. In Tailwinds each sector's block time is its flying time at the aircraft's cruise speed plus the turnaround, and no aircraft can be scheduled for more than 100 block hours a week (140 in games started before November 2026). Block time therefore sets how many flights a week an aircraft can fly on a route.</dd>
 
       <dt>On-time rate</dt>
       <dd>The share of your flights that operate on schedule. In Tailwinds it is set mainly by the morale of your pilots, ground staff and cabin crew and by how hard you fly the fleet, and it is pulled down by crew shortages and disruption events. It is a large part of your quality score, and the more of your flights run late, the bigger your passenger compensation bill. The <a href="/on-time-performance.html">on-time performance guide</a> covers it in full.</dd>
 
       <dt>Crew hiring</dt>
-      <dd>In new Tailwinds games your pilots, cabin crew, ground staff and maintenance team are hired and trained rather than appearing with each new aircraft. Recruits must complete training before they work (ten weeks for pilots, two for ground staff), and how quickly a large hire fills depends on how well you pay. A shortage hurts punctuality, and a big enough shortage of pilots or cabin crew parks aircraft. You set each group's pay in Operations; a pay premium slowly drifts back toward market rate unless you hold it there.</dd>
+      <dd>In new Tailwinds games your pilots, cabin crew, ground staff and maintenance team are hired and trained rather than appearing with each new aircraft. Your first two aircraft are crewed for you at the normal training cost; after that, the hiring is yours. Recruits must complete training before they work (ten weeks for pilots, two for ground staff), and how quickly a large hire fills depends on how well you pay. A shortage hurts punctuality, and a big enough shortage of pilots or cabin crew parks aircraft. You set each group's pay in Operations; a pay premium slowly drifts back toward market rate unless you hold it there.</dd>
 
       <dt>Codeshare</dt>
       <dd>An arrangement where two airlines sell seats on the same flight under their own names. Codeshares let you offer destinations you don't fly yourself and feed extra passengers onto your aircraft — a low-cost way to widen your network. In Tailwinds you sign codeshares with individual rival airlines for a weekly fee that depends on the partner's tier, and they earn interline revenue from the traffic you share. In historical-era games, codeshares become available around 1990.</dd>
@@ -192,7 +192,7 @@
       <dd>The price you charge a passenger for a seat. Setting fares is a balancing act: too high and your load factor collapses, too low and you fill the plane but don't cover your costs. Let load factor and route profit guide you rather than what "feels" fair.</dd>
 
       <dt>Yield</dt>
-      <dd>The average revenue you earn per passenger per mile flown. Yield tells you how <em>richly</em> you're pricing, separate from how full your planes are. A route can have high load but low yield (full of cheap seats) or low load but high yield (few passengers paying a premium).</dd>
+      <dd>The average revenue you earn per passenger per distance flown (Tailwinds shows it per passenger-kilometre). Yield tells you how <em>richly</em> you're pricing, separate from how full your planes are. A route can have high load but low yield (full of cheap seats) or low load but high yield (few passengers paying a premium).</dd>
 
       <dt>Demand</dt>
       <dd>How many people want to travel a given route at a given price. Demand sets the ceiling on what a route can earn. Reading demand correctly — and matching capacity and fare to it — is the heart of route planning.</dd>
@@ -204,7 +204,7 @@
       <dd>A frequent-flyer scheme that rewards repeat passengers and encourages them to keep choosing your airline over competitors. A good loyalty program lifts repeat bookings and makes your load factors steadier and less price-sensitive.</dd>
 
       <dt>Quality score</dt>
-      <dd>Tailwinds rates every route you fly from 0 to 100 for what passengers actually experience: punctuality, customer rating, cabin seats and service, fleet age, cabin space, catering, extras, ground staff and hub investment. Business travellers weigh it far more heavily than leisure travellers. The <a href="/demand-and-quality.html">demand and quality guide</a> breaks down every component.</dd>
+      <dd>Tailwinds rates every route you fly from 0 to 100 for what passengers actually experience: punctuality, customer rating, cabin seats and service, fleet age, cabin space, catering, extras, ground staff and hub investment, and in historical-era games the age of the aircraft design itself. Business travellers weigh it far more heavily than leisure travellers. The <a href="/demand-and-quality.html">demand and quality guide</a> breaks down every component.</dd>
 
       <dt>Reputation / brand</dt>
       <dd>How travellers perceive your airline. A stronger brand wins passengers at the margin and lets you hold fares a little higher. Reputation is built slowly through reliable operations and eroded quickly by problems.</dd>
@@ -225,10 +225,10 @@
       <dd>Revenue minus operating cost for a single route. This is where the real decisions live: a network of many small, consistent winners beats one glamorous route that loses money on every flight.</dd>
 
       <dt>CASM (cost per available seat mile)</dt>
-      <dd>What it costs you to fly one seat one mile, whether or not that seat is sold. CASM is the standard measure of an airline's cost efficiency — the lower it is, the more room you have to price competitively and still profit.</dd>
+      <dd>What it costs you to fly one seat one mile, whether or not that seat is sold. CASM is the standard measure of an airline's cost efficiency — the lower it is, the more room you have to price competitively and still profit. Tailwinds measures it per kilometre, as CASK (cost per available seat-kilometre) on the Finance screen.</dd>
 
       <dt>RASM (revenue per available seat mile)</dt>
-      <dd>The revenue you earn for each seat-mile of capacity you offer. Comparing RASM against CASM tells you, at a glance, whether a route or the whole airline is making money on the capacity it flies: RASM above CASM means you're in the black.</dd>
+      <dd>The revenue you earn for each seat-mile of capacity you offer. Comparing RASM against CASM tells you, at a glance, whether a route or the whole airline is making money on the capacity it flies: RASM above CASM means you're in the black. Tailwinds shows it per kilometre, as RASK.</dd>
 
       <dt>Break-even load factor</dt>
       <dd>The percentage of seats you need to sell just to cover a flight's costs. Everything above the break-even load factor is profit; everything below is loss. Lower costs or higher fares pull the break-even point down and give you more margin for error.</dd>

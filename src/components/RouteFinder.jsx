@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
-import { effectiveRangeKm, formatMoney, calendarYear, currentGameDate } from '../utils/simulation.js';
+import { effectiveRangeKm, formatMoney, calendarYear, currentGameDate, maxWeeklyBlockHoursFor } from '../utils/simulation.js';
 import { buildRouteMarket } from '../models/demand.js';
 import {
   findCandidates, sortCandidates, SORTS, DEFAULT_SCORE_LIMIT,
@@ -60,6 +60,8 @@ const MAX_STALE = 3000;
 
 /** Which airframe a forecast context prices — stale figures are only reused for the same one. */
 function ctxIdentity(ctx) {
+  // No cap in the key: a game's block-hour cap is fixed for its whole life, and
+  // saved figures are already scoped to the one airline (finderMemoryKey).
   return ctx ? `${ctx.type.id}|${ctx.frame.id}|${ctx.frameLease}|${ctx.weeklyFrequency}` : '';
 }
 
@@ -243,10 +245,11 @@ export default function RouteFinder({ onPick, standalone = false }) {
   const forecastSort   = !!SORTS[sortBy]?.needsForecast;
   const forecastCtx = useMemo(
     () => (forecastReady
-      ? finderForecastContext({ aircraftTypeId: typeId, aircraft: owned?.best ?? null, weeklyFrequency: 7, gameDate })
+      ? finderForecastContext({ aircraftTypeId: typeId, aircraft: owned?.best ?? null, weeklyFrequency: 7, gameDate,
+                                capHours: maxWeeklyBlockHoursFor(state) })
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [forecastReady, typeId, owned?.best, gameDate.month]);
+    [forecastReady, typeId, owned?.best, gameDate.month, maxWeeklyBlockHoursFor(state)]);
 
   // The context by VALUE, not identity: forecastCtx is rebuilt on every mount,
   // and the cache is meant to outlive one (the trip to the planner and back).

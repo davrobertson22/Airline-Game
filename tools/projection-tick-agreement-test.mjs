@@ -73,7 +73,10 @@ function startedAirline({ seed = 12345, ageWeeks = 500, freq = 21, fare = 1.15 }
     { type: 'START_GAME', airlineName: 'Probe Air', hub: 'JFK', enableObjectives: false,
       // Classic markets: the sold-out lanes are calibrated so a slump moves them.
       marketDev: false });
-  s = { ...s, cash: 5e9 };
+  // Classic 140h cap: this fixture's schedules were calibrated against it, and
+  // the 100h cap of new games would refuse enough of them that the heavy-check /
+  // breakdown weeks this suite needs never happen.
+  s = { ...s, cash: 5e9, realisticUtilization: false };
   for (let i = 0; i < 14; i++) s = gameReducer(s, { type: 'ADD_GATE', airportCode: 'JFK' });
   for (const d of DESTS) {
     s = gameReducer(s, { type: 'BUY_AIRCRAFT', typeId: 'b737800' });

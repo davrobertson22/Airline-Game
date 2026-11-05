@@ -216,7 +216,10 @@ function startedAirline({ seed = 1001, ownership = 'owned', ageWeeks = 500, freq
   seedRandom(seed);
   let s = gameReducer(freshState(),
     { type: 'START_GAME', airlineName: 'Probe Air', hub: 'JFK', enableObjectives: false });
-  s = { ...s, cash: 5e9 };
+  // Classic 140h cap: this fixture's schedules were calibrated against it, and
+  // the 100h cap of new games would refuse enough of them that the heavy-check /
+  // breakdown weeks this suite needs never happen.
+  s = { ...s, cash: 5e9, realisticUtilization: false };
   for (let i = 0; i < 10; i++) s = gameReducer(s, { type: 'ADD_GATE', airportCode: 'JFK' });
   for (const d of DESTS) {
     s = gameReducer(s, { type: 'BUY_AIRCRAFT', typeId: 'b737800' });

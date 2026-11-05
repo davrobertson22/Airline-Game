@@ -14,7 +14,7 @@ import {
   formatMoney, formatPercent,
   maintenanceMultiplier, ageLabel,
   simulateRoute, simulateCargoRoute, cargoLaneAllocations, weeklyBlockHours, currentGameDate,
-  MAX_WEEKLY_BLOCK_HOURS, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
+  maxWeeklyBlockHoursFor, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, coverOutlookByAircraft,
@@ -22,7 +22,7 @@ import {
 } from '../utils/simulation.js';
 import { reserveParkingFee, RESERVE_READINESS_MULT, isReserve } from '../data/reserve.js';
 import { ReserveBadge } from './ReserveNotice.jsx';
-import { RenewalNotice, RenewalBadge, OrderReplacementLine, BulkReplaceModal } from './FleetRenewal.jsx';
+import { RenewalNotice, RenewalBadge, OrderReplacementLine, BulkReplaceModal, OrderFilterBar, useOrderFilter } from './FleetRenewal.jsx';
 import { absoluteWeek, effectiveFuelMultiplier } from '../utils/fuel.js';
 import { orderProgress } from '../data/delivery.js';
 import { laborEffects, crewStatus } from '../data/labor.js';
@@ -81,7 +81,7 @@ const utilFor = (state, aircraft, month) => aircraftUtilization({
   cargoRoutes: state.cargoRoutes ?? [],
   charters:    state.charters ?? [],
   month,
-  capHours:    MAX_WEEKLY_BLOCK_HOURS,
+  capHours:    maxWeeklyBlockHoursFor(state),
 });
 
 /** Bar width % — full (not clipped-and-forgotten) once the cap is breached. */
@@ -618,6 +618,7 @@ function WingtipBadge({ aircraft }) {
 
 export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSell }) {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const confirm = useConfirm();
   const { routes } = state;
 
@@ -951,7 +952,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
           <div className="stat-label">Utilisation ({aircraftRoutes.length} route{aircraftRoutes.length !== 1 ? 's' : ''})</div>
           <div style={{ fontWeight: 700, fontSize: 17, color: totalBlockHrs > 0 ? blockColor : 'var(--text-muted)', marginTop: 4 }}>
             {totalBlockHrs.toFixed(1)}h
-            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}> / {MAX_WEEKLY_BLOCK_HOURS}h</span>
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}> / {bhCap}h</span>
           </div>
           <div style={{ height: 4, background: 'var(--surface3)', borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
             <div style={{
@@ -964,9 +965,9 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>
             {blockPct > 1
-              ? `over the ${MAX_WEEKLY_BLOCK_HOURS}h weekly limit by ${(totalBlockHrs - MAX_WEEKLY_BLOCK_HOURS).toFixed(1)}h — trim frequency or move a route`
+              ? `over the ${bhCap}h weekly limit by ${(totalBlockHrs - bhCap).toFixed(1)}h — trim frequency or move a route`
               : util.overCap
-                ? `⚠ scheduled over the ${MAX_WEEKLY_BLOCK_HOURS}h limit in ${UTIL_MONTH_NAMES[util.peakMonth - 1]} (${util.peakHours.toFixed(1)}h)`
+                ? `⚠ scheduled over the ${bhCap}h limit in ${UTIL_MONTH_NAMES[util.peakMonth - 1]} (${util.peakHours.toFixed(1)}h)`
                 : util.grounded
                   ? `out of service — ${util.peakHours.toFixed(1)}h/wk scheduled for its return`
                   : util.seasonal
@@ -1086,7 +1087,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
         {routeResults.length > 0 ? routeResults.map(({ route: r, result: res, blockHrs: bh }) => {
           const org = getAirport(r.origin);
           const dst = getAirport(r.destination);
-          const rhColor = bh / MAX_WEEKLY_BLOCK_HOURS >= 0.75 ? 'var(--yellow)' : 'var(--text-dim)';
+          const rhColor = bh / bhCap >= 0.75 ? 'var(--yellow)' : 'var(--text-dim)';
           return (
             <div key={r.id} className="card" style={{ background: 'var(--surface2)', padding: '12px 16px', borderRadius: 'var(--radius)', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1428,6 +1429,7 @@ const CATEGORY_ORDER = AIRCRAFT_CATEGORIES;
 
 function FleetByType({ fleet, routes, cargoRoutes = [] }) {
   const { state } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const gameMonth = currentGameDate(state).month;
   const gd = { year: 1, week: 1 }; // just for label purposes
   // Group by typeId
@@ -1482,7 +1484,7 @@ function FleetByType({ fleet, routes, cargoRoutes = [] }) {
         const utils     = aircraft.map(a => utilFor(state, a, gameMonth));
         const avgBlock  = utils.reduce((s, u) => s + u.flyingHours, 0) / count;
         const anyOver   = utils.some(u => u.overCap);
-        const avgPct    = avgBlock / MAX_WEEKLY_BLOCK_HOURS;
+        const avgPct    = avgBlock / bhCap;
         const blockColor = anyOver ? OVER_CAP_COLOR
           : avgPct >= 0.8 ? 'var(--red)' : avgPct >= 0.5 ? 'var(--yellow)' : avgPct > 0 ? 'var(--accent)' : 'var(--surface3)';
 
@@ -1517,7 +1519,7 @@ function FleetByType({ fleet, routes, cargoRoutes = [] }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
                 <span>Avg utilisation</span>
                 <span style={{ color: blockColor, fontWeight: 600 }}>
-                  {avgBlock.toFixed(1)}h / {MAX_WEEKLY_BLOCK_HOURS}h{anyOver ? ' ⚠' : ''}
+                  {avgBlock.toFixed(1)}h / {bhCap}h{anyOver ? ' ⚠' : ''}
                 </span>
               </div>
               <div style={{ height: 5, background: 'var(--surface3)', borderRadius: 3, overflow: 'hidden' }}>
@@ -1578,6 +1580,7 @@ function FleetByType({ fleet, routes, cargoRoutes = [] }) {
 
 function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
   const { state } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const gameMonth = currentGameDate(state).month;
   const categories = CATEGORY_ORDER.filter(cat =>
     fleet.some(a => getAircraftType(a.typeId)?.category === cat)
@@ -1653,7 +1656,7 @@ function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
         const catUtils  = catFleet.map(a => utilFor(state, a, gameMonth));
         const avgBlock  = catUtils.reduce((s, u) => s + u.flyingHours, 0) / catFleet.length;
         const anyOver   = catUtils.some(u => u.overCap);
-        const avgPct    = avgBlock / MAX_WEEKLY_BLOCK_HOURS;
+        const avgPct    = avgBlock / bhCap;
         const blockColor = anyOver ? OVER_CAP_COLOR
           : avgPct >= 0.8 ? 'var(--red)' : avgPct >= 0.5 ? 'var(--yellow)' : avgPct > 0 ? 'var(--accent)' : 'var(--surface3)';
 
@@ -1851,7 +1854,7 @@ function SummaryRow({ r, total = false, onPick }) {
 
 export function FleetSummary({ onPickType }) {
   const { state } = useGame();
-  const bhCap     = MAX_WEEKLY_BLOCK_HOURS;
+  const bhCap     = maxWeeklyBlockHoursFor(state);
   const gameMonth = currentGameDate(state).month;
   const absWeek   = absoluteWeek(state.year, state.week);
   const [sort, setSortState] = useState(readSummarySort);
@@ -1967,6 +1970,7 @@ function FleetLiveryCard({ state }) {
 // with tails already ticked (tools/bulk-lease-buyout-test.mjs).
 export default function Fleet({ initialCheckedIds = [] } = {}) {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   // Tails the crew pipeline parks this week (severe band) — same set the tick
   // grounds, so the row can say why its routes earned nothing.
   const crewParked = new Set(crewStatus(state, (a) => getAircraftType(a.typeId))?.parkedIds ?? []);
@@ -1998,6 +2002,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
     if (nav.filterChip === 'expiring') { setSortKey('lease'); setSortDir('asc'); }
   }, []);
   const [showOnOrder,   setShowOnOrder]   = useState(false); // collapsible "On Order" panel
+  const orderFilter = useOrderFilter(pendingOrders);
 
   // What the reserve system will do for each broken tail at the NEXT tick —
   // computed by running the real reserve pass, so the badge on the row agrees
@@ -2548,7 +2553,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
           const count = aircraft.length;
           const avgAgeYrs = aircraft.reduce((s, a) => s + (a.ageWeeks ?? 0), 0) / count / 52;
           const chipUtils = aircraft.map(a => utilFor(state, a, gameMonth));
-          const avgUtil   = chipUtils.reduce((s, u) => s + u.flyingHours, 0) / count / MAX_WEEKLY_BLOCK_HOURS;
+          const avgUtil   = chipUtils.reduce((s, u) => s + u.flyingHours, 0) / count / bhCap;
           const anyOver   = chipUtils.some(u => u.overCap);
           const idle = aircraft.filter(a => a.status === 'idle' && !isReserve(a)).length;
           const res  = aircraft.filter(a => isReserve(a)).length;
@@ -2772,6 +2777,12 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
             }}>▶</span>
           </div>
           {showOnOrder && (
+          <>
+          {pendingOrders.length >= 5 && (
+            <div style={{ padding: '0 16px' }}>
+              <OrderFilterBar orders={pendingOrders} filter={orderFilter.filter} setFilter={orderFilter.setFilter} />
+            </div>
+          )}
           <table>
             <thead>
               <tr>
@@ -2784,7 +2795,10 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
               </tr>
             </thead>
             <tbody>
-              {pendingOrders.map(order => {
+              {orderFilter.visible.length === 0 && (
+                <tr><td colSpan={6} style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>No orders match the filter.</td></tr>
+              )}
+              {orderFilter.visible.map(order => {
                 const type       = getAircraftType(order.typeId);
                 const catColor   = CAT_COLORS[type?.category] || '#93a4ba';
                 const weeksLeft  = order.deliverAbsWeek - currentAbsWeek;
@@ -2855,6 +2869,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
               })}
             </tbody>
           </table>
+          </>
           )}
         </div>
       )}

@@ -30,7 +30,7 @@ import { routeLaunchCost } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import { referencePrice } from '../utils/market.js';
 import {
-  defaultClassPrices, maxFrequency, MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm,
+  defaultClassPrices, maxFrequency, maxWeeklyBlockHoursFor, routeDistanceKm,
   routePairKey, effectiveRangeKm, currentGameDate,
 } from '../utils/simulation.js';
 import { forecastLaunch } from './routeFinder.js';
@@ -87,8 +87,8 @@ function pickTail(state, typeId, distKm) {
  * dispatch. `openable` is the actions to dispatch, in order.
  */
 export function planRouteBatch(state, picks = [], { gameDate = currentGameDate(state) } = {}) {
-  // Tailwinds has one scheduling cap (no New World Restrictions worlds).
-  const capHours = MAX_WEEKLY_BLOCK_HOURS;
+  // The game's own scheduling cap: 100h in new games, 140h in older saves.
+  const capHours = maxWeeklyBlockHoursFor(state);
   let s = state;
   const items = [];
   const openable = [];

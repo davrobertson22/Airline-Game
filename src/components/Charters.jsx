@@ -17,7 +17,7 @@ import {
 import { CHARTER_TYPES } from '../data/charters.js';
 import {
   formatMoney, effectiveRangeKm, routeBlockHours, blockHourFit,
-  MAX_WEEKLY_BLOCK_HOURS, routeDistanceKm,
+  maxWeeklyBlockHoursFor, routeDistanceKm,
 } from '../utils/simulation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ function Quote({ offer, aircraft, state }) {
     aircraftId: aircraft.id, type,
     routes: state.routes, cargoRoutes: state.cargoRoutes ?? [], charters: state.charters ?? [],
     hoursPerFlight: missionHrs, weeklyFrequency: 1, ignoreSeason: true,
-    capHours: MAX_WEEKLY_BLOCK_HOURS,
+    capHours: maxWeeklyBlockHoursFor(state),
   });
 
   const Row = ({ label, value, muted, note }) => (
@@ -119,7 +119,7 @@ function Quote({ offer, aircraft, state }) {
       )}
       <div style={{ borderTop: '1px solid var(--border)', margin: '6px 0' }} />
       <Row label="Block hours" note={`${Math.round(fit.existingHours)}h committed now`}
-           value={`+${Math.round(missionHrs)}h/wk of ${MAX_WEEKLY_BLOCK_HOURS}h`} />
+           value={`+${Math.round(missionHrs)}h/wk of ${maxWeeklyBlockHoursFor(state)}h`} />
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
         Flying cost only. It doesn't count what those hours would earn on your schedule,
         and the fee is fixed for the whole term whatever fuel does.

@@ -9,7 +9,7 @@ import {
   simulateTagRoute, referencePrice, distanceKm, formatMoney, formatPercent,
   currentGameDate, effectiveRangeKm, defaultClassPrices,
   routeLegs, routeSegments, routeSegmentKey, routeMaxLegKm, routeBlockHours,
-  routeLandingFee, routeStops, MAX_WEEKLY_BLOCK_HOURS, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
+  routeLandingFee, routeStops, maxWeeklyBlockHoursFor, SLOTS_PER_GATE, MAX_ROUTE_STOPS,
   cargoSlotsUsedAt, fleetAvgUtilization, rivalSpecsFor,
   routesCommittedTo, committedPeakBlockHours, blockHourFit,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields,
@@ -61,6 +61,7 @@ function StopSelect({ value, onChange, gates, hubs, placeholder }) {
  */
 export default function TagRoutePlanner({ mode, setMode, embedded = false, initialStops = null, initialFares = null, onOpened }) {
   const { state, dispatch } = useGame();
+  const bhCap = maxWeeklyBlockHoursFor(state);   // 100h in new games, 140h in older saves
   const { fleet, routes, gates = {}, hub, cash, cargoRoutes = [], hubs = EMPTY_HUBS } = state;
   const gd = currentGameDate(state);
 
@@ -110,7 +111,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
   const inRange  = type ? maxLeg <= effRange : true;
 
   // Aircraft that can actually be put on this tag flight: able to fly the
-  // longest leg, with block-hours left, and either idle (140h free, free to go
+  // longest leg, with block-hours left, and either idle (all hours free, free to go
   // anywhere) or already serving one of the stops — the reducer's connectivity
   // rule. Anything else would be rejected on submit, so it isn't offered.
   const reachable = useMemo(() => {
@@ -123,14 +124,14 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
       // rotation a reserve is covering for it (those come home). Filtering on
       // aircraftId alone showed a covered tail as free metal.
       const acRoutes = routesCommittedTo(a.id, routes, cargoRoutes, state.charters ?? []);
-      if (committedPeakBlockHours(a.id, t, routes, cargoRoutes, state.charters ?? []) >= MAX_WEEKLY_BLOCK_HOURS) return false;
+      if (committedPeakBlockHours(a.id, t, routes, cargoRoutes, state.charters ?? []) >= bhCap) return false;
       if (acRoutes.length === 0) return true;
       return acRoutes.some(r => routeStops(r).some(c => stopSet.has(c)));
     })
       // Reserves sort last: still offered (deploying one just ends its standby)
       // but never the plane the picker lands on by default.
       .sort((a, b) => (a.reserveBase ? 1 : 0) - (b.reserveBase ? 1 : 0));
-  }, [fleet, routes, cargoRoutes, route, maxLeg]);
+  }, [fleet, routes, cargoRoutes, route, maxLeg, bhCap]);
 
   // Auto-pick a reachable aircraft when needed.
   useMemo(() => {
@@ -160,7 +161,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
     // The multi-stop guard charges every committed route whether or not it
     // operates this month — match it exactly rather than being kinder here.
     ignoreSeason: true,
-    capHours: MAX_WEEKLY_BLOCK_HOURS,
+    capHours: bhCap,
   });
   const blockHrsExisting = tagFit.existingHours;
   const blockHrsNew      = tagFit.addedHours;
@@ -316,7 +317,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
               {!inRange && type && (
                 <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {type.name} range {effRange.toLocaleString()} km &lt; longest leg {Math.round(maxLeg).toLocaleString()} km.</span>
               )}
-              {!blockOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> Exceeds the {MAX_WEEKLY_BLOCK_HOURS}h/wk block-hour cap for this aircraft.</span>}
+              {!blockOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> Exceeds the {bhCap}h/wk block-hour cap for this aircraft.</span>}
               {gateProblem && <span style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}><Glyph e="⚠" /> No gate at {gateProblem}<AddGateButton code={gateProblem} /></span>}
               {slotProblem && <span style={{ color: 'var(--yellow)', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}><Glyph e="⚠" /> Not enough slots at {slotProblem}<AddGateButton code={slotProblem} /></span>}
               {!connectivityOk && <span style={{ color: 'var(--red)' }}><Glyph e="⚠" /> {aircraft?.name} can only extend from an airport it already serves.</span>}
