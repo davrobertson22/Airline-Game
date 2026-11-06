@@ -30,6 +30,7 @@
  */
 
 import { loyaltyFieldsFromPoolRows } from './loyaltyPools.js';
+import { cabinProductPoints } from '../data/seatProducts.js';
 import { baseCityPairDemand, referencePrice, routeDistance, pairDemandGrowth, getEraCalendarYear, getDemandModel, metroPrimary, sectorCostKm } from '../utils/market.js';
 import { SEASONS as V2_SEASONS } from '../data/demandV2Seasons.js';
 import { SEASONS as V3_SEASONS, CLASS_SEASONS as V3_CLASS_SEASONS } from '../data/demandV3Seasons.js';
@@ -37,6 +38,7 @@ import { pairAppeal } from '../data/metros.js';
 import { onDemandWorldChange } from '../data/demandWorld.js';
 import { marketDevFor, marketDevActive } from './marketDev.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
+import { viaOf, routeLegKm, routeLegsKm, routeBlockHoursOneWay, findRefuelStop, techStopPenalty, techStopDemandShare, REFUEL_TURN_COST_SHARE } from './rivalStops.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
 import { AIRCRAFT_TYPES, getAircraftType, fuelCostPerKm, aircraftAvailability, aircraftOrderable, typicalSeatsOf, maxSeatsForRange } from '../data/aircraft.js';
 
@@ -772,11 +774,33 @@ export const SERVICE_QUALITY_POINTS = {
   luxury:   14,
 };
 
-/** Combined quality points from a cabin config's seat + service settings. */
+/**
+ * Combined quality points from a cabin config: seat grade + service, plus the
+ * seat-weighted points of the cabin PRODUCTS aboard (data/seatProducts.js:
+ * pitch, lie-flats, suites…). A config with no products adds exactly 0 here.
+ */
 export function cabinQualityPoints(config) {
   return (SEAT_QUALITY_POINTS[config?.seatQuality ?? 'standard'] ?? 0)
-       + (SERVICE_QUALITY_POINTS[config?.serviceQuality ?? 'standard'] ?? 0);
+       + (SERVICE_QUALITY_POINTS[config?.serviceQuality ?? 'standard'] ?? 0)
+       + cabinProductPoints(config).blended;
 }
+
+/**
+ * How far each segment's view of the cabin sits from the blended score: the
+ * leisure passenger sits in economy and sees its pitch and screens; the
+ * business passenger sits up front and sees the lie-flats. Both 0 with no
+ * products, so an offer's segment scores equal its qualityScore exactly.
+ */
+export function cabinSegmentQualityDelta(config) {
+  const p = cabinProductPoints(config);
+  return { leisure: p.leisure - p.blended, business: p.business - p.blended };
+}
+
+/** An offer's quality as the LEISURE segment experiences it (falls back to qualityScore). */
+export const leisureQ  = (o) => o.qualityScoreLeisure  ?? o.qualityScore;
+/** An offer's quality as the BUSINESS segment experiences it (falls back to qualityScore). */
+export const businessQ = (o) => o.qualityScoreBusiness ?? o.qualityScore;
+const segmentQ = (o, segment) => (segment === 'business' ? businessQ(o) : leisureQ(o));
 
 /**
  * Business travelers demand a credible product — even without airline
@@ -943,7 +967,7 @@ export function computeUtility(offer, market, segment) {
   // inside the share fight (loyaltySensReduction is never read by the pools).
   const sens        = 1 - (offer.priceSensitivityReduction ?? 0) - (offer.loyaltySensReduction ?? 0);
   const priceUtil   = -(price / refPrice) * w.price * sens;
-  const qualityUtil = (offer.qualityScore / 100) * w.quality;
+  const qualityUtil = (segmentQ(offer, segment) / 100) * w.quality;
   const freqUtil    = Math.log1p(offer.weeklyFrequency) * w.frequency;
   // ?? 0, or an offer built without the field NaN-poisons BOTH softmaxes and
   // every carrier on the pair books NaN passengers.
@@ -1184,18 +1208,18 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   // it drag the "market price" up shrank the whole pool for everyone else: three
   // $650 one-stops on a $478 pair took the pool down 15% while carrying nobody.
   const bizPriceOf = (o) => (o.businessPrice != null ? o.businessPrice : o.economyPrice * BUSINESS_PRICE_MULTIPLIER);
-  const weightedAvg = (priceOf, shares, refForChoke) => {
+  const weightedAvg = (priceOf, shares, refForChoke, qualityOf) => {
     let num = 0, den = 0;
     offers.forEach((o, i) => {
-      const w = shares[i] * priceChokeFactor(priceOf(o), refForChoke(o), o.qualityScore);
+      const w = shares[i] * priceChokeFactor(priceOf(o), refForChoke(o), qualityOf(o));
       num += priceOf(o) * w; den += w;
     });
     // Everyone choked: fall back to the plain share-weighted mean.
     return den > 0 ? num / den : offers.reduce((s, o, i) => s + priceOf(o) * shares[i], 0);
   };
-  const avgLeisurePrice  = weightedAvg(o => o.economyPrice, leisureShares, () => compressedRef);
+  const avgLeisurePrice  = weightedAvg(o => o.economyPrice, leisureShares, () => compressedRef, leisureQ);
   const avgBusinessPrice = weightedAvg(bizPriceOf, businessShares,
-    o => compressedBizRef * businessFareTolerance(o.qualityScore));
+    o => compressedBizRef * businessFareTolerance(businessQ(o)), businessQ);
 
   // Elasticity factors: demand shrinks when average market price is above the
   // (competition-compressed) reference
@@ -1225,7 +1249,7 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   // all-budget pair loses business travelers to other modes entirely, while a
   // premium-served market attracts extra (see businessQualityCapture).
   const marketBizCapture = offers.reduce(
-    (s, o, i) => s + businessQualityCapture(o.qualityScore) * businessShares[i], 0);
+    (s, o, i) => s + businessQualityCapture(businessQ(o)) * businessShares[i], 0);
   // The pool BEFORE brand: everyone these airports and fares could carry.
   const leisureBase  = Math.round(leisurePool * appealCapture * Math.min(1.5, leisureElasticityFactor));
   const businessBase = Math.round(
@@ -1258,9 +1282,9 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   // demand that ceases to exist. Before this, an offer priced past the cap was
   // a sink — it won share and sold nothing, and the passengers vanished.
   const chokeB = offers.map(offer =>
-    priceChokeFactor(bizPriceOf(offer), compressedBizRef * businessFareTolerance(offer.qualityScore), offer.qualityScore));
+    priceChokeFactor(bizPriceOf(offer), compressedBizRef * businessFareTolerance(businessQ(offer)), businessQ(offer)));
   const chokeL = offers.map(offer =>
-    priceChokeFactor(offer.economyPrice, compressedRef, offer.qualityScore));
+    priceChokeFactor(offer.economyPrice, compressedRef, leisureQ(offer)));
   const rawBusinessFull = offers.map((offer, i) => adjustedBusinessDemand * businessShares[i]);
   const rawLeisureFull  = offers.map((offer, i) => adjustedLeisureDemand  * leisureShares[i]);
   const rawBusiness = rawBusinessFull.map((v, i) => v * chokeB[i]);
@@ -1517,7 +1541,7 @@ function _computeMarketShareLegacy(market, offers) {
   // all-budget pair loses business travelers to other modes entirely, while a
   // premium-served market attracts extra (see businessQualityCapture).
   const marketBizCapture = offers.reduce(
-    (s, o, i) => s + businessQualityCapture(o.qualityScore) * businessShares[i], 0);
+    (s, o, i) => s + businessQualityCapture(businessQ(o)) * businessShares[i], 0);
   const adjustedBusinessDemand = Math.round(
     market.businessDemand * appealCapture * Math.min(1.5, businessElasticityFactor) * marketBizCapture);
 
@@ -1533,12 +1557,12 @@ function _computeMarketShareLegacy(market, offers) {
       ? offer.businessPrice
       : offer.economyPrice * BUSINESS_PRICE_MULTIPLIER;
     let leisurePax  = Math.round(
-      adjustedLeisureDemand  * lShare * priceChokeFactor(offer.economyPrice, compressedRef, offer.qualityScore)
+      adjustedLeisureDemand  * lShare * priceChokeFactor(offer.economyPrice, compressedRef, leisureQ(offer))
     );
     // High quality stretches the tolerable business fare before the choke bites.
     let businessPax = Math.round(
       adjustedBusinessDemand * bShare
-      * priceChokeFactor(bizPrice, compressedBizRef * businessFareTolerance(offer.qualityScore), offer.qualityScore)
+      * priceChokeFactor(bizPrice, compressedBizRef * businessFareTolerance(businessQ(offer)), businessQ(offer))
     );
 
     // The demand the market GENERATED for this offer, before any seat count is
@@ -1620,14 +1644,14 @@ function _soloCeiling(market, offer, ref, { foldBusiness = false } = {}) {
     : market.leisureDemand * tpL;
   const leisure = leisurePool * poolMult
     * Math.min(1.5, Math.pow(ref / Math.max(offer.economyPrice, 1), ELASTICITY.leisure * sens))
-    * priceChokeFactor(offer.economyPrice, ref, offer.qualityScore);
-  const bizRef     = ref * BUSINESS_PRICE_MULTIPLIER * businessFareTolerance(offer.qualityScore);
+    * priceChokeFactor(offer.economyPrice, ref, leisureQ(offer));
+  const bizRef     = ref * BUSINESS_PRICE_MULTIPLIER * businessFareTolerance(businessQ(offer));
   const business = noBusiness ? 0 : market.businessDemand * poolMult
     * Math.max(0, offer.loungeAppeal ?? 1)
     * tpB
-    * businessQualityCapture(offer.qualityScore)
+    * businessQualityCapture(businessQ(offer))
     * Math.min(1.5, Math.pow(bizRef / Math.max(offer.businessPrice, 1), ELASTICITY.business * sens))
-    * priceChokeFactor(offer.businessPrice, bizRef, offer.qualityScore);
+    * priceChokeFactor(offer.businessPrice, bizRef, businessQ(offer));
   return { leisure: Math.max(0, leisure), business: Math.max(0, business) };
 }
 
@@ -1646,7 +1670,7 @@ function _monopolyResult(market, offer) {
   // product loses business travelers to other modes even without a rival airline —
   // and stretches the fare business travelers will tolerate (businessFareTolerance).
   const businessRef = market.referencePrice * BUSINESS_PRICE_MULTIPLIER
-    * businessFareTolerance(offer.qualityScore);
+    * businessFareTolerance(businessQ(offer));
   // Targeted advertising on an UNCONTESTED pair has no rival to take passengers
   // from, so it grows the pool instead — the same magnitude the old post-hoc
   // revenue multiplier applied. In competitive markets it is a utility term
@@ -1692,7 +1716,7 @@ function _monopolyResult(market, offer) {
         * poolMult
         * loungePool
         * travelBusinessPool
-        * businessQualityCapture(offer.qualityScore)
+        * businessQualityCapture(businessQ(offer))
         * Math.pow(businessRef / offer.businessPrice, ELASTICITY.business * sens)
         * priceChokeFactor(offer.businessPrice, businessRef));
   const businessPax = noBusiness ? 0 : Math.min(businessAdj, offer.businessSeats);
@@ -2911,6 +2935,20 @@ export function tailsForRoute(distKm, frequency) {
   return Math.max(1, Math.ceil(blockPerWeek / WEEKLY_BLOCK_PER_TAIL));
 }
 
+/**
+ * tailsForRoute for a carrier's route config: a route through a refuelling
+ * stop (models/rivalStops.js, cfg.via) flies two sectors and sits on the
+ * ground at the stop. A nonstop is exactly tailsForRoute on its distance.
+ */
+export function tailsForCompetitorRoute(routeKey, cfg, frequency) {
+  if (!viaOf(cfg)) {
+    const [a, b] = String(routeKey).split('-');
+    return tailsForRoute(routeDistance(a, b), frequency);
+  }
+  const blockPerWeek = routeBlockHoursOneWay(routeKey, cfg, blockTimeOneWay) * frequency * 2;
+  return Math.max(1, Math.ceil(blockPerWeek / (14 * 7)));
+}
+
 let _tailSeq = 0;
 function newTailId(airlineId) { return `${airlineId}-t${(++_tailSeq).toString(36)}`; }
 
@@ -2935,11 +2973,11 @@ export function buildCompetitorFleet(airline) {
   const routes = {};
   const fleet  = [];
   for (const [routeKey, cfg] of Object.entries(airline.routes ?? {})) {
-    const [a, b] = routeKey.split('-');
-    const dist   = routeDistance(a, b);
+    // A route through a refuelling stop (cfg.via) is sized on its longest leg.
+    const dist   = routeLegKm(routeKey, cfg);
     const type   = pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref);
     if (!type) { routes[routeKey] = cfg; continue; }   // no in-range type — leave unflown
-    const tails  = tailsForRoute(dist, cfg.frequency ?? 7);
+    const tails  = tailsForCompetitorRoute(routeKey, cfg, cfg.frequency ?? 7);
     routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails };
     for (let i = 0; i < tails; i++) fleet.push(makeCompetitorTail(airline.id, type.id, routeKey, true));
   }
@@ -2980,8 +3018,7 @@ export function healAnachronisticCompetitorFleets(competitors, calYear) {
     // tests, and any caller outside a reducer tick).
     const target = TIER_SEAT_TARGET[c.tier] ?? 200;
     for (const [routeKey, cfg] of bad) {
-      const [a, b]  = routeKey.split('-');
-      const dist    = routeDistance(a, b);
+      const dist    = routeLegKm(routeKey, cfg);   // the longest leg on a refuelling-stop route
       // Never let the heal hand out MORE seats than the illegal frame carried:
       // this is a downgrade to period metal, not a free up-gauge.
       const wasSeats = cfg.seats ?? getAircraftType(cfg.aircraftType)?.seats ?? Infinity;
@@ -2989,7 +3026,7 @@ export function healAnachronisticCompetitorFleets(competitors, calYear) {
         .filter(t => (t.range ?? 0) >= dist && maxSeatsForRange(t, dist) <= wasSeats && aircraftOrderable(t, calYear)), c.fleetPref)
         .slice().sort((x, y) => Math.abs(maxSeatsForRange(x, dist) - target) - Math.abs(maxSeatsForRange(y, dist) - target))[0];
       if (!type) { delete routes[routeKey]; continue; }   // nothing of the era can fly it — drop the route
-      routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails: tailsForRoute(dist, cfg.frequency ?? 7) };
+      routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails: tailsForCompetitorRoute(routeKey, cfg, cfg.frequency ?? 7) };
       swapped.set(routeKey, type.id);
     }
     const fleet = (c.fleet ?? [])
@@ -3079,21 +3116,30 @@ export function generateStarterRoutes(airline, count) {
  * preference) is left out and counted in `skipped`.
  * @returns {{ routes: object, skipped: string[] }}
  */
-export function listedStarterRoutes(airline, pairs) {
+export function listedStarterRoutes(airline, pairs, { stops = false } = {}) {
   const priceBase = TIER_PRICE_MULT[airline.tier] ?? 1.0;
   const seats = TIER_SEAT_TARGET[airline.tier] ?? 200;
-  const routes = {}, skipped = [];
+  const routes = {}, skipped = [], viaStop = [];
   for (const pair of pairs ?? []) {
     const [a, b] = String(pair).split('-');
     const key  = [a, b].sort().join('-');
     if (routes[key]) continue;
     const dist = routeDistance(a, b);
-    if (!dist || !pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) { skipped.push(pair); continue; }
-    const demand = baseCityPairDemand(a, b) || 0;
+    if (!dist) { skipped.push(pair); continue; }
+    let via = null;
+    if (!pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) {
+      // Refuelling-stop worlds (models/rivalStops.js): out of range nonstop,
+      // fly it with one stop when one works.
+      const stop = stops ? findRefuelStop(key.split('-')[0], key.split('-')[1], { home: getAirport(airline.homeHub)?.country ?? null }) : null;
+      if (!stop || !pickCompetitorAircraftType(Math.max(...stop.legsKm), airline.tier, airline.fleetPref)) { skipped.push(pair); continue; }
+      via = stop.via;
+      viaStop.push(`${pair} via ${via}`);
+    }
+    const demand = (baseCityPairDemand(a, b) || 0) * (via ? techStopDemandShare(a, via, b) : 1);
     const freq   = Math.max(3, Math.min(21, Math.round(demand / (seats * 0.75))));
-    routes[key] = { frequency: freq, priceMultiplier: +(priceBase * (0.97 + Math.random() * 0.06)).toFixed(3) };
+    routes[key] = { frequency: freq, priceMultiplier: +(priceBase * (0.97 + Math.random() * 0.06)).toFixed(3), ...(via ? { via } : {}) };
   }
-  return { routes, skipped };
+  return { routes, skipped, viaStop };
 }
 
 /**
@@ -3811,15 +3857,23 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const nCarriers = Math.max(1, pairCounts?.get(routeKey) ?? 1);
   const shareOfPool = Math.pow(nCarriers, 0.15) / nCarriers;
 
-  const demandOneWay = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal * shareOfPool * evMult);
+  // A stop costs it the passengers who would only fly nonstop.
+  const via          = viaOf(cfg);
+  const stopShare    = via ? techStopDemandShare(a, via, b) : 1;
+  const demandOneWay = Math.round(baseD * Math.pow(priceRatio, 1.3) * seasonal * shareOfPool * evMult * stopShare);
   const paxOneWay    = Math.min(demandOneWay, Math.round(capOneWay * 0.88)); // max 88% LF
   const weeklyPax    = paxOneWay * 2;
 
   const tier        = competitor.tier ?? 'legacy';
   const revenue     = weeklyPax * (price + (PAX_ANCILLARY_REVENUE[tier] ?? 4));
   // Billed per sector like the player's (market.js sectorCostKm; = dist classic).
-  const opCost      = sectorCostKm(type ?? { category: 'Narrow Body' }, dist) * opPerKm * (OP_COST_UPLIFT[tier] ?? 1.55) * flightsPerWk;
-  const airportCost = seats * (AIRPORT_COST_PER_SEAT[tier] ?? 16) * flightsPerWk;
+  // A refuelling-stop route (models/rivalStops.js) flies two sectors and pays
+  // part of a turn at the stop.
+  const sectorKm    = via
+    ? routeLegsKm(routeKey, cfg).reduce((s, k) => s + sectorCostKm(type ?? { category: 'Narrow Body' }, k), 0)
+    : sectorCostKm(type ?? { category: 'Narrow Body' }, dist);
+  const opCost      = sectorKm * opPerKm * (OP_COST_UPLIFT[tier] ?? 1.55) * flightsPerWk;
+  const airportCost = seats * (AIRPORT_COST_PER_SEAT[tier] ?? 16) * flightsPerWk * (via ? 1 + REFUEL_TURN_COST_SHARE : 1);
   const paxCost     = weeklyPax * (PAX_SERVICE_COST[tier] ?? 28);
   const fixed       = type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
   const cost        = Math.round(opCost + airportCost + paxCost + fixed);
@@ -3963,7 +4017,9 @@ export function buildCompetitorOffer(competitor, market) {
     connectivityBonus: computeConnectivityBonus(competitor.homeHub, market.origin, market.destination)
                        + (competitor.secondaryHub
                           ? computeConnectivityBonus(competitor.secondaryHub, market.origin, market.destination)
-                          : 0),
+                          : 0)
+                       // A refuelling stop (models/rivalStops.js) reads worse than a nonstop.
+                       - techStopPenalty(market.origin, viaOf(config), market.destination),
     // City loyalty (models/loyaltyPools.js): an AI carrier's program standing on
     // this pair, from the rows the reducer derives each week. Absent outside
     // city-loyalty games, so every other offer is unchanged.

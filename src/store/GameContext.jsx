@@ -163,6 +163,7 @@ import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxS
          isLegalEraStartYear, ERA_MIN_START_YEAR, ERA_MAX_START_YEAR,
          HORIZON_YEAR, horizonReached, pastHorizon } from '../data/era.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
+import { productDenial } from '../data/seatProducts.js';
 import { cleanHex, normalizeAirlineCode } from '../utils/logoBranding.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
@@ -1544,6 +1545,22 @@ export function eraFeatureDenial(state, feature) {
   return { code: 'not_yet_invented', feature, message: ERA_FEATURE_MESSAGE[feature] };
 }
 
+// A cabin product this world or airframe refuses (data/seatProducts.js): a
+// lie-flat in 1965, a shower on a 737. Same shape as the era refusal so the
+// toast reads the same.
+function refuseCabinProducts(state, config, type) {
+  const denial = productDenial(config, { calYear: calendarYear(state), type });
+  if (!denial) return null;
+  const title = denial.code === 'not_yet_invented' ? '🕰 Not in this era yet' : '✈ Not on this aircraft';
+  return {
+    ...state,
+    error: denial.message,
+    pendingToasts: [...(state.pendingToasts ?? []), {
+      type: 'warning', title, message: denial.message, duration: 8000,
+    }],
+  };
+}
+
 function refuseEraFeature(state, feature) {
   const denial = eraFeatureDenial(state, feature);
   if (!denial) return null;
@@ -2191,6 +2208,10 @@ function reducer(state, action) {
     case 'ORDER_AIRCRAFT': {
       const type = getAircraftType(action.typeId);
       if (!type) return state;
+      if (action.config) {
+        const refusedProduct = refuseCabinProducts(state, action.config, type);
+        if (refusedProduct) return refusedProduct;
+      }
       // Era gate: not yet in service = not orderable, buy or lease. The UI
       // shows the same denial; this is the authoritative check. A launch_only
       // denial is the one refusal that is really a different kind of order: a
@@ -3446,6 +3467,8 @@ function reducer(state, action) {
         return { ...state, error: `${target.name ?? 'That aircraft'} is out of service — it cannot start a cabin refit until it is back.` };
       }
       const cfgType    = getAircraftType(target.typeId);
+      const refusedProduct = refuseCabinProducts(state, action.config, cfgType);
+      if (refusedProduct) return refusedProduct;
       const cfgCurrent = target.config ?? defaultConfig(cfgType?.seats ?? 100);
       const cost       = calcReconfCost(cfgCurrent, action.config);
       if (cost > state.cash) {
