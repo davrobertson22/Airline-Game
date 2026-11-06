@@ -2484,3 +2484,11 @@ body:has(.app-layout-map) .toast-stack { right: 70px !important; bottom: 100px !
 /* Tailwinds' top bar also carries Support, so on narrower desktops the Map view
    button drops to its globe (the invitation strip and tooltip still name it). */
 @media (max-width: 1560px) { .topbar-mapview-label { display: none; } }
+
+/* A page whose code is still loading (utils/lazyPage.jsx) — usually a blink. */
+.page-loading {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

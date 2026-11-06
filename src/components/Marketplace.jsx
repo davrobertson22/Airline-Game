@@ -17,6 +17,7 @@ import {
 } from '../data/aircraft.js';
 import { formatMoney, weekToGameDate, maintenanceMultiplier, calendarYear, cruiseSpeedKmh, typicalSeatsOf, fullCabinRangeKm } from '../utils/simulation.js';
 import { projectWeek } from '../utils/financeProjection.js';
+import { useProgressiveCount } from '../utils/useProgressiveCount.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { nextDeliveryWeeks, orderProgress } from '../data/delivery.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
@@ -143,6 +144,8 @@ function AircraftPhoto({ src, alt, category }) {
       src={src}
       alt={alt}
       className="aircraft-photo"
+      loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   );
@@ -911,6 +914,12 @@ export default function Marketplace() {
     (!q || `${t.manufacturer} ${t.name} ${t.category}`.toLowerCase().includes(q)) &&
     passesMarketFilters(t, calYear, activeFilters, { ownedFamilies })
   );
+  // ~200 cards, each with a photo: build them a slice per frame (and load the
+  // photos only as they scroll into view) instead of all in one click.
+  const shownCards = useProgressiveCount(filtered.length, {
+    first: 24, step: 24,
+    resetKey: `${layout}|${activeCategory}|${safeMfr}|${q}|${JSON.stringify(activeFilters)}`,
+  });
 
   return (
     <div>
@@ -1146,7 +1155,7 @@ export default function Marketplace() {
       {/* Aircraft grid */}
       {layout === 'cards' && filtered.length > 0 && (
       <div className="aircraft-market-grid">
-        {filtered.map(type => {
+        {filtered.slice(0, shownCards).map(type => {
           const currentAbsWeek = absoluteWeek(year, week);
           // Runway AFTER signing this lease: the burn the projection already sees
           // (which includes every lease currently on the books) plus this one's

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useProgressiveCount } from '../utils/useProgressiveCount.js';
 import NumberStepper from './NumberStepper.jsx';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { designAgeQualityPts } from '../models/demand.js';
@@ -217,6 +218,7 @@ function AircraftThumb({ type, size = 'sm' }) {
     return (
       <img
         src={type.image} alt={type.name}
+        loading="lazy" decoding="async"
         style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
         onError={() => setFailed(true)}
       />
@@ -227,6 +229,7 @@ function AircraftThumb({ type, size = 'sm' }) {
     <img
       src={type.image} alt={type.name}
       className="fleet-thumb"
+      loading="lazy" decoding="async"
       onError={() => setFailed(true)}
     />
   );
@@ -2197,6 +2200,13 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
     }
   }
 
+  // A big fleet is hundreds of rows: build them a slice per frame instead of
+  // all in the click that opened the page (utils/useProgressiveCount.js).
+  const shownRows = useProgressiveCount(fleet.length, {
+    first: 60, step: 120,
+    resetKey: `${viewMode}|${search}|${filterChip}|${filterTypeId}|${filterBase}|${sortKey}|${sortDir}`,
+  });
+
   if (fleet.length === 0 && pendingOrders.length === 0) {
     return (
       <div className="empty-state">
@@ -3356,7 +3366,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
                 No aircraft match — <button className="btn btn-ghost" style={{ fontSize: 12, display: 'inline' }} onClick={() => { setSearch(''); setFilterChip('all'); }}>clear filters</button>
               </td></tr>
             ) : null}
-            {sortedFleet.map(aircraft => {
+            {sortedFleet.slice(0, shownRows).map(aircraft => {
               const type   = getAircraftType(aircraft.typeId);
               const route  = routes.find(r => r.aircraftId === aircraft.id);
               const ageWks = aircraft.ageWeeks ?? 0;
