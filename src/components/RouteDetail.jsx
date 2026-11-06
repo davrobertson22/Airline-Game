@@ -13,11 +13,12 @@ import {
 } from '../models/demand.js';
 import { playerCampaignBoost } from '../models/pairShare.js';
 import { rivalIndexFor, rivalOneStopOffersFor, rivalsOn, isLegacy } from '../models/network.js';
+import { blendJetAgeAppeal, jetAgeFields } from '../models/jetAge.js';
 import { getAlliance } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, currentGameDate,
   hubSpokeCounts, pairConnectivityBonus,
-  isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization,
+  isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization, routeDistanceKm,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateSensReduction, CLASS_FARE_MULTIPLIERS,
   stateTravelPartnerFields, stateLoyaltyFields, routeStops,
@@ -61,6 +62,16 @@ function Stat({ label, value, sub, color }) {
 }
 
 /** Travel partners covering this route's stops, with what each lifts this month. */
+// The jet age (models/jetAge.js, new era games): the pair's schedule blended
+// by frequency — the same helper the tick's multi-aircraft pre-pass and the
+// pairShare preview use. {} for jets, classic games and older saves.
+function pairJetAgeFields(state, pairRoutes, origin, destination) {
+  return jetAgeFields(blendJetAgeAppeal(pairRoutes.map(r => ({
+    type: getAircraftType(state.fleet.find(a => a.id === r.aircraftId)?.typeId),
+    freq: r.weeklyFrequency ?? 7,
+  })), routeDistanceKm(origin, destination)));
+}
+
 function travelPartnerRows(state, route) {
   const partners = state.travelPartners;
   if (!partners || !route) return [];
@@ -145,6 +156,23 @@ function QualityBreakdownPanel({ route, aircraft, state }) {
           </span>
           <span style={{ fontWeight: 600, color: 'var(--green)', whiteSpace: 'nowrap', marginLeft: 10 }}>
             ×{bd.loungeAppeal.toFixed(2)} business pull
+          </span>
+        </div>
+      )}
+      {/* The jet age — like lounges, a demand term outside the quality score:
+          a propeller airliner on a longer sector once jets are flying (new era
+          games). Shown because nothing else on the page would explain why a
+          full-quality Vanguard is losing passengers to a Caravelle. */}
+      {(bd.jetAgeAppeal ?? 1) < 1 && (
+        <div data-jet-age style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
+          <span>
+            Jet age
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>
+              {bd.designName} is a propeller airliner — on a sector this long, travellers want a jet
+            </span>
+          </span>
+          <span style={{ fontWeight: 600, color: 'var(--red)', whiteSpace: 'nowrap', marginLeft: 10 }}>
+            −{Math.round((1 - bd.jetAgeAppeal) * 100)}% demand
           </span>
         </div>
       )}
@@ -366,6 +394,8 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost:    playerCampaignBoost(state, origin, dest),
           brandReach:        stateBrandReach(state, maxHubBonus, false, [origin, dest]),
+          // The jet age (new era games): props on a longer sector — the tick's term.
+          ...pairJetAgeFields(state, playerRoutes, origin, dest),
         };
       }
     }
@@ -454,6 +484,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
           priceSensitivityReduction: stateSensReduction(state, maxHubBonus),
           marketingBoost: playerCampaignBoost(state, origin, dest),
           brandReach: stateBrandReach(state, maxHubBonus, false, [origin, dest]),
+          ...pairJetAgeFields(state, playerRoutes, origin, dest),
         };
         const compOffers = [...competitorsOnRoute.map(c => buildCompetitorOffer(c, market)).filter(Boolean), ...viaOffers];
         const [combined] = computeMarketShare(market, [combinedOffer, ...compOffers], { legacy: isLegacy(rivalIndexFor(state)) });
@@ -947,7 +978,10 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
                   const share     = shareResults.find(s => s.airlineId === c.id);
                   return (
                     <tr key={c.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name}</td>
+                      <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {c.name}
+                        {cfg.via && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }} title="A refuelling stop on the way: passengers stay on board">· stops at {cfg.via}</span>}
+                      </td>
                       <td style={{ padding: '8px 12px' }}><TierBadge tier={c.tier} /></td>
                       <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {cfg.aircraftType

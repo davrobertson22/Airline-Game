@@ -15,7 +15,9 @@ import { finderForecastContext, forecastCandidate } from '../models/routeFinder.
 import { setDemandModel } from './market.js';
 import { applyDemandWorld } from '../data/demandWorld.js';
 import { setMarketDev } from '../models/marketDev.js';
-import { syncCycleKnobs } from './simulation.js';
+import { syncCycleKnobs, calendarYear } from './simulation.js';
+import { setEraCalendarYear } from './market.js';
+import { setJetAgeEnabled, jetAgeOn } from '../models/jetAge.js';
 
 // A worker is its own module world: the main thread's module-level demand
 // knobs (demand model version, randomized-demand world, market development)
@@ -27,6 +29,10 @@ function syncDemandModules(state) {
   syncCycleKnobs(state);   // the business cycle's demand / lease knobs (v4 games)
   applyDemandWorld(state?.demandWorld ?? null);
   setMarketDev(state);
+  // The jet age reads the era calendar and this game's switch; neither reaches
+  // a worker from the main thread (models/jetAge.js).
+  setEraCalendarYear(calendarYear(state));
+  setJetAgeEnabled(jetAgeOn(state));
 }
 
 export function createForecastWorkerCore() {

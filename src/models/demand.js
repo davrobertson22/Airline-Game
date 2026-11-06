@@ -37,6 +37,7 @@ import { SEASONS as V3_SEASONS, CLASS_SEASONS as V3_CLASS_SEASONS } from '../dat
 import { pairAppeal } from '../data/metros.js';
 import { onDemandWorldChange } from '../data/demandWorld.js';
 import { marketDevFor, marketDevActive } from './marketDev.js';
+import { offersJetAgeCapture } from './jetAge.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { viaOf, routeLegKm, routeLegsKm, routeBlockHoursOneWay, findRefuelStop, techStopPenalty, techStopDemandShare, REFUEL_TURN_COST_SHARE } from './rivalStops.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
@@ -1034,7 +1035,14 @@ export function computeUtility(offer, market, segment) {
   // Loyalty pools: the airline's member standing on this pair. Share only.
   const loyaltyUtil = Math.log(Math.max(offer.loyaltyAppeal ?? 1, 0.01)) * (w.loyalty ?? 0);
 
-  return priceUtil + qualityUtil + freqUtil + connUtil + mktUtil + brandUtil + loungeUtil + appealUtil + travelUtil + loyaltyUtil;
+  // The jet age (models/jetAge.js; new era games only): a propeller airliner on
+  // a longer sector once jets are flying. The airport-appeal identity again —
+  // weight 1 on both segments, so log(appeal) multiplies the offer's softmax
+  // weight by exactly the factor _monopolyResult applies to its pool. Offers
+  // without the field (jets, classic games, AI, synthetic connections) are 0.
+  const jetUtil     = Math.log(Math.max(offer.jetAgeAppeal ?? 1, 0.01));
+
+  return priceUtil + qualityUtil + freqUtil + connUtil + mktUtil + brandUtil + loungeUtil + appealUtil + travelUtil + loyaltyUtil + jetUtil;
 }
 
 /**
@@ -1265,7 +1273,10 @@ export function computeMarketShare(market, offers, { legacy = false } = {}) {
   // weak secondary fields shrinks. For a single offer it equals that offer's own
   // appeal, i.e. exactly the monopoly rule, so the two paths agree where they
   // meet.
-  const appealCapture = offersAppealCapture(offers);
+  // The jet age (models/jetAge.js): a pair flown only by propellers on a long
+  // sector reaches fewer travellers; one jet in the fight and it is 1.0. For a
+  // single offer it is that offer's own appeal — the monopoly rule.
+  const appealCapture = offersAppealCapture(offers) * offersJetAgeCapture(offers);
   // Business pool scales with the market's share-weighted quality: an
   // all-budget pair loses business travelers to other modes entirely, while a
   // premium-served market attracts extra (see businessQualityCapture).
@@ -1556,7 +1567,7 @@ function _computeMarketShareLegacy(market, offers) {
   // weak secondary fields shrinks. For a single offer it equals that offer's own
   // appeal, i.e. exactly the monopoly rule, so the two paths agree where they
   // meet.
-  const appealCapture = offersAppealCapture(offers);
+  const appealCapture = offersAppealCapture(offers) * offersJetAgeCapture(offers);   // + the jet age, as above
   const adjustedLeisureDemand  = Math.round(leisurePool * appealCapture * Math.min(1.5, leisureElasticityFactor));
   // Business pool scales with the market's share-weighted quality: an
   // all-budget pair loses business travelers to other modes entirely, while a
@@ -1642,7 +1653,8 @@ function _soloCeiling(market, offer, ref, { foldBusiness = false } = {}) {
   const sens       = 1 - (offer.priceSensitivityReduction ?? 0);
   const poolMult   = (1 + (offer.marketingBoost ?? 0))
     * Math.min(1, Math.max(0, offer.brandReach ?? 1))
-    * Math.min(1, Math.max(0, offerAirportAppeal(offer)));
+    * Math.min(1, Math.max(0, offerAirportAppeal(offer)))
+    * Math.min(1, Math.max(0, offer.jetAgeAppeal ?? 1));   // jet age, as _monopolyResult
   // `foldBusiness`: the contested fight has put the business travellers in the
   // leisure pool because nobody on the pair sells a business cabin (its
   // `anyBiz` test). Then an economy-only carrier alone would carry them in
@@ -1719,7 +1731,13 @@ function _monopolyResult(market, offer) {
   // unaffected and only a demand-limited route feels it. Capped at 1 so a
   // registry entry can never manufacture demand.
   const appealPool = Math.min(1, Math.max(0, offerAirportAppeal(offer)));
-  const poolMult  = mktPool * brandPool * appealPool;
+  // The jet age (models/jetAge.js; new era games only) on an UNCONTESTED pair:
+  // the travellers who will only fly a jet are not served by a propeller on a
+  // long sector — they drive, take the train, connect on someone else, or do
+  // not go. Same stage as airport appeal: both segments, before elasticity and
+  // the capacity cap. 1 for jets and every classic game.
+  const jetAgePool = Math.min(1, Math.max(0, offer.jetAgeAppeal ?? 1));
+  const poolMult  = mktPool * brandPool * appealPool * jetAgePool;
   // Lounges on an UNCONTESTED pair: with no rival to take share from, a lounge
   // network instead brings business travellers into the market who would
   // otherwise drive, connect on someone else, or send one person instead of

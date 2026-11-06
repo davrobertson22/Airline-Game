@@ -48,6 +48,7 @@ import {
   HUB_TIERS,
 } from './demand.js';
 import { rivalIndexFor, isLegacy, runNetworkTick } from './network.js';
+import { blendJetAgeAppeal, jetAgeFields } from './jetAge.js';
 import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { memberPairKeysOf } from '../utils/market.js';
 import { campaignDemandBoostPct } from '../data/overhead.js';
@@ -77,6 +78,7 @@ import {
   buildEventDemandModel,
   currentGameDate,
   CLASS_FARE_MULTIPLIERS,
+  routeDistanceKm,
 } from '../utils/simulation.js';
 
 // TW: Headwinds declares its own `pairKeyOf`. Tailwinds already exports the
@@ -124,6 +126,7 @@ export function buildPlayerPairOffer(state, pairRoutes) {
   let premiumSeats = 0;                 // TW: Σ bodies × that type's ticketPremium
   let hasBusinessCabin = false;
   let qualitySum = 0, qualityN = 0, qualityLeisureSum = 0, qualityBusinessSum = 0;
+  const jetItems = [];
   for (const route of pairRoutes) {
     const aircraft = fleet.find((a) => a.id === route.aircraftId);
     if (!aircraft) continue;
@@ -139,6 +142,7 @@ export function buildPlayerPairOffer(state, pairRoutes) {
     totalBizSeats += biz;
     totalSeatsAll += bodies;
     premiumSeats  += bodies * (type.ticketPremium ?? 1);
+    jetItems.push({ type, freq });
     if (biz > 0) hasBusinessCabin = true;
     // Engine-accurate per-route quality (morale, utilization, cabin product,
     // catering, ancillaries, hub bonus) — the same figure the tick scores the
@@ -214,6 +218,9 @@ export function buildPlayerPairOffer(state, pairRoutes) {
     // business). Same reason again: an offer without them previews a partnered
     // airline as if it had none.
     ...stateTravelPartnerFields(state, r0.origin, r0.destination), ...stateLoyaltyFields(state, r0.origin, r0.destination),
+    // The jet age (new era games): blended over the pair's schedule by
+    // frequency, as the tick's multi-aircraft pre-pass does.
+    ...jetAgeFields(blendJetAgeAppeal(jetItems, routeDistanceKm(r0.origin, r0.destination))),
   };
 }
 

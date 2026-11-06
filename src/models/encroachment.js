@@ -187,6 +187,9 @@ export function buildEncroachmentOffer(spec, market, pairCodes = null) {
     // ticks would split the same pair differently. AI carriers: parity.
     loyaltyAppeal:        spec.loyaltyAppeal ?? 1,
     loyaltySensReduction: spec.loyaltySensReduction ?? 0,
+    // The jet age (models/jetAge.js): carried when a spec has it (Headwinds'
+    // human rivals do); AI encroachers never do and score as jets — parity.
+    ...(spec.jetAgeAppeal != null && spec.jetAgeAppeal < 1 ? { jetAgeAppeal: spec.jetAgeAppeal } : {}),
   };
 }
 
