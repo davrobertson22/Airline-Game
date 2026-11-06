@@ -53,6 +53,7 @@ import {
 } from '../data/wifi.js';
 import { FUEL_PROGRAMME_MAP, canActivateProgramme, programmeFailureMult } from '../data/fuelProgrammes.js';
 import { canRetrofitWingtips, fitWingtips } from '../data/retrofits.js';
+import { canConvertToFreighter, startConversion } from '../data/conversions.js';
 import {
   canBuyRefinery, makeRefinery, refinerySaleValue, rollRefineryOutage,
   tickCrackIndex, CRACK_BASE_INDEX, REFINERY_BUILD_WEEKS, REFINERY_CAPACITY_SHARE,
@@ -119,6 +120,7 @@ import {
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
 import { buildCargoContest, computeCompetitorCargoStats, withCargoStats, cargoTailKey } from '../models/competitorCargo.js';
+import { applyCargoYields } from '../models/cargoYieldBulk.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
 import { normalizeStarts } from '../models/schedule.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
@@ -151,7 +153,7 @@ import {
   getLoanProduct, loanProductForTerm, loanRate, borrowingCapacity,
   unencumberedOwnedFleet, isPledged, loanSecuredOn,
 } from '../data/credit.js';
-import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining,
+import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining, tailBookValue,
          marketingAwarenessGain, MARKETING_PCT_MAX, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
          campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor, setEraCostScale } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -2951,6 +2953,69 @@ function reducer(state, action) {
       };
     }
 
+    // Freighter conversion of owned passenger frames (data/conversions.js,
+    // claude/p2f-conversion.md). canConvertToFreighter is the Fleet screen's
+    // quote: the same capex, the same slot weeks. A tail still flying routes is
+    // refused unless the player chose "close its routes and convert"
+    // (closeRoutes) — then they go exactly as SELL_AIRCRAFT takes them, covers
+    // handed back to their originals first.
+    case 'CONVERT_TO_FREIGHTER': {
+      const ids = [...new Set((action.aircraftIds ?? (action.aircraftId ? [action.aircraftId] : [])).filter(Boolean))];
+      if (ids.length === 0) return state;
+      const targets = (state.fleet ?? []).filter(a => ids.includes(a.id));
+      if (targets.length === 0) return state;
+      const closeRoutes = action.closeRoutes === true;
+      const quote = canConvertToFreighter(state, targets, { closeRoutes });
+      if (!quote.ok) {
+        return {
+          ...state,
+          pendingToasts: [
+            ...(state.pendingToasts ?? []),
+            {
+              type: 'warning', icon: '📦',
+              title: 'Conversion not started',
+              message: quote.eligible.length === 0
+                ? quote.reasons[0]
+                : `${quote.reasons[0]} Converting ${quote.eligible.length} aircraft costs `
+                  + `${formatMoney(quote.capex)}; you have ${formatMoney(state.cash)}.`,
+            },
+          ],
+        };
+      }
+      const absWeek = absoluteWeek(state.year ?? 1, state.week ?? 1);
+      let working = state;
+      if (closeRoutes) {
+        for (const a of quote.eligible) {
+          const settled = settleCoversForRemoval(working, a.id);
+          working = {
+            ...working,
+            fleet:       settled.fleet,
+            routes:      settled.routes.filter(r => r.aircraftId !== a.id),
+            cargoRoutes: settled.cargoRoutes.filter(r => r.aircraftId !== a.id),
+          };
+        }
+      }
+      const converting = new Set(quote.eligible.map(a => a.id));
+      const n = converting.size;
+      const latest = Math.max(...quote.eligible.map(a => quote.byId[a.id].readyInWeeks));
+      return {
+        ...working,
+        cash:  state.cash - quote.capex,
+        fleet: working.fleet.map(a => (converting.has(a.id) ? startConversion(a, quote.byId[a.id], absWeek) : a)),
+        pendingToasts: [
+          ...(state.pendingToasts ?? []),
+          {
+            type: 'success', icon: '📦',
+            title: n === 1 ? `Conversion started: ${quote.eligible[0].name}` : `${n} aircraft into freighter conversion`,
+            message: `${formatMoney(quote.capex)} spent. `
+              + (n === 1 ? `Back as a freighter in ${latest} weeks.` : `The last is back as a freighter in ${latest} weeks.`)
+              + (quote.routesToClose > 0 ? ` ${quote.routesToClose} route${quote.routesToClose === 1 ? '' : 's'} closed.` : ''),
+            duration: 7000,
+          },
+        ],
+      };
+    }
+
     case 'BUILD_LOUNGE': {
       { const refused = refuseEraFeature(state, 'lounges'); if (refused) return refused; }
       const code    = action.code;
@@ -3200,9 +3265,10 @@ function reducer(state, action) {
         };
       }
       const type          = aircraft ? getAircraftType(aircraft.typeId) : null;
-      const remaining     = valueRemaining(aircraft?.ageWeeks, type);
       const sellAbsWeek   = absoluteWeek(state.year, state.week);
-      const nav           = Math.round(eraPurchasePrice(type) * remaining * maintNavMultiplier(aircraft, sellAbsWeek));
+      // tailBookValue: price × valueRemaining, plus a freighter conversion's
+      // capex (data/overhead.js) — the same book airframeNAV reads.
+      const nav           = Math.round(tailBookValue(aircraft, type) * maintNavMultiplier(aircraft, sellAbsWeek));
       const fee           = Math.round(nav * 0.05);
       const proceeds      = nav - fee;
       const settled       = settleCoversForRemoval(state, action.aircraftId);
@@ -3860,6 +3926,13 @@ function reducer(state, action) {
         ),
       };
     }
+
+    // Freight mass pricing: many freighters repriced in one action (Routes ▸
+    // Freight selection bar and Bulk Pricing modal). Port from Headwinds.
+    // action: { routeIds: [...], mode: 'pct' | 'delta' | 'reference' | 'set', value }
+    // models/cargoYieldBulk.js is the whole rule; the preview calls it too.
+    case 'BULK_SET_CARGO_YIELD':
+      return applyCargoYields(state, action.routeIds, { mode: action.mode, value: action.value });
 
     // action: { schedules: { [routeId]: number[] | null } } — passenger or cargo.
     // The player's pinned departures (minutes into the week, UTC) for each
@@ -5815,7 +5888,9 @@ function reducer(state, action) {
         ...baseOpenToasts,
         ...checksStarted.map(c => ({ type: 'info', title: `🔧 ${c.checkType} check ${c.auto ? 'auto-scheduled' : 'started'} — ${c.name}`, message: `${c.tailNumber || c.name} is in the shop for ${c.weeks} week${c.weeks !== 1 ? 's' : ''}. Cost: ${c.cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.${c.auto ? ' Booked automatically by your maintenance team.' : ''}`, icon: '🔧', duration: 7000 })),
         ...checksForced.map(c => ({ type: 'danger', title: `⚠️ Forced grounding — ${c.name}`, message: `${c.tailNumber || c.name} blew past its ${c.checkType}-check window. Regulator-grounded ${c.weeks} week${c.weeks !== 1 ? 's' : ''}; rushed check ${c.cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`, icon: '⚠️', duration: 10000 })),
-        ...completedChecks.map(c => ({ type: 'success', title: `✅ ${c.checkType} check complete — ${c.name}`, message: `${c.tailNumber || c.name} has returned to service.`, icon: '✅', duration: 5000 })),
+        ...completedChecks.map(c => (c.checkType === 'P2F'
+          ? { type: 'success', title: `📦 Freighter conversion complete — ${c.name}`, message: `${c.tailNumber || c.name} is back as a ${getAircraftType(c.toTypeId)?.name ?? 'freighter'}, ready for cargo routes.`, icon: '📦', duration: 7000 }
+          : { type: 'success', title: `✅ ${c.checkType} check complete — ${c.name}`, message: `${c.tailNumber || c.name} has returned to service.`, icon: '✅', duration: 5000 })),
       ];
       // Reserve cover toasts. Gap warnings fire once per incident: only for
       // broken tails that were NOT already listed as gapped last week.
