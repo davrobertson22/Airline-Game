@@ -61,6 +61,7 @@ import {
   weeklyLitresOf, isCommissioned, isOnOutage,
 } from '../data/refinery.js';
 import { setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn, FUEL_OPS_VERSION } from '../data/fuelStations.js';
+import { setJetAgeEnabled, jetAgeOn } from '../models/jetAge.js';
 import {
   FARM_LEVELS, canTakeFarm, makeFarm, farmCloseRefund, farmDiscountsOf, farmLevelDef,
 } from '../data/fuelFarm.js';
@@ -1930,6 +1931,7 @@ function reducer(state, action) {
   // Market development (models/marketDev.js): this state's D table, or none.
   setMarketDev(state);
   setFuelStationsEnabled(fuelStationsOn(state));   // station fuel pricing (FUEL_OPERATIONS_PLAN.md §7)
+  setJetAgeEnabled(jetAgeOn(state));   // the jet age: new era games only (models/jetAge.js)
   setFuelStationDiscounts(fuelStationsOn(state)    // this airline's fuel farms (§8)
     ? farmDiscountsOf(state, absoluteWeek(state?.year ?? 1, state?.week ?? 1)) : null);
   switch (action.type) {
@@ -2098,6 +2100,11 @@ function reducer(state, action) {
         // City loyalty (models/loyaltyPools.js): new games only, like the crew
         // pipeline. Existing saves keep the budget-and-tier program for life.
         loyaltyPoolsWorld: true,
+        // The jet age (models/jetAge.js): once jets are flying, props lose
+        // demand on longer sectors. New games only, like the crew pipeline —
+        // an era save without the flag keeps its propliners' demand for life.
+        // Inert in a classic game (no era calendar).
+        jetAgeWorld: true,
         // Production lines (data/productionLines.js, models/lineBook.js): every
         // aircraft comes off a factory line shared with the rivals, who order
         // and wait too; era games add launch customers. Staged purchase
@@ -3551,6 +3558,9 @@ function reducer(state, action) {
       if (typeof action.logoId === 'string')   next.logoId    = action.logoId;
       if (typeof action.logoColor === 'string') next.logoColor = action.logoColor;
       if ('customLogo' in action)              next.customLogo = action.customLogo ?? null;
+      // Uploaded tail (components/TailPicker.jsx): same contract — null clears
+      // back to the designed fin.
+      if ('customTail' in action)              next.customTail = action.customTail ?? null;
       // Tile colour and airline code: null clears back to the default (dark
       // tile / code derived from the name); anything invalid is ignored.
       if ('logoBg' in action) {
@@ -7495,6 +7505,8 @@ function reconcileState(parsed) {
     ...(parsed.partnershipsWorld === true ? { partnershipsWorld: true } : {}),
     // City loyalty — the new-game flag, carried only when present.
     ...(parsed.loyaltyPoolsWorld === true ? { loyaltyPoolsWorld: true } : {}),
+    // The jet age — the new-game flag, carried only when present.
+    ...(parsed.jetAgeWorld === true ? { jetAgeWorld: true } : {}),
     ...(parsed.travelPartners && Object.keys(parsed.travelPartners).length > 0
       ? { travelPartners: parsed.travelPartners } : {}),
     ...(parsed.travelPartnerMemory && Object.keys(parsed.travelPartnerMemory).length > 0
@@ -7695,6 +7707,7 @@ export function GameProvider({ children }) {
   setDemandModel(state?.demandModel);
   syncCycleKnobs(state);
   setMarketDev(state);
+  setJetAgeEnabled(jetAgeOn(state));
 
   // ── Hydrate ────────────────────────────────────────────────────────────────
   // StrictMode double-invokes effects in development. A latch rather than a

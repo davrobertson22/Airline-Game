@@ -19,6 +19,7 @@ import { setMapBasemap } from './basemap.js';
 import useBasemap from '../hooks/useBasemap.js';
 import { rivalIndexFor } from '../models/network.js';
 import { AirportDetailModal } from './AirportLink.jsx';
+import { hubFinMarkup, hubFinSize, tailAspect } from '../utils/hubFin.js';
 
 // ── Polar softening ──────────────────────────────────────────────────────────
 // Reported on Discord 2026-10-02 (Headwinds, Gulf hub, 500+ routes): the true
@@ -558,6 +559,10 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   const { state } = heldRef.current;
   // Satellite (Blue Marble) or Dark (CARTO) — see basemap.js.
   const [basemap, setBasemap] = useBasemap();
+  // Your tail fin over each of your hubs (logo maker → Tail; utils/hubFin.js).
+  const hubFin = useMemo(() => hubFinMarkup(state),   // eslint-disable-line react-hooks/exhaustive-deps
+    [state.livery, state.logoId, state.logoColor, state.logoBg, state.customLogo, state.customTail, state.airlineName]);
+  const finLayersRef = useRef([]);
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
           competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
@@ -1490,6 +1495,37 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       map.removeLayer(group);
     };
   }, [mapReady, showAirports, pinnedCodes, isMobile]);
+
+  // Your tail fin standing on each hub pin (utils/hubFin.js), in its own
+  // effect: the pins never wait for it, and a redraw that moved nothing
+  // repaints nothing. Not interactive — the pin under it keeps the tooltip
+  // and click.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return undefined;
+    let cancelled = false;
+    const hubList = airportSet.filter(a => hubs[a.code]);
+    (async () => {
+      await hubFin.load([...new Set(hubList.map(a => Math.max(0, Math.min(3, hubs[a.code].tier ?? 1))))]);
+      if (cancelled || mapRef.current !== map) return;
+      finLayersRef.current.forEach(l => map.removeLayer(l));
+      finLayersRef.current = [];
+      for (const airport of hubList) {
+        const tier = hubs[airport.code].tier ?? 1;
+        const html = hubFin.html(tier);
+        if (!html) continue;
+        const finH = hubFinSize(tier), finW = Math.round(finH * tailAspect());
+        const fin = window.L.marker([airport.lat, airport.lon], {
+          icon: window.L.divIcon({ className: 'hub-fin-marker', html, iconSize: [finW, finH],
+            iconAnchor: [Math.round(finW * 0.66), finH + Math.round(hubMarkerSize(tier).core / 2) + 1] }),
+          interactive: false, keyboard: false, zIndexOffset: 1100,
+        });
+        fin.addTo(map);
+        finLayersRef.current.push(fin);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [airportSet, hubs, mapReady, hubFin]);
 
   // Re-style when hover changes
   useEffect(() => {

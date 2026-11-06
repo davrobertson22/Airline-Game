@@ -6,6 +6,7 @@ import { LOGO_COLORS, normalizeAirlineCode, cleanHex, brandingClash, takenBrandi
 import { Glyph } from './Icons.jsx';
 import { CloseIcon } from './Icons.jsx';
 import LiveryEditor from './LiveryEditor.jsx';
+import TailPicker from './TailPicker.jsx';
 import { liveryFor, isLiveryShaped } from '../data/livery.js';
 
 // In-game branding editor: change the airline name, logo (preset or uploaded
@@ -19,6 +20,7 @@ export default function BrandingModal({ onClose, initialTab = 'identity' }) {
   const [logoId,      setLogoId]      = useState(state.customLogo ? 'custom' : (state.logoId ?? AIRLINE_LOGOS[0].id));
   const [accentColor, setAccentColor] = useState(state.logoColor ?? LOGO_COLORS[0].hex);
   const [customLogo,  setCustomLogo]  = useState(state.customLogo ?? null);
+  const [customTail,  setCustomTail]  = useState(state.customTail ?? null);
   const [logoBg,      setLogoBg]      = useState(cleanHex(state.logoBg));
   const [airlineCode, setAirlineCode] = useState(state.airlineCode ?? '');
   // Livery: edits are local until Save. `liveryDirty` keeps a name-only rebrand
@@ -52,6 +54,9 @@ export default function BrandingModal({ onClose, initialTab = 'identity' }) {
       logoId:      usingCustom ? 'horizon' : logoId,
       logoColor:   accentColor,
       customLogo:  usingCustom ? customLogo : null,
+      // Forwarded only when it changed (mirrors Headwinds, where the key alone
+      // means "write the column").
+      ...(customTail !== (state.customTail ?? null) ? { customTail } : {}),
       logoBg:      cleanHex(logoBg),
       airlineCode: normalizeAirlineCode(airlineCode),
       ...(liveryReset ? { livery: null } : liveryDirty ? { livery } : {}),
@@ -119,6 +124,20 @@ export default function BrandingModal({ onClose, initialTab = 'identity' }) {
             customLogo={customLogo} onCustomLogo={setCustomLogo}
             maxHeight={280}
             taken={taken}
+          />
+        </div>
+
+        {/* ── Tail: the licensed template's tail in your paint, logo on the fin ── */}
+        <div className="form-group">
+          <label className="form-label">Tail</label>
+          <TailPicker
+            livery={hasSavedLivery || liveryDirty ? livery : liveryFor({ ...state, livery: undefined, logoColor: accentColor })}
+            airlineName={name.trim()}
+            onChange={changeLivery}
+            tail={customTail}
+            onTail={setCustomTail}
+            onOpenLivery={() => setTab('livery')}
+            logo={{ id: usingCustom ? null : logoId, accentColor, bgColor: cleanHex(logoBg), customSrc: usingCustom ? customLogo : null }}
           />
         </div>
         </>)}
