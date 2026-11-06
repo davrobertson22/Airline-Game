@@ -12,6 +12,8 @@ import ServedCell from './FinderServed.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import InfoTip from './InfoTip.jsx';
 import OriginPicker from './OriginPicker.jsx';
+import FinderPresets from './FinderPresets.jsx';
+import { resolvePreset, presetName, shortTypeName, distPart } from '../utils/finderPresets.js';
 import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
 import { useRememberedState, finderMemoryKey } from '../utils/finderMemory.js';
 
@@ -174,6 +176,34 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
 
   function resetPaging() { setLimit(PAGE_SIZE); }
 
+  // ── Presets (utils/finderPresets.js) — the freight half of the same feature.
+  const presetSearch = { rangeTypeId, minDist, maxDist, sortBy, showServed };
+  const presetTypeOk = id => fleetTypes.some(f => f.type.id === id)
+    || AIRCRAFT_TYPES.some(t => t.id === id && t.freighter && aircraftOrderable(t, calendarYear(state)));
+  function applyPreset(p) {
+    const { search, missingType } = resolvePreset('freight', p, {
+      current: { rangeTypeId },
+      typeOk: presetTypeOk,
+      sortOk: s => SORT_OPTIONS.some(o => o.id === s),
+    });
+    if (!search) return null;
+    setRangeTypeId(search.rangeTypeId);
+    setMinDist(search.minDist);
+    setMaxDist(search.maxDist);
+    setSortBy(search.sortBy);
+    setShowServed(search.showServed);
+    resetPaging();
+    if (!missingType) return null;
+    const wanted = getAircraftType(missingType)?.name ?? 'That freighter';
+    const cur = rangeTypeId ? getAircraftType(rangeTypeId)?.name : null;
+    return `${wanted} isn't available in this game yet, so the search kept ${cur ? `the ${cur}` : 'any freighter'}.`;
+  }
+  const suggestedPresetName = presetName([
+    rangeTypeId ? shortTypeName(getAircraftType(rangeTypeId)?.name) : 'Any freighter',
+    distPart(minDist, maxDist),
+    SORT_OPTIONS.find(o => o.id === sortBy)?.label,
+  ]);
+
   return (
     <div className="card" style={{ marginBottom: 12, borderLeft: `3px solid ${ACCENT}` }}>
       {/* Header / toggle */}
@@ -196,6 +226,9 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
 
       {open && (
         <div style={{ marginTop: 14 }}>
+          <FinderPresets panel="freight" current={presetSearch} onApply={applyPreset}
+                         suggestedName={suggestedPresetName} accent={ACCENT} />
+
           {/* Controls */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
 

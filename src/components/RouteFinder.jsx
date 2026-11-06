@@ -16,6 +16,8 @@ import { Glyph } from './Icons.jsx';
 import InfoTip from './InfoTip.jsx';
 import { useSlotPosition, SlotCell, OriginSlotsLine } from './FinderSlots.jsx';
 import BatchOpenReview from './BatchOpenReview.jsx';
+import FinderPresets from './FinderPresets.jsx';
+import { resolvePreset, presetName, shortTypeName, distPart } from '../utils/finderPresets.js';
 import FinderDestination, { finderCellPad } from './FinderDestination.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { useRememberedState, finderMemoryKey, finderForecastStore } from '../utils/finderMemory.js';
@@ -187,6 +189,39 @@ export default function RouteFinder({ onPick, standalone = false }) {
   );
 
   function resetPaging() { setLimit(PAGE_SIZE); }
+
+  // ── Presets (utils/finderPresets.js) ───────────────────────────────────────
+  // A named search the player keeps: aircraft, distance band, region, sort and
+  // the filter ticks. Not the origin — a preset works from wherever you search.
+  const presetSearch = { typeId, minDist, maxDist, region, sortBy, soloOnly, showUnflyable, showServed, splitMetros };
+  function applyPreset(p) {
+    const { search, missingType } = resolvePreset('passenger', p, {
+      current: { typeId },
+      typeOk: id => fleetTypes.some(f => f.type.id === id) || catalogueTypes.some(t => t.id === id),
+      sortOk: (s, t) => !!SORTS[s] && (!SORTS[s].needsForecast || !!t),
+    });
+    if (!search) return null;
+    setTypeId(search.typeId);
+    setMinDist(search.minDist);
+    setMaxDist(search.maxDist);
+    setRegion(REGION_LABELS[search.region] ? search.region : '');
+    setSortBy(search.sortBy);
+    setSoloOnly(search.soloOnly);
+    setShowUnflyable(search.showUnflyable);
+    setShowServed(search.showServed);
+    setSplitMetros(search.splitMetros);
+    resetPaging();
+    if (!missingType) return null;
+    const wanted = getAircraftType(missingType)?.name ?? 'That aircraft';
+    return `${wanted} isn't available in this game yet, so the search kept ${selectedType ? `the ${selectedType.name}` : 'any aircraft'}.`;
+  }
+  const suggestedPresetName = presetName([
+    selectedType ? shortTypeName(selectedType.name) : 'Any aircraft',
+    distPart(minDist, maxDist),
+    region ? REGION_LABELS[region] : null,
+    SORTS[sortBy]?.label,
+    soloOnly ? 'no competitors' : null,
+  ]);
 
   // ── Candidates (cheap: no demand model, safe to re-run on every keystroke) ──
   const rows = useMemo(() => {
@@ -442,6 +477,9 @@ export default function RouteFinder({ onPick, standalone = false }) {
 
       {open && (
         <div style={{ marginTop: 14 }}>
+          <FinderPresets panel="passenger" current={presetSearch} onApply={applyPreset}
+                         suggestedName={suggestedPresetName} />
+
           {/* Controls */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
 
