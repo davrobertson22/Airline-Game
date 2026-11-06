@@ -15,6 +15,7 @@ import { finderForecastContext, forecastCandidate } from '../models/routeFinder.
 import { setDemandModel } from './market.js';
 import { applyDemandWorld } from '../data/demandWorld.js';
 import { setMarketDev } from '../models/marketDev.js';
+import { syncCycleKnobs } from './simulation.js';
 
 // A worker is its own module world: the main thread's module-level demand
 // knobs (demand model version, randomized-demand world, market development)
@@ -23,6 +24,7 @@ import { setMarketDev } from '../models/marketDev.js';
 // finder would rank routes on classic demand.
 function syncDemandModules(state) {
   setDemandModel(state?.demandModel);
+  syncCycleKnobs(state);   // the business cycle's demand / lease knobs (v4 games)
   applyDemandWorld(state?.demandWorld ?? null);
   setMarketDev(state);
 }

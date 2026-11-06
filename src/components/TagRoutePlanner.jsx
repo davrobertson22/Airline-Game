@@ -21,6 +21,7 @@ import { Glyph } from './Icons.jsx';
 import { isReserve } from '../data/reserve.js';
 import ReserveNotice, { reserveOptionTag } from './ReserveNotice.jsx';
 import { rivalIndexFor } from '../models/network.js';
+import { standShortfall } from '../data/airportRestrictions.js';
 
 // ─── Region-grouped airport <select> (only airports with a gate) ───────────────
 
@@ -120,6 +121,7 @@ export default function TagRoutePlanner({ mode, setMode, embedded = false, initi
     return fleet.filter(a => {
       const t = getAircraftType(a.typeId);
       if (!t || t.freighter || effectiveRangeKm(a, t) < maxLeg) return false;
+      if (standShortfall([...stopSet], t)) return false;   // code-F stands (v4 games)
       // Everything this tail is on the hook for — its cargo network too, and any
       // rotation a reserve is covering for it (those come home). Filtering on
       // aircraftId alone showed a covered tail as free metal.

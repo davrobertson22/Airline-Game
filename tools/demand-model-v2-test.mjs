@@ -76,7 +76,7 @@ test('a save with no demandModel loads classic, even straight after a v2 game', 
 });
 test('a load never upgrades: an unknown demandModel is dropped to classic', () => {
   const v2 = startGame();
-  for (const bad of [4, 0, '2', 'v2', null]) {
+  for (const bad of [5, 0, '2', 'v2', null]) {
     const s = gameReducer(v2, { type: 'LOAD_STATE', payload: { ...v2, demandModel: bad } });
     assert.equal(getDemandModel(), DEMAND_MODEL_CLASSIC, String(bad));
     assert.ok(!isDemandModel(s.demandModel), `kept ${bad}`);

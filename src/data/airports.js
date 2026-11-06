@@ -365,7 +365,9 @@ export const AIRPORTS = [
   { code: 'PHC', name: 'Port Harcourt Intl',            city: 'Port Harcourt',   country: 'NG', lat: 5.01,   lon: 6.95,     population: 2.7,  tier: 'regional', runwayFt: 9843 },
   { code: 'ACC', name: 'Kotoka Intl',                   city: 'Accra',           country: 'GH', lat: 5.60,   lon: -0.17,    population: 3.6,  tier: 'regional', annualPaxM: 3.2, runwayFt: 11165 },
   { code: 'ABJ', name: 'Felix Houphouet-Boigny Intl',   city: 'Abidjan',         country: 'CI', lat: 5.26,   lon: -3.93,    population: 5.2,  tier: 'regional', runwayFt: 9843 },
-  { code: 'DKR', name: 'Blaise Diagne Intl',            city: 'Dakar',           country: 'SN', lat: 14.67,  lon: -17.07,   population: 3.7,  tier: 'regional', runwayFt: 11450 },
+  // Dakar's original airport (Léopold Sédar Senghor, Yoff), the city's gateway until Blaise Diagne (DSS) replaced it in
+  // December 2017. It used to duplicate DSS's name and coordinates; the metro registry (data/metros.js) pools the two.
+  { code: 'DKR', name: 'Léopold Sédar Senghor Intl',    city: 'Dakar',           country: 'SN', lat: 14.74,  lon: -17.49,   population: 3.7,  tier: 'regional', runwayFt: 11450 },
   { code: 'BKO', name: 'Senou Intl',                    city: 'Bamako',          country: 'ML', lat: 12.53,  lon: -7.95,    population: 2.7,  tier: 'regional', runwayFt: 10498 },
   { code: 'OUA', name: 'Ouagadougou Airport',           city: 'Ouagadougou',     country: 'BF', lat: 12.35,  lon: -1.51,    population: 2.7,  tier: 'regional', runwayFt: 9843 },
   { code: 'NIM', name: 'Diori Hamani Intl',             city: 'Niamey',          country: 'NE', lat: 13.48,  lon: 2.18,     population: 1.3,  tier: 'regional', runwayFt: 10499 },
@@ -2533,8 +2535,31 @@ function lastEscalatingGate(rate) {
 // Era games: airport charges are constant-dollar fixed overhead and scale with
 // the era's capital scale (src/data/era.js) — a 1950 gate at a 1950 airport is
 // a fraction of today's rent. getEraCostScale() is 1 in classic games.
+// ─── Gate rent, demand model v4 worlds (docs/game-audit-2026-11-06.md R4) ─────
+//
+// The escalating curve above made every extra gate at one airport dearer than
+// the last — the 80th gate at O'Hare cost four times the 5th — which is the
+// opposite of how hubs work: the carrier with a whole terminal gets the best
+// per-gate terms. In v4 games rent is flat by tier with a volume discount for
+// a big tenant, and scarcity (auctions, the gate market, the 60% cap) and
+// congestion do the constraining instead. Set with the demand model
+// (utils/market.js setDemandModel), so every screen and the tick agree.
+export const GATE_VOLUME_DISCOUNTS = [
+  { fromGate: 11, mult: 0.90 },   // gates 11–25 at 90% of the tier rate
+  { fromGate: 26, mult: 0.80 },   // gate 26 onward at 80%
+];
+let _gateRentV4 = false;
+export function setGateRentV4(on) { _gateRentV4 = on === true; }
+export function getGateRentV4() { return _gateRentV4; }
+function v4GateMult(n) {
+  let m = 1;
+  for (const d of GATE_VOLUME_DISCOUNTS) if (n >= d.fromGate) m = d.mult;
+  return m;
+}
+
 export function gateMonthlyFee(airport, n = 1) {
   const base = GATE_FEE_BY_TIER[airport?.tier] ?? 50_000;
+  if (_gateRentV4) return Math.round(base * v4GateMult(n) * getEraCostScale());
   const rate = GATE_COST_ESCALATION[airport?.tier] ?? 1.05;
   return Math.round(base * gateFeeMultiplier(rate, n) * getEraCostScale());
 }
@@ -2553,6 +2578,11 @@ export function gateMonthlyFee(airport, n = 1) {
 export function totalGateMonthlyFee(airport, count) {
   if (!count || count <= 0) return 0;
   const base = GATE_FEE_BY_TIER[airport?.tier] ?? 50_000;
+  if (_gateRentV4) {
+    let total = 0;
+    for (let n = 1; n <= count; n++) total += base * v4GateMult(n);
+    return Math.round(total * getEraCostScale());
+  }
   const rate = GATE_COST_ESCALATION[airport?.tier] ?? 1.05;
   if (rate <= 1) return Math.round(base * count * getEraCostScale());
 

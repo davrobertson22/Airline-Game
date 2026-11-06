@@ -24,7 +24,7 @@ import {
   rankAircraftForRoute, rankAircraftForYear, seasonalProfitByType, gameDateInMonth, ALL_MONTHS,
 } from '../models/aircraftRecommender.js';
 import { routeLaunchCost } from '../data/overhead.js';
-import { checkRouteRestrictions } from '../data/airportRestrictions.js';
+import { checkRouteRestrictions, standShortfall } from '../data/airportRestrictions.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import CateringSelector from './CateringSelector.jsx';
 import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
@@ -626,8 +626,11 @@ export default function RoutePlanner() {
   // Aircraft types that can reach this route
   const reachableTypes = useMemo(() => {
     if (!routeData) return [];
-    return AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, calendarYear(state)) && reachKmFor(t) >= routeData.dist);
-  }, [routeData, reachByType, state.startYear, state.year]);
+    // Superjumbos need a code-F stand at both ends (demand model v4 games) —
+    // ADD_ROUTE refuses them otherwise, so the picker must not offer them.
+    return AIRCRAFT_TYPES.filter(t => aircraftOrderable(t, calendarYear(state)) && reachKmFor(t) >= routeData.dist
+      && !standShortfall([origin, dest], t));
+  }, [routeData, reachByType, state.startYear, state.year, origin, dest, state.demandModel]);
 
   // Hard ceiling on flights/week for this aircraft on this route: one airframe
   // has bhCap flying hours a week (100 in new games, 140 in older saves), so longer sectors fit fewer

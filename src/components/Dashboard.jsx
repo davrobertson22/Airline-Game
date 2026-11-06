@@ -14,6 +14,7 @@ import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
 import { getSeasonalProfile } from '../models/demand.js';
 import BoardObjectives from './BoardObjectives.jsx';
+import EconomyIndicator from './EconomyIndicator.jsx';
 import InfoTip from './InfoTip.jsx';
 import { requestNav } from '../utils/navIntent.js';
 import { airlineAlerts, projectedRouteResults, projectWeekShared } from '../utils/airlineAlerts.js';
@@ -530,6 +531,9 @@ export default function Dashboard() {
       )}
 
       {/* ── Board objectives ─────────────────────────────────────────────── */}
+      {/* World business cycle (demand model v4 games; nothing elsewhere) */}
+      <EconomyIndicator />
+
       <BoardObjectives />
 
       {/* ── Financial history chart ──────────────────────────────────────── */}

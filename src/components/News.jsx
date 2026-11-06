@@ -67,6 +67,17 @@ function compose(item) {
         sub: `Grounded ${plural(d.weeksGrounded, 'week', 'weeks')}${d.tailNumber ? ` · ${d.tailNumber}` : ''}`,
       };
 
+    case 'operational_meltdown':
+      // An operational meltdown the airline earned (models/incidents.js).
+      return {
+        headline: `Operational meltdown${d.airport ? ` at ${d.airport}` : ''} — passengers stranded`,
+        sub: [
+          (d.causes ?? []).includes('utilisation') ? 'a fleet flown flat-out' : null,
+          (d.causes ?? []).includes('spares') ? 'no spare aircraft' : null,
+          (d.causes ?? []).includes('morale') ? 'unhappy crews' : null,
+        ].filter(Boolean).join(', ') || null,
+        standalone: true,
+      };
     case 'objective_complete':
       return {
         headline: `Objective complete — ${d.title}`,

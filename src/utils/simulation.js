@@ -3,6 +3,8 @@ import {
   getAircraftType, fuelCostPerKm, typicalSeatsOf,
   PAX_PAYLOAD_KG, FUEL_KG_PER_L, LIGHT_CABIN_GAIN_MAX, BREGUET_RANGE_KM, DENSE_RANGE_FLOOR, payloadRangeMod, fullTankGainRate, maxSeatsForRange,
 } from '../data/aircraft.js';
+import { setLeaseCycleMult } from '../data/aircraft.js';
+import { cycleDemandMult, cycleLeaseMult } from '../models/economyCycle.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { productSpaceMul, productWeeklyCost, productFittingCost } from '../data/seatProducts.js';
 import { clampImpact, MAX_EVENT_IMPACT, MAX_LOCALIZED_IMPACT } from '../data/events.js';
@@ -4162,6 +4164,20 @@ export function simulateCharter(contract, aircraft, fuelMultiplier = 1.0) {
  * @param {object[]} [activeEvents]
  * @returns {{ globalMult: number, multFor: (a: string, b: string) => number }}
  */
+// ─── The business cycle's demand knob (demand model v4 games) ────────────────
+// models/economyCycle.js: one cycle per game scales every route's demand. It
+// rides the event demand model's multFor — the single place every screen and
+// the tick get an O&D's demand multiplier from — as a module knob set from
+// state (syncCycleKnobs) like the fare index. 1 outside v4, so nothing moves.
+let _cycleDemandMult = 1;
+export function getCycleDemandMult() { return _cycleDemandMult; }
+/** Set the cycle's demand and lease knobs from a game state (identity outside v4). */
+export function syncCycleKnobs(state) {
+  const m = cycleDemandMult(state);
+  _cycleDemandMult = Number.isFinite(m) && m > 0 ? m : 1;
+  setLeaseCycleMult(cycleLeaseMult(state));
+}
+
 export function buildEventDemandModel(activeEvents) {
   let   rawGlobal    = 1.0;
   const regionMults  = [];   // [{ codes:Set<country>, mult }]
@@ -4194,7 +4210,8 @@ export function buildEventDemandModel(activeEvents) {
     for (const r of airportMults) {
       if (a === r.code || b === r.code) { m *= r.mult; local = true; }
     }
-    return local ? clampImpact(m, MAX_LOCALIZED_IMPACT) : m;
+    const v = local ? clampImpact(m, MAX_LOCALIZED_IMPACT) : m;
+    return _cycleDemandMult === 1 ? v : v * _cycleDemandMult;
   };
   return { globalMult, multFor };
 }
@@ -4580,6 +4597,8 @@ export function weeklyTick(state) {
   // world (no-op when it is already live, which it is in the game itself).
   applyDemandWorld(state.demandWorld ?? null);
   setDemandModel(state.demandModel);
+  // The business cycle's demand and lease knobs, for the same reason.
+  syncCycleKnobs(state);
   // Market development (models/marketDev.js): this state's D table, or none.
   setMarketDev(state);
 

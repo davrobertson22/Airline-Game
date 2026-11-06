@@ -57,12 +57,13 @@ const REAL = { 'LHR-PMI': 14086, 'MAN-PMI': 6679, 'LHR-AGP': 15927, 'LHR-EDI': 2
 console.log('\nDemand model v3 — new games only\n');
 
 console.log('── 1. Which games run it ──────────────────────────────────────────');
-test('a new game starts on v3', () => {
+test('a new game starts on v4 (v3\'s tables + the 2026-11-06 rules); an explicit v3 game stays v3', () => {
   setDemandModel(DEMAND_MODEL_CLASSIC);
   const s = startGame();
-  assert.equal(DEMAND_MODEL_LATEST, 3);
-  assert.equal(s.demandModel, 3);
-  assert.equal(getDemandModel(), 3);
+  assert.equal(DEMAND_MODEL_LATEST, 4);
+  assert.equal(s.demandModel, 4);
+  assert.equal(getDemandModel(), 4);
+  assert.equal(startGame({ demandModel: 3 }).demandModel, 3);
 });
 test('a v2 game stays v2 through a load and every action, and prices exactly as before v3', () => {
   const v2 = startGame({ demandModel: 2 });
@@ -82,12 +83,12 @@ test('a classic save stays classic straight after a v3 game (no memo carried acr
   assert.equal(getDemandModel(), DEMAND_MODEL_CLASSIC);
   assert.equal(d('LHR-PMI'), 5816);
 });
-test('a load keeps 2 and 3, and drops anything else to classic', () => {
-  assert.ok(isDemandModel(2) && isDemandModel(3));
-  for (const bad of [4, 0, '3', null]) assert.ok(!isDemandModel(bad), String(bad));
+test('a load keeps 2, 3 and 4, and drops anything else to classic', () => {
+  assert.ok(isDemandModel(2) && isDemandModel(3) && isDemandModel(4));
+  for (const bad of [5, 0, '3', null]) assert.ok(!isDemandModel(bad), String(bad));
 });
 test('weeklyTick and the Route Finder worker price off THEIR state\'s model', () => {
-  const v3 = startGame();
+  const v3 = startGame({ demandModel: 3 });
   setDemandModel(2);
   quiet(() => weeklyTick({ ...v3 }));
   assert.equal(getDemandModel(), 3);

@@ -631,7 +631,12 @@ export function rollEvents(activeEvents = [], opts = {}) {
     if (activeEvents.length + newEvents.length >= MAX_ACTIVE_EVENTS) break; // cap reached
     if (activeTypes.has(tmpl.id)) continue;          // already active
     if (calYear != null && tmpl.fromYear != null && calYear < tmpl.fromYear) continue; // not in this era yet
-    if (Math.random() > tmpl.probability * EVENT_FREQUENCY) continue;  // didn't trigger
+    // Business-cycle games (demand model v4, models/economyCycle.js): the cycle
+    // now carries the macro economy, so demand-sentiment events come half as
+    // often and hit half again as hard — fewer, bigger stories. Operational
+    // disruptions (no demand axis) are unchanged.
+    const macro = opts.macroCycle === true && EVENT_AXES[tmpl.id]?.demand != null;
+    if (Math.random() > tmpl.probability * EVENT_FREQUENCY * (macro ? 0.5 : 1)) continue;  // didn't trigger
 
     // Skip events that contradict something already active or just rolled.
     const present = [...activeEvents.map(e => e.templateId), ...newEvents.map(e => e.templateId)];
@@ -644,6 +649,11 @@ export function rollEvents(activeEvents = [], opts = {}) {
     // (those hitting a single airport/city) get the higher ±50% cap;
     // everything broader is held to ±30%.
     const cap = effects.airportCode ? MAX_LOCALIZED_IMPACT : MAX_EVENT_IMPACT;
+    if (macro) {
+      for (const k of ['globalDemandMult', 'regionDemandMult']) {
+        if (typeof effects[k] === 'number') effects[k] = 1 + (effects[k] - 1) * 1.5;
+      }
+    }
     if (effects.fuelMult)         effects.fuelMult         = clampImpact(effects.fuelMult, cap);
     if (effects.globalDemandMult) effects.globalDemandMult = clampImpact(effects.globalDemandMult, cap);
     if (effects.regionDemandMult) effects.regionDemandMult = clampImpact(effects.regionDemandMult, cap);
