@@ -20,6 +20,8 @@ import useBasemap from '../hooks/useBasemap.js';
 import { rivalIndexFor } from '../models/network.js';
 import { AirportDetailModal } from './AirportLink.jsx';
 import { hubFinMarkup, hubFinSize, tailAspect } from '../utils/hubFin.js';
+import { ROUTE_WIDTH_KEY, routeWidthFactors } from '../utils/routeWidth.js';
+import { ROUTE_COLOUR_KEY, LF_BANDS, loadFactorColor, normalizeColourMode } from '../utils/routeColour.js';
 
 // ── Polar softening ──────────────────────────────────────────────────────────
 // Reported on Discord 2026-10-02 (Headwinds, Gulf hub, 500+ routes): the true
@@ -461,9 +463,12 @@ export function worldAirportTip(a) {
 }
 
 /** Hover card for one of your own airports (a hub when `hubInfo` is set). */
-/** Line colour for a route group: purple rotation, else green / red by profit. */
-export function routeGroupColor(g) {
-  return g.multi ? TAG_COLOR : ((g.hasResult ? g.profit : 0) >= 0 ? PROFIT_COLOR : LOSS_COLOR);
+/** Line colour for a route group: purple rotation, else green / red by profit —
+ *  or, in load-factor mode (utils/routeColour.js), its load-factor band. */
+export function routeGroupColor(g, mode = 'profit') {
+  if (g.multi) return TAG_COLOR;
+  if (mode === 'lf') return loadFactorColor(g.hasResult ? g.loadFactor : 0);
+  return (g.hasResult ? g.profit : 0) >= 0 ? PROFIT_COLOR : LOSS_COLOR;
 }
 
 /** Tooltip for one of your passenger lines (one city pair or rotation). */
@@ -563,6 +568,23 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   const hubFin = useMemo(() => hubFinMarkup(state),   // eslint-disable-line react-hooks/exhaustive-deps
     [state.livery, state.logoId, state.logoColor, state.logoBg, state.customLogo, state.customTail, state.airlineName]);
   const finLayersRef = useRef([]);
+  // Passenger lines drawn thicker the more people they carried last week
+  // (utils/routeWidth.js). Off by default, remembered per browser.
+  const [widthByPax, setWidthByPax] = useState(() => {
+    try { return localStorage.getItem(ROUTE_WIDTH_KEY) === 'on'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(ROUTE_WIDTH_KEY, widthByPax ? 'on' : 'off'); } catch { /* private mode */ }
+  }, [widthByPax]);
+  // Line colour: profit (default) or load factor, remembered per browser.
+  const [colorMode, setColorMode] = useState(() => {
+    try { return normalizeColourMode(localStorage.getItem(ROUTE_COLOUR_KEY)); } catch { return 'profit'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(ROUTE_COLOUR_KEY, colorMode); } catch { /* private mode */ }
+  }, [colorMode]);
+  const colorModeRef = useRef(colorMode);
+  colorModeRef.current = colorMode;
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
           competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
@@ -934,6 +956,12 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     [routeGroups, focusAirport],
   );
 
+  // Width multiple per route group (empty map = toggle off = 1 everywhere).
+  // Read through a ref so applyStyles stays a stable callback.
+  const widthFactors = useMemo(() => routeWidthFactors(routeGroups, widthByPax), [routeGroups, widthByPax]);
+  const widthRef = useRef(widthFactors);
+  widthRef.current = widthFactors;
+
   // ── Style resolver: highlight selected/hovered, dim the rest ─────────────────
   const applyStyles = useCallback(() => {
     const selId = selectedIdRef.current;
@@ -951,6 +979,8 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       else if (active)  { mainW = 3.2; mainO = 1;    haloW = 12; haloO = 0.24; }
       else if (anySel)  { mainW = 1.8; mainO = 0.18; haloW = 7;  haloO = 0.03; }
       else              { mainW = 2.5; mainO = 0.85; haloW = 9;  haloO = 0.16; }
+      const w = widthRef.current.get(id) ?? 1;
+      mainW *= w; haloW *= w;
 
       group.halo.forEach(l => l.setStyle({ weight: haloW, opacity: haloO }));
       group.main.forEach(l => {
@@ -1271,7 +1301,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       for (const g of routeGroups) {
         const group = lineGroupsRef.current.get(g.key);
         if (!group) continue;
-        const color = routeGroupColor(g);
+        const color = routeGroupColor(g, colorModeRef.current);
         if (color !== group.color) {
           group.halo.forEach(l => l.setStyle({ color }));
           group.main.forEach(l => l.setStyle({ color }));
@@ -1296,12 +1326,10 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     for (const g of routeGroups) {
       const { origin, dest } = g;
       const chain    = g.chain?.length >= 2 ? g.chain : [origin, dest];
-      const profit   = g.hasResult ? g.profit : 0;
-      // Profit colour still carries the money; a rotation is purple because the
-      // shape of the line is the thing you cannot read any other way (and purple
-      // is what the Routes page already calls multi-stop).
-      const profitColor = profit >= 0 ? PROFIT_COLOR : LOSS_COLOR;
-      const color    = g.multi ? TAG_COLOR : profitColor;
+      // Profit colour (or the load-factor band) carries the line; a rotation is
+      // purple because the shape of the line is the thing you cannot read any
+      // other way (and purple is what the Routes page already calls multi-stop).
+      const color    = routeGroupColor(g, colorModeRef.current);
       const segments = g.multi
         ? segmentsForChain(chain.map(a => [a.lat, a.lon]))
         : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
@@ -1426,7 +1454,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     }
 
     applyStyles();
-  }, [routeGroups, airportSet, hubs, mapReady, applyStyles]); // mapReady ensures this re-runs after L.map() finishes
+  }, [routeGroups, airportSet, hubs, mapReady, applyStyles, colorMode]); // mapReady ensures this re-runs after L.map() finishes
 
   // 5. Every airport in the game, dim, under the network. Redrawn for the view
   // on every pan and zoom (see worldAirportsInView). Lives in its own panes so
@@ -1532,6 +1560,9 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     hoveredIdRef.current = hoveredId;
     applyStyles();
   }, [hoveredId, applyStyles]);
+
+  // Re-style when the width toggle flips (or a tick changes the passengers).
+  useEffect(() => { applyStyles(); }, [widthFactors, applyStyles]);
 
   // What a focus frames: the route's whole chain, or every airport on the
   // routes at the focused airport (the airport alone when none touch it).
@@ -1643,6 +1674,31 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
             onClick={toggleAirports}
             title={showAirports ? 'Hide the airports you don\'t fly to' : 'Show every airport you can fly to'}
           >Airports</button>
+          <button
+            className={`map-bleed-chip${widthByPax ? ' on' : ''}`}
+            aria-pressed={widthByPax}
+            data-map-width-toggle
+            onClick={() => setWidthByPax(v => !v)}
+            title={widthByPax ? 'Draw every route the same width' : 'Draw routes thicker the more passengers they carried last week'}
+          >Width</button>
+          <button
+            className={`map-bleed-chip${colorMode === 'lf' ? ' on' : ''}`}
+            aria-pressed={colorMode === 'lf'}
+            data-map-colour-toggle
+            onClick={() => setColorMode(m => (m === 'lf' ? 'profit' : 'lf'))}
+            title={colorMode === 'lf'
+              ? 'Colour routes by profit'
+              : `Colour routes by load factor: ${LF_BANDS.map(b => b.label).join(', ')} run cool to hot`}
+          >Load</button>
+          {colorMode === 'lf' && (
+            <span className="map-bleed-chip" data-map-lf-key
+              title={`Load factor last week: ${LF_BANDS.map(b => b.label).join(' · ')}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'default' }}>
+              <span style={{ fontSize: 10, opacity: 0.8 }}>&lt;50%</span>
+              {LF_BANDS.map(b => <span key={b.label} style={{ width: 10, height: 4, borderRadius: 1, background: b.color, display: 'inline-block' }} />)}
+              <span style={{ fontSize: 10, opacity: 0.8 }}>90%+</span>
+            </span>
+          )}
           {loyaltyWorld && (
             <button
               className={`map-bleed-chip${showLoyalty ? ' on' : ''}`}
@@ -1742,7 +1798,47 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
                 <Glyph e="✕" /> Clear focus
               </button>
             )}
-            {/* Static legend items */}
+            {/* Route width by passengers */}
+            <button
+              onClick={() => setWidthByPax(v => !v)}
+              aria-pressed={widthByPax}
+              data-map-width-toggle
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                opacity: widthByPax ? 1 : 0.4, transition: 'opacity 0.15s',
+                color: 'var(--text-muted)', fontSize: 11,
+              }}
+              title={widthByPax
+                ? 'Draw every route the same width'
+                : 'Draw routes thicker the more passengers they carried last week'}
+            >
+              <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden="true" style={{ display: 'inline-block' }}>
+                <line x1="1" y1="2" x2="17" y2="2" stroke={PROFIT_COLOR} strokeWidth="1" strokeLinecap="round" />
+                <line x1="1" y1="7" x2="17" y2="7" stroke={PROFIT_COLOR} strokeWidth="3.5" strokeLinecap="round" />
+              </svg>
+              Width
+            </button>
+            {/* Line colour: profit or load factor — the switch, then its key */}
+            <button
+              onClick={() => setColorMode(m => (m === 'lf' ? 'profit' : 'lf'))}
+              aria-pressed={colorMode === 'lf'}
+              data-map-colour-toggle
+              className="map-clear-btn"
+              title={colorMode === 'lf' ? 'Colour routes by profit' : 'Colour routes by how full they flew last week'}
+            >
+              Colour: {colorMode === 'lf' ? 'Load factor' : 'Profit'}
+            </button>
+            {colorMode === 'lf' ? (
+              <span data-map-lf-key style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Load factor last week: the share of seats filled">
+                {LF_BANDS.map(b => (
+                  <span key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 14, height: 3, background: b.color, display: 'inline-block', borderRadius: 1 }} />
+                    {b.label}
+                  </span>
+                ))}
+              </span>
+            ) : (<>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 18, height: 2, background: PROFIT_COLOR, display: 'inline-block', borderRadius: 1 }} />
               Profitable
@@ -1751,6 +1847,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
               <span style={{ width: 18, height: 2, background: LOSS_COLOR, display: 'inline-block', borderRadius: 1 }} />
               Loss
             </span>
+            </>)}
             {routeGroups.some(g => g.multi) && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="A multi-stop rotation, drawn through every stop it serves">
                 <span style={{ width: 18, height: 2, background: TAG_COLOR, display: 'inline-block', borderRadius: 1 }} />

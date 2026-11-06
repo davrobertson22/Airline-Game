@@ -693,7 +693,10 @@ test('the fleet lease sum bills the signed rate and charges nothing for owned me
   st.routes[0].aircraftId = 'owned1';
   seedSave(st);
   const html = render(React.createElement(Dashboard));
-  const i = html.indexOf('Leases');
+  // The lease line is the Weekly P&L card's Cost Mix entry — searched from
+  // there, because the "Where the money went" card above it names leases in
+  // its hover text first (2026-11-06).
+  const i = html.indexOf('Leases', html.indexOf('Cost Mix'));
   assert.ok(i > 0, 'lease cost line rendered');
   const m = html.slice(i, i + 400).match(/(\$[\d.,]+[kKmMbB]?)/);
   assert.ok(m, 'lease figure rendered');
