@@ -8,7 +8,7 @@ import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { crewStatus, crewParkedAlertText } from '../data/labor.js';
-import { isOutOfService } from '../data/maintenance.js';
+import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { isReserve } from '../data/reserve.js';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
@@ -141,7 +141,7 @@ export default function Dashboard() {
     const crew        = routeResults.reduce((s, { result }) => s + (result?.crewCost  ?? 0), 0);
     const maintenance = fleet.reduce((s, a) => {
       const type = getAircraftType(a.typeId);
-      return s + Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(a.ageWeeks ?? 0));
+      return s + Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(effectiveMaintAgeWeeks(a)));
     }, 0);
     const service = Math.max(0, projectedOpCost - fuel - crew);
     const total   = fuel + crew + weeklyLeaseCost + maintenance + service;

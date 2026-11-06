@@ -93,7 +93,7 @@ import {
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions, runwayShortfall } from '../data/airportRestrictions.js';
 import { deliverySchedule } from '../data/delivery.js';
-import { makeSlotAllocator, slotPremiumPct, launchWindow, launchOrderDiscount } from '../data/productionLines.js';
+import { makeSlotAllocator, slotPremiumPct, launchWindow, launchOrderDiscount, lineOrdersOf } from '../data/productionLines.js';
 import { withLineBook, makeTickLedger, orderCancelTerms, SOLO_LINE_SCALE } from '../models/lineBook.js';
 import { parseRivalSet, splitRivalSet, buildRivalFromSpec, RIVAL_SET_MAX_START, RIVAL_COUNT_OPTIONS } from '../models/rivalSets.js';
 import {
@@ -2965,7 +2965,8 @@ function reducer(state, action) {
       const targets = (state.fleet ?? []).filter(a => ids.includes(a.id));
       if (targets.length === 0) return state;
       const closeRoutes = action.closeRoutes === true;
-      const quote = canConvertToFreighter(state, targets, { closeRoutes });
+      // Production-line games: the rivals' line bookings, as every order sees them.
+      const quote = canConvertToFreighter(withLineBook(state, absoluteWeek(state.year ?? 1, state.week ?? 1)), targets, { closeRoutes });
       if (!quote.ok) {
         return {
           ...state,
@@ -6233,7 +6234,9 @@ function reducer(state, action) {
           // the week this tick's deliveries land.
           lines: state.productionLinesWorld === true ? makeTickLedger({
             competitors:   currentCompetitors,
-            pendingOrders: state.pendingOrders ?? [],
+            // The player's orders AND freighter conversions (data/conversions.js):
+            // both take frames of a conversion line's week.
+            pendingOrders: lineOrdersOf(state),
             absWeek:       weekNumber + 1,
             scale:         state.productionLineScale ?? SOLO_LINE_SCALE,
           }) : null,
