@@ -18,7 +18,7 @@ import {
   FleetIcon, MarketIcon, PlaneIcon, CompetitionIcon, HandshakeIcon, TrendUpIcon, NewsIcon, GlobeIcon,
   OperationsIcon, UsersIcon, WrenchIcon, FuelIcon, MegaphoneIcon, GiftIcon, TicketIcon, RepIcon,
   LoyaltyIcon, SeatIcon, FinanceIcon, ScaleIcon, BanknoteIcon, BarChartIcon, ClipboardIcon,
-  CompassIcon, RocketIcon,
+  CompassIcon, RocketIcon, BulbIcon,
 } from './Icons.jsx';
 
 // ── Map-first layout ──────────────────────────────────────────────────────────
@@ -113,6 +113,7 @@ export const MAP_PAGES = {
   news:           { tab: 'news' },
   charters:       { tab: 'charters' },
   operations:     { tab: 'operations', label: 'Crew', Icon: UsersIcon },
+  advisor:        { tab: 'advisor', Icon: BulbIcon },
   maintenance:    { tab: 'maintenance' },
   fuel:           { tab: 'finance', label: 'Fuel', Icon: FuelIcon },
   marketing:      { tab: 'operations', label: 'Marketing', Icon: MegaphoneIcon },
@@ -136,7 +137,7 @@ export const MAP_GROUPS = [
   { id: 'network', label: 'Network',    Icon: RoutesIcon,     pages: ['routes', 'charters', 'airports', 'hubs', 'departures'] },
   { id: 'fleet',   label: 'Fleet',      Icon: FleetIcon,      pages: ['fleet', 'market'] },
   { id: 'world',   label: 'World',      Icon: GlobeIcon,      pages: ['competition', 'alliances', 'news'] },
-  { id: 'ops',     label: 'Operations', short: 'Ops', Icon: OperationsIcon, pages: ['operations', 'maintenance', 'fuel'] },
+  { id: 'ops',     label: 'Operations', short: 'Ops', Icon: OperationsIcon, pages: ['advisor', 'operations', 'maintenance', 'fuel'] },
   { id: 'service', label: 'Service',    Icon: SeatIcon,       pages: ['marketing', 'catering', 'ancillaries', 'reputation', 'loyalty', 'partners'] },
   { id: 'finance', label: 'Finance',    Icon: FinanceIcon,    pages: ['fin-statements', 'fin-planning', 'fin-analysis', 'fin-breakdown'] },
 ];
@@ -160,7 +161,11 @@ export function mapGroupOf(page) {
  */
 export function resolveMapPage(id) {
   if (id === MAP_TAB) return MAP_TAB;
-  if (id === 'operations') return peekDepartureBoardRequest() ? 'departures' : 'operations';
+  if (id === 'operations') {
+    if (peekDepartureBoardRequest()) return 'departures';
+    // The Dashboard's brand marketing tile asks for the marketing card.
+    return peekNavFilter('operations')?.section === 'marketing' ? 'marketing' : 'operations';
+  }
   if (id === 'finance') {
     const g = financeGroupOf(peekNavFilter('finance')?.view);
     return g === 'fuel' ? 'fuel' : `fin-${g ?? 'statements'}`;

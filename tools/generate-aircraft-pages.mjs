@@ -162,6 +162,13 @@ const FOOTER = `
       <a href="/faq.html">FAQ</a>
       <a href="/demand-and-quality.html">Demand &amp; Quality</a>
       <a href="/on-time-performance.html">On-Time Performance</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
       <a href="/devlog.html">Devlog</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>
@@ -210,7 +217,7 @@ const CSS = `
 
 // Shown under every page's lede. Bump it when the pages' content changes
 // (new aircraft, rebalanced stats, rewritten advice), not on every regeneration.
-const UPDATED = 'October 29, 2026';
+const UPDATED = 'November 9, 2026';
 
 function pageShell({ title, description, canonical, h1, lede, body }) {
   return `<!DOCTYPE html>

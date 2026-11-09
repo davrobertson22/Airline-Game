@@ -3,7 +3,7 @@ import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
-  simulateRoute, simulateCargoRoute, cargoLaneAllocations, formatMoney, currentGameDate,
+  simulateRoute, simulateCargoRoute, simulateCargoNetwork, formatMoney, currentGameDate,
   fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, routeStops, isMultiStop,
 } from '../utils/simulation.js';
@@ -816,15 +816,17 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   // freighter sharing a pair never sees the full-market pool to itself.
   const cargoRouteData = useMemo(() => {
     const needsFallback = cargoRoutes.some(r => !cargoRrById[r.id]);
-    const alloc = needsFallback
-      ? cargoLaneAllocations(cargoRoutes, fleet, 1.0, { gameDate: gd, competitors }) : null;
+    const net = needsFallback
+      ? simulateCargoNetwork(cargoRoutes, fleet, { gameDate: gd, competitors, labor: state.labor ?? null,
+          fuelMultiplier: proj.fuelMultiplier }) : null;
+    const alloc = net?.allocations ?? null;
     return cargoRoutes.map(r => {
       const origin   = getAirport(r.origin);
       const dest     = getAirport(r.destination);
       if (!origin || !dest) return null;
       const aircraft = fleet.find(a => a.id === r.aircraftId);
       const result = !aircraft ? null
-        : (cargoRrById[r.id] ?? simulateCargoRoute(r, aircraft, gd, state.labor ?? null,
+        : (cargoRrById[r.id] ?? net?.results.get(r.id) ?? simulateCargoRoute(r, aircraft, gd, state.labor ?? null,
             proj.fuelMultiplier, 1.0, alloc?.get(r.id) ?? null));
       return { r, origin, dest, result, chain: [origin, dest], multi: false };
     }).filter(Boolean);
@@ -1019,12 +1021,14 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       const color = type === 'alliance' ? ALLIANCE_COLOR
                   : type === 'codeshare' ? CODESHARE_COLOR
                   : (RIVAL_COLORS[comp.tier] ?? RIVAL_DEFAULT_COLOR);
-      for (const routeKey of Object.keys(comp.routes ?? {})) {
+      for (const [routeKey, cfg] of Object.entries(comp.routes ?? {})) {
         const [a, b] = routeKey.split('-');
         const origin = getAirport(a);
         const dest   = getAirport(b);
         if (!origin || !dest) continue;
-        result.push({ comp, type, color, origin, dest, routeKey,
+        // A refuelling stop (models/rivalStops.js) bends the line through it.
+        const stop   = typeof cfg?.via === 'string' ? getAirport(cfg.via) : null;
+        result.push({ comp, type, color, origin, dest, routeKey, ...(stop ? { stop } : {}),
                       contested: myPairs.has(routeKey) });
       }
     }
@@ -1055,8 +1059,8 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       && (airportFilter === 'all' || origin.code === airportFilter || dest.code === airportFilter));
     // Every tick hands over new competitor objects, usually with the same
     // network; everything a partner or rival line shows is in this key.
-    const drawKey = `${dim}#` + shown.map(({ comp, type, origin, dest, contested }) =>
-      `${comp.id}:${comp.name}:${type}:${contested ? 1 : 0}:${origin.code}-${dest.code}`).sort().join('|');
+    const drawKey = `${dim}#` + shown.map(({ comp, type, origin, dest, stop, contested }) =>
+      `${comp.id}:${comp.name}:${type}:${contested ? 1 : 0}:${origin.code}-${stop ? `${stop.code}-` : ''}${dest.code}`).sort().join('|');
     if (drawnRef.current.partners === drawKey) return;
     drawnRef.current.partners = drawKey;
 
@@ -1064,13 +1068,16 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     partnerLayersRef.current.forEach(l => map.removeLayer(l));
     partnerLayersRef.current = [];
 
-    for (const { comp, type, color, origin, dest, contested } of shown) {
+    for (const { comp, type, color, origin, dest, stop, contested } of shown) {
 
-      const segments = segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
+      const segments = stop
+        ? [...segmentsForRoute(origin.lat, origin.lon, stop.lat, stop.lon), ...segmentsForRoute(stop.lat, stop.lon, dest.lat, dest.lon)]
+        : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
       const tipHtml = `
         <div class="map-tip">
           <div class="map-tip-title" style="color:${color}">${origin.code} → ${dest.code}</div>
           <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
+          ${stop ? `<div class="map-tip-sub">Refuelling stop at ${stop.code} (${stop.city})</div>` : ''}
           <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${
             type === 'alliance' ? 'Alliance'
             : type === 'codeshare' ? 'Codeshare'

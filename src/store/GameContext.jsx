@@ -4669,6 +4669,9 @@ function reducer(state, action) {
     case 'SET_LABOR_PAY': {
       // action: { group: 'pilots' | 'cabinCrew' | 'groundStaff' | 'maintenanceTeam', payMultiplier: number }
       const current = state.labor ?? DEFAULT_LABOR_STATE;
+      // A missing group or a non-numeric multiplier would write NaN into the
+      // save and poison cash within a week; ignore the action instead.
+      if (!action.group || !Number.isFinite(action.payMultiplier)) return state;
       return {
         ...state,
         labor: {
@@ -4804,7 +4807,9 @@ function reducer(state, action) {
     case 'SET_MAINTENANCE_BUDGET': {
       return {
         ...state,
-        maintenanceBudget: Math.max(0.5, Math.min(2.0, action.multiplier)),
+        maintenanceBudget: Number.isFinite(action.multiplier)
+          ? Math.max(0.5, Math.min(2.0, action.multiplier))
+          : (state.maintenanceBudget ?? 1),
       };
     }
 

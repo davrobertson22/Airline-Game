@@ -17,7 +17,7 @@ const Fleet = lazyPage(() => import('./components/Fleet.jsx'), 'Fleet');
 const Routes = lazyPage(() => import('./components/Routes.jsx'), 'Routes');
 const Marketplace = lazyPage(() => import('./components/Marketplace.jsx'), 'Marketplace');
 import Finance from './components/Finance.jsx';
-import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon } from './components/Icons.jsx';
+import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon, BulbIcon } from './components/Icons.jsx';
 import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 const HubManagement = lazyPage(() => import('./components/HubManagement.jsx'), 'HubManagement');
 const Reputation = lazyPage(() => import('./components/Reputation.jsx'), 'Reputation');
@@ -34,6 +34,7 @@ const Loyalty = lazyPage(() => import('./components/Loyalty.jsx'), 'Loyalty');
 const Partnerships = lazyPage(() => import('./components/Partnerships.jsx'), 'Partnerships');
 const Alliances = lazyPage(() => import('./components/Alliances.jsx'), 'Alliances');
 const Wiki = lazyPage(() => import('./components/Wiki.jsx'), 'Wiki');
+const Advisor = lazyPage(() => import('./components/Advisor.jsx'), 'Advisor');
 const News = lazyPage(() => import('./components/News.jsx'), 'News');
 import AirlineLogo from './components/AirlineLogo.jsx';
 import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
@@ -146,6 +147,7 @@ const TABS = [
   { id: 'market',      label: 'Market',        Icon: MarketIcon      },
   { id: 'airports',    label: 'Gates',         Icon: GateIcon          },
   { id: 'hubs',        label: 'Hubs',          Icon: HubIcon           },
+  { id: 'advisor',     label: 'Advisor',      Icon: BulbIcon          },
   { id: 'charters',    label: 'Charters',     Icon: RoutesIcon        },
   { id: 'operations',  label: 'Operations',   Icon: OperationsIcon    },
   { id: 'maintenance', label: 'Maintenance',  Icon: WrenchIcon       },
@@ -171,7 +173,7 @@ const NAV_GROUPS = [
   { label: 'Network',  Icon: MapIcon,        children: ['map', 'finder', 'planner', 'routes'] },
   { label: 'Fleet',    Icon: FleetIcon,      children: ['fleet', 'market'] },
   { label: 'Airports', Icon: GateIcon,       children: ['airports', 'hubs'] },
-  { label: 'Company',  Icon: OperationsIcon, children: ['operations', 'charters', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'partners', 'alliances', 'competition'] },
+  { label: 'Company',  Icon: OperationsIcon, children: ['advisor', 'operations', 'charters', 'maintenance', 'ancillaries', 'reputation', 'loyalty', 'partners', 'alliances', 'competition'] },
   { id: 'finance' },
   { id: 'wiki' },
 ];
@@ -180,6 +182,22 @@ const NAV_GROUPS = [
 // ones behind a dropdown. Dashboard, News, Finance and Help are already one
 // click away — a shortcut to them would save nothing.
 const PINNABLE = new Set(NAV_GROUPS.flatMap(g => g.children ?? []));
+
+// Scroll a section of the tab just switched to into view and flash it. The tab
+// mounts on the next frames, so retry briefly until the element exists.
+function focusSection(id, tries = 0) {
+  if (typeof requestAnimationFrame !== 'function') return;
+  requestAnimationFrame(() => {
+    const el = document.getElementById(id);
+    if (!el) {
+      if (tries < 12) focusSection(id, tries + 1);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.add('focus-flash');
+    setTimeout(() => el.classList.remove('focus-flash'), 1800);
+  });
+}
 
 export default function App() {
   return (
@@ -346,6 +364,9 @@ function AppInner() {
       // Map view: a classic tab id lands on its map page (MapShell).
       setActiveTab(layoutRef.current === 'map' ? resolveMapPage(id) : id);
       setOpenGroup(null);
+      // { tab, focus } also scrolls a named section of that tab into view.
+      const focus = typeof d === 'object' && d ? d.focus : null;
+      if (focus) focusSection(focus);
     };
     window.addEventListener('hw:navigate', onNavigate);
     return () => window.removeEventListener('hw:navigate', onNavigate);
@@ -406,6 +427,7 @@ function AppInner() {
     airports:    <Airports />,
     hubs:        <HubManagement />,
     charters:    <Charters />,
+    advisor:     <Advisor />,
     operations:  <Operations />,
     maintenance: <Maintenance />,
     ancillaries: <Ancillaries />,

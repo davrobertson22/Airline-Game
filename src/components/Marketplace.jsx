@@ -970,7 +970,7 @@ export default function Marketplace() {
       {/* Header + category filter */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14 }}>
-          Order aircraft to grow your fleet. Delivery times vary by size: turboprops 1 week, regional jets 2, narrowbodies 3, widebodies 4.
+          Order aircraft to grow your fleet. Nothing arrives the week you order it: each type quotes its own delivery wait, shortest for turboprops and longest for the biggest jets.
         </div>
 
         {/* Search + view toggle */}

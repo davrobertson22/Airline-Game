@@ -22,13 +22,14 @@ import { airlineAlerts, projectedRouteResults, projectWeekShared } from '../util
 import { fuelImpact } from '../utils/fuelImpact.js';
 import { programmeSavingsFromReport } from '../data/fuelProgrammes.js';
 import { navPathFor } from '../navPath.js';
+import { airlineAdvice } from '../models/advisor.js';
 import { leasesAtRisk, idleFleetAlertText, leaseWarnPhrase, leaseAutoRenewSetting } from '../utils/leaseAlerts.js';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
   PROFIT_LABELS, PROFIT_SHORT, PROFIT_HELP,
   BASIS_CONTRIBUTION, BASIS_FULL, loadProfitBasis, saveProfitBasis,
 } from '../utils/routeEconomics.js';
-import { AlertIcon, DotIcon, TrendDownIcon, PackageIcon } from './Icons.jsx';
+import { AlertIcon, DotIcon, TrendDownIcon, PackageIcon, BulbIcon } from './Icons.jsx';
 import { rivalIndexFor } from '../models/network.js';
 
 export default function Dashboard() {
@@ -334,6 +335,13 @@ export default function Dashboard() {
   // reads, so the two can never list different problems.
   const alerts = airlineAlerts(state, proj, routeResults);
 
+  // ── Advisor teaser ───────────────────────────────────────────────────────
+  // One line pointing at Company ▸ Advisor (engine models/advisor.js), off the
+  // same projection as the alerts. Not a hook: it sits below no early return
+  // either way, but a plain call keeps conditional-hooks-check out of it.
+  let advice = [];
+  try { advice = airlineAdvice(state, proj.report); } catch { advice = []; }
+
   return (
     <div>
       {/* ── Active events banner ─────────────────────────────────────────── */}
@@ -391,6 +399,28 @@ export default function Dashboard() {
             );
           })}
         </div>
+      )}
+
+      {/* ── Advisor teaser ───────────────────────────────────────────────── */}
+      {advice.length > 0 && (
+        <button
+          type="button"
+          data-advisor="teaser"
+          onClick={() => requestNav('advisor')}
+          title={`Go to ${navPathFor('advisor')}`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', marginBottom: 16,
+            background: 'var(--surface2)', border: 'none', borderLeft: '3px solid var(--accent)',
+            borderRadius: 'var(--radius)', font: 'inherit', fontSize: 13, textAlign: 'left',
+            width: '100%', cursor: 'pointer',
+          }}
+        >
+          <span style={{ color: 'var(--accent)', display: 'inline-flex', flexShrink: 0 }}><BulbIcon size={15} /></span>
+          <span style={{ color: 'var(--text)', flex: 1, minWidth: 0 }}>
+            <strong>Advisor:</strong> {advice.length} suggestion{advice.length === 1 ? '' : 's'} · {advice[0].title}
+          </span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 12, flexShrink: 0 }}>{navPathFor('advisor')} →</span>
+        </button>
       )}
 
       {/* ── KPI grid ─────────────────────────────────────────────────────── */}

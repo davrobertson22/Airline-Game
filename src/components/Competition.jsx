@@ -590,7 +590,18 @@ export function ContestedRouteRow({ routeKey, playerRoute, competitors, fleet })
         {/* Column headers */}
         <div />
         <ColHeader isPlayer>You</ColHeader>
-        {competitors.map(c => <ColHeader key={c.id}>{c.name}</ColHeader>)}
+        {competitors.map(c => {
+          const via = c.routes[routeKey]?.via;
+          return (
+            <ColHeader key={c.id}>
+              {via
+                ? <span title={`${c.name} flies this pair through a refuelling stop at ${via} — passengers stay on board, but the stop costs it trip time against a nonstop.`}>
+                    {c.name}<span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)' }}>stops at {via}</span>
+                  </span>
+                : c.name}
+            </ColHeader>
+          );
+        })}
         {viaRoutings.map(v => (
           <ColHeader key={v.id}>
             <span title={`${v.name} sells this pair as a connection over its ${v.hub} hub — one itinerary, two of its flights. This column is that itinerary, not a nonstop.`}>

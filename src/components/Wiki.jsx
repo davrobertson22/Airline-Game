@@ -24,7 +24,7 @@ const WIKI = [
     title: 'Getting Started',
     blurb: 'Your first 15 minutes',
     blocks: [
-      { p: "You've founded an airline with **$10 million in equity**: no debt to service, just cash to invest. Your job is to build a route network that earns more than it spends, week after week, and eventually outgrow every rival." },
+      { p: "You've founded an airline with **$10 million in equity** (less in an early historical start, where money is scaled to the period): no debt to service, just cash to invest. Your job is to build a route network that earns more than it spends, week after week, and eventually outgrow every rival." },
       { h: 'The fastest path to your first flight' },
       { steps: [
         'Open the **Market** tab and lease a Turboprop or Regional Jet. They are cheap to run and low-commitment, perfect for week one.',
@@ -33,7 +33,7 @@ const WIKI = [
         'Hit **Next Week** in the top bar to fly the route and collect revenue. Check the **Dashboard** afterwards for alerts.',
       ] },
       { tip: "Don't over-spend in week one. Keep a cash cushion, leases, fuel and crew are billed every week whether your planes are full or not." },
-      { p: "The game auto-advances one week every hour, but you can always advance manually with **Next Week**. Your progress is auto-saved; use **Save** to keep named slots you can return to." },
+      { p: "The game auto-advances one week every hour, but you can always advance manually with **Next Week**. Your progress is auto-saved; use **Save** to keep manual save slots you can return to." },
     ],
   },
   {
@@ -44,7 +44,8 @@ const WIKI = [
     blocks: [
       { p: 'Every week you collect ticket (and cargo) revenue from your routes. Every week, costs come out: fuel, crew, leases, maintenance, gate fees, overhead and any loan payments. The gap between the two is your weekly profit or loss.' },
       { h: 'How you win' },
-      { p: 'You win by **acquiring every competitor**. As you grow stronger and rivals weaken, you can buy them out from the **Competition** tab. Take over the last one and the industry is yours.' },
+      { p: 'In a Classic game you win when **no rival is left standing**: buy them out from the **Competition** tab, or outlast them as they collapse. The game never ends on its own, so you can keep playing after the victory screen.' },
+      { p: 'A game that starts in a **historical year** has an ending instead: the clock stops at the end of **2050**, and you are ranked by market capitalisation against the rivals still flying.' },
       { h: 'How you go bankrupt' },
       { ul: [
         '**Miss 3 loan payments** · i.e. your cash is negative on a week when loan repayments are due, three times.',
@@ -93,6 +94,40 @@ const WIKI = [
         '**Alerts** · surfaced automatically when something needs a look, e.g. idle aircraft, loss-making routes or low cash.',
       ] },
       { tip: 'Make the Dashboard your first stop every week. Acting on its alerts early is the cheapest way to stay healthy.' },
+    ],
+  },
+  {
+    id: 'advisor',
+    icon: '💡',
+    title: 'Advisor & AI briefing',
+    blurb: 'Tips from your own figures, and a briefing for your AI',
+    blocks: [
+      { p: '**Company ▸ Advisor** reads your airline the way an experienced manager would and lists what to do about it, most urgent first. Each tip says why, names the routes or aircraft involved, and has a button that takes you to the screen that fixes it. The Dashboard shows the count and the top tip on one line.' },
+      { h: 'What it looks for' },
+      { ul: [
+        '**Idle aircraft** · grouped by type, with a button that opens the Route Finder already set to that aircraft.',
+        '**Aircraft with hours to spare** · tails flying well under the weekly block-hour cap, ready for more frequency or a second route.',
+        '**Routes that are full but losing money** · the fare is below what the seats cost to fly.',
+        '**Routes flying mostly empty at a loss** · too many seats for the market. Routes in their first 16 weeks are left out while demand builds.',
+        '**Routes selling out** · more people want seats than you fly: room to charge more or add capacity.',
+        '**Heavy checks coming due** with nothing booked, plus the settings that let the airline book them itself.',
+        '**Gates nearly full**, **crew pay below the going rate** while you are short-handed, **unfunded marketing**, **unhedged fuel**, **loans you could clear from cash**, and **no ancillaries policy**.',
+      ] },
+      { p: 'The tips use the same figures as the Dashboard (this week\'s projection), so the two never disagree. They are rules, not guesses: if nothing is flagged, nothing crossed a line.' },
+      { h: 'Copy airline briefing' },
+      { p: 'The **Copy airline briefing** button puts your airline on the clipboard as plain text. **Download .md** saves the same text as a file. Paste or attach it in Claude, ChatGPT or any AI chat you use, then ask it questions about your airline.' },
+      { steps: [
+        'Open **Company ▸ Advisor** and press **Copy airline briefing**.',
+        'Paste it into a new chat with your AI.',
+        'Ask: “What should I fix first?”, “Which routes should I reprice?”, “Why did my profit drop?”',
+      ] },
+      { ul: [
+        '**What\'s in it:** cash and recent profit, the Advisor\'s tips, your best and worst routes (load factor, revenue, profit, fares against the reference fare, number of rivals), fleet by type, gate use and your main settings.',
+        '**What isn\'t:** anything about other players beyond the number of rivals on your routes.',
+        '**Private:** the game sends nothing anywhere — the text goes only where you paste it.',
+      ] },
+      { tip: 'The briefing is a snapshot. After you act on the advice, copy it again so your AI is working from the new numbers.' },
+      { warn: 'An AI only knows what is in the briefing. It has no demand figures for routes you don\'t fly yet, so for new routes use the Route Finder, which forecasts them properly.' },
     ],
   },
   {
@@ -178,7 +213,7 @@ const WIKI = [
       { h: 'Configure Cabin' },
       { p: 'Open **Configure** on any aircraft to set its cabin layout and quality:' },
       { ul: [
-        '**Cabin Layout**: how many seats and the class mix (economy / business). More premium seats earn more per passenger but reduce total capacity.',
+        '**Cabin Layout**: how many seats and the class mix (economy, premium economy, business and first). More premium seats earn more per passenger but reduce total capacity.',
         '**Seat Quality** and **Service Quality**: raise these to lift your in-flight product score, which boosts demand and supports premium pricing. They cost more to run.',
       ] },
       { warn: 'Idle aircraft are pure loss. They accrue leases and maintenance while earning nothing. If a plane has no route, either assign it or return/sell it.' },
@@ -193,7 +228,8 @@ const WIKI = [
     blocks: [
       { p: 'The Market is where you grow your fleet. Browse by manufacturer and category, compare fuel burn per seat and weekly maintenance per seat, then either **lease** (lower commitment, weekly payments) or **order** aircraft outright.' },
       { h: 'Delivery times' },
-      { p: 'New deliveries are staggered by type: widebodies take 4 weeks, narrowbodies 3, regional jets 2, and turboprops 1. Plan ahead, an order placed today won\'t fly this week.' },
+      { p: 'Nothing arrives the week you order it. Each type has a lead time by size: 1 week for turboprops, 2 for regional jets, 3 for narrowbodies, 4 for widebodies and 5 for double-deckers. The **first** aircraft of a type takes **twice** that (so 2, 4, 6, 8 and 10 weeks), and each further one follows one lead time behind the last.' },
+      { p: 'In newer games aircraft come off **production lines** shared with your rivals instead: the order form shows the first week each line can deliver, a busy line means a longer wait, and you can pay a premium for an earlier slot.' },
       { h: 'Customising an order' },
       { ul: [
         '**Engine Options** and a **Wingtip Package** can extend range and adjust fuel burn.',
@@ -299,7 +335,7 @@ const WIKI = [
       { p: 'Operations is where you manage the people and upkeep behind the flights. Changes take effect next week.' },
       { h: 'Pay rates & morale' },
       { p: 'You set pay rates for your labour groups, pilots, cabin crew, ground staff and maintenance. Pay influences **staff morale**, which feeds your quality score and demand.' },
-      { p: 'Your **on-time rate** blends the morale of pilots (50%), ground staff (30%) and cabin crew (20%), and suffers when your fleet is worked too hard. Above roughly 60% average block-hour utilisation, schedules lose the slack to absorb delays; a fleet flown flat-out near the weekly cap loses up to 12 points of punctuality. Idle spare aircraft act as a buffer that protects on-time performance. Late flights hurt your quality score and increase passenger compensation payouts.' },
+      { p: 'Your **on-time rate** blends the morale of pilots (50%), ground staff (30%) and cabin crew (20%), and suffers when your fleet is worked too hard. Above roughly 84 average block hours a week per aircraft, schedules lose the slack to absorb delays. In newer games, where an aircraft can be scheduled for 100 hours at most, a fleet flown flat-out loses about 3 points of punctuality; in older games with the 140-hour cap it can lose up to 12. Idle spare aircraft act as a buffer that protects on-time performance. Late flights hurt your quality score and increase passenger compensation payouts.' },
       { warn: 'Pay cuts reduce costs immediately, but morale falls gradually over several weeks (~12% per week toward the new target) and recovers just as slowly. Underpaying now has lasting consequences.' },
       { p: 'Wages across the industry keep rising, so a pay rate above 1.0\u00d7 slips back toward market by about 6% a year unless you **hold it**: tick **\uD83D\uDD12 Hold this rate** on a group and its multiplier stays where you set it, with the full premium paid every week.' },
       { h: 'Crew: hiring, training & shortfalls' },

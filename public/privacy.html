@@ -59,24 +59,28 @@
 
   <main>
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: 15 October 2026</p>
+    <p class="updated">Last updated: 29 October 2026</p>
 
     <p>This Privacy Policy explains how Tailwinds ("we", "us", or "the game") handles information when you visit and play the game at this website. Tailwinds is a free, browser-based airline management game. We aim to collect as little personal information as possible, and this page describes what is stored, why, and the choices you have.</p>
 
     <h2>Information we store</h2>
     <p>You do not need an account to play Tailwinds, and the game never asks for your name, email address or any other personal contact information in order to play.</p>
-    <p>The game uses your browser's <strong>local storage</strong> to save your game progress (for example, your airline, fleet, routes, and finances) directly on your own device. This save data stays in your browser, is not transmitted to us, and lets you pick up where you left off. You can clear it at any time by clearing your browser's site data for this website.</p>
+    <p>The game uses your browser's storage (<strong>IndexedDB and local storage</strong>) to save your game progress (for example, your airline, fleet, routes, and finances) directly on your own device. This save data stays in your browser, is not transmitted to us, and lets you pick up where you left off. You can clear it at any time by clearing your browser's site data for this website.</p>
 
     <h2>Cloud saves (optional, for supporters)</h2>
     <p>Cloud saves are an optional extra for people who support the game. To use them you sign in with a <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a> account (Headwinds is this game's multiplayer companion, run by the same person). Sign-in is handled by our authentication provider, Supabase, using Google, Discord or a link sent to your email address. We receive your email address and an account identifier from it, and the first time you sign in, a Headwinds account is created for that email if you do not already have one. Signing in keeps a session token in your browser's local storage so you stay signed in; signing out removes it.</p>
-    <p>When you upload a game to a cloud slot, we store a copy of that save (your airline, fleet, routes and finances), a summary used to show the slot (airline name and logo, home airport, game date and cash), when it was uploaded, and a short description of the device it came from, such as "Chrome on Mac". It is stored in our database, which is hosted by Supabase, and is used only to give the save back to you. It is never shared or sold.</p>
+    <p>When you upload a game to a cloud slot, we store a copy of that save (your airline, fleet, routes and finances), a summary used to show the slot (airline name and logo, home airport, game date and cash), when it was uploaded, and a short description of the device it came from, such as "Chrome on Mac". It is sent to the Headwinds server and stored in our database, which is hosted by Supabase, and is used only to give the save back to you. It is never shared or sold.</p>
     <p>You can delete any cloud save at any time from the Save / Load window. Your cloud saves are also deleted if your Headwinds account is deleted, which you can ask for on Discord. The database is backed up daily, so a deleted save can remain in a backup for up to about a week before it ages out.</p>
+
+    <h2>Contact form and supporter tips</h2>
+    <p>If you use the form on our <a href="/contact.html">contact page</a>, the name, message and any email address you enter are sent through our form provider, Web3Forms, to our inbox, and are used only to reply to you.</p>
+    <p>Tips are handled by Ko-fi under its own privacy policy. We see the name, amount and message you send with a tip, and use the message only to switch on your supporter perks.</p>
 
     <h2>Cookies and similar technologies</h2>
     <p>A cookie is a small file placed on your device. We and our partners use cookies and similar technologies (such as local storage and device identifiers) to operate the game, remember preferences, and — where advertising is shown — to serve and measure ads. Some cookies are essential to the game functioning; others are set by third-party services described below.</p>
 
     <h2>Third-party advertising</h2>
-    <p>We may use third-party advertising companies, including <strong>Google</strong>, to serve ads when you visit the site. These companies may use cookies and similar technologies to serve ads based on your prior visits to this and other websites.</p>
+    <p>We use third-party advertising, including <strong>Google AdSense</strong> (which also shows occasional ads between game weeks), to serve ads when you visit the site. These companies may use cookies and similar technologies to serve ads based on your prior visits to this and other websites.</p>
     <ul>
       <li>Google, as a third-party vendor, uses cookies to serve ads on this site. Google's use of advertising cookies enables it and its partners to serve ads to you based on your visit to this site and/or other sites on the internet.</li>
       <li>Third-party vendors and ad networks may also use cookies to serve ads based on your prior visits to this website.</li>
@@ -84,8 +88,11 @@
     </ul>
     <p>For more information about how Google uses data when you use our site, see <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">Google's "How Google uses information from sites or apps that use our services"</a> page.</p>
 
-    <h2>Analytics</h2>
-    <p>We may use privacy-respecting analytics to understand aggregate, anonymous usage — such as how many people play and which pages they visit — so we can improve the game. This data is not used to personally identify you.</p>
+    <h2>Analytics and hosting</h2>
+    <p>We use Vercel Web Analytics to understand aggregate usage — such as how many people play and which pages they visit — so we can improve the game. It does not use cookies and is not used to personally identify you. The site is hosted by Vercel, which, like any web host, keeps standard server logs (such as IP address and browser type) to run and protect the site.</p>
+
+    <h2>Other services the game loads</h2>
+    <p>To draw the game, your browser fetches fonts from Google Fonts, the map library from unpkg.com, map tiles from CARTO (map data © OpenStreetMap contributors) and aircraft photos from Wikimedia Commons. As with any web request, these providers receive your IP address and basic browser details; we send them nothing else.</p>
 
     <h2>Children's privacy</h2>
     <p>Tailwinds is a general-audience game and is not directed at children under 13. We do not knowingly collect personal information from children. If you believe a child has provided us with personal information, please contact us and we will take appropriate steps to remove it.</p>
@@ -115,6 +122,13 @@
       <a href="/faq.html">FAQ</a>
       <a href="/demand-and-quality.html">Demand &amp; Quality</a>
       <a href="/on-time-performance.html">On-Time Performance</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
       <a href="/devlog.html">Devlog</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>

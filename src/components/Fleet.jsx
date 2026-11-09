@@ -1281,7 +1281,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
               style={{ fontWeight: 700, color: profitColor, cursor: 'help' }}
               title="True weekly profit: revenue minus operating cost, aircraft lease and maintenance. This is the number that reflects whether the aircraft actually pays for itself."
             >
-              = {weeklyProfit >= 0 ? '+' : ''}{formatMoney(weeklyProfit)} true profit
+              = {weeklyProfit >= 0 ? '+' : ''}{formatMoney(weeklyProfit)} fully-loaded profit
             </span>
             {routeResults.some(({ result }) => !result.cargo) && (
               <span>{routeResults.reduce((s, { result }) => s + (result.passengers ?? 0), 0).toLocaleString()} pax/wk</span>

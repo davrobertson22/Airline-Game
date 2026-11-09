@@ -75,7 +75,7 @@ export const LOAN_PRODUCTS = [
     maxMultiple: 4,            // ceiling = 4× weekly revenue …
     baseMax: 5_000_000,        // … or $5M, whichever is higher (available from launch)
     secured: false,
-    description: '13-week term · up to $5M · lowest total interest',
+    description: '13-week term · $5M or 4× weekly revenue, whichever is higher · lowest total interest',
     color: '#38d39f',
   },
   {
@@ -86,7 +86,7 @@ export const LOAN_PRODUCTS = [
     maxMultiple: 8,
     baseMax: 10_000_000,
     secured: false,
-    description: '26-week term · up to $10M · balanced payments',
+    description: '26-week term · $10M or 8× weekly revenue, whichever is higher · balanced payments',
     color: '#3ea6ff',
   },
   {
@@ -97,7 +97,7 @@ export const LOAN_PRODUCTS = [
     maxMultiple: 16,
     baseMax: 20_000_000,
     secured: false,
-    description: '52-week term · up to $20M · largest unsecured amount',
+    description: '52-week term · $20M or 16× weekly revenue, whichever is higher · largest unsecured amount',
     color: '#ffb43d',
   },
   {

@@ -66,10 +66,12 @@ await test('solo v4: the cycle is walked, stored, and scales next week’s deman
 
 await test('the forecast prices the week on the same stored cycle the tick uses', () => {
   let s = airline(4);
-  for (let i = 0; i < 4; i++) s = gameReducer(s, { type: 'ADVANCE_WEEK' });
-  s = { ...s, economyCycle: { ...s.economyCycle, x: -0.1 } };
+  // Pinned from the warm-up on: about 1 run in 400, a random mechanical fault
+  // grounded the only aircraft in these four weeks and left no route to compare.
   Math.random = () => 0.9999999;
   try {
+    for (let i = 0; i < 4; i++) s = gameReducer(s, { type: 'ADVANCE_WEEK' });
+    s = { ...s, economyCycle: { ...s.economyCycle, x: -0.1 } };
     const proj = projectWeek(s);
     const next = gameReducer(s, { type: 'ADVANCE_WEEK' });
     assert.equal(proj.report.routeResults[0].passengers, next.lastReport.routeResults[0].passengers);

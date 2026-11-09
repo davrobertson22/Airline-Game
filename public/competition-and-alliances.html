@@ -46,6 +46,10 @@
     footer.site { border-top:1px solid var(--line); }
     .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
     .footwrap a { color:var(--gold-light); text-decoration:none; }
+    .byline { color:var(--muted); font-size:0.88rem; margin:-18px 0 28px; }
+    figure.shot { margin:8px 0 32px; }
+    figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
   <script type="application/ld+json">
   {
@@ -56,7 +60,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/competition-and-alliances.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-06",
-    "dateModified": "2026-10-21",
+    "dateModified": "2026-11-09",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -92,6 +96,7 @@
   <main>
     <h1>Competition &amp; Alliances: Winning Contested Markets</h1>
     <p class="lede">You are never alone on the map. Tailwinds' AI airlines grow, defend their hubs, and move into your profitable markets. This guide covers how they behave, how to fight back without a fare war, what alliances actually buy you, and when to simply buy the competition.</p>
+    <p class="byline">By the Tailwinds team · Last updated November 9, 2026</p>
 
     <h2>How AI competitors think</h2>
     <p>The AI carriers in Tailwinds run their own airlines — they operate hubs, deploy fleets bought with their own cash, sell connections over their hubs, and look for profitable opportunities, including yours. Each one has a personality, shown on the Competition tab: <strong>Aggressive</strong> carriers attack busy routes others already fly, <strong>Copycats</strong> follow proven markets (especially yours), <strong>Fortress</strong> carriers build density at home and defend it, <strong>Niche</strong> carriers avoid crowded lanes, and <strong>Expansionist</strong> and <strong>Balanced</strong> carriers grow where the money is. The bigger your airline gets, the more attention they pay you. Four behaviours are worth internalising:</p>
@@ -102,16 +107,22 @@
       <li><strong>They notice you as you grow.</strong> A small start-up is barely on the AI's radar. As your airline's value climbs, rivals pay steadily more attention: they look harder at your routes when choosing where to expand, defend more readily against you, and become more willing to start a fare war. The attention builds gradually with your size rather than arriving all at once, and it is at its fullest for an airline worth a quarter of a billion or more.</li>
       <li><strong>They live through the same world you do.</strong> A recession, a pandemic scare or a fuel spike hits the AI carriers' books as hard as yours. Their loads thin, their profits shrink and the weaker ones trim service, so a downturn is also a chance to take ground from a rival that is hurting.</li>
       <li><strong>They fly freight too.</strong> Once a full-service rival has an established network and money to spare, it starts a freight arm: dedicated freighters on lanes from its hub, usually a handful, and more of them for an airline based at a big freight hub like Hong Kong, Frankfurt or Dubai. Budget carriers stay out of freight. A rival's freighters compete with yours on the same terms as two of your own would: a lane's freight is shared out by how much each airline lifts, weighted by how keenly it prices, so a rival undercutting the market rate wins more than its share. Rivals size their lanes to what they can sell, add flights where their freighters fill, cut back where they fly light, and pull out of lanes that keep losing money. Copycat and aggressive carriers go after your freight lanes once you're big enough to notice. Your freight routes name every rival on the lane, and the Competition tab lists each rival's freight lanes.</li>
+      <li><strong>They stop to refuel.</strong> In games started since November 2026, a rival can fly a route the aircraft of the day can't manage nonstop with one stop on the way, the way the airlines of the 1950s and 60s did: Los Angeles to Tokyo through Honolulu, London to Johannesburg through Cairo. Passengers stay on the aircraft, so the airline sells only the end-to-end market. Travellers prefer a nonstop, so a rival flying through a stop wins fewer of them against a nonstop competitor, and the extra landing and the longer flying time cost it money. The route is drawn through its stop on the map, and the stop is named wherever you compare yourself with rivals on a route. Rivals pick big, long-runway airports for their stops and keep out of airspace that was closed to them at the time, such as the Soviet Union before 1991. Once an aircraft that can do the trip nonstop goes on sale, a rival flying through a stop re-equips and drops it, if it can afford the new aircraft and the nonstop earns more. Buy a rival that flies through a stop and the route becomes one of your multi-stop routes, with the two shorter markets on the way yours to sell as well.</li>
       <li><strong>They back off, but rarely leave.</strong> Make a route unattractive — keep its fares just under the market reference for around twenty weeks — and an entrant eventually stops actively contesting it. It doesn't disappear: it stays on with a smaller schedule and only a mild undercut, and comes back hard if you let the route get fat again. Network carriers do withdraw from routes that keep losing them money, and trim ones that fly empty.</li>
     </ul>
     <p>The field also changes on its own. Rivals open second hubs, invest in their product when they're profitable and cut service when they're not, merge with each other, fall into a fire sale and go bankrupt, and new start-ups appear mid-game. The News tab keeps the record.</p>
+
+    <figure class="shot">
+      <img src="/img/guide/competition.webp" width="1200" height="508" loading="lazy" alt="Industry leaderboard ranking airlines by market capitalisation, with each carrier's home hub and whether it is a budget, legacy or premium airline" />
+      <figcaption>Company › Competition ranks every airline in your world by market capitalisation, with its home hub and its business model (budget, legacy or premium). Your rivals grow, merge and go under as the game goes on, so this list changes over time.</figcaption>
+    </figure>
 
     <h2>Choosing your rivals</h2>
     <p>By default a new game draws about 25 rivals from the game's own roster, different every time. The Rivals options on the setup screen let you set the field yourself:</p>
     <ul>
       <li><strong>How many, and how hard they push.</strong> Choose a field of 10, 25 or 40 random rivals. Rival pressure sets how closely they watch you: relaxed rivals pay you half the usual attention and make their moves less often, while fierce ones notice you early, fight harder for your routes and move more often.</li>
       <li><strong>Custom set.</strong> Paste a rival set: a short block of text listing each airline's name, home airport code and tier (budget, legacy or premium), and optionally its size (small, medium or large), founding and closing years, logo, personality and quality. Size sets a rival's starting cash and network; its market value then comes out of how it plays. You can play with only your set or add it to the random field, and a set can start with up to 60 rivals.</li>
-      <li><strong>Fleets, routes and second hubs.</strong> A rival in a set can list the aircraft it flies (or just its manufacturers), its starting routes and a second hub. Name one manufacturer as <code>"maker": "Boeing"</code>, or several as a list: <code>"maker": ["Boeing", "Embraer"]</code>. One piece of text with commas, <code>"Boeing, Embraer"</code>, works too. Writing <code>"maker"</code> twice doesn't, because only the last copy of a repeated name is read. A carrier with a fleet preference only buys what it prefers when one of those types can fly the route, and takes whatever fits when none can. Within its preference it still picks the best-sized aircraft for each route, so a carrier allowed two makers may end up flying mostly one. A listed route no aircraft of the era can fly is left out at the start.</li>
+      <li><strong>Fleets, routes and second hubs.</strong> A rival in a set can list the aircraft it flies (or just its manufacturers), its starting routes and a second hub. Name one manufacturer as <code>"maker": "Boeing"</code>, or several as a list: <code>"maker": ["Boeing", "Embraer"]</code>. One piece of text with commas, <code>"Boeing, Embraer"</code>, works too. Writing <code>"maker"</code> twice doesn't, because only the last copy of a repeated name is read. A carrier with a fleet preference only buys what it prefers when one of those types can fly the route, and takes whatever fits when none can. Within its preference it still picks the best-sized aircraft for each route, so a carrier allowed two makers may end up flying mostly one. In games started since November 2026, a listed route that no aircraft of the era can fly nonstop starts with a refuelling stop when one works, and a route nothing can reach even with a stop stays on the airline's list: it opens the route as soon as an aircraft can, ahead of its other plans. In older games such a route is left out at the start.</li>
       <li><strong>Founded and closed in their own years.</strong> In an era game, a rival founded after your start year doesn't exist yet. It appears once the calendar reaches its year, with its own starter network, if the field has room; otherwise it waits and tries again. A rival with a closing year ceases operations in that year, and one already closed by your start year never appears. Classic games have no calendar, so every rival in a set starts on day one and stays.</li>
       <li><strong>Random logos and a chance to appear.</strong> Any rival's logo can be <code>"random"</code>, and <code>"randomLogos": true</code> at the top of a set shuffles them all; random logos are spread across the whole range, so a big set doesn't end up with ten of the same one. A rival can also have a <code>"chance"</code> from 0 to 100: the percent chance it takes part in a game at all, so a long list of airlines plays out differently every time. The roll leans toward underserved markets: a rival is likelier to appear where few airlines are based near its hub and less likely where many are, so a chance of 50 might come in three times in four in an empty region and one time in four in crowded Europe. Add <code>"crowding": false</code> to keep the percentage exact, and put <code>"chance"</code> at the top of a set to give every rival without its own the same odds. A rival founded later rolls in its founding year; one that misses never appears that game. A set made only of chance rivals always gets at least one.</li>
       <li><strong>No rival based at my hub.</strong> Removes any rival based at your home airport from the starting field. Others still fly in, and airlines founded later may still choose to base there.</li>
@@ -227,6 +238,13 @@
       <a href="/faq.html">FAQ</a>
       <a href="/demand-and-quality.html">Demand &amp; Quality</a>
       <a href="/on-time-performance.html">On-Time Performance</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
       <a href="/devlog.html">Devlog</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>

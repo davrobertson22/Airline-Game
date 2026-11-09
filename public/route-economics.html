@@ -55,7 +55,7 @@
     "mainEntityOfPage": "https://www.tailwindsairlinegame.com/route-economics.html",
     "image": "https://www.tailwindsairlinegame.com/og-image.png",
     "datePublished": "2026-07-06",
-    "dateModified": "2026-10-13",
+    "dateModified": "2026-11-09",
     "author": {
       "@type": "Organization",
       "name": "Tailwinds"
@@ -91,7 +91,7 @@
   <main>
     <h1>Route Economics: Reading a P&amp;L and Pricing to Win</h1>
     <p class="lede">Every decision in Tailwinds eventually shows up in a route's profit line. This guide breaks down where demand comes from, what each flight really costs, how to set fares, and how to protect yourself when fuel prices spike.</p>
-    <p class="byline">By the Tailwinds team · Last updated October 29, 2026</p>
+    <p class="byline">By the Tailwinds team · Last updated November 9, 2026</p>
 
     <h2>Where demand comes from</h2>
     <p>Tailwinds uses a gravity-style demand model: the bigger the populations at both ends of a route and the shorter the distance between them, the more people want to fly it. On top of raw population, four modifiers matter:</p>
@@ -106,16 +106,16 @@
 
     <figure class="shot">
       <img src="/img/guide/planner-demand.webp" width="1200" height="355" loading="lazy" alt="Route Planner analysis of San Francisco to Honolulu showing market demand, the leisure and business split, reference price, seasonality and competitors" />
-      <figcaption>The Route Planner sizes a market before you commit: San Francisco–Honolulu carries 22,894 passengers a week one way, 85% of them leisure travellers. The reference economy fare is $371, and no rival flies the route yet.</figcaption>
+      <figcaption>The Route Planner sizes a market before you commit: San Francisco–Honolulu carries 22,894 passengers a week one way, 85% of them leisure travellers. The reference economy fare is $371, and no rival flies the route yet. (Screenshot from a game started before October 2026; newer games size and price US domestic markets differently, and quote about $295 here.)</figcaption>
     </figure>
 
     <h2>What a flight actually costs</h2>
     <p>A route's costs fall into four groups, and they behave differently:</p>
     <ul>
-      <li><strong>Per flight, full or empty.</strong> <em>Fuel</em>: each type burns a fixed number of litres per 100 km, and your dollar cost is that burn times the fuel price. Fuel is usually the biggest single cost. <em>Crew flying pay</em> scales with distance and aircraft size. <em>Landing and navigation fees</em> are charged at both ends on every flight, by aircraft size and airport tier: a narrow-body pays $3,800 a landing at a mega airport, $2,400 at a major one and $950 at a regional one. Sectors longer than four block hours also pay for crew hotel nights.</li>
+      <li><strong>Per flight, full or empty.</strong> <em>Fuel</em>: each type burns a fixed number of litres per 100 km, and your dollar cost is that burn times the fuel price. Fuel is usually the biggest single cost. <em>Crew flying pay</em> scales with distance and aircraft size. <em>Landing and navigation fees</em> are charged on every landing, by aircraft size and airport tier, so each round trip pays at both ends: a narrow-body pays $3,800 a landing at a mega airport, $2,400 at a major one and $950 at a regional one. Sectors longer than four block hours also pay for crew hotel nights.</li>
       <li><strong>Per passenger.</strong> Ground handling, catering at the service level you choose, lounge access for premium cabins, and delay compensation when your punctuality slips. These shrink when the cabin is empty, which is why a full aircraft costs more to fly than an empty one but earns far more.</li>
-      <li><strong>Per aircraft, every week.</strong> <em>Lease</em> is charged whether the aircraft flies full, empty, or not at all — an idle aircraft is a slow leak, and a half-used one spreads the lease over too few flights. Leasing costs roughly 9–14% of an aircraft's purchase price per year. <em>Maintenance</em> grows as airframes get older, so a cheap old jet's lease saving is partly an illusion — some of it comes back as maintenance. A route's <em>True profit</em> line charges both.</li>
-      <li><strong>Airline overheads.</strong> Some costs never appear on a route line: staff payroll for every aircraft in the fleet, gate rent, head office, insurance, booking and distribution fees (about 2.5% of revenue), marketing, your loyalty programme and hub investment. Routes have to earn enough True profit to pay for all of them.</li>
+      <li><strong>Per aircraft, every week.</strong> <em>Lease</em> is charged whether the aircraft flies full, empty, or not at all — an idle aircraft is a slow leak, and a half-used one spreads the lease over too few flights. Leasing costs roughly 9–14% of an aircraft's purchase price per year. <em>Maintenance</em> grows as airframes get older, so a cheap old jet's lease saving is partly an illusion — some of it comes back as maintenance. A route's <em>Fully-loaded profit</em> line charges both.</li>
+      <li><strong>Airline overheads.</strong> Some costs never appear on a route line: staff payroll for every aircraft in the fleet, gate rent, head office, insurance, booking and distribution fees (about 2.5% of revenue), marketing, your loyalty programme and hub investment. Routes have to earn enough Fully-loaded profit to pay for all of them.</li>
     </ul>
     <p>Divide total weekly route cost by seats flown and you get <strong>cost per seat</strong> — the number your average fare must beat. Do this mentally before opening any route: seats × realistic load factor × fare against the per-flight and per-aircraft lines, with something left over for overheads. If the margin only works at 95% load, it doesn't work.</p>
 
@@ -127,7 +127,7 @@
     <h2>Setting fares</h2>
     <p>Fares steer demand share and yield simultaneously. Cut fares and you fill more seats at lower revenue each; raise them and you earn more per passenger but push travellers to competitors — or out of the market entirely. Practical rules:</p>
     <ol>
-      <li><strong>Start at the reference fare, then iterate weekly.</strong> The Route Planner fills every cabin in at its market reference fare, and the fare editor's <em>Reset to ref</em> button puts you back there. The simulation gives you feedback every tick. Load factor above ~85% with no competitor? You're probably underpriced — nudge up, but remember that a route running nearly full at 10% or more over the reference fare is the first place rival airlines look to enter. Load below ~60%? You're overpriced for the market or flying too much capacity.</li>
+      <li><strong>Start at the reference fare, then iterate weekly.</strong> The Route Planner fills every cabin in at its market reference fare, and the fare editor's <em>Reset to ref</em> button puts you back there. The simulation gives you feedback every tick. Load factor above ~85% with no competitor? You're probably underpriced — nudge up, but remember that rivals look first at routes running around 80% full at 10% or more over the reference fare, and a route that is almost always full draws them even at the reference fare. Load below ~60%? You're overpriced for the market or flying too much capacity.</li>
       <li><strong>Respect the cliff.</strong> Leisure passengers are the most price-sensitive, and every cabin's demand falls away faster the further you price above its reference, reaching zero at around three times the reference fare — which is also the highest fare the game lets you set. A blanket fare rise across your network can empty it.</li>
       <li><strong>Price against the route's role.</strong> A spoke that exists to feed your long-haul can run thinner margins — its passengers earn again on the connecting flight. A standalone route must justify itself alone.</li>
       <li><strong>Don't chase load factor for its own sake.</strong> 95% load at a loss-making fare is just a very popular way to lose money. Route profit is the score; load factor is a diagnostic.</li>
@@ -175,6 +175,13 @@
       <a href="/faq.html">FAQ</a>
       <a href="/demand-and-quality.html">Demand &amp; Quality</a>
       <a href="/on-time-performance.html">On-Time Performance</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
       <a href="/devlog.html">Devlog</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
       <a href="/about.html">About</a>

@@ -1146,7 +1146,9 @@ export function buildRivalHubIndex(competitors = []) {
     const hubSet = new Set(declared);
     const legs = new Map();
     for (const [key, cfg] of Object.entries(c.routes)) {
-      if (!cfg) continue;
+      // A flight through a refuelling stop (models/rivalStops.js) is not sold
+      // as a leg of a connection: that would be a two-stop trip.
+      if (!cfg || cfg.via) continue;
       const [a, b] = key.split('-');
       for (const h of [a, b]) {
         if (!hubSet.has(h)) continue;

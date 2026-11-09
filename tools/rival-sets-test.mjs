@@ -312,10 +312,21 @@ test('an all-Boeing rival flies only Boeings, its listed routes and its second h
 });
 
 test('a listed route nothing of the era can fly is left out, and the player is told', () => {
-  const s = withSeed(53, () => start({ startYear: 1960, rivalSet: set([R('Too Far', 'LHR', 'legacy', { routes: ['LHR-SYD', 'LHR-CDG'] })]) }));
+  // 1952: London–Sydney is out of reach even with one refuelling stop
+  // (models/rivalStops.js), so the airline starts without it — it stays on
+  // the list as a goal (tools/rival-stops-test.mjs).
+  const s = withSeed(53, () => start({ startYear: 1952, rivalSet: set([R('Too Far', 'LHR', 'legacy', { routes: ['LHR-SYD', 'LHR-CDG'] })]) }));
   assert.deepEqual(Object.keys(s.competitors[0].routes), ['CDG-LHR']);
   assert.equal(s.competitors[0]._skippedRoutes, undefined, 'bookkeeping stripped');
+  assert.equal(s.competitors[0]._viaStop, undefined, 'bookkeeping stripped');
   assert.ok(s.pendingToasts.some(t => /LHR-SYD/.test(t.message)));
+});
+
+test('new games: a listed route out of nonstop range starts with a refuelling stop, and the player is told', () => {
+  const s = withSeed(53, () => start({ startYear: 1960, rivalSet: set([R('Too Far', 'LHR', 'legacy', { routes: ['LHR-SYD', 'LHR-CDG'] })]) }));
+  const r = s.competitors[0].routes['LHR-SYD'];
+  assert.ok(r?.via, JSON.stringify(s.competitors[0].routes));
+  assert.ok(s.pendingToasts.some(t => /refuelling stop/.test(t.message)));
 });
 
 test('a closing year retires the airline in that year (era games)', () => {

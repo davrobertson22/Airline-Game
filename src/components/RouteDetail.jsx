@@ -847,7 +847,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
                   <span>Maintenance</span><span>−{formatMoney(totalMaint)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-                  <span style={{ fontWeight: 600 }}>True profit/wk</span>
+                  <span style={{ fontWeight: 600 }}>Fully-loaded profit/wk</span>
                   <span style={{ fontWeight: 700, color: trueProfitColor }}>
                     {trueProfit >= 0 ? '+' : ''}{formatMoney(trueProfit)}
                   </span>

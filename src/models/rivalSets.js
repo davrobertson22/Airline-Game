@@ -36,6 +36,12 @@
 //   routes         its starting network ("AAA-BBB"), replacing the generated
 //                  one; size still sets its cash. Pairs nothing of the era (or
 //                  of its fleet preference) can fly are left out at the start.
+//                  New games (state.rivalStopsWorld, 2026-11-04, Discord:
+//                  VodkaOnFire): such a pair is flown through one refuelling
+//                  stop when one works (models/rivalStops.js), and the list
+//                  stays the carrier's goal — a pair it can't fly yet opens as
+//                  soon as something can, ahead of its other expansion
+//                  (competitorAI.js pickListedRoute).
 //
 // Third package (2026-10-18, Discord: VodkaOnFire):
 //   logo "random"  a logo drawn when the airline is founded, from the least
@@ -362,7 +368,7 @@ export function pickRandomLogo(takenLogos = [], rng = Math.random) {
 }
 
 /** The competitor object the game runs for one rival of a set. */
-export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [] } = {}) {
+export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [], stops = false } = {}) {
   const base = {
     id: `set_${slug(spec.name)}_${(hash(`${spec.name}|${idSeed}`) % 46656).toString(36)}`,
     name: spec.name,
@@ -389,16 +395,17 @@ export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [] } = {}) {
   const c = jitterCompetitor(base);
   if (spec.quality != null) c.baseQualityScore = spec.quality;
   const n = Math.max(3, Math.round(TIER_BASE_ROUTES[spec.tier] * SIZE_ROUTES[spec.size]));
-  let skipped = [];
+  let skipped = [], viaStop = [];
   if (spec.routes?.length) {
-    const listed = listedStarterRoutes(c, spec.routes);
+    const listed = listedStarterRoutes(c, spec.routes, { stops });
     skipped = listed.skipped;
+    viaStop = listed.viaStop ?? [];
     c.routes = Object.keys(listed.routes).length ? listed.routes : generateStarterRoutes(c, n);
   } else {
     c.routes = generateStarterRoutes(c, n);
   }
   const built = buildCompetitorFleet(c);
-  return skipped.length ? { ...built, _skippedRoutes: skipped } : built;
+  return { ...built, ...(skipped.length ? { _skippedRoutes: skipped } : {}), ...(viaStop.length ? { _viaStop: viaStop } : {}) };
 }
 
 /** Size of a running carrier, for export: from its network against its tier. */
