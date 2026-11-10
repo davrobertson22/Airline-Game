@@ -42,6 +42,30 @@
          hide it while the landing shows so it doesn't stack below the landing. */
       #root { display: none; }
       html[data-skip-landing="1"] #root { display: block; }
+
+      /* Landing: site nav, guide cards and latest updates (classes are sl-*, scoped to the landing). */
+      #seo-landing .sl-nav { max-width: 1040px; margin: 0 auto; padding: 18px 24px 0; display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; }
+      #seo-landing .sl-nav a { color: #a1a1aa; text-decoration: none; font-size: 0.95rem; font-weight: 500; }
+      #seo-landing .sl-nav a:hover { color: #d3ad63; }
+      #seo-landing .sl-nav a.sl-brand { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 1.15rem; color: #ededee; margin-right: auto; }
+      #seo-landing .sl-nav a.sl-support { color: #d3ad63; border: 1px solid #c79a4b; border-radius: 999px; padding: 2px 12px; font-weight: 600; }
+      #seo-landing .sl-nav a.sl-play { color: #20180a; background: #c79a4b; border-radius: 6px; padding: 4px 14px; font-weight: 700; }
+      #seo-landing .sl-wrap { max-width: 900px; margin: 0 auto; padding: 0 24px 60px; }
+      #seo-landing .sl-h2 { font-size: 1.6rem; font-weight: 700; margin: 0 0 10px; color: #ededee; }
+      #seo-landing .sl-sub { color: #9a9aa2; font-size: 1rem; line-height: 1.7; max-width: 700px; margin: 0 0 8px; }
+      #seo-landing .sl-sub a { color: #d3ad63; text-decoration: none; font-weight: 600; }
+      #seo-landing .sl-group { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; color: #8b8c94; font-weight: 600; margin: 28px 0 12px; }
+      #seo-landing .sl-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+      #seo-landing .sl-card { display: block; background: #26262d; border: 1px solid #3a3b40; border-radius: 10px; padding: 16px 18px; text-decoration: none; }
+      #seo-landing .sl-card:hover { border-color: #c79a4b; }
+      #seo-landing .sl-card strong { display: block; color: #d3ad63; font-size: 1rem; margin: 0 0 4px; }
+      #seo-landing .sl-card span { display: block; color: #9a9aa2; font-size: 0.9rem; line-height: 1.5; }
+      #seo-landing .sl-updates { border-top: 1px solid #3a3b40; margin: 20px 0 22px; }
+      #seo-landing .sl-update { display: block; padding: 16px 0; border-bottom: 1px solid #3a3b40; text-decoration: none; }
+      #seo-landing .sl-update .sl-date { display: block; color: #d3ad63; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+      #seo-landing .sl-update strong { display: block; color: #ededee; font-size: 1.05rem; margin: 2px 0 4px; }
+      #seo-landing .sl-update:hover strong { color: #d3ad63; }
+      #seo-landing .sl-update .sl-x { display: block; color: #9a9aa2; font-size: 0.93rem; line-height: 1.55; }
     </style>
     <link rel="icon" type="image/png" href="/favicon.png" />
 
@@ -132,7 +156,19 @@
     <!-- Static SEO landing page — hidden by React on mount, indexed by crawlers -->
     <div id="seo-landing" style="font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif; background: #1b1b1f; color: #ededee; min-height: 100vh; padding: 0; margin: 0;">
 
-      <header style="max-width: 1040px; margin: 0 auto; padding: 56px 24px 40px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center;">
+      <!-- Site nav: the same links every guide page carries, so the guides are one click from the front door -->
+      <nav class="sl-nav" aria-label="Site">
+        <a class="sl-brand" href="/">Tailwinds</a>
+        <a href="/how-to-play.html">How to Play</a>
+        <a href="#guides">Guides</a>
+        <a href="/aircraft.html">Aircraft</a>
+        <a href="/devlog.html">Devlog</a>
+        <a href="/faq.html">FAQ</a>
+        <a class="sl-support" href="/support.html">&#9829; Support</a>
+        <a class="sl-play" href="#" onclick="document.documentElement.setAttribute('data-skip-landing','1'); setTimeout(function(){try{window.dispatchEvent(new Event('resize'))}catch(e){}},60); return false;">Play</a>
+      </nav>
+
+      <header style="max-width: 1040px; margin: 0 auto; padding: 44px 24px 40px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center;">
 
         <!-- Hero copy -->
         <div style="flex: 1 1 380px; min-width: 300px;">
@@ -248,6 +284,84 @@
           </div>
 
         </div>
+      </section>
+
+      <!-- Guides: every guide and article, linked from the front door (tools/site-pages-test.mjs checks none is missing) -->
+      <section id="guides" class="sl-wrap">
+        <h2 class="sl-h2">Guides and reference</h2>
+        <p class="sl-sub">Everything here is free to read, whether or not you play. The guides explain how the simulation works and how to run an airline in it. The articles explain the real aircraft and airline economics the game is built on.</p>
+        <h3 class="sl-group">Start here</h3>
+        <div class="sl-cards">
+          <a class="sl-card" href="/how-to-play.html"><strong>How to Play</strong><span>Your first hour: pick a home airport, lease a plane, open routes and read the weekly results.</span></a>
+          <a class="sl-card" href="/beginner-mistakes.html"><strong>Beginner Mistakes</strong><span>Ten ways new airlines lose money, and the fix for each one.</span></a>
+          <a class="sl-card" href="/faq.html"><strong>FAQ</strong><span>Saving, accounts, playing on a phone, and the questions players ask most.</span></a>
+          <a class="sl-card" href="/glossary.html"><strong>Glossary</strong><span>Load factor, yield, RASM, CASM, slots and block time in plain English.</span></a>
+        </div>
+        <h3 class="sl-group">Running the airline</h3>
+        <div class="sl-cards">
+          <a class="sl-card" href="/strategy.html"><strong>Strategy Guide</strong><span>Fleet, routes, hubs and finance, from opening week to the late game.</span></a>
+          <a class="sl-card" href="/route-economics.html"><strong>Route Economics</strong><span>Where demand comes from, what a flight costs, and how to price it.</span></a>
+          <a class="sl-card" href="/route-case-study.html"><strong>Route Case Study</strong><span>One leased 737-800 on one route for twelve weeks, with the full accounts.</span></a>
+          <a class="sl-card" href="/hub-strategy.html"><strong>Hub Strategy</strong><span>Choosing a first hub, growing it, and knowing when a second one pays.</span></a>
+          <a class="sl-card" href="/fleet-planning.html"><strong>Fleet Planning</strong><span>Lease or buy, old or new, and how many aircraft types to run.</span></a>
+          <a class="sl-card" href="/demand-and-quality.html"><strong>Demand &amp; Quality</strong><span>How passengers choose between airlines, and what goes into the 0&ndash;100 quality score.</span></a>
+          <a class="sl-card" href="/competition-and-alliances.html"><strong>Competition &amp; Alliances</strong><span>How rival airlines behave, how fare wars end, and what alliances are worth.</span></a>
+          <a class="sl-card" href="/fuel-hedging.html"><strong>Fuel Prices &amp; Hedging</strong><span>How the fuel market moves, and when locking in a price is worth the premium.</span></a>
+          <a class="sl-card" href="/on-time-performance.html"><strong>On-Time Performance</strong><span>What causes delays and cancellations, and what they cost you.</span></a>
+        </div>
+        <h3 class="sl-group">Aircraft: all 207 types, with the game&rsquo;s real numbers</h3>
+        <div class="sl-cards">
+          <a class="sl-card" href="/aircraft.html"><strong>Aircraft Guide</strong><span>How aircraft economics work, and where to start.</span></a>
+          <a class="sl-card" href="/aircraft-narrow-body.html"><strong>Narrow-Body Jets</strong><span>The 737, A320 and their rivals: the single-aisle workhorses.</span></a>
+          <a class="sl-card" href="/aircraft-wide-body.html"><strong>Wide-Body Jets</strong><span>Twin-aisle long-haul aircraft, from the 767 to the A350.</span></a>
+          <a class="sl-card" href="/aircraft-regional-jets.html"><strong>Regional Jets</strong><span>E-Jets, CRJs and the small jets that feed a hub.</span></a>
+          <a class="sl-card" href="/aircraft-turboprops.html"><strong>Turboprops</strong><span>ATRs, Dash 8s and the propliners for short, thin routes.</span></a>
+          <a class="sl-card" href="/aircraft-freighters.html"><strong>Freighters</strong><span>Cargo aircraft, from parcel feeders to the 747 freighter.</span></a>
+          <a class="sl-card" href="/aircraft-flagships.html"><strong>Flagships</strong><span>The A380, the 747 family and Concorde.</span></a>
+        </div>
+        <h3 class="sl-group">Aviation explained</h3>
+        <div class="sl-cards">
+          <a class="sl-card" href="/regional-jets-explained.html"><strong>Regional Jets Explained</strong><span>What counts as a regional jet, who builds them, and why the 50-seaters are disappearing.</span></a>
+          <a class="sl-card" href="/narrow-body-vs-wide-body.html"><strong>Narrow-Body vs Wide-Body</strong><span>One aisle or two: what the difference means for range, cost and the routes an airline can fly.</span></a>
+          <a class="sl-card" href="/a380-vs-747.html"><strong>A380 vs 747</strong><span>Two double-deckers, two very different careers, and why airlines stopped ordering both.</span></a>
+          <a class="sl-card" href="/best-airline-management-games.html"><strong>Best Airline Management Games</strong><span>An honest comparison of the airline games you can play in 2026, ours included.</span></a>
+        </div>
+      </section>
+
+      <!-- Latest updates: rebuilt from the devlog by tools/generate-devlog-pages.mjs -->
+      <section id="updates" class="sl-wrap">
+        <h2 class="sl-h2">Latest updates</h2>
+        <p class="sl-sub">Tailwinds changes most days, and each significant update is written up for players in the <a href="/devlog.html">devlog</a>. The five most recent:</p>
+        <div class="sl-updates">
+          <!-- DEVLOG-LATEST:START (generated by tools/generate-devlog-pages.mjs; do not edit) -->
+          <a class="sl-update" href="/devlog/2026-11.html#the-advisor-and-a-briefing-for-your-own-ai">
+            <span class="sl-date">November 9, 2026</span>
+            <strong>The Advisor, and a briefing for your own AI</strong>
+            <span class="sl-x">A new Advisor page under Company reads your airline and lists what to do about it, most urgent first: aircraft sitting idle (with a button that opens the Route Finder on that type), aircraft with hours to…</span>
+          </a>
+          <a class="sl-update" href="/devlog/2026-11.html#belly-cargo-freight-in-the-holds-of-your-passenger-flights">
+            <span class="sl-date">November 9, 2026</span>
+            <strong>Belly cargo: freight in the holds of your passenger flights (new games)</strong>
+            <span class="sl-x">Games you start from today carry freight under the cabin floor. Games already in progress keep freight on freighters only, and nothing in them changes. You can switch it off on the setup screen.</span>
+          </a>
+          <a class="sl-update" href="/devlog/2026-11.html#guides-and-in-game-help-brought-back-in-line-with-the-game">
+            <span class="sl-date">November 9, 2026</span>
+            <strong>Guides and in-game help brought back in line with the game</strong>
+            <span class="sl-x">Delivery times read correctly. The Market screen and the in-game Wiki used to say a turboprop arrives in one week and a widebody in four. The first aircraft of a type has always taken twice that, and newer…</span>
+          </a>
+          <a class="sl-update" href="/devlog/2026-11.html#replace-a-whole-type-in-one-go">
+            <span class="sl-date">November 8, 2026</span>
+            <strong>Replace a whole type in one go</strong>
+            <span class="sl-x">Retire a type without tagging aircraft one by one. Open any order in your order queue and use Replace a whole type: every aircraft of that type on order that isn’t already replacing something takes over one of…</span>
+          </a>
+          <a class="sl-update" href="/devlog/2026-11.html#see-the-cabin-floor-plans-cabin-painting-and-seat-products">
+            <span class="sl-date">November 6, 2026</span>
+            <strong>See the cabin: floor plans, cabin painting and seat products</strong>
+            <span class="sl-x">A floor plan of the real aircraft. The cabin refit screen now draws the aircraft from above with every seat on it, so you can see what a layout looks like before you pay for it.</span>
+          </a>
+          <!-- DEVLOG-LATEST:END -->
+        </div>
+        <p class="sl-sub"><a href="/devlog.html">Every update since June 2026 &rarr;</a></p>
       </section>
 
       <section style="background: #26262d; padding: 60px 24px;">

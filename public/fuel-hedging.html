@@ -48,6 +48,12 @@
     figure.shot { margin:8px 0 32px; }
     figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
     figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    figure.chart { margin:8px 0 32px; }
+    figure.chart .chartwrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:14px 10px 6px; }
+    figure.chart svg.chart { display:block; width:100%; min-width:620px; height:auto; }
+    figure.chart figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    ul.sources { color:var(--muted); font-size:0.92rem; padding-left:20px; }
+    ul.sources li { margin:0 0 6px; }
   </style>
   <script type="application/ld+json">
   {
@@ -82,9 +88,9 @@
     <nav class="site">
       <a class="brand" href="/">Tailwinds</a>
       <a class="link" href="/how-to-play.html">How to Play</a>
-      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/#guides">Guides</a>
       <a class="link" href="/aircraft.html">Aircraft</a>
-      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/devlog.html">Devlog</a>
       <a class="link" href="/faq.html">FAQ</a>
       <a class="link" href="/support.html" style="color:var(--gold-light);border:1px solid var(--gold);border-radius:999px;padding:2px 12px;font-weight:600;">&#9829; Support</a>
       <a class="link" href="/">Play</a>
@@ -93,7 +99,7 @@
 
   <main>
     <h1>Fuel Prices &amp; Hedging: The Complete Guide</h1>
-    <p class="lede">For most airlines in Tailwinds, fuel is the single largest operating cost — which makes the fuel market the single largest thing you don't control. Except that you can, partially. This guide explains exactly how fuel pricing works under the hood, how hedge contracts are priced, and a simple routine that takes the drama out of spikes.</p>
+    <p class="lede">Fuel is the largest operating cost for most airlines in Tailwinds, and its price moves every week. You cannot control the market, but you can fix part of what you pay. This guide explains how fuel is priced, how hedge contracts are priced, and a routine that keeps a price spike from becoming a crisis.</p>
     <p class="byline">By the Tailwinds team · Last updated November 9, 2026</p>
 
     <h2>How the fuel market works</h2>
@@ -128,6 +134,13 @@
     </table>
     <p>Coverage comes in steps of 25%, 50%, or 75% of your fuel bill, and contracts stack — you can layer several at once up to a total of 100% coverage. While a contract runs, its share of your fuel is charged at the locked price no matter what the market does; the unhedged remainder floats. Your effective price is simply the blend:</p>
     <p class="tip">effective index = hedged share × locked price + unhedged share × market index</p>
+
+    <figure class="chart">
+      <!-- GEN:hedge-lock:START -->
+      <div class="chartwrap"><svg class="chart" viewBox="0 0 760 430" role="img" aria-label="The fuel index each hedge contract locks, against the market index on the day it is bought" font-family="'IBM Plex Sans',system-ui,-apple-system,sans-serif" xmlns="http://www.w3.org/2000/svg"><line x1="62" x2="664" y1="380" y2="380" stroke="#4a4b53" stroke-width="1"/><text x="54" y="384" font-size="11.5" fill="#a1a1aa" text-anchor="end">0.40</text><line x1="62" x2="664" y1="340.8" y2="340.8" stroke="#2e2f36" stroke-width="1"/><text x="54" y="344.8" font-size="11.5" fill="#a1a1aa" text-anchor="end">0.60</text><line x1="62" x2="664" y1="301.5" y2="301.5" stroke="#2e2f36" stroke-width="1"/><text x="54" y="305.5" font-size="11.5" fill="#a1a1aa" text-anchor="end">0.80</text><line x1="62" x2="664" y1="262.3" y2="262.3" stroke="#2e2f36" stroke-width="1"/><text x="54" y="266.3" font-size="11.5" fill="#a1a1aa" text-anchor="end">1.00</text><line x1="62" x2="664" y1="223" y2="223" stroke="#2e2f36" stroke-width="1"/><text x="54" y="227" font-size="11.5" fill="#a1a1aa" text-anchor="end">1.20</text><line x1="62" x2="664" y1="183.8" y2="183.8" stroke="#2e2f36" stroke-width="1"/><text x="54" y="187.8" font-size="11.5" fill="#a1a1aa" text-anchor="end">1.40</text><line x1="62" x2="664" y1="144.5" y2="144.5" stroke="#2e2f36" stroke-width="1"/><text x="54" y="148.5" font-size="11.5" fill="#a1a1aa" text-anchor="end">1.60</text><line x1="62" x2="664" y1="105.3" y2="105.3" stroke="#2e2f36" stroke-width="1"/><text x="54" y="109.3" font-size="11.5" fill="#a1a1aa" text-anchor="end">1.80</text><line x1="62" x2="664" y1="66" y2="66" stroke="#2e2f36" stroke-width="1"/><text x="54" y="70" font-size="11.5" fill="#a1a1aa" text-anchor="end">2.00</text><line x1="62" x2="62" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="62" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">0.40</text><line x1="137.3" x2="137.3" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="137.3" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">0.60</text><line x1="212.5" x2="212.5" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="212.5" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">0.80</text><line x1="287.8" x2="287.8" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="287.8" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">1.00</text><line x1="363" x2="363" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="363" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">1.20</text><line x1="438.2" x2="438.2" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="438.2" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">1.40</text><line x1="513.5" x2="513.5" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="513.5" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">1.60</text><line x1="588.7" x2="588.7" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="588.7" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">1.80</text><line x1="664" x2="664" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="664" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">2.00</text><text x="363" y="420" font-size="12" fill="#a1a1aa" text-anchor="middle">Market fuel index on the day you buy</text><text x="6" y="52" font-size="12" fill="#a1a1aa">Index the contract locks</text><circle cx="11" cy="16" r="5" fill="#3987e5"/><text x="22" y="20" font-size="12" fill="#a1a1aa">8-week</text><circle cx="87.88" cy="16" r="5" fill="#d95926"/><text x="98.88" y="20" font-size="12" fill="#a1a1aa">13-week</text><circle cx="171.24" cy="16" r="5" fill="#199e70"/><text x="182.24" y="20" font-size="12" fill="#a1a1aa">26-week</text><circle cx="254.60000000000002" cy="16" r="5" fill="#c98500"/><text x="265.6" y="20" font-size="12" fill="#a1a1aa">52-week</text><circle cx="337.96000000000004" cy="16" r="5" fill="#4a4b53"/><text x="348.96000000000004" y="20" font-size="12" fill="#a1a1aa">No hedge (pay the market)</text><path d="M118.4 350.6L626.4 85.6" fill="none" stroke="#4a4b53" stroke-width="2" stroke-linecap="round"/><path d="M118.4 327.8L137.3 320.1L156.1 312.7L174.9 305L193.7 297.4L212.5 289.7L231.3 282.1L250.1 274.6L268.9 267L287.8 259.3L306.6 251.7L325.4 244L344.2 236.5L363 228.9L381.8 221.2L400.6 213.6L419.4 205.9L438.2 198.5L457.1 190.8L475.9 183.2L494.7 175.5L513.5 167.9L532.3 160.4L551.1 152.7L569.9 145.1L588.7 137.4L607.6 129.8L626.4 122.3" fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><title>8-week</title></path><circle cx="626.4" cy="122.3" r="4.5" fill="#3987e5" stroke="#1b1b1f" stroke-width="2"/><text x="636.4" y="126.3" font-size="12" fill="#ededee">8 wk</text><path d="M118.4 317.6L137.3 310.9L156.1 304.2L174.9 297.6L193.7 290.9L212.5 284.2L231.3 277.4L250.1 270.7L268.9 264L287.8 257.3L306.6 250.7L325.4 244L344.2 237.3L363 230.5L381.8 223.8L400.6 217.1L419.4 210.4L438.2 203.8L457.1 197.1L475.9 190.4L494.7 183.8L513.5 176.9L532.3 170.2L551.1 163.5L569.9 156.9L588.7 150.2L607.6 143.5L626.4 136.8" fill="none" stroke="#d95926" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><title>13-week</title></path><circle cx="626.4" cy="136.8" r="4.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"/><text x="636.4" y="140.8" font-size="12" fill="#ededee">13 wk</text><path d="M118.4 298.8L137.3 293.7L156.1 288.7L174.9 283.8L193.7 278.9L212.5 274L231.3 269.1L250.1 264.2L268.9 259.3L287.8 254.4L306.6 249.5L325.4 244.6L344.2 239.7L363 234.8L381.8 229.9L400.6 225L419.4 220.1L438.2 215.2L457.1 210L475.9 205.1L494.7 200.2L513.5 195.3L532.3 190.4L551.1 185.5L569.9 180.6L588.7 175.7L607.6 170.8L626.4 165.9" fill="none" stroke="#199e70" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><title>26-week</title></path><circle cx="626.4" cy="165.9" r="4.5" fill="#199e70" stroke="#1b1b1f" stroke-width="2"/><text x="636.4" y="169.9" font-size="12" fill="#ededee">26 wk</text><path d="M118.4 277.6L137.3 274.6L156.1 271.5L174.9 268.5L193.7 265.6L212.5 262.4L231.3 259.5L250.1 256.6L268.9 253.4L287.8 250.5L306.6 247.5L325.4 244.4L344.2 241.4L363 238.5L381.8 235.4L400.6 232.4L419.4 229.5L438.2 226.3L457.1 223.4L475.9 220.4L494.7 217.3L513.5 214.4L532.3 211.4L551.1 208.3L569.9 205.3L588.7 202.4L607.6 199.3L626.4 196.3" fill="none" stroke="#c98500" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><title>52-week</title></path><circle cx="626.4" cy="196.3" r="4.5" fill="#c98500" stroke="#1b1b1f" stroke-width="2"/><text x="636.4" y="200.3" font-size="12" fill="#ededee">52 wk</text></svg></div>
+      <!-- GEN:hedge-lock:END -->
+      <figcaption>What each contract locks, drawn from the game's own pricing. When fuel is cheap, a hedge locks above today's price, because the market is expected to rise. When fuel is dear, it locks below today's price, and the longer the contract, the closer to 1.00 it sits. The grey diagonal is paying the market with no hedge. The contracts cross it a little above 1.00, not at 1.00, because of the premium.</figcaption>
+    </figure>
     <p>Worked example: the market index sits at 0.97. You buy a 13-week hedge at 50% coverage. The expected average over 13 weeks is about 0.98, so your locked price is 0.98 × 1.025 ≈ 1.005. Six weeks later a spike drives the market to 1.45 — but you pay 0.5 × 1.005 + 0.5 × 1.45 ≈ <strong>1.23</strong>. On the 737-800 schedule above, that's about $40,000 a week you didn't spend, for a premium that cost you a few thousand a week while prices were calm. The Fuel tab previews every contract before you buy: the expected average, the locked price, what it covers in dollars, and the average index it needs to beat to pay off.</p>
     <h3>Closing a contract early</h3>
     <p>A live contract can be unwound before it expires. You are quoted what it is worth today — the gap between the locked price and where the market is expected to average over the weeks still to run — less a 1.5% haircut for exiting early. In the money, that pays you cash; underwater, it costs you, and the game will not let you unwind into a position you cannot afford. The practical use is taking the win: if you hedged at 0.99 and the market is at 1.45 with twenty weeks left, you can bank the contract's value now instead of waiting to see whether the spike holds. Expect less than the spike itself suggests: the quote assumes the market will fall back over those twenty weeks, so it values the rest of the contract at about 1.25, not 1.45. The Fuel tab also keeps a running scoreboard of every contract you have closed, so you can see whether your hedging has actually made money rather than guessing.</p>
@@ -136,7 +149,7 @@
     <h3>Know what you're betting on</h3>
     <p>Because every contract is priced off the expected path, there is no free money in hedging at any particular index. A hedge pays off when fuel ends up averaging <em>above</em> the locked price over the term, which means the market came back down more slowly than the model expected, or spiked again. It loses a little when the market behaves as expected or better. The premium is what you pay to stop caring which happens.</p>
     <h3>Cheap fuel: lock in a good level</h3>
-    <p>When the index is low, the locked price sits above today's index, because the market is expected to climb back toward 1.00. That is normal, not a bad deal: you are buying a price you'd be happy to pay for months, at a small markup. Think of it as insurance shopping on a sunny day.</p>
+    <p>When the index is low, the locked price sits above today's index, because the market is expected to climb back toward 1.00. That is normal, not a bad deal: you are buying a price you'd be happy to pay for months, at a small markup. It is insurance bought while it is cheap.</p>
     <h3>During a spike: hedging is no longer a trap</h3>
     <p>At an index of 1.50 the market is expected to come back down, so a hedge locks <em>below</em> today's index: about 1.40 for 8 weeks, 1.29 for 26 weeks and 1.21 for 52 weeks. You are not locking the bad price. You are protecting yourself against the spike lasting longer than it should. That is worth doing if a long spike would really hurt you. Alongside it, the operational levers still work: nudge fares up (your competitors' costs spiked too) and trim marginal frequency.</p>
     <h3>Ladder your contracts</h3>
@@ -162,10 +175,24 @@
     <p>That is a different bet, not a smaller one. When the gap between crude and jet fuel is wide, the refinery makes that slice of your fuel considerably cheaper than the market. When the gap collapses, you pay <em>more</em> than the market on every one of those litres, and the running costs and the occasional outage are due regardless. Delta bought a real refinery in 2012 for precisely this reason and lost nine figures in the years the spread went against them. Note too that hedges cover only the share the refinery does not: the crude-to-jet spread is exactly the exposure you bought, and it is not something you can insure away.</p>
     <p>The capacity you buy is fixed in litres at the moment of purchase and never grows, so the share of your fuel bill it covers falls as your airline expands.</p>
 
+    <h2>How real airlines handle fuel</h2>
+    <p>IATA, the airline industry's trade body, put fuel at 25.4% of airline operating costs in 2025 and forecast 31.4% for 2026. War in the Middle East and tension in the Strait of Hormuz had pushed its forecast for jet fuel from an average of $90 a barrel to $152. On those figures the world's airlines will spend $350 billion on fuel in 2026 against $252 billion the year before, and IATA cut its forecast of the industry's profit from $41 billion to $23 billion.</p>
+    <p>Airlines disagree about whether hedging is worth the cost. Southwest was its best-known user. It saved more than $4 billion through hedging between 1999 and 2008, $1.3 billion of that in 2008 alone, and another $1.2 billion when prices jumped in 2022. It ended the programme in 2025, the last large US airline to do so, about a year before the 2026 spike. Across the industry, IATA estimated that airlines had hedged about a third of the fuel they expected to use in 2026.</p>
+    <p>The case against hedging is the one this guide makes about the game. A hedge is priced so that on average it costs you the premium, and when prices fall it holds you to paying more than the market. Real contracts are built from swaps and options on crude oil or jet fuel, and Tailwinds' are simpler, but the trade is the same: you pay a little in most years to avoid a very bad one.</p>
+    <p>Delta's refinery, mentioned above, is the Trainer plant near Philadelphia, bought in 2012 through a subsidiary called Monroe Energy. It can process 185,000 barrels a day, and Delta spent about $100 million shifting 40% of its output to jet fuel.</p>
+
     <h2>Reading fuel in your route P&amp;L</h2>
     <p>Fuel flows through every route's weekly profit line, so a market move shows up as your whole network getting better or worse at once — distinct from a single route souring, which points to competition or pricing instead. When your P&amp;L dips across the board, check the fuel index before touching your fares; the fix for expensive fuel is rarely a fare cut. The <a href="/route-economics.html">route economics guide</a> covers how to decompose a route's profit change into its causes, and the <a href="/route-case-study.html">route case study</a> shows a fuel spike hitting a live route — with and without the hedge.</p>
 
     <div class="tip">Rule of thumb: hedge to the level of risk you can stomach, not to the index. Keep the ladder rolling in any market, carry more cover when a long spike would hurt you, and when fuel is well above normal, remember a new contract locks below today's price. Above 1.40, be glad you laddered.</div>
+
+    <h3>Sources</h3>
+    <ul class="sources">
+      <li><a href="https://www.travelweek.ca/?p=193164" rel="noopener">Fuel bill for world's airlines will soar from $252 billion to $350 billion</a>, Travelweek, reporting IATA's June 2026 outlook: fuel's share of costs, price assumptions, profit forecast and the share hedged.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Fuel_hedging" rel="noopener">Fuel hedging</a>, Wikipedia: how swaps and options work, and Southwest's savings from 1999 to 2008.</li>
+      <li><a href="https://sherwood.news/business/southwest-stopped-fuel-hedging-a-year-ago-whoops/" rel="noopener">Southwest stopped fuel hedging a year ago</a>, Sherwood News, 9 March 2026: the 2008 and 2022 savings and the end of the programme.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Trainer_Refinery" rel="noopener">Trainer Refinery</a>, Wikipedia: Delta's 2012 purchase, capacity and conversion to jet fuel.</li>
+    </ul>
 
     <a class="cta" href="/">Play Tailwinds Now →</a>
   </main>
@@ -175,20 +202,23 @@
       <a href="/?home">Home</a>
       <a href="/how-to-play.html">How to Play</a>
       <a href="/strategy.html">Strategy</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/on-time-performance.html">On-Time Performance</a>
       <a href="/aircraft.html">Aircraft</a>
       <a href="/glossary.html">Glossary</a>
       <a href="/faq.html">FAQ</a>
-      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
-      <a href="/on-time-performance.html">On-Time Performance</a>
-      <a href="/hub-strategy.html">Hub Strategy</a>
-      <a href="/route-economics.html">Route Economics</a>
-      <a href="/fleet-planning.html">Fleet Planning</a>
-      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
-      <a href="/fuel-hedging.html">Fuel Hedging</a>
-      <a href="/route-case-study.html">Route Case Study</a>
-      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
-      <a href="/devlog.html">Devlog</a>
+      <a href="/regional-jets-explained.html">Regional Jets Explained</a>
+      <a href="/narrow-body-vs-wide-body.html">Narrow-Body vs Wide-Body</a>
+      <a href="/a380-vs-747.html">A380 vs 747</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
+      <a href="/devlog.html">Devlog</a>
       <a href="/about.html">About</a>
       <a href="/contact.html">Contact</a>
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>

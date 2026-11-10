@@ -45,6 +45,12 @@
     figure.shot { margin:8px 0 32px; }
     figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
     figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    figure.chart { margin:8px 0 32px; }
+    figure.chart .chartwrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:14px 10px 6px; }
+    figure.chart svg.chart { display:block; width:100%; min-width:620px; height:auto; }
+    figure.chart figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    ul.sources { color:var(--muted); font-size:0.92rem; padding-left:20px; }
+    ul.sources li { margin:0 0 6px; }
   </style>
   <script type="application/ld+json">
   {
@@ -79,9 +85,9 @@
     <nav class="site">
       <a class="brand" href="/">Tailwinds</a>
       <a class="link" href="/how-to-play.html">How to Play</a>
-      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/#guides">Guides</a>
       <a class="link" href="/aircraft.html">Aircraft</a>
-      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/devlog.html">Devlog</a>
       <a class="link" href="/faq.html">FAQ</a>
       <a class="link" href="/support.html" style="color:var(--gold-light);border:1px solid var(--gold);border-radius:999px;padding:2px 12px;font-weight:600;">&#9829; Support</a>
       <a class="link" href="/">Play</a>
@@ -90,16 +96,30 @@
 
   <main>
     <h1>Hub Strategy: Building Networks That Feed Themselves</h1>
-    <p class="lede">Your hub choice shapes everything that follows — which routes are viable, which aircraft make sense, and how hard the competition hits back. This guide covers picking a first hub, growing it, and knowing when a second one is worth the money.</p>
+    <p class="lede">Where you put your hub decides which routes can work, which aircraft suit them and how much competition you face. This guide covers choosing a first hub, growing it, and deciding when a second one is worth the money.</p>
     <p class="byline">By the Tailwinds team · Last updated November 9, 2026</p>
 
     <h2>Why hubs matter more than routes</h2>
-    <p>A route in isolation earns whatever its two endpoints can generate between them. A route plugged into a hub earns that <em>plus</em> every connecting passenger flowing through it. That's the whole hub-and-spoke idea: ten spokes into one hub don't create ten markets, they create closer to fifty-five, because every spoke can exchange passengers with every other spoke through your hub. In Tailwinds, connecting traffic is often the difference between a marginal spoke and a solidly profitable one — a thin route that could never survive on local demand alone becomes viable when it also feeds your long-haul departures.</p>
+    <p>A route on its own earns whatever its two cities generate between them. A route into a hub also carries passengers connecting to every other route you fly from that hub. The arithmetic is what makes hub-and-spoke networks work. Ten spokes into one hub are ten routes to fly, but they connect 55 city pairs, because each spoke city can reach the hub and every other spoke city. Thirty spokes connect 465.</p>
+
+    <figure class="chart">
+      <!-- GEN:hub-pairs:START -->
+      <div class="chartwrap"><svg class="chart" viewBox="0 0 760 228" role="img" aria-label="City pairs connected through one hub, by number of spokes" font-family="'IBM Plex Sans',system-ui,-apple-system,sans-serif" xmlns="http://www.w3.org/2000/svg"><line x1="74.75" x2="74.75" y1="14" y2="194" stroke="#4a4b53" stroke-width="1"/><text x="64.75" y="33" font-size="12.5" fill="#ededee" text-anchor="end">3 spokes</text><path d="M74.75 20h3.9a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>3 routes from the hub connect 6 city pairs</title></path><text x="90.7" y="33" font-size="12" fill="#a1a1aa">6 city pairs</text><text x="64.75" y="63" font-size="12.5" fill="#ededee" text-anchor="end">5 spokes</text><path d="M74.75 50h15.8a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>5 routes from the hub connect 15 city pairs</title></path><text x="102.6" y="63" font-size="12" fill="#a1a1aa">15 city pairs</text><text x="64.75" y="93" font-size="12.5" fill="#ededee" text-anchor="end">10 spokes</text><path d="M74.75 80h68.8a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>10 routes from the hub connect 55 city pairs</title></path><text x="155.5" y="93" font-size="12" fill="#a1a1aa">55 city pairs</text><text x="64.75" y="123" font-size="12.5" fill="#ededee" text-anchor="end">15 spokes</text><path d="M74.75 110h154.8a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>15 routes from the hub connect 120 city pairs</title></path><text x="241.5" y="123" font-size="12" fill="#a1a1aa">120 city pairs</text><text x="64.75" y="153" font-size="12.5" fill="#ededee" text-anchor="end">20 spokes</text><path d="M74.75 140h273.9a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>20 routes from the hub connect 210 city pairs</title></path><text x="360.6" y="153" font-size="12" fill="#a1a1aa">210 city pairs</text><text x="64.75" y="183" font-size="12.5" fill="#ededee" text-anchor="end">30 spokes</text><path d="M74.75 170h611.3a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H74.75Z" fill="#3987e5"><title>30 routes from the hub connect 465 city pairs</title></path><text x="698" y="183" font-size="12" fill="#a1a1aa">465 city pairs</text><text x="74.75" y="218" font-size="12" fill="#a1a1aa">City pairs a passenger can travel between, flying only the routes from the hub</text></svg></div>
+      <!-- GEN:hub-pairs:END -->
+      <figcaption>City pairs grow with the square of the number of spokes: <em>n</em> routes from one hub connect <em>n</em>(<em>n</em>+1)/2 pairs. Not every pair is a sensible journey, since nobody connects through a hub that takes them the wrong way, but each new spoke still adds a market to every spoke already flying.</figcaption>
+    </figure>
+
+    <p>In Tailwinds that connecting traffic often decides whether a spoke is marginal or solidly profitable. A thin route that could never survive on local demand becomes viable when it also feeds your long-haul departures.</p>
 
     <figure class="shot">
       <img src="/img/guide/map.webp" width="1200" height="496" loading="lazy" alt="Route map of a nine-route network radiating from San Francisco to Seattle, Portland, Salt Lake City, Denver, Chicago, Las Vegas, Phoenix, Los Angeles and San Diego" />
       <figcaption>Network › Map for the same airline: nine spokes from a San Francisco hub to the West Coast, the Mountain West and Chicago. Green lines are profitable routes, red lines lose money, and every dot is an airport you could fly to.</figcaption>
     </figure>
+
+    <h2>How real airlines use hubs</h2>
+    <p>Until the United States deregulated its airlines in 1978, a regulator decided which routes each airline could fly, and most networks ran point to point. Once airlines could choose for themselves, many rebuilt their networks around hubs. Delta, serving smaller cities through Atlanta, was the first to run such a system.</p>
+    <p>A hub that one airline dominates is called a fortress hub. Delta carried roughly three-quarters of the passengers departing Atlanta in 2024, and American roughly two-thirds of those departing Dallas/Fort Worth. With that share an airline can charge more, because local passengers have few alternatives. That is the reason for the advice below: build your fortress where rivals are thin, and leave theirs alone.</p>
+    <p>Real hubs schedule flights in banks, with many arrivals close together followed by many departures, so that connections are short. Doha, the hub of Qatar Airways, runs three such waves a day and connected about 30 million passengers in 2019. Tailwinds leaves the clock out. Connections are worked out from weekly frequency, so what matters is how many flights you offer, not when they leave.</p>
 
     <h2>Choosing your first hub</h2>
     <p>Airports in Tailwinds come in three tiers — <strong>mega</strong>, <strong>major</strong>, and <strong>regional</strong>. Major and regional are set from each airport's real passenger traffic; mega is reserved for the world's biggest hubs. (In a Randomized-demand game an airport's roll can move it up or down a tier.) The tier sets gate rent, landing fees and fuel prices, and the mega and major airports are where rival airlines build their networks. It does not set demand — that comes from the city. Bigger sounds better, but the best first hub is usually not the biggest one available. Wherever you found your airline becomes your first Hub, and its country becomes your home country. Look for four things:</p>
@@ -109,7 +129,7 @@
       <li><strong>Room to grow.</strong> At mega-hubs you'll fight established AI carriers from day one. A busy major-tier airport with lighter competition frequently earns more, sooner, with less drama.</li>
       <li><strong>A believable long-haul future.</strong> Eventually your hub will host intercontinental routes. A hub that can one day fill a widebody to another continent is worth a small compromise today.</li>
     </ul>
-    <div class="tip">Tip: mega-hubs are endgame material, not starting positions. Beating an entrenched competitor at their fortress hub costs cash you don't have yet. Build your fortress somewhere they aren't.</div>
+    <div class="tip">Tip: leave the mega-hubs for later. Beating an established competitor at its own fortress hub takes cash you don't have yet, so build yours where rivals are thin.</div>
 
     <h2>Hub tiers: what you build at the hub</h2>
     <p>Your own connecting itineraries are only sold through airports designated on the Hubs screen, and the designation comes in four steps. Each needs more gates and routes, costs more to build and to run every week, and pays you back with more attractive connections, more connecting seats and a bigger quality bonus on its routes:</p>
@@ -142,28 +162,34 @@
       <li><strong>Frequency beats size defensively.</strong> Three daily narrow-body flights are harder for a competitor to displace than one widebody flight, because passengers weigh the number of departures, not just the seat count.</li>
       <li><strong>Reputation and loyalty compound at hubs.</strong> Cabin quality, catering, and a loyalty program all shift share on contested routes. Passengers with your loyalty status pick you at equal fares — most of your repeat customers live at your hub.</li>
       <li><strong>Don't hand them an invitation.</strong> Rivals look hardest at routes you fly nearly full at fares well above the market reference. An entrant that gets in tends to stay. It only backs off after about five months of fares below the reference, and even then it keeps around half your frequency at a small undercut. Push fares well above the reference again and it comes back fighting. At the hub, fair fares and enough frequency to keep loads below the brim are cheaper than a fight.</li>
-      <li><strong>Don't overreact elsewhere.</strong> If a competitor attacks a spoke, decide whether it's strategic (feed for your long-haul) or expendable. Defending everything means defending nothing.</li>
+      <li><strong>Don't overreact elsewhere.</strong> If a competitor attacks a spoke, decide whether it's strategic (feed for your long-haul) or expendable. You cannot afford to defend every route.</li>
     </ul>
 
     <h2>The second hub: when and where</h2>
     <p>The most common expansion mistake is opening a second hub too early. A second hub splits your fleet, your cash, and your attention. Open one only when all three are true:</p>
     <ul>
       <li>Your first hub is <strong>saturated</strong> — the good spokes are flown, frequencies are healthy, and additional aircraft there face diminishing returns.</li>
-      <li>You have a <strong>cash cushion</strong> that can absorb months of the new hub losing money while its network matures. Every hub starts as a money pit; the question is how long yours can afford to be.</li>
+      <li>You have a <strong>cash cushion</strong> that can absorb months of the new hub losing money while its network matures. A new hub loses money at first, so the question is how many months of that you can fund.</li>
       <li>The new hub <strong>complements</strong> the old one. The ideal second hub sits far enough away to open a new catchment, close enough to connect with a profitable trunk route between the two. That trunk becomes the spine of your airline — fed at both ends, it's often the most profitable route you'll ever fly.</li>
     </ul>
     <p>Geographically, think in pairs a continent apart, or one hub each on two sides of a dense region. Full hubs must be in your home country, so a continent-wide pair is easiest from a big country. Abroad, you are limited to one Focus City per country. Two hubs 700 km apart mostly cannibalise each other's catchments.</p>
 
     <h2>Common hub mistakes</h2>
     <ol>
-      <li><strong>Starting at a mega-hub because it's famous.</strong> Prestige doesn't pay leases. Competition intensity matters more than airport size early on.</li>
+      <li><strong>Starting at a mega-hub because it's famous.</strong> Early on, the number of rivals you face matters more than the size of the airport.</li>
       <li><strong>Point-to-point sprawl.</strong> Routes scattered across the map with no common endpoint earn only local demand and are individually fragile. Concentrate.</li>
-      <li><strong>Long-haul before feed.</strong> A widebody launched from a hub with three spokes flies mostly empty. Build the funnel before the firehose.</li>
+      <li><strong>Long-haul before feed.</strong> A widebody launched from a hub with three spokes flies mostly empty. Build the feeder routes first.</li>
       <li><strong>Ignoring the trunk between hubs.</strong> If you run two hubs and don't connect them generously, you're running two small airlines instead of one big one.</li>
     </ol>
 
     <h2>Further reading</h2>
     <p>Hub economics interact with everything else: <a href="/route-economics.html">route economics and pricing</a> explains how to set fares on hub routes, <a href="/fleet-planning.html">fleet planning</a> covers matching aircraft to spokes and trunks, and <a href="/competition-and-alliances.html">competition &amp; alliances</a> goes deeper on defending contested markets.</p>
+
+    <h3>Sources</h3>
+    <ul class="sources">
+      <li><a href="https://en.wikipedia.org/wiki/Airline_hub" rel="noopener">Airline hub</a>, Wikipedia: deregulation, fortress hubs, 2024 departing-passenger shares, banking and the Doha hub.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Airline_Deregulation_Act" rel="noopener">Airline Deregulation Act</a>, Wikipedia: the 1978 law that let US airlines choose their own routes.</li>
+    </ul>
 
     <a class="cta" href="/">Play Tailwinds Now →</a>
   </main>
@@ -173,20 +199,23 @@
       <a href="/?home">Home</a>
       <a href="/how-to-play.html">How to Play</a>
       <a href="/strategy.html">Strategy</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/on-time-performance.html">On-Time Performance</a>
       <a href="/aircraft.html">Aircraft</a>
       <a href="/glossary.html">Glossary</a>
       <a href="/faq.html">FAQ</a>
-      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
-      <a href="/on-time-performance.html">On-Time Performance</a>
-      <a href="/hub-strategy.html">Hub Strategy</a>
-      <a href="/route-economics.html">Route Economics</a>
-      <a href="/fleet-planning.html">Fleet Planning</a>
-      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
-      <a href="/fuel-hedging.html">Fuel Hedging</a>
-      <a href="/route-case-study.html">Route Case Study</a>
-      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
-      <a href="/devlog.html">Devlog</a>
+      <a href="/regional-jets-explained.html">Regional Jets Explained</a>
+      <a href="/narrow-body-vs-wide-body.html">Narrow-Body vs Wide-Body</a>
+      <a href="/a380-vs-747.html">A380 vs 747</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
+      <a href="/devlog.html">Devlog</a>
       <a href="/about.html">About</a>
       <a href="/contact.html">Contact</a>
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>

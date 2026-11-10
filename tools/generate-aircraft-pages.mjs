@@ -2,6 +2,8 @@
 // Generates the static aircraft guide pages in public/ from src/data/aircraft.js.
 // Run from the project root:  node tools/generate-aircraft-pages.mjs
 // Re-run whenever aircraft data changes, then rebuild (vite copies public/ into dist/).
+//   node tools/generate-aircraft-pages.mjs --check   exit 1 if a page on disk is stale
+// Afterwards run `node tools/stamp-page-dates.mjs` so a changed page gets its new date.
 
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +11,9 @@ import path from 'node:path';
 import { AIRCRAFT_TYPES } from '../src/data/aircraft.js';
 import { fuelCostPerKm } from '../src/utils/fuel.js';
 import { cruiseSpeedKmh, typicalSeatsOf, fullCabinRangeKm } from '../src/utils/simulation.js';
+import { NAV, FOOTER, SITE } from './site-chrome.mjs';
+import { scatterChart, barChart, SERIES, CHART_CSS } from './site-charts.mjs';
+import { updatedLabel } from './stamp-page-dates.mjs';
 
 // A passenger type's headline range is quoted at its typical cabin; say which, and
 // what it flies packed to the exit limit. A type quoted at full payload says so too.
@@ -24,7 +29,6 @@ const fmtIntLite = (n) => Math.round(n).toLocaleString('en-US');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'public');
-const SITE = 'https://www.tailwindsairlinegame.com';
 
 // Hand-written, Tailwinds-only editorial injected into each category page after
 // the stat table. These are wrapped in TW-ONLY markers on output; the Headwinds
@@ -42,6 +46,32 @@ function picksFor(file) {
   return `    <!-- TW-ONLY:START -->\n${readFileSync(p, 'utf8').trimEnd()}\n    <!-- TW-ONLY:END -->`;
 }
 
+// Hand-written background on the real aircraft, with outside sources. Optional per page,
+// Tailwinds-only like the picks.
+const BACKGROUND_DIR = path.join(ROOT, 'content/aircraft-background');
+
+function backgroundFor(file) {
+  const p = path.join(BACKGROUND_DIR, file);
+  if (!existsSync(p)) return '';
+  return `    <!-- TW-ONLY:START -->\n${readFileSync(p, 'utf8').trimEnd()}\n    <!-- TW-ONLY:END -->`;
+}
+
+// --check compares instead of writing, so a test can tell when the pages are stale.
+const CHECK = process.argv.includes('--check');
+let staleCount = 0;
+function emit(file, html, note) {
+  const p = path.join(OUT, file);
+  if (CHECK) {
+    if (!existsSync(p) || readFileSync(p, 'utf8') !== html) {
+      staleCount++;
+      console.log(`stale: public/${file}`);
+    }
+    return;
+  }
+  writeFileSync(p, html);
+  console.log(`wrote public/${file} (${note})`);
+}
+
 // ── Category → page config ───────────────────────────────────────────────────
 
 const PAGES = [
@@ -53,10 +83,10 @@ const PAGES = [
     description:
       'Every narrow-body jet in Tailwinds compared: seats, range, lease cost, fuel burn, and per-seat economics. Find the right single-aisle workhorse for your airline.',
     intro: `
-      <p>Narrow-body jets are the backbone of almost every successful Tailwinds airline. They cover the busiest segment of the route map — short and medium-haul city pairs with strong, repeatable demand — and they do it with economics that widebodies simply cannot match on those stage lengths. If your airline only ever mastered one aircraft category, it should be this one.</p>
-      <p>The core trade-off inside the category is capacity versus cost. Smaller types like the A318 or 737-700 are cheap to lease and easy to fill, which makes them forgiving while you learn a market. Larger types like the A321neo or 737 MAX 10 carry far more passengers for only modestly higher trip cost — brilliant on proven routes, punishing on speculative ones. The table and per-type notes below use each aircraft's actual in-game numbers, including fuel cost per seat-kilometre, the single best measure of how cheaply a jet moves one passenger one kilometre.</p>
+      <p>Single-aisle jets fly most of the world's short and medium-haul routes, and they will fly most of yours. They suit city pairs a few hundred to a few thousand kilometres apart with steady demand, where a widebody would leave half its seats empty and a turboprop would take too long.</p>
+      <p>Inside the category the choice is between capacity and cost. The A318 and 737-700 are cheap to lease and easy to fill, so a mistake on a new route costs little. The A321neo and 737 MAX 10 carry many more passengers for a modest rise in trip cost, which pays on a route you already know is busy and hurts on one you are guessing at. The table and notes below use each aircraft's in-game numbers, including fuel cost per seat-kilometre: what it costs in fuel to move one seat one kilometre.</p>
       <h2>How to choose</h2>
-      <p>Match seats to demand first, then range to mission, and only then look at price. A jet that is 30% too big for its route flies half-empty and loses money regardless of how efficient it is on paper. New-generation types (neo, MAX, A220, E2) burn noticeably less fuel per seat than the classics they replaced, but lease for more — they reward busy networks that keep them in the air. Older classics are the value play for cash-strapped early airlines: far lower weekly lease, but higher burn, and they arrive second-hand with a maintenance bill already inflated by age. The oldest jets here, whose lines closed in 1976 or earlier, are buy-only, because no lessor stocks them. The Comet 1 is listed for history: its certificate was withdrawn in 1954, so it can only be bought in an era game, from 1952 through 1954.</p>`,
+      <p>Match seats to demand first, then range to the route, and look at price last. A jet 30% too big for its route flies half-empty and loses money however efficient it is. The new-generation types (neo, MAX, A220, E2) burn less fuel per seat than the classics they replaced and lease for more, so they suit busy networks that keep them in the air. Older classics cost far less each week but burn more, and they arrive second-hand with a maintenance bill that age has already raised. The oldest jets here, whose lines closed in 1976 or earlier, are buy-only, because no lessor stocks them. The Comet 1 is listed for history: its certificate was withdrawn in 1954, so it can only be bought in an era game, from 1952 through 1954.</p>`,
   },
   {
     file: 'aircraft-wide-body.html',
@@ -107,10 +137,10 @@ const PAGES = [
     description:
       'Every cargo aircraft in Tailwinds compared: payload, range, lease cost and fuel burn. Build a profitable cargo network alongside your passenger airline.',
     intro: `
-      <p>Cargo is a different business with different rules. Freighters fly payload, not passengers: no catering, no loyalty points, no reputation dance — just tonnes, lanes, and yield. The freight market has rivals of its own: full-service AI airlines start freight arms from their hubs once they're established, and a lane's freight is shared out by how much each airline lifts and how keenly it prices (see <a href="/competition-and-alliances.html">competition &amp; alliances</a>). A well-built cargo network is steady, high-margin income that keeps earning even when passenger demand wobbles.</p>
-      <p>Because these aircraft carry no seats, the comparison metric changes: what matters is payload tonnes against trip cost over the lanes you actually fly. Small feeders move parcels into your hub; big intercontinental freighters move serious tonnage between major economies.</p>
+      <p>Freighters carry payload instead of passengers. There is no catering, no loyalty programme and no cabin to configure: revenue is the tonnes you carry times the rate on the lane. The freight market has rivals of its own. Full-service AI airlines start freight arms from their hubs once they are established, and a lane's freight is divided by how much each airline lifts and how keenly it prices (see <a href="/competition-and-alliances.html">competition &amp; alliances</a>). A cargo network earns separately from your passenger routes, so it can steady the airline's income when passenger demand dips.</p>
+      <p>With no seats to count, the comparison is payload tonnes against trip cost on the lanes you fly. Small feeders bring parcels into a hub. Large intercontinental freighters move heavy tonnage between major economies.</p>
       <h2>How to choose</h2>
-      <p>Start small. A regional freighter on a short, proven lane teaches you cargo pricing at minimal risk. Converted passenger jets (BCF/P2F types) are the mid-market value play — cheap to lease, decent payload. Purpose-built giants like the 747F only pay off on dense long-haul trade lanes with tonnage to fill them, but when they work, nothing else comes close.</p>`,
+      <p>Start with a regional freighter on a short lane you know has freight. It teaches cargo pricing for little money. Converted passenger jets (the BCF and P2F types) sit in the middle: cheap to lease, with a useful payload. Purpose-built giants such as the 747 freighters need a dense long-haul trade lane to fill them, and on such a lane they carry more per flight than anything else you can lease.</p>`,
   },
   {
     file: 'aircraft-flagships.html',
@@ -120,11 +150,11 @@ const PAGES = [
     description:
       'The A380, 747 family and Concorde in Tailwinds: seats, range, lease cost and economics of the game’s biggest and fastest aircraft — and when they actually pay.',
     intro: `
-      <p>These are the trophy aircraft of Tailwinds — the double-deck giants and the supersonic Concorde. Every player wants to fly them. Most players lose money the first time they try. This page is about flying them profitably.</p>
-      <p>Double-deckers live or die on one question: can the route fill 400 to 853 seats week after week? That only happens on the world's great trunk routes, usually between mega-hubs with strong feed on both ends. When it works, per-seat costs are excellent. When it doesn't, the weekly lease alone erases the profit of half your network.</p>
-      <p>Concorde is its own economy. Its fuel burn is extraordinary, but supersonic prestige commands a large ticket premium in-game, and on the right premium transatlantic-style pairing it can work as a halo aircraft — brand first, margin second.</p>
+      <p>This page covers the largest and fastest aircraft in Tailwinds: the double-deck A380 and 747 family, and Concorde. They are the aircraft players most want to fly, and the ones most often flown at a loss.</p>
+      <p>A double-decker needs a route that fills 400 to 853 seats every week. In practice that means the busiest trunk routes, usually between mega-hubs with connecting traffic at both ends. On such a route the cost per seat is very low. On a weaker one the weekly lease alone can cancel the profit of several healthy routes.</p>
+      <p>Concorde is a separate case. It burns more fuel per seat than any other airliner in the game, but passengers pay a large premium to fly supersonic, so on a wealthy long-haul pair it can pay its way. Treat it as a prestige aircraft that has to fight for its margin.</p>
       <h2>How to choose</h2>
-      <p>Honestly? Wait. Flagships belong in a mature network with established mega-hubs, deep cash reserves, and proven trunk routes bursting past the capacity of your largest twins. Then, and only then, they are glorious.</p>`,
+      <p>Wait until the network is ready. A flagship needs established mega-hubs, a deep cash reserve, and trunk routes that already overflow your largest twin-engined widebodies. With those in place it is the cheapest way to add seats to a route that is full.</p>`,
   },
 ];
 
@@ -137,48 +167,7 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, 
 
 // ── Shared page chrome (matches how-to-play.html styling) ────────────────────
 
-const NAV = `
-  <header class="site">
-    <nav class="site">
-      <a class="brand" href="/">Tailwinds</a>
-      <a class="link" href="/how-to-play.html">How to Play</a>
-      <a class="link" href="/strategy.html">Strategy</a>
-      <a class="link" href="/aircraft.html">Aircraft</a>
-      <a class="link" href="/glossary.html">Glossary</a>
-      <a class="link" href="/faq.html">FAQ</a>
-      <a class="link" href="/support.html" style="color:var(--gold-light);border:1px solid var(--gold);border-radius:999px;padding:2px 12px;font-weight:600;">&#9829; Support</a>
-      <a class="link" href="/">Play</a>
-    </nav>
-  </header>`;
-
-const FOOTER = `
-  <footer class="site">
-    <div class="footwrap">
-      <a href="/?home">Home</a>
-      <a href="/how-to-play.html">How to Play</a>
-      <a href="/strategy.html">Strategy</a>
-      <a href="/aircraft.html">Aircraft</a>
-      <a href="/glossary.html">Glossary</a>
-      <a href="/faq.html">FAQ</a>
-      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
-      <a href="/on-time-performance.html">On-Time Performance</a>
-      <a href="/hub-strategy.html">Hub Strategy</a>
-      <a href="/route-economics.html">Route Economics</a>
-      <a href="/fleet-planning.html">Fleet Planning</a>
-      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
-      <a href="/fuel-hedging.html">Fuel Hedging</a>
-      <a href="/route-case-study.html">Route Case Study</a>
-      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
-      <a href="/devlog.html">Devlog</a>
-      <a href="/best-airline-management-games.html">Best Airline Games</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
-      <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>
-      <a href="/privacy.html">Privacy</a>
-      <a href="/terms.html">Terms</a>
-      <span style="margin-left:auto;">© Tailwinds — free to play in your browser. Multiplayer: <a href="https://www.headwindsairlinegame.com" target="_blank" rel="noopener noreferrer">Headwinds</a>.</span>
-    </div>
-  </footer>`;
+// NAV and FOOTER are imported from site-chrome.mjs, the one copy every page shares.
 
 const CSS = `
     :root { --bg:#1b1b1f; --panel:#26262d; --line:#3a3b40; --text:#ededee; --muted:#a1a1aa; --gold:#c79a4b; --gold-light:#d3ad63; }
@@ -213,11 +202,16 @@ const CSS = `
     .byline { color:var(--muted); font-size:0.88rem; margin:-24px 0 32px; }
     figure.shot { margin:8px 0 32px; }
     figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
-    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }`;
+    figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    ul.sources { color:var(--muted); font-size:0.92rem; padding-left:20px; margin:0 0 28px; }
+    ul.sources li { margin:0 0 6px; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }${CHART_CSS}`;
 
-// Shown under every page's lede. Bump it when the pages' content changes
-// (new aircraft, rebalanced stats, rewritten advice), not on every regeneration.
-const UPDATED = 'November 9, 2026';
+// The "Last updated" date under each page's lede comes from content/page-dates.json, so
+// regenerating never moves it. `node tools/stamp-page-dates.mjs` moves it when the page's
+// content has really changed (new aircraft, rebalanced stats, rewritten advice).
 
 function pageShell({ title, description, canonical, h1, lede, body }) {
   return `<!DOCTYPE html>
@@ -253,7 +247,7 @@ ${NAV}
     <p class="crumbs"><a href="/">Home</a> › <a href="/aircraft.html">Aircraft</a>${h1 === 'Aircraft in Tailwinds' ? '' : ` › ${esc(h1)}`}</p>
     <h1>${esc(h1)}</h1>
     <p class="lede">${lede}</p>
-    <p class="byline">By the Tailwinds team · Last updated ${UPDATED}</p>
+    <p class="byline">By the Tailwinds team · Last updated ${updatedLabel(`public/${canonical.slice(SITE.length + 1)}`)}</p>
 ${body}
     <a class="cta" href="/">Play Tailwinds — It's Free →</a>
   </main>
@@ -330,6 +324,103 @@ function aircraftCard(t, isFreight) {
     </div>`;
 }
 
+// ── Charts ────────────────────────────────────────────────────────────────────
+
+const shortName = (t) => {
+  const rest = t.name.startsWith(`${t.manufacturer} `) ? t.name.slice(t.manufacturer.length + 1) : t.name;
+  return /^\d+$/.test(rest) ? t.name : rest; // "Fokker 100" stays whole
+};
+const PRODUCTION = [
+  { key: 'built', label: 'Still in production', color: SERIES[0] },
+  { key: 'closed', label: 'Out of production (arrives second-hand)', color: SERIES[1] },
+];
+const seriesOf = (t) => (t.oop ? 'closed' : 'built');
+const pick = (group, score) => group.reduce((best, t) => (score(t) > score(best) ? t : best));
+const figure = (svg, caption) => `    <figure class="chart">
+      <div class="chartwrap">${svg}</div>
+      <figcaption>${caption}</figcaption>
+    </figure>`;
+
+function chartsFor(page, group, isFreight) {
+  const size = (t) => (isFreight ? t.payloadTonnes : typicalSeatsOf(t) || t.seats);
+  const metric = (t) => (isFreight ? t.fuelTonneKm : t.fuelSeatKm);
+  const unit = isFreight ? 'tonne' : 'seat';
+  const few = group.length <= 12;
+  const noun = { 'Narrow Body': 'narrow-body jets', 'Wide Body': 'wide-body jets', 'Regional Jet': 'regional and business jets', Turboprop: 'turboprops and propliners', Freighter: 'freighters', 'Double Deck': 'flagships' }[page.categories[0]];
+  const the = (t) => (/^Concorde/.test(t.name) ? esc(t.name) : `the ${esc(t.name)}`);
+  const The = (t) => the(t).replace(/^t/, 'T');
+
+  // 1. Size against range: where each type sits in the category.
+  const far = pick(group, (t) => t.range);
+  const big = pick(group, (t) => size(t));
+  const small = pick(group, (t) => -size(t));
+  const near = pick(group, (t) => -t.range);
+  const newest = pick(group, (t) => t.eis);
+  const reach = scatterChart({
+    label: `${page.h1}: ${isFreight ? 'payload' : 'seats'} against range for all ${group.length} types`,
+    points: group.map((t) => ({
+      x: size(t),
+      y: t.range,
+      name: t.name,
+      short: shortName(t),
+      series: seriesOf(t),
+      tip: `${t.name}: ${isFreight ? `${t.payloadTonnes} t` : `${fmtInt(size(t))} seats`}, ${fmtInt(t.range)} km, in service ${t.eis}`,
+    })),
+    series: PRODUCTION,
+    xLabel: isFreight ? 'Payload (tonnes)' : 'Seats in the cabin the range is quoted at',
+    yLabel: 'Range (km)',
+    xFmt: fmtInt,
+    yFmt: fmtInt,
+    labelNames: few ? group.map((t) => t.name) : [...new Set([far, big, small, near, newest].map((t) => t.name))],
+  });
+  const reachCaption = `${isFreight ? 'Payload' : 'Seats'} against range for all ${group.length} ${noun} in Tailwinds, from the table above. The longest-legged is ${the(far)} at ${fmtInt(far.range)} km and the ${isFreight ? 'heaviest lifter' : 'biggest cabin'} is ${the(big)} (${isFreight ? `${big.payloadTonnes} tonnes` : `${fmtInt(size(big))} seats`}). Blue types are still built and can be ordered new. Orange lines have closed, so those aircraft arrive second-hand. Hover or tap a dot for the type.`;
+
+  // 2. Fuel per seat-km (or tonne-km) by year of entry into service: what each generation bought.
+  const scored = group.filter((t) => metric(t) != null);
+  const best = pick(scored, (t) => -metric(t));
+  const worst = pick(scored, (t) => metric(t));
+  const oldest = pick(scored, (t) => -t.eis);
+  const cents = (v) => `${v.toFixed(isFreight ? 1 : 2)}\u00a2`;
+  let fuel;
+  let fuelCaption;
+  if (few) {
+    const ranked = [...scored].sort((a, b) => metric(a) - metric(b));
+    fuel = barChart({
+      label: `${page.h1}: fuel cost per ${unit}-kilometre, cheapest first`,
+      bars: ranked.map((t) => ({ label: `${shortName(t)} (${t.eis})`, value: metric(t), series: seriesOf(t), tip: `${t.name}: ${cents(metric(t))} per ${unit}-km` })),
+      series: PRODUCTION.filter((p) => ranked.some((t) => seriesOf(t) === p.key)),
+      valueFmt: cents,
+      xLabel: `Fuel cost per ${unit}-kilometre at the base fuel price, with the year each type entered service`,
+    });
+    fuelCaption = `Fuel cost per ${unit}-kilometre with every seat filled, cheapest first. ${The(best)} moves a ${unit} for ${cents(metric(best))} a kilometre; ${the(worst)} needs ${cents(metric(worst))}, ${(metric(worst) / metric(best)).toFixed(1)} times as much.`;
+  } else {
+    fuel = scatterChart({
+      label: `${page.h1}: fuel cost per ${unit}-kilometre by year of entry into service`,
+      points: scored.map((t) => ({
+        x: t.eis,
+        y: metric(t),
+        name: t.name,
+        short: shortName(t),
+        series: seriesOf(t),
+        tip: `${t.name} (${t.eis}): ${cents(metric(t))} per ${unit}-km`,
+      })),
+      series: PRODUCTION,
+      xLabel: 'Year the type entered service',
+      yLabel: `Fuel per ${unit}-km (\u00a2)`,
+      xFmt: (v) => String(v),
+      yFmt: (v) => (isFreight ? String(v) : v.toFixed(1)),
+      xZero: false,
+      labelNames: [...new Set([worst, best, oldest, newest].map((t) => t.name))],
+    });
+    fuelCaption = `Fuel cost per ${unit}-kilometre at the base fuel price, set against the year each type entered service. The dearest ${unit} on the chart is aboard ${the(worst)} (${worst.eis}) at ${cents(metric(worst))} a kilometre, and the cheapest aboard ${the(best)} (${best.eis}) at ${cents(metric(best))}. ${isFreight ? 'Payloads differ widely, so compare aircraft of a similar size.' : 'Every seat is assumed sold, and small cabins spread the same engines over fewer seats, so compare aircraft of a similar size.'}`;
+  }
+  return `    <!-- TW-ONLY:START -->
+    <h2>The category in two charts</h2>
+${figure(reach, reachCaption)}
+${figure(fuel, fuelCaption)}
+    <!-- TW-ONLY:END -->`;
+}
+
 // ── Category pages ────────────────────────────────────────────────────────────
 
 const all = AIRCRAFT_TYPES.map(enrich);
@@ -344,7 +435,9 @@ for (const page of PAGES) {
     `<h2>All ${group.length} aircraft at a glance</h2>`,
     `<p>Figures are the game's actual values. Fuel cost assumes the base fuel price of $1.45/litre — the live market price in your save drifts between roughly half and nearly double that, which is why <a href="/route-economics.html">fuel hedging</a> matters. Lease and price are the classic-game market rates. Any type whose production line closed in 1976 or earlier is buy-only, because no lessor stocks it, so ignore its lease column. In an era game the calendar takes over: a type appears the year it entered service, lessors only take it from ten years after that (the war-surplus C-46, C-47 and DC-4 excepted), and prices shift with the year.</p>`,
     statsTable(group, isFreight),
+    chartsFor(page, group, isFreight),
     picksFor(page.file),
+    backgroundFor(page.file),
     `<h2>Every type in the category</h2>`,
     `<p>Reference entries for all ${group.length}, in the same order as the table. The table above carries ${isFreight ? 'payload' : 'seats'}, range, cruise speed, lease, price and fuel; these add the runway each type needs and its base weekly maintenance bill. That base is for a factory-fresh frame: out-of-production types arrive second-hand, already years old, and their maintenance starts higher (the market screen in the game quotes the delivered figure).</p>`,
     group.map((t) => aircraftCard(t, isFreight)).join('\n'),
@@ -358,8 +451,7 @@ for (const page of PAGES) {
     lede: page.description,
     body,
   });
-  writeFileSync(path.join(OUT, page.file), html);
-  console.log(`wrote public/${page.file} (${group.length} aircraft)`);
+  emit(page.file, html, `${group.length} aircraft`);
 }
 
 // ── Index page ────────────────────────────────────────────────────────────────
@@ -392,8 +484,8 @@ ${catCounts
         <figcaption>Fleet › Market in table view puts every type side by side: seats, range, runway length, fuel burn per seat, a 0–100 fuel-efficiency score, weekly maintenance, lease rate and purchase price. Filter by category or manufacturer, or show only types you can lease right now.</figcaption>
       </figure>`;
 
-writeFileSync(
-  path.join(OUT, 'aircraft.html'),
+emit(
+  'aircraft.html',
   pageShell({
     title: `Aircraft Guide — All ${all.length} Planes in Tailwinds Airline Management Game`,
     description: `Complete guide to all ${all.length} aircraft in Tailwinds: narrow-bodies, widebodies, regional jets, turboprops, freighters and flagships — with real in-game stats and economics.`,
@@ -401,6 +493,8 @@ writeFileSync(
     h1: 'Aircraft in Tailwinds',
     lede: `Every aircraft in the game, organised by category — with real stats, per-seat economics, and advice on when to fly each one.`,
     body: indexBody,
-  })
+  }),
+  `index, ${all.length} aircraft`
 );
-console.log(`wrote public/aircraft.html (index, ${all.length} aircraft)`);
+if (CHECK && staleCount) process.exit(1);
+

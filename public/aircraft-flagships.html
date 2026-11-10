@@ -55,6 +55,15 @@
     figure.shot { margin:8px 0 32px; }
     figure.shot img { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:10px; }
     figure.shot figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
+    ul.sources { color:var(--muted); font-size:0.92rem; padding-left:20px; margin:0 0 28px; }
+    ul.sources li { margin:0 0 6px; }
+    footer.site { border-top:1px solid var(--line); }
+    .footwrap { max-width:880px; margin:0 auto; padding:28px 24px; color:var(--muted); font-size:0.9rem; display:flex; flex-wrap:wrap; gap:16px; }
+    .footwrap a { color:var(--gold-light); text-decoration:none; }
+    figure.chart { margin:8px 0 32px; }
+    figure.chart .chartwrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:14px 10px 6px; }
+    figure.chart svg.chart { display:block; width:100%; min-width:620px; height:auto; }
+    figure.chart figcaption { color:var(--muted); font-size:0.9rem; line-height:1.55; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -63,9 +72,9 @@
     <nav class="site">
       <a class="brand" href="/">Tailwinds</a>
       <a class="link" href="/how-to-play.html">How to Play</a>
-      <a class="link" href="/strategy.html">Strategy</a>
+      <a class="link" href="/#guides">Guides</a>
       <a class="link" href="/aircraft.html">Aircraft</a>
-      <a class="link" href="/glossary.html">Glossary</a>
+      <a class="link" href="/devlog.html">Devlog</a>
       <a class="link" href="/faq.html">FAQ</a>
       <a class="link" href="/support.html" style="color:var(--gold-light);border:1px solid var(--gold);border-radius:999px;padding:2px 12px;font-weight:600;">&#9829; Support</a>
       <a class="link" href="/">Play</a>
@@ -78,11 +87,11 @@
     <p class="lede">The A380, 747 family and Concorde in Tailwinds: seats, range, lease cost and economics of the game’s biggest and fastest aircraft — and when they actually pay.</p>
     <p class="byline">By the Tailwinds team · Last updated November 9, 2026</p>
 
-      <p>These are the trophy aircraft of Tailwinds — the double-deck giants and the supersonic Concorde. Every player wants to fly them. Most players lose money the first time they try. This page is about flying them profitably.</p>
-      <p>Double-deckers live or die on one question: can the route fill 400 to 853 seats week after week? That only happens on the world's great trunk routes, usually between mega-hubs with strong feed on both ends. When it works, per-seat costs are excellent. When it doesn't, the weekly lease alone erases the profit of half your network.</p>
-      <p>Concorde is its own economy. Its fuel burn is extraordinary, but supersonic prestige commands a large ticket premium in-game, and on the right premium transatlantic-style pairing it can work as a halo aircraft — brand first, margin second.</p>
+      <p>This page covers the largest and fastest aircraft in Tailwinds: the double-deck A380 and 747 family, and Concorde. They are the aircraft players most want to fly, and the ones most often flown at a loss.</p>
+      <p>A double-decker needs a route that fills 400 to 853 seats every week. In practice that means the busiest trunk routes, usually between mega-hubs with connecting traffic at both ends. On such a route the cost per seat is very low. On a weaker one the weekly lease alone can cancel the profit of several healthy routes.</p>
+      <p>Concorde is a separate case. It burns more fuel per seat than any other airliner in the game, but passengers pay a large premium to fly supersonic, so on a wealthy long-haul pair it can pay its way. Treat it as a prestige aircraft that has to fight for its margin.</p>
       <h2>How to choose</h2>
-      <p>Honestly? Wait. Flagships belong in a mature network with established mega-hubs, deep cash reserves, and proven trunk routes bursting past the capacity of your largest twins. Then, and only then, they are glorious.</p>
+      <p>Wait until the network is ready. A flagship needs established mega-hubs, a deep cash reserve, and trunk routes that already overflow your largest twin-engined widebodies. With those in place it is the cheapest way to add seats to a route that is full.</p>
 <h2>All 9 aircraft at a glance</h2>
 <p>Figures are the game's actual values. Fuel cost assumes the base fuel price of $1.45/litre — the live market price in your save drifts between roughly half and nearly double that, which is why <a href="/route-economics.html">fuel hedging</a> matters. Lease and price are the classic-game market rates. Any type whose production line closed in 1976 or earlier is buy-only, because no lessor stocks it, so ignore its lease column. In an era game the calendar takes over: a type appears the year it entered service, lessors only take it from ten years after that (the war-surplus C-46, C-47 and DC-4 excepted), and prices shift with the year.</p>
     <div class="tablewrap"><table class="stats">
@@ -199,6 +208,17 @@
       </tbody>
     </table></div>
     <!-- TW-ONLY:START -->
+    <h2>The category in two charts</h2>
+    <figure class="chart">
+      <div class="chartwrap"><svg class="chart" viewBox="0 0 760 430" role="img" aria-label="Flagships: Double-Deckers &amp; Supersonic: seats against range for all 9 types" font-family="'IBM Plex Sans',system-ui,-apple-system,sans-serif" xmlns="http://www.w3.org/2000/svg"><line x1="62" x2="736" y1="380" y2="380" stroke="#4a4b53" stroke-width="1"/><text x="54" y="384" font-size="11.5" fill="#a1a1aa" text-anchor="end">0</text><line x1="62" x2="736" y1="301.5" y2="301.5" stroke="#2e2f36" stroke-width="1"/><text x="54" y="305.5" font-size="11.5" fill="#a1a1aa" text-anchor="end">5,000</text><line x1="62" x2="736" y1="223" y2="223" stroke="#2e2f36" stroke-width="1"/><text x="54" y="227" font-size="11.5" fill="#a1a1aa" text-anchor="end">10,000</text><line x1="62" x2="736" y1="144.5" y2="144.5" stroke="#2e2f36" stroke-width="1"/><text x="54" y="148.5" font-size="11.5" fill="#a1a1aa" text-anchor="end">15,000</text><line x1="62" x2="736" y1="66" y2="66" stroke="#2e2f36" stroke-width="1"/><text x="54" y="70" font-size="11.5" fill="#a1a1aa" text-anchor="end">20,000</text><line x1="62" x2="62" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="62" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">0</text><line x1="174.3" x2="174.3" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="174.3" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">100</text><line x1="286.7" x2="286.7" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="286.7" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">200</text><line x1="399" x2="399" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="399" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">300</text><line x1="511.3" x2="511.3" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="511.3" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">400</text><line x1="623.7" x2="623.7" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="623.7" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">500</text><line x1="736" x2="736" y1="380" y2="385" stroke="#4a4b53" stroke-width="1"/><text x="736" y="399" font-size="11.5" fill="#a1a1aa" text-anchor="middle">600</text><text x="399" y="420" font-size="12" fill="#a1a1aa" text-anchor="middle">Seats in the cabin the range is quoted at</text><text x="6" y="52" font-size="12" fill="#a1a1aa">Range (km)</text><circle cx="11" cy="16" r="5" fill="#3987e5"/><text x="22" y="20" font-size="12" fill="#a1a1aa">Still in production</text><circle cx="172.12" cy="16" r="5" fill="#d95926"/><text x="183.12" y="20" font-size="12" fill="#a1a1aa">Out of production (arrives second-hand)</text><circle cx="174.3" cy="266.2" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Concorde: 100 seats, 7,250 km, in service 1976</title></circle><circle cx="372" cy="210.4" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747SP: 276 seats, 10,800 km, in service 1976</title></circle><circle cx="473.1" cy="180.6" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-200B: 366 seats, 12,700 km, in service 1971</title></circle><circle cx="473.1" cy="226.1" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-100: 366 seats, 9,800 km, in service 1970</title></circle><circle cx="529.3" cy="168.9" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-400: 416 seats, 13,445 km, in service 1989</title></circle><circle cx="586.6" cy="147.4" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-8I: 467 seats, 14,816 km, in service 2012</title></circle><circle cx="511.3" cy="196.3" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-300: 400 seats, 11,700 km, in service 1983</title></circle><circle cx="700.1" cy="321.9" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Boeing 747-400D: 568 seats, 3,700 km, in service 1991</title></circle><circle cx="651.8" cy="141.4" r="5.5" fill="#d95926" stroke="#1b1b1f" stroke-width="2"><title>Airbus A380: 525 seats, 15,200 km, in service 2007</title></circle><text x="183.3" y="270.2" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">Concorde</text><text x="381" y="214.4" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747SP</text><text x="464.1" y="184.6" font-size="12" fill="#ededee" text-anchor="end" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-200B</text><text x="482.1" y="230.1" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-100</text><text x="538.3" y="172.9" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-400</text><text x="595.6" y="151.4" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-8I</text><text x="520.3" y="200.3" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-300</text><text x="691.1" y="325.9" font-size="12" fill="#ededee" text-anchor="end" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">747-400D</text><text x="660.8" y="145.4" font-size="12" fill="#ededee" text-anchor="start" paint-order="stroke" stroke="#1b1b1f" stroke-width="3" stroke-linejoin="round">A380</text></svg></div>
+      <figcaption>Seats against range for all 9 flagships in Tailwinds, from the table above. The longest-legged is the Airbus A380 at 15,200 km and the biggest cabin is the Boeing 747-400D (568 seats). Blue types are still built and can be ordered new. Orange lines have closed, so those aircraft arrive second-hand. Hover or tap a dot for the type.</figcaption>
+    </figure>
+    <figure class="chart">
+      <div class="chartwrap"><svg class="chart" viewBox="0 0 760 318" role="img" aria-label="Flagships: Double-Deckers &amp; Supersonic: fuel cost per seat-kilometre, cheapest first" font-family="'IBM Plex Sans',system-ui,-apple-system,sans-serif" xmlns="http://www.w3.org/2000/svg"><line x1="115.25" x2="115.25" y1="14" y2="284" stroke="#4a4b53" stroke-width="1"/><text x="105.25" y="33" font-size="12.5" fill="#ededee" text-anchor="end">A380 (2007)</text><path d="M115.25 20h100.2a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Airbus A380: 3.06¢ per seat-km</title></path><text x="227.4" y="33" font-size="12" fill="#a1a1aa">3.06¢</text><text x="105.25" y="63" font-size="12.5" fill="#ededee" text-anchor="end">747-8I (2012)</text><path d="M115.25 50h110.2a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-8I: 3.36¢ per seat-km</title></path><text x="237.5" y="63" font-size="12" fill="#a1a1aa">3.36¢</text><text x="105.25" y="93" font-size="12.5" fill="#ededee" text-anchor="end">747-400D (1991)</text><path d="M115.25 80h116.3a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-400D: 3.53¢ per seat-km</title></path><text x="243.5" y="93" font-size="12" fill="#a1a1aa">3.53¢</text><text x="105.25" y="123" font-size="12.5" fill="#ededee" text-anchor="end">747-400 (1989)</text><path d="M115.25 110h127.2a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-400: 3.85¢ per seat-km</title></path><text x="254.5" y="123" font-size="12" fill="#a1a1aa">3.85¢</text><text x="105.25" y="153" font-size="12.5" fill="#ededee" text-anchor="end">747-300 (1983)</text><path d="M115.25 140h140.9a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-300: 4.26¢ per seat-km</title></path><text x="268.1" y="153" font-size="12" fill="#a1a1aa">4.26¢</text><text x="105.25" y="183" font-size="12.5" fill="#ededee" text-anchor="end">747-200B (1971)</text><path d="M115.25 170h150.8a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-200B: 4.55¢ per seat-km</title></path><text x="278.1" y="183" font-size="12" fill="#a1a1aa">4.55¢</text><text x="105.25" y="213" font-size="12.5" fill="#ededee" text-anchor="end">747-100 (1970)</text><path d="M115.25 200h159.2a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747-100: 4.79¢ per seat-km</title></path><text x="286.5" y="213" font-size="12" fill="#a1a1aa">4.79¢</text><text x="105.25" y="243" font-size="12.5" fill="#ededee" text-anchor="end">747SP (1976)</text><path d="M115.25 230h161.1a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Boeing 747SP: 4.85¢ per seat-km</title></path><text x="288.4" y="243" font-size="12" fill="#a1a1aa">4.85¢</text><text x="105.25" y="273" font-size="12.5" fill="#ededee" text-anchor="end">Concorde (1976)</text><path d="M115.25 260h570.8a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4H115.25Z" fill="#d95926"><title>Concorde: 16.88¢ per seat-km</title></path><text x="698" y="273" font-size="12" fill="#a1a1aa">16.88¢</text><text x="115.25" y="308" font-size="12" fill="#a1a1aa">Fuel cost per seat-kilometre at the base fuel price, with the year each type entered service</text></svg></div>
+      <figcaption>Fuel cost per seat-kilometre with every seat filled, cheapest first. The Airbus A380 moves a seat for 3.06¢ a kilometre; Concorde needs 16.88¢, 5.5 times as much.</figcaption>
+    </figure>
+    <!-- TW-ONLY:END -->
+    <!-- TW-ONLY:START -->
 <h2>Five flagships and the routes that justify them</h2>
     <p>Nine flagships are listed above, but most of the money is won or lost on five of them. What follows is not a ranking. It is five separate arguments about when a very large aeroplane earns its keep — from an old jumbo that only looks cheap to the one that charges 2.75 times the going fare and still has to fight for its margin.</p>
     <div class="card">
@@ -226,6 +246,21 @@
       <p>Concorde is not really an aircraft in this game; it is a fare multiplier with wings, and judged that way the case becomes arguable. Whatever fare you set, passengers are charged 2.75 times it — and they feel that price, so demand thins accordingly — which is the only reason 16.88 cents per seat-kilometre is even worth discussing. Divide the burn by the multiplier and you still need a baseline fare worth about 6.1 cents per kilometre simply to cover fuel — double the 3.06 cents an A380 has to clear, and above every other type here. Only a genuinely premium market pays that, and a 7,250 km range confines you to the shorter premium trunks in any case.</p>
       <p>Then the fixed costs, which are savage across 128 seats: $463,000 of lease plus $320,000 of maintenance is $783,000 a week, about $6,100 of standing cost per seat, against roughly $1,380 per seat on an A380. Fuel volatility lands hardest here too, since the market can run to nearly double $1.45 a litre and the 2.75x multiplier applies to your fares, not your costs. It also wants 10,800 ft of runway, the longest requirement of any passenger aircraft in the game, which quietly rules out airports that would otherwise be ideal. Fly it when a mature network can absorb a flat week, on one short premium trunk, as the thing your airline is known for. Read <a href="/route-economics.html">route economics</a> before you sign.</p>
     </div>
+    <!-- TW-ONLY:END -->
+    <!-- TW-ONLY:START -->
+    <h2>The real aircraft behind these numbers</h2>
+    <p>The Boeing 747 entered service with Pan Am on 22 January 1970, on the New York to London route. It was the first wide-body airliner, and it stayed the largest passenger aircraft in service until the Airbus A380 arrived in 2007. Boeing built 1,574 of them over more than half a century. The last, a 747-8 freighter, went to Atlas Air on 31 January 2023.</p>
+    <p>The A380 was launched in December 2000, first flew on 27 April 2005 and entered service with Singapore Airlines on 25 October 2007. A typical three-class cabin seats 525, and the type is certified for up to 853 passengers in an all-economy layout. Those are the two cabin sizes Tailwinds uses for it. Airbus announced in February 2019 that production would end, and delivered the last aircraft to Emirates on 16 December 2021. It was the 251st A380 delivered, and the 123rd for Emirates alone.</p>
+    <p>Both programmes ended for much the same reason. A four-engined aircraft burns more fuel than a twin of similar size, and modern twin-engined widebodies can fly the same ocean crossings. A very large aircraft is only cheap per seat when the seats are sold, and few routes fill 500 of them every day. Tailwinds treats both production lines as closed, which is why every A380 and 747 in the game arrives second-hand.</p>
+    <p>Concorde first flew on 2 March 1969 and entered service on 21 January 1976 with Air France and British Airways. Twenty were built, and fourteen of them flew for the two airlines. It cruised at about twice the speed of sound and crossed the Atlantic in just under three and a half hours, against about eight for a subsonic jet. British Airways retired its fleet on 24 October 2003, after maintenance costs rose and passenger numbers fell. Tailwinds keeps it flying.</p>
+    <h3>Sources and further reading</h3>
+    <ul class="sources">
+      <li><a href="https://en.wikipedia.org/wiki/Boeing_747" rel="noopener">Boeing 747</a>, Wikipedia: service entry, production total and the final delivery.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Airbus_A380" rel="noopener">Airbus A380</a>, Wikipedia: programme dates, seating and the end of production.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Concorde" rel="noopener">Concorde</a>, Wikipedia: service dates, fleet size and flight times.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Wide-body_aircraft" rel="noopener">Wide-body aircraft</a>, Wikipedia: why twin-engined designs replaced three- and four-engined ones.</li>
+      <li>Our own article, <a href="/a380-vs-747.html">A380 vs 747</a>, compares the two double-deckers in more depth.</li>
+    </ul>
     <!-- TW-ONLY:END -->
 <h2>Every type in the category</h2>
 <p>Reference entries for all 9, in the same order as the table. The table above carries seats, range, cruise speed, lease, price and fuel; these add the runway each type needs and its base weekly maintenance bill. That base is for a factory-fresh frame: out-of-production types arrive second-hand, already years old, and their maintenance starts higher (the market screen in the game quotes the delivered figure).</p>
@@ -282,20 +317,23 @@
       <a href="/?home">Home</a>
       <a href="/how-to-play.html">How to Play</a>
       <a href="/strategy.html">Strategy</a>
+      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
+      <a href="/route-economics.html">Route Economics</a>
+      <a href="/route-case-study.html">Route Case Study</a>
+      <a href="/hub-strategy.html">Hub Strategy</a>
+      <a href="/fleet-planning.html">Fleet Planning</a>
+      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
+      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
+      <a href="/fuel-hedging.html">Fuel Hedging</a>
+      <a href="/on-time-performance.html">On-Time Performance</a>
       <a href="/aircraft.html">Aircraft</a>
       <a href="/glossary.html">Glossary</a>
       <a href="/faq.html">FAQ</a>
-      <a href="/demand-and-quality.html">Demand &amp; Quality</a>
-      <a href="/on-time-performance.html">On-Time Performance</a>
-      <a href="/hub-strategy.html">Hub Strategy</a>
-      <a href="/route-economics.html">Route Economics</a>
-      <a href="/fleet-planning.html">Fleet Planning</a>
-      <a href="/competition-and-alliances.html">Competition &amp; Alliances</a>
-      <a href="/fuel-hedging.html">Fuel Hedging</a>
-      <a href="/route-case-study.html">Route Case Study</a>
-      <a href="/beginner-mistakes.html">Beginner Mistakes</a>
-      <a href="/devlog.html">Devlog</a>
+      <a href="/regional-jets-explained.html">Regional Jets Explained</a>
+      <a href="/narrow-body-vs-wide-body.html">Narrow-Body vs Wide-Body</a>
+      <a href="/a380-vs-747.html">A380 vs 747</a>
       <a href="/best-airline-management-games.html">Best Airline Games</a>
+      <a href="/devlog.html">Devlog</a>
       <a href="/about.html">About</a>
       <a href="/contact.html">Contact</a>
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>

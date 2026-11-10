@@ -1,0 +1,224 @@
+{
+  "index.html": {
+    "updated": "2026-11-09",
+    "hash": "7fb9fbde905d2bf8",
+    "blocks": "9ebb48 3540d2 231b60 5c9831 1a9dbb 7c0565 d5a9de 3f5152 d96221 bd37f9 220853 053055 14095c 9ae3cf 8f4d1b dae97a 4b1c71 9db7fb cd0669 86d127 1176ef e87a17 29af08 6257f3 66b0c5 449303 6d07b0 763f78 61ba41 6865be eb24a4 f431d1 5e726c 19b2c5 358cc2 69e39b 1a51d2 14548d 2adc96 0506ca 3f5daf e572ff bea1dd 24052f cf673e 13a6b2 641379 dd2ba8 2e6542 f04b6a 050ced b813d7 218581 2b6a79 d5c90a d85e7e 3feefb c0d427 0bcb3a 0a0e26 649867"
+  },
+  "public/a380-vs-747.html": {
+    "updated": "2026-11-09",
+    "hash": "8e195a2f67bed14d",
+    "blocks": "12252f 6375cd 46b396 3ad9ed 5db631 5ae6ad 0b4b05 ce05a3 ab0d1c cc5a6a 6c3423 8ec273 95d3bf 964570 1a74d9 0da656 8f332b 28686a 7e6973 3659ff 434591 6b115f 9b7385 44a0e0 4546f0 094b3c 6a3054 cff52e c241ed 940c31 497dbc c2f821 fc48b1 52e868 1d1b40 f15157 caf85b f60e7e 4fee34 6786d3 96d38b 5719e6"
+  },
+  "public/about.html": {
+    "updated": "2026-11-09",
+    "hash": "54ce671a751821b4",
+    "blocks": "c94605 ee07fc cdc792 a59ba2 85a124 08f69a 3edc10 ec92a7 dddf82 933003 ac8605 9e4d79 6f6fd2 ee9734 40b83d 5719e6"
+  },
+  "public/aircraft-flagships.html": {
+    "updated": "2026-11-09",
+    "hash": "7cef604d31354474",
+    "blocks": "b810b8 0bc735 2cae3d 276b57 f5a015 f60c51 7429aa 8beab6 afcc53 3785e7 4d84f3 e708be 86e08a 72852e 15403a 3873a4 3a04ca df73d9 85956b 146831 8205e7 d3bdfd 5909e3 e9d047 2cd18c 8d07d1 c6b01d 72894b a1e194 daf00b d3edec bba8f1 88b2d7 962c66 219b16 630012 d8c842 ab1a31 dd65ad d9851b d6316a 8ed818 95d5b6 d70765 54cd7b 9b095c 7dbe79 9a2bb7 8d0f44 35e42a dfa183 96d38b 500700 1c1722 249266 2c573b 9dc514 3c1747 7e377e 75997b 45f138 eb1b61 deb789 708516 4cb2b9 0f3886 ca1b46 0e2d7c f96bf2 cfe899 935c9b 765027 587cdd b6f23c c36c78 53e40c 890592 c9b07a e80a5d a013d4 54747b 5c3b08 5719e6"
+  },
+  "public/aircraft-freighters.html": {
+    "updated": "2026-11-09",
+    "hash": "ca51b39401eb3cda",
+    "blocks": "c2f8d0 84182e 69e9b1 17d8c6 c30776 7429aa db8e28 3fcc75 3785e7 9d6326 c173b8 8365f6 58676f 60e6be 20cafb 068b22 adb63e 743c10 4a1384 3ebda3 10e3f7 6d57f8 0eaf35 339ccc 54cca6 8f96f6 32a348 f89cbc 31acef ca4236 1675cb 727255 36e6df 77533c a52868 cac2ca ff1e45 61e87d bf9cc7 be37d0 77011c 5cfe32 8205e7 4e90d8 7cd2a9 3f3684 4bf2f8 8f07c5 b349dc 56c6d9 bae9f0 ede7b0 f6a06e ccafb1 2175d8 4d44bd db5bfa 172416 04b684 8ac8b6 bd8d83 66bedd be6e11 de8c18 db8740 c1d7fb c3c82d 95d5b6 e9a3f5 5e05a0 b55357 9a2bb7 c5b058 1328bc 1c1722 8d9073 c7823a a9ad67 0ce527 2e0db7 2823d0 ccd0b4 2b6195 40d85b e65f4b 5d518f 9754e0 8b75c9 82bacb 99f3a8 e95038 223838 8ca0b2 037917 9ec12f 82aa99 bb99d8 e05e89 675ae8 8e50a2 c455cc 82aa99 8ad711 0de55f 64eaa6 d311c3 afa742 230579 a53f08 7303d8 ee9989 abfdc0 a21532 0f6282 1e24d5 b7fd92 cf2310 6f3a78 2be7fb 670f13 c6e12e 283692 8f9871 523fc0 896a8c b99279 36269e 70dc35 93170a 52b768 127edb 869145 c42152 cd9ee7 e9b5e0 e9de08 63882a c84201 d5c5b7 703736 063475 38d327 ef1151 07e62d 852b3d 812906 f85f4c eb3ce2 51f950 e0c8ab 8599f4 5e73f2 b74cb2 5eb17c 8c953f f5e25c 1e2e09 2303a5 62bae7 09bfc4 759802 2c8210 887afa 86600e bd554c 8757f0 1b5a61 2f4eb9 465687 bb4d46 6d4d24 d84704 5719e6"
+  },
+  "public/aircraft-narrow-body.html": {
+    "updated": "2026-11-09",
+    "hash": "54ccd2d181cdb664",
+    "blocks": "040fb5 a459d1 1c322a 83be67 b96a04 7429aa 3825e5 5cdf42 3785e7 4d84f3 b15b4b 010bc3 906003 beb2c5 0cc52a a8b533 395fac f57005 754819 07de23 863bea 014596 f059a6 eae5c7 37eadb 89c7f3 cf132a dfbe81 ff30b5 1e9287 46cbcc 0b8c69 a832ed 9a36d8 cd0d3e 7d8038 e9961b 0bac83 4be22a 62837a d2f4d8 309866 ed0728 41a7ec aea234 4b2f71 822d7c e44ef3 dad084 896487 359b7c 4cfc68 11bec7 2db103 6844e8 db00c6 3ff52e 8d48de 951f65 46da1b a88972 8dc8c3 c57ec2 8205e7 620823 586a70 58015e a8133b bd1f8e fb3521 4cbdcc fbd65f f955ff ff78ec 8feed1 d01b6d 03c4cc c1d803 d151c1 abd131 14c3ec a971bc 514ad0 0a7ab1 575f04 c233cf d621a1 44c5ca 95d5b6 da8d73 ea33c5 14c441 9a2bb7 8a4f7e e3ee1e af4581 5fd845 1c1722 78fde2 a760bf d9511a 955d14 84c7ee 2b0394 4eb4bc a896b8 3672d8 77d813 94b24b 220664 6b6607 030629 56b056 b08fab 343285 e325b9 e18159 298b29 ef3389 a7062e 3ba91e 806d4a 29d390 12357e 07ca40 77af0a 8f5904 8b1945 e0ce05 6f674d 238120 0be94d 046434 3ff51b 1d2baf 7824ed 79fe68 34c73e 54a0ee 373a4d f49d88 412639 9fe19b 2c1a7a e6b5b8 db7562 99a017 5c5981 c4ff45 8960cc 21f998 2dc3df d39061 2f7aca 6282c3 048def d687c4 b37a94 1459af 4537a7 0cb594 b145c1 c0e2fc b5433f f5effb a1d2a5 ade92f 66cbff bcb9af 4bc57f e0cecd 6f5ab1 01b1da 59583f 8ba3d5 eb406d 0f5f67 2a950d 43c64b 30fcd8 783598 69ba83 7d0c44 6ae29e 08c906 a4a6b3 c14893 f9f35d 2bf212 54b67b 650257 6ab4fe ae512b f19731 9ef72d 0762a1 b8f6d9 fc1fc7 271516 e47d5a b8e5ef 7b939d a96620 141b46 ea6e08 fa4314 6bbee8 baae97 c63c70 df9974 94ceb2 db8543 09f22b ba3ddb 0c0e93 695d65 c29c3a 75866c 4b2ad0 085ac9 f46084 539099 c21315 26bcf0 ae362a 2226ce 17f392 079213 5ee986 17f392 98ba76 3d3b50 b92608 4481b5 5a78f9 bcd081 122538 369cb2 176b2d 50321a e54c51 79ac9b af7308 7465e5 92b7b9 7e636e f5c71f e03313 4187c2 c0305d bba254 ccd5d2 94a4e6 c93094 5389e5 7671be dc1552 48246c 5719e6"
+  },
+  "public/aircraft-regional-jets.html": {
+    "updated": "2026-11-09",
+    "hash": "84473f60d1a479f9",
+    "blocks": "81b2d9 493479 296f4b fa1964 7e6258 7429aa f9a059 fdcf68 cb54e4 f653a5 3785e7 4d84f3 09db5b dface7 3593a0 66f74e 3aedc1 1d59b8 5b7ed2 432d2e a2fa44 581f3e 40a803 b75d84 687391 76cd34 19153f 7d915f 390e81 58d0ae 8818a9 4b3c2f 7aa40a 4b9eaa ed16f3 9c9d29 bafc30 aceeb7 904fbe 74392e d50b1c 592cc5 8205e7 3c72fd 5876d5 c91a5e defeeb 58b0b1 d9e171 3c1a86 6bc47c 35c17e 723eba de9a0b 126e5d c3b4a2 18becc a23ef9 36a659 42d1ae db3fa3 df7ee5 567c38 b0f978 4c4a3d 9e3184 b3835e 1c1722 1c3452 76c960 59c8c8 21d207 6c66a8 1a535e eef3bc f7f627 a9bca9 959429 5d21bd aa1a6d d0d9b8 8cd52e f22d20 64b10f 077ffc fd2bbf f9a6ca 5e2100 76c937 8e9749 e9fa11 d2e7c0 b78630 89b91c ba653b 833f57 7c1011 d44e2c 1bf9ab 54ddd6 d5f0da 91b68a c01b13 3aa429 6ca01c 8e2062 1b8368 59c5e6 a85ca1 7816a7 efa67f 5561c4 083993 aa53e8 406858 bd48e5 eb52e7 7c2d77 94c07c 18e64f 87c330 973ce7 1d019a 1b6b86 f82fce 596ec0 3327a6 bc8cd0 f7d3c9 050ee4 a340af fcf785 4b6235 58865f 5d4a4b 5626d0 7ee8b7 c13d52 e1a3c4 089794 6686f8 5e1c9d 2f3480 de8382 2ecb66 689267 6be8fa fb8458 838b70 231c1a fd5c52 307ccd 06d4b2 36355c 0d4953 d4ba30 af8040 34415e 116266 5719e6"
+  },
+  "public/aircraft-turboprops.html": {
+    "updated": "2026-11-09",
+    "hash": "9a4271a9d8669d86",
+    "blocks": "0b8883 2d4a63 2083b2 e73f84 dfea2d 7429aa f31bfd dece4b 3785e7 4d84f3 4b0e17 791382 94074c 8f2a52 9c70bf bc86df 75e262 430720 eaa014 bc118d aee598 b86f7c 44602a 7b4f2d 329145 ce4287 c6a257 a51a74 6a2a3f ab0d00 3aa882 618bbb e22f11 2e8793 6a6bf1 c7a10a d75f15 7a25a0 96438a 8d5e8c b6e65e c22978 5be0e2 21f15f 804c50 8bb3c6 298f16 29525a 8c4c11 c902ed 32e29f 09bc2b 1add8e 0b354b 49faba 5647f6 0ff5f9 e3684f ef8d7d 61716d 237f73 d78e9f 8205e7 a60062 059587 9a1fa0 792065 ef3d4d 91596b 40d6e9 5faf5f fea402 a468b3 c05ac6 55cbeb b184b6 c7fa62 55edd7 1f3322 92aab2 d2b0d8 79ad1c c8ed46 9df4d5 8325c6 bba12e b4e8aa 1c1722 0ef8a8 5b6966 a58332 5a2222 44e703 5ae1ff 89dea7 beab25 99493d 738906 137b4b 2ed600 cc4fa4 febf2e 770d57 683a5a d6fb6a 45d2d6 3d9880 852882 436b42 c8b26d 6f2cdd e7ae01 ca5e90 31231a 4a9ee4 2291e5 80a985 a4836b 31b169 1d1ef0 07f4ca 277848 1af208 f28a88 bbef5c 72948e 12b56a 99febe 804ded e0b8c3 2859ef e85678 872774 43e65b 9e8037 759cc7 87eb5a c22917 388975 74259e 276b8d ce1dff 353337 85b366 f7c6e4 e2608a ee0acf 49890e a3e073 479573 1f9389 bcdd9b d68737 f4af1e b13f49 490ba0 50885a 3d5067 a7e9d8 3cc9b2 5e026b a8269d 1b5122 79e7ef d39654 fb05ed b984f4 d866ee 97ad85 38eacb 7f3f8b 5fc1d5 0b317a fc35f3 8c0364 3b22a2 efd95b 816a8e beff2f 231ba5 4fa9d1 0c4412 338799 55ac10 5d1b9d f69a7c 365328 a994e8 af0b96 ecb064 9bb95e 033a68 ecaaef 3fc7e2 44bfe6 584a0a bacdbb e3e256 7c826e f6dbcc 546070 662272 f90fc1 c2c150 f6f11d 2b1e59 61d5b9 2c1d76 15f6be 47f34d 274fcf f6642d 5022db e2448e a84f73 125210 ba55e2 59b5df 2ebe9c 182641 3baee8 a23257 f0423c 48f3e0 3ebed7 d26ef6 3b6be3 298813 f6f11d 8180ea 49bab8 248b24 b051c7 135798 457e44 54f645 a7dfac d51aed 7f4f3d 7626a3 2f0fee 81857c 004df3 864156 1021c1 5719e6"
+  },
+  "public/aircraft-wide-body.html": {
+    "updated": "2026-11-09",
+    "hash": "8256ad78b1b5d4ad",
+    "blocks": "c8aee1 d2781a d12372 a3ec69 683243 7429aa 6b5d4a 14c06b 3785e7 4d84f3 e61af9 fb3622 e370c2 6eb8cd 356185 fb81cd a77891 292994 352fb7 623425 7051e8 77e12b 6be5b5 15c1ca 7b7527 366610 5a71f5 5f7831 75318f c99490 c34288 6ca500 708e9b 50f1bf ceef94 57c780 578f6b f3c758 7f4ca8 d3a8f8 a9d2f7 8205e7 4bd361 4c8750 865e7c 620c48 60bfa1 ee3979 2c31b3 34fd1c 9bfbf2 7d6076 ebca75 a1d7ec 56d64e 0064f7 fce76f 1f7cdd 63b558 2d8075 13cf4c 27c49e 35d948 4b2882 bfdb5b 837fcc 1c1722 b60f6f 1d8de8 7f4bd7 638805 f68e8b 4d3302 468edd b1b632 f0a8c0 68dfa6 6e0d0c b973c6 3639f5 6b8e98 96cd9b d0dc41 4aed27 8ac276 856c86 23ac8c d9c04d e8f415 cfafc8 d0deaf de4613 ee9f50 cd7c22 adf396 501338 793f2b 02571a 9a5e82 a799f7 f68b16 340381 9d4b64 31fa37 6fb481 9758bc fdf0e5 59067e a5a5c2 db965f e02085 ab4c59 b30ce7 a20901 8f5ac6 5ecc98 5b64dc cd1758 096b7e f84496 1101a8 c6689f 47d28c 9dbe73 3a319b 8d14d4 64d316 79046a eac923 82606b 218968 29cfbf efd7b9 e309f0 aa6b66 01f120 943a10 ccd79c aad217 1a555a 4d907b 058f6a 415149 d0de83 28344d a297b7 2f9a60 b06325 ce665a ea1831 4603b4 435b05 8256fa d1b5eb 2d537f 4f4b7d dba1c7 38faa2 fbbe6e 2fbf06 a2cd67 5719e6"
+  },
+  "public/aircraft.html": {
+    "updated": "2026-11-04",
+    "hash": "bf48083e2208898b",
+    "blocks": "caa4ab 9c58e1 e84895 b10760 2f1f79 1add93 a459d1 8be8d3 1c322a d2781a bd9be9 d12372 493479 d68b8d 296f4b 2d4a63 8be8d3 2083b2 84182e a57caa 69e9b1 0bc735 59ffe4 2cae3d f7760e 18fb5b cf54a1 1cabf8 0d896f 5719e6"
+  },
+  "public/beginner-mistakes.html": {
+    "updated": "2026-10-29",
+    "hash": "c6173e7f6de36aea",
+    "blocks": "208b19 46d62d 526dcd 7aff7d 43f366 a62f40 0259ae 120a93 c213db 9355b3 418eb5 4e16be 79d7f4 e7848b 0e51ea ed8660 dd6968 694897 ffab2d 31724a daf49a f283b6 46a80b 7c45a3 e00d58 df1ae3 733fce 93b919 200f10 1800b6 0afa3c 60855b 68be73 b7dad7 992b14 155bff 2b14ed 376543 1ea11c"
+  },
+  "public/best-airline-management-games.html": {
+    "updated": "2026-11-09",
+    "hash": "df161f23bfce05fe",
+    "blocks": "2d7100 7a3857 9f3407 46b396 3c69b1 cb8391 656ed4 c6ce57 7823f3 646d41 e0ff7b c6b931 727353 b34e57 0f33bb af78e7 6c62e8 3c0c70 b2d863 214043 897d38 6af316 81d5d1 93c6c0 78c583 890504 ef0372 f9305c 32099d e956a9 e8545f 066ad8 0a01e6 0a8c01 4cf672 ea344f 7e14e2 9b1e32 339589"
+  },
+  "public/competition-and-alliances.html": {
+    "updated": "2026-11-09",
+    "hash": "cdbb0a01358cf4d9",
+    "blocks": "cb837d ebcb8d b6a6c9 8eed2e ea1406 74a311 e7b54a b597b7 1205f7 71e6bd 63c774 ab6a60 b0ef86 20692e 127f7e ade7e5 7859ad ca0ae7 cede1c eedaf7 4b4ccc 8a3d8a 948ea2 abf8f5 a32d90 e7a488 25f406 1336a1 62b2f4 d27708 6abd04 3e8516 ed942a fb2f3d 23197d de9918 17e8c9 74b3f3 502675 3e4a2e 4f1a85 c7a3e0 3d9d0f 75cec0 cbe86c a3a679 90fbfd c76273 24d1de 651f91 9f1398 d40a05 35cb3f 39a8b7 1386cb 7907f2 da95d9 f310e0 36813d f8687d 5014c2 a4aad9 0e6550 f5a7ee 3655ec 7953be 0d9fce e47c73 40e8db e492cb accab7 84e8dc 0e481b 0a421d cc8636 b99196 1a1da8 59c117 775b73 ae2f49 e7d734 0942b2 89cd4d 92ea29 d6e75e 0df8d4 e26441 6e46f7 ef6542 492965 bde2f2 8f4d7f 6b6478 36c97f 421576 5ef6dc 250dbd 4082f5 1a8d84 1ea11c"
+  },
+  "public/contact.html": {
+    "updated": "2026-07-12",
+    "hash": "73174e476e3494fc",
+    "blocks": "2b5c3d 5aa66b db12de 631427 12543c 50c7b4 74af86 4a1b7f 1bd505 2fdab1 5d3d8b 7b4b76 a4eb5b e32ac1 1572e0 ab832f c32852 7a4907 01c22d 5719e6"
+  },
+  "public/demand-and-quality.html": {
+    "updated": "2026-11-09",
+    "hash": "4629ea0afed30325",
+    "blocks": "2f5b16 df56dd 4561af abeee8 f47237 f5cea6 7ee1d2 414d9b 162ff6 814d20 f3225f 52c57d 7c254d e3844d c71795 1e8e8c 345565 9a49c5 e5f927 0ec780 8eaaa6 685e15 63a736 f3bcf5 f26d90 ac524d 7fb703 a1133c 4082f5 a32c42 1ea11c"
+  },
+  "public/devlog/2026-07.html": {
+    "updated": "2026-07-31",
+    "hash": "61e7c712d93475ae"
+  },
+  "public/devlog/2026-08.html": {
+    "updated": "2026-08-31",
+    "hash": "892789257be507a2"
+  },
+  "public/devlog/2026-09.html": {
+    "updated": "2026-09-30",
+    "hash": "6f33559dc5cabef8"
+  },
+  "public/devlog/2026-10.html": {
+    "updated": "2026-10-31",
+    "hash": "71ce0f4a6dbef0d2"
+  },
+  "public/devlog/2026-11.html": {
+    "updated": "2026-11-09",
+    "hash": "5b9fa1586e6fcad0"
+  },
+  "public/devlog/aircraft-audit-part-two-real-turboprop-figures-one-runway.html": {
+    "updated": "2026-09-24",
+    "hash": "7f3d3bf89c947634"
+  },
+  "public/devlog/charter-contracts-the-fee-is-fixed-the-cost-is-yours.html": {
+    "updated": "2026-09-12",
+    "hash": "5c1215c81b4acb79"
+  },
+  "public/devlog/fuel-is-a-department-now-not-a-button.html": {
+    "updated": "2026-09-20",
+    "hash": "c5277b49b799e9b3"
+  },
+  "public/devlog/maintenance-gets-its-own-page-and-you-can-build-your-own.html": {
+    "updated": "2026-07-28",
+    "hash": "090a6ed56af8dd3d"
+  },
+  "public/devlog/multi-stop-routes-bend-on-the-map-and-can-finally-take-more.html": {
+    "updated": "2026-08-27",
+    "hash": "5ea9254a48639450"
+  },
+  "public/devlog/passenger-demand-overhaul-recalibrated-against-real-traffic.html": {
+    "updated": "2026-10-29",
+    "hash": "af8f7b5c8b324e1f"
+  },
+  "public/devlog/propellers-now-burn-what-propellers-burn.html": {
+    "updated": "2026-09-20",
+    "hash": "b31aa9f53ed0d34f"
+  },
+  "public/devlog/small-charters-business-jets-and-a-plane-finder-that-ranks.html": {
+    "updated": "2026-09-16",
+    "hash": "fff9a2a3740e51d4"
+  },
+  "public/devlog/start-in-1950-and-fly-the-century.html": {
+    "updated": "2026-08-31",
+    "hash": "804743cb1f011343"
+  },
+  "public/devlog/the-numbers-on-screen-now-match-the-numbers-you-are-charged.html": {
+    "updated": "2026-08-09",
+    "hash": "f8401fd7218efbcd"
+  },
+  "public/devlog/wi-fi-is-fitted-to-an-aeroplane-and-a-lounge-is-a-room-you.html": {
+    "updated": "2026-08-10",
+    "hash": "03fab5bf27b6a8e9"
+  },
+  "public/devlog/your-planes-stop-being-permanently-full-and-the-other.html": {
+    "updated": "2026-08-07",
+    "hash": "55a0db0551cb0d6d"
+  },
+  "public/devlog.html": {
+    "updated": "2026-11-09",
+    "hash": "d218aa5e7c895f8f"
+  },
+  "public/faq.html": {
+    "updated": "2026-10-16",
+    "hash": "4150d652a6fedc53",
+    "blocks": "a3d458 1f3401 e2a149 1d7637 840a02 18567a aa6a79 d35bfd 30f5bd 8d9cba 41816c ab5d95 f59ddb 7a9e22 91b318 35191c bbdd96 c13740 24e3c3 91047e d38ee3 31bcb8 26fd42 087e58 ad4250 511b69 807ead 13ea5b f73260 efc426 fa218a 1050bc 96ecb5 5978dc be9194 6875d5 94be12 998459 20bab6 5719e6"
+  },
+  "public/fleet-planning.html": {
+    "updated": "2026-11-04",
+    "hash": "d149d1f287e72f36",
+    "blocks": "e4e1e6 80fe30 cb9115 056a44 f00f6a 6427b7 9062c4 427045 afc05f da65c3 12534b a9cad2 de3e21 c154ae 6c6b09 b3209c c65d38 8d543c 3589e9 8d9b90 d91ad4 7e538c 075135 b2233c bd5678 a85ceb 6d9e6a 1cabf8 0d896f 73e9ca 828c03 9250b4 0da56e e4f4a8 3d40ed 7454c6 cb00cd 0fa5de 2c90ed c642a4 e4a0ba 3f2885 e5d980 73e501 dde7a0 96da4c 72f07c d9801f d8d67a 3b062e 1b339e 4082f5 d5ca19 1ea11c"
+  },
+  "public/fuel-hedging.html": {
+    "updated": "2026-11-09",
+    "hash": "10c5d994a5e40742",
+    "blocks": "f9c5df bcbf4a 12ed32 e9dd3a 8b1669 f4fd0a d8d80a b3c7aa 3fde20 1db823 28ab43 eef24f 644c0c 3e59aa cd1382 e2859a 5f8d51 31f6c7 2f1ee9 78d040 1ef0ae d5bf6d e672a2 458779 6a9a2b a387ef 387702 9836a2 1d0fec f812ac 2e60ce 753452 474846 4ca74e 37f811 21f053 ebd0de a26577 08f18e 751b3d 13d34d 6aef02 d16930 4e5f77 ed6031 4d8249 8aebae 9988af 91e063 28b0be 24bd0f 627454 cb49c1 912ede c62426 30d6b5 8bd287 6cc5e4 9f8261 6f47da 8e80e2 992f91 e04f46 86e2b0 f8e466 389dfe 8f1325 877d6b 521aea 1ea11c"
+  },
+  "public/glossary.html": {
+    "updated": "2026-11-09",
+    "hash": "84ae59b46591de29",
+    "blocks": "1e83fe c50265 f50303 adc747 1aa107 d87c9c 09b1b8 e76690 9f011e c6e5a6 509f1d 796897 fc91fc fa77a5 55dcc0 50a43b c2dfc4 16b666 34eabe 96537b 98a272 f2528d d17a45 e45f9d 828cbe 6b2bd2 0a6c2f ba6c6f f8954a afe3c1 bb98f7 185fb8 2bb4f9 9d462c 789a40 6a084d 59a37c 8f0485 f6e82f 0f7404 5de74a 83d0b6 ae65d0 dda37a 6415f3 6a94a5 9af799 06063a 17ccfa 2ed870 0b6479 2a5572 bc3fb8 401571 1c7443 ce043a 4ed39b 347de0 6d80af 8c9f8a d26c68 9bcb87 64fffd 2c4d5d 9841ce 742124 96b1d9 214823 f99399 bfee1e 964c4c 87bc44 e2da10 32311d 1d4afe 51fd3c 3e92be a27553 c6c562 32305c b7141f 20b45f fef984 d7a36c 026e2f 1c8459 293ae8 34cff8 7651a9 941d45 d17a6a a1f8c1 5719e6"
+  },
+  "public/how-to-play.html": {
+    "updated": "2026-11-09",
+    "hash": "0b8382cc5087c999",
+    "blocks": "f03832 13438a 533832 00dbdd b7a3fc de7969 bc713f ef4b75 e69b11 8bda90 d06c1d 02c6d9 65876f f3225f 52c57d a5d9d1 f4810d 694897 ffab2d aaf287 8c88f9 27c620 74c0a7 b92422 099cab 71ff93 e0a87b 7c86f0 e40661 fadf08 e0107f c6e274 a64c28 1afde7 f4f00a 1ea11c"
+  },
+  "public/hub-strategy.html": {
+    "updated": "2026-11-09",
+    "hash": "4035698551af7abb",
+    "blocks": "d29a04 b090c8 05d2ef 872855 8aa767 b9fa37 ae26fa 27c620 74c0a7 2bb878 195dd8 f3bf78 d78b18 7ddaad f59b15 35b563 6500e8 1fff2a f5120d 13724f 020286 36dc3d fcce30 ea8a68 5c0491 75a801 001ff7 428464 8a1491 303a3a deee6b 38a3e4 dd1c17 05bc37 8c42b7 5e7a93 58ca34 368db7 b6648a 5da63e 8918fc 9c6f21 291d0a d91ce9 23359b 85068c 6b6c16 75f110 1d50a2 dce7a8 792a14 794fd8 4082f5 346b29 caf85b 49ea25 68b628 1ea11c"
+  },
+  "public/narrow-body-vs-wide-body.html": {
+    "updated": "2026-11-09",
+    "hash": "e572af22974a948b",
+    "blocks": "a147eb 79de27 018069 b20f9b 05c0cd 25f8eb 6fbb3a 975f19 4010ab dff08e 70a903 56066d 91818c f98593 b2d2e5 bc3725 47cb7f 9ec4b1 007415 004995 d9abcb 37b710 15487a 9f7592 f3509d 7072fd f86036 30cdbd eaf5f1 4754ae 30a722 8500e0 c4d4f7 933348 2e0c2b 920641 76e6e7 caf85b f60e59 5cf3c8 0bb228 3dfb3a e3ee1e 5719e6"
+  },
+  "public/on-time-performance.html": {
+    "updated": "2026-11-04",
+    "hash": "5321d198fd8bb453",
+    "blocks": "ec656f 478a26 367e70 9d3022 590ea0 5efb9f 401363 dcc23a 982242 ea1aaf cbdf11 e5ea78 9055f9 7c9412 c792ce d0458b b6c5e8 cb831f c472b2 fd4e84 4648e6 205964 11046f 024862 9523a9 e601ba 6551e9 002aa1 55a715 60cee0 f5a55d d5e41b ad9dd0 c2f5e3 ee4034 e5387f 85d105 51eb95 be12a9 805cb8 74e13c 4082f5 550b2b 1ea11c"
+  },
+  "public/privacy.html": {
+    "updated": "2026-11-09",
+    "hash": "03d5092023a78082",
+    "blocks": "506ff3 bcae24 fa154e 4381c4 fccc46 4b7686 4b1dba aebe2f 5d0efb 640d63 ea00f4 48a2da 9065c9 dd8764 e0b8a5 184337 d7ee2f 1e411a 559fa0 833ba0 84af74 e27c8c ea7f1e 9170d4 8e17f7 317c45 9706d4 0ecda0 b4a32e ef6d4c 6c75fa bfbf5f 86cb08 58a502 2b5c3d acdf4e"
+  },
+  "public/regional-jets-explained.html": {
+    "updated": "2026-11-09",
+    "hash": "67ab24e9772f1d69",
+    "blocks": "377fa0 ba2e2a 82cb4f 103998 e4b3cd 55061a 272a6a 302623 fab8bf 200657 612a7e e708dc 6d8ef0 74c111 520907 ed62b8 c40f3b 7b6079 e34b2c 337cac e393cb 5c52d7 c6f413 7a26e4 0ec0e2 47da47 db62c1 9dd72e 1811d6 a78e30 7a485a bc3bb9 9db423 e81788 bef04e fbc682 dc48aa c67eae c3d202 9ca386 ef73cb 487280 e9280a 58e040 085752 7ff4b2 68fd3e 94c733 e385f8 23e1cd 19b593 761cd0 caf85b 69d75c 49a261 ae23c5 5719e6"
+  },
+  "public/route-case-study.html": {
+    "updated": "2026-11-09",
+    "hash": "d323eb7c7b259a0d",
+    "blocks": "2e50c5 83d2ee ecc47b 856e10 fe9bb4 44a509 8eef40 037b59 7372ad e76cc2 de10c1 74b204 2c4354 a6661c 644156 931796 099250 2c0f83 d464f3 992633 ea3202 9e854e 9f94a2 e847be 9bc937 62f8f2 ccbb47 dafc59 7eef03 a7300b 6a24f4 633465 4112b8 865c73 b6953a a8e93d 714188 b92c8e e5e429 9d60c6 a38300 9e87ae"
+  },
+  "public/route-economics.html": {
+    "updated": "2026-11-09",
+    "hash": "687b8a6d34b2305b",
+    "blocks": "20a052 d133d0 8f2b4a 363ec5 cbe68c 9dfb92 596a0d 401ebb 4e0a6f 1b228d f3225f 52c57d 14c6c5 1ac7ca 2b8881 bded0e 63d8eb 599825 c066f2 99827d 979680 fe75eb c3bb1e 0b10fe cde481 f35d84 629872 5f8ab7 98fc15 94578b ecbbc4 27eeb9 efebf6 0dcb9b f96805 0716e6 dd3a19 58082b 6633a1 d78431 e8d64c ecda43 e0a12b c936ee 433802 a0c51f a55030 4082f5 818ab0 1ea11c"
+  },
+  "public/strategy.html": {
+    "updated": "2026-11-09",
+    "hash": "590809c24244d5e6",
+    "blocks": "d1fca7 30792d a69331 5aed6a 8b0efa 547a88 1ce449 222f97 8185ea 9ba293 bea511 82f6d3 882d97 14a77d 446b4a e901af 0bff3f d4f6bf 8b0efa 638a62 7332c1 022d92 6c89ae da5825 96a3ae bac94e f4bc5f 825af9 547a88 604745 6559a4 ae1682 da4948 3a0609 1ce449 1ba02d 37ec3d 4319cc 130679 cf9ab1 20692e 127f7e 222f97 fe1495 8185ea c191f1 9ba293 71a7cc 46f137 2c8acc 39da5d 75de49 4d7bd2 af23e5 395b5a"
+  },
+  "public/support.html": {
+    "updated": "2026-10-14",
+    "hash": "cf3405e2ff8cfaa5",
+    "blocks": "21ef83 ba8133 dd8e81 e7a813 8840bc 41a1ac 49cfe1 828f31 e39165 5e52fb c01539 e9ed70 f01e33 a40087 390275 8ce5f4 3f9650 9e6f84 d3195c c42b58 97bcee"
+  },
+  "public/terms.html": {
+    "updated": "2026-11-09",
+    "hash": "9bcfa81c2cee12b7",
+    "blocks": "12a001 324688 0a3f44 5b9dd1 5e5a07 c69009 c88cdb aa4191 298581 f8c219 75d850 40769d 51e112 a98099 970530 d17de7 818465 09511b a3c1e6 f14522 816f20 6b78ee 7a3976 18e73c dcfb7c"
+  }
+}
