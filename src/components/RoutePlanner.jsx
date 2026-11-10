@@ -1724,7 +1724,10 @@ export default function RoutePlanner() {
                               : undefined,
                             color: simulation.result.loadFactor >= 0.75 ? 'var(--green)' : simulation.result.loadFactor >= 0.45 ? 'var(--yellow)' : 'var(--red)',
                           },
-                          { label: 'O&D Revenue',       value: formatMoney(simulation.result.revenue),           color: 'var(--green)' },
+                          { label: 'O&D Revenue',       value: formatMoney(simulation.result.revenue - (simulation.result.bellyRevenue ?? 0)), color: 'var(--green)' },
+                          // Belly cargo (belly-cargo worlds): freight in the holds, at the pair's rate.
+                          ...((simulation.result.bellyRevenue ?? 0) > 0 ? [{ label: 'Belly Cargo', value: `+${formatMoney(simulation.result.bellyRevenue)}`, color: 'var(--green)',
+                            sub: `${simulation.result.bellyTonnes.toLocaleString()} t each way in the holds` }] : []),
                           { label: 'Connecting Rev',    value: `+${formatMoney(simulation.connecting.totalRevenue)}`, color: 'var(--accent)',
                             sub: `${simulation.connecting.totalPax} connecting pax` },
                           { label: 'Total Revenue',     value: formatMoney(simulation.totalRevenue),             color: 'var(--green)' },

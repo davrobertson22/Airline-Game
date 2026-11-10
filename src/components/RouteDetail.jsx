@@ -3,6 +3,7 @@ import { useGame } from '../store/GameContext.jsx';
 import { getAirport } from '../data/airports.js';
 import AirportLink from './AirportLink.jsx';
 import FuelBasisChip from './FuelBasisChip.jsx';
+import BellyCargoPanel from './BellyCargo.jsx';
 import { fuelStationsOn } from '../data/fuelStations.js';
 import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
 import { getAircraftType } from '../data/aircraft.js';
@@ -819,6 +820,8 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
               />
             )}
           </div>
+          {/* Belly cargo (belly-cargo worlds): what the holds earned, and the pair's rate. */}
+          {<BellyCargoPanel origin={origin} destination={dest} results={playerSims.map(x => x.result)} />}
           {/* Fixed cost indicator */}
           {(() => {
             const totalLease = playerSims.reduce((s, { result }) => s + (result.weeklyLeaseCost ?? 0), 0);

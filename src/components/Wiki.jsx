@@ -75,6 +75,8 @@ const WIKI = [
       { tip: 'The classic play: lock cheap leases and order aircraft while the economy is contracting or recovering, so they deliver into the upswing.' },
       { h: 'Operational meltdowns' },
       { p: 'An airline that works its fleet past about **85%** of its hours, keeps **no spare aircraft** and lets crew morale slide below **55** runs a weekly risk of an operational meltdown: stranded passengers, a hit to satisfaction and reputation, and a line in your news. A well-run airline with slack carries no risk at all. Airlines with fewer than five aircraft are exempt.' },
+      { h: 'Belly cargo (games started from 9 November 2026)' },
+      { p: 'Passenger flights carry freight in their holds. A flight can take the smaller of its hold and the weight it has to spare at that distance: about **14 tonnes** on a 787-9 across the Atlantic, about **one tonne** on a narrow-body, and nothing at the edge of an aircraft\'s range. Around half the space sells in a good week, at about half the freighter rate, and each tonne costs handling plus the fuel to carry it. Each route\'s detail page shows what its holds earned and lets you set the **belly rate**; left alone it follows the market. Rivals sell their hold space too, and holds share each lane\'s freight with the freighters.' },
       { h: 'Board mandates' },
       { p: 'From the second quarter, the board sets you **one mandate a quarter**, chosen from where you stand — grow the traffic, widen the margin, fill the aircraft, lift satisfaction, reach a new country or open new routes. Hit it in any week before the quarter ends for a flat **$1.5M** bonus. Missing it costs nothing but the bonus.' },
     ],
@@ -555,6 +557,7 @@ const WIKI = [
     blurb: 'Earn from freight lanes',
     blocks: [
       { p: 'Beyond passengers, you can run dedicated **freight lanes** using freighter aircraft. Switch the Route Planner into freight mode to model a lane: pick origin and destination, choose a freighter type, and review the estimated freight economics before committing.' },
+      { p: 'In newer games your **passenger flights carry belly cargo** as well (see Newer Game Rules). It needs no freighter and no extra route: it is booked on the passenger route, priced by that route\'s belly rate, and shown as its own line in Finance.' },
       { p: 'Cargo revenue shows up as its own line in Finance, so you can see exactly how much your freight operation contributes. It can diversify income and make use of routes where passenger demand alone is thin.' },
     ],
   },

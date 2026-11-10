@@ -5,6 +5,7 @@ import {
 } from '../data/aircraft.js';
 import { setLeaseCycleMult } from '../data/aircraft.js';
 import { cycleDemandMult, cycleLeaseMult } from '../models/economyCycle.js';
+import { bellyCargoOn, bellyCapacityTonnes, buildBellyMarket, bellyEconomics, bellyPairKey } from '../models/bellyCargo.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { productSpaceMul, productWeeklyCost, productFittingCost } from '../data/seatProducts.js';
 import { clampImpact, MAX_EVENT_IMPACT, MAX_LOCALIZED_IMPACT } from '../data/events.js';
@@ -3235,6 +3236,119 @@ export function simulateTagRoute(route, aircraft, gameDate = { month: 6 }, labor
 // CARGO SIMULATION
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// BELLY CARGO (models/bellyCargo.js) — the state-facing wrapper
+// ─────────────────────────────────────────────
+/** Seats a tail actually flies: its configured cabin, else the type's stock cabin. */
+function configuredBodies(aircraft, type) {
+  const c = aircraft?.config;
+  const n = c ? (c.firstClass ?? 0) + (c.businessClass ?? 0) + (c.premiumEconomy ?? 0) + (c.economy ?? 0) : 0;
+  return n > 0 ? n : (type?.seats ?? 0);
+}
+
+/** A route's belly rate, $ per tonne-km: the player's own for that pair
+ *  (state.bellyRates), or null to follow the market. */
+export function bellyRateOf(route, bellyRates) {
+  const r = bellyRates?.[bellyPairKey(route?.origin, route?.destination)];
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
+
+/**
+ * The freight left on each lane for freighters once this state's passenger
+ * holds have flown, as simulateCargoNetwork's `bellyPoolFactor` option — or
+ * undefined outside a belly-cargo world. Every freight preview passes it, so a
+ * freighter is quoted the lane the weekly tick will give it.
+ */
+export function bellyPoolFactorOf(state, gameDate = null) {
+  return bellyMarketForState(state, { gameDate: gameDate ?? state?.gameDate ?? null })?.poolFactor;
+}
+
+/**
+ * Book a route's belly freight onto its result: revenue, plus the handling and
+ * carrying fuel folded into the lines they belong to (and into the by-station
+ * fuel split), so the route's cost lines still add up to its total. The tick
+ * and the route previews both come through here. Returns the belly economics,
+ * or null when nothing was loaded (no passengers flew, no freight offered, or
+ * a rate that doesn't cover the carrying).
+ */
+export function bookBellyOnResult(rr, route, b, fuelMultiplier = 1) {
+  if (!rr || !b || !(b.tonnesOneWay > 0) || !((rr.passengers ?? 0) > 0)) return null;
+  const e = bellyEconomics(route.origin, route.destination, b.tonnesOneWay, b.rate,
+    fuelMultiplier * (rr.fuelStationFactor ?? 1));
+  if (!(e.profit > 0)) return null;
+  rr.bellyTonnes       = e.tonnes;
+  rr.bellyCapacity     = Math.round(b.capOneWay * 10) / 10;
+  rr.bellyRate         = b.rate;
+  rr.bellyRefRate      = b.refRate;
+  rr.bellyRevenue      = e.revenue;
+  rr.bellyHandlingCost = e.handlingCost;
+  rr.bellyFuelCost     = e.fuelCost;
+  if (rr.fuelByStation && rr.fuelCost > 0) {
+    const scaled = {}; let sum = 0, first = null;
+    for (const [code, v] of Object.entries(rr.fuelByStation)) {
+      scaled[code] = Math.round(v * (rr.fuelCost + e.fuelCost) / rr.fuelCost); sum += scaled[code]; first ??= code;
+    }
+    if (first != null) scaled[first] += (rr.fuelCost + e.fuelCost) - sum;
+    rr.fuelByStation = scaled;
+  }
+  rr.revenue            = (rr.revenue ?? 0) + e.revenue;
+  rr.fuelCost           = (rr.fuelCost ?? 0) + e.fuelCost;
+  rr.groundHandlingCost = (rr.groundHandlingCost ?? 0) + e.handlingCost;
+  rr.totalOpCost        = (rr.totalOpCost ?? 0) + e.handlingCost + e.fuelCost;
+  if (rr.profit != null)     rr.profit     += e.profit;
+  if (rr.trueProfit != null) rr.trueProfit += e.profit;
+  return e;
+}
+
+/**
+ * This week's belly market for a game state (null outside a belly-cargo world).
+ * The weekly tick, the reducer's rival pass and the previews all call this, so
+ * they agree on who carries what. Nonstop passenger routes only: a multi-stop
+ * route carries no belly freight yet.
+ *
+ * @param {object} state  needs routes, fleet, cargoRoutes, competitors
+ * @param {object} [opts] { gameDate, demandMultFor, groundedIds, demandMult }
+ */
+export function bellyMarketForState(state, opts = {}) {
+  if (!bellyCargoOn(state)) return null;
+  const { gameDate = state.gameDate ?? null, demandMultFor = null, groundedIds = null, demandMult = 1 } = opts;
+  const grounded = groundedIds instanceof Set ? groundedIds : new Set(groundedIds ?? []);
+  const fleetById = new Map((state.fleet ?? []).map(a => [a.id, a]));
+  const flying = (route) => {
+    const aircraft = fleetById.get(route?.aircraftId);
+    if (!aircraft || isOutOfService(aircraft) || grounded.has(aircraft.id)) return null;
+    const type = getAircraftType(aircraft.typeId);
+    const o = getAirport(route.origin), d = getAirport(route.destination);
+    if (!type || !o || !d) return null;
+    const dist = distanceKm(o, d);
+    if (dist > routeReachKm(route, aircraft, type)) return null;
+    return { aircraft, type, dist };
+  };
+  const offers = [];
+  for (const route of state.routes ?? []) {
+    if (Array.isArray(route.stops) && route.stops.length > 2) continue;
+    const f = flying(route);
+    if (!f || f.type.freighter) continue;
+    offers.push({
+      id: route.id, origin: route.origin, destination: route.destination,
+      weeklyFrequency: route.weeklyFrequency ?? 0,
+      capPerFlight: bellyCapacityTonnes(f.type, configuredBodies(f.aircraft, f.type), f.dist),
+      rate: bellyRateOf(route, state.bellyRates),
+      maturity: route.weeksOpen != null ? routeMaturityFactor(route.weeksOpen) : 1,
+      demandMult,
+    });
+  }
+  const cargoRoutes = [];
+  for (const route of state.cargoRoutes ?? []) {
+    const f = flying(route);
+    if (!f || !f.type.freighter) continue;
+    cargoRoutes.push({ origin: route.origin, destination: route.destination,
+      capTonnes: (f.type.payloadTonnes ?? 0) * (route.weeklyFrequency ?? 0) });
+  }
+  return buildBellyMarket({ offers, cargoRoutes, competitors: state.competitors ?? [],
+    month: gameDate?.month ?? null, demandMultFor });
+}
+
 /**
  * Yield (price) elasticity of cargo demand. Forwarders shop on rate, but freight is
  * less elastic than leisure pax — there's no "drive instead" option on a 9,000 km lane.
@@ -3645,9 +3759,17 @@ export function findCargoConnections(segments) {
 export function simulateCargoNetwork(cargoRoutes = [], fleet = [], opts = {}) {
   const {
     gameDate = { month: 6 }, labor = null, fuelMultiplier = 1.0, demandMultiplier = 1.0,
-    demandMultFor = null, competitors = [], groundedIds = null, connections = true,
+    demandMultFor: eventMultFor = null, competitors = [], groundedIds = null, connections = true,
+    // Belly cargo worlds (models/bellyCargo.js): the share of each lane's freight
+    // passenger holds have NOT already carried. Absent → 1, and nothing moves.
+    bellyPoolFactor = null,
   } = opts;
   const groundedSet = groundedIds instanceof Set ? groundedIds : new Set(groundedIds ?? []);
+  // Folded into the event multiplier so every freight pool below — solo lanes,
+  // shared lanes and connections — sees the same smaller market.
+  const demandMultFor = bellyPoolFactor
+    ? (o, d) => (eventMultFor ? eventMultFor(o, d) : 1) * bellyPoolFactor(o, d)
+    : eventMultFor;
   const evMult = (o, d) => (demandMultFor ? demandMultFor(o, d) : 1);
 
   const allocations = cargoLaneAllocations(cargoRoutes, fleet, demandMultiplier,
@@ -5817,6 +5939,32 @@ export function weeklyTick(state) {
     });
   }
 
+  // 1a. Belly cargo (models/bellyCargo.js; belly-cargo worlds only). Freight in
+  // the holds of the nonstop passenger flights above: revenue, handling and the
+  // fuel it costs to carry, added to each route's result and to the totals.
+  // Built before the freighters fly, because what the holds carry is freight
+  // the freighters below no longer find on the lane.
+  let totalBellyRevenue = 0, totalBellyTonnes = 0, totalBellyCost = 0;
+  const bellyMarket = bellyMarketForState({ ...state, routes, fleet, cargoRoutes, competitors }, {
+    gameDate, demandMultFor: eventDemandMultFor, groundedIds: crewGroundedSet, demandMult: awarenessMultiplier,
+  });
+  if (bellyMarket) {
+    const routeById = new Map(routes.map(r => [r.id, r]));
+    for (const rr of routeResults) {
+      const b = bellyMarket.player.get(rr.routeId);
+      const route = routeById.get(rr.routeId);
+      if (!route) continue;
+      const e = bookBellyOnResult(rr, route, b, fuelMultiplier);
+      if (!e) continue;
+      totalRevenue        += e.revenue;
+      totalFuel           += e.fuelCost;
+      totalGroundHandling += e.handlingCost;
+      totalBellyRevenue   += e.revenue;
+      totalBellyTonnes    += e.tonnes;
+      totalBellyCost      += e.handlingCost + e.fuelCost;
+    }
+  }
+
   // 1b. Cargo route revenue + variable operating costs
   // Freighters run a parallel, simpler economics path: tonnes × yield, no cabins,
   // no catering, no connecting pax. Fixed costs (lease/maint/insurance/labor) are
@@ -5840,6 +5988,7 @@ export function weeklyTick(state) {
   const cargoNetwork = simulateCargoNetwork(freightRoutes, fleet, {
     gameDate, labor, fuelMultiplier, demandMultiplier: awarenessMultiplier,
     demandMultFor: eventDemandMultFor, competitors, groundedIds: crewGroundedSet,
+    ...(bellyMarket ? { bellyPoolFactor: bellyMarket.poolFactor } : {}),
   });
   const cargoAllocations = cargoNetwork.allocations;
 
@@ -6430,6 +6579,10 @@ export function weeklyTick(state) {
     // Cargo
     cargoRouteResults,
     totalCargoRevenue:      Math.round(totalCargoRevenue),
+    // Belly cargo (belly-cargo worlds only; the keys are absent everywhere else).
+    // The revenue is inside totalRevenue, the fuel inside totalFuel and the
+    // handling inside totalGroundHandling; these are the memo lines.
+    ...(bellyMarket ? { totalBellyRevenue: Math.round(totalBellyRevenue), totalBellyTonnes: Math.round(totalBellyTonnes), totalBellyCost: Math.round(totalBellyCost) } : {}),
     totalCargoTonnes:       Math.round(totalCargoTonnes),
     totalCargoProfit:       Math.round(totalCargoProfit),
     // Charter contracts. Always present (0 and empty when the airline holds

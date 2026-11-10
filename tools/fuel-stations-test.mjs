@@ -204,7 +204,9 @@ test('previews agree: a route sim at the projected multiplier equals the tick, s
   const route = V2.routes.find(r => r.id === rr.routeId);
   const ac = V2.fleet.find(a => a.id === route.aircraftId);
   const sim = simulateRoute(route, ac, proj.gameDate, V2.labor ?? null, proj.fuelMultiplier);
-  assert.equal(sim.fuelCost, rr.fuelCost);
+  // The tick's fuel line also carries the fuel burned hauling belly freight
+  // (belly-cargo worlds); a bare passenger sim has none.
+  assert.equal(sim.fuelCost, rr.fuelCost - (rr.bellyFuelCost ?? 0));
   assert.equal(sim.fuelStationFactor, rr.fuelStationFactor);
   // And the classic state, projected afterwards, is back to world-flat fuel.
   const classic = projectWeek(s60);

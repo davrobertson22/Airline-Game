@@ -38,6 +38,7 @@ import { pairAppeal } from '../data/metros.js';
 import { onDemandWorldChange } from '../data/demandWorld.js';
 import { marketDevFor, marketDevActive } from './marketDev.js';
 import { offersJetAgeCapture } from './jetAge.js';
+import { rivalBellyPnL } from './bellyCargo.js';
 import { AIRPORTS, getAirport, getAirportScores } from '../data/airports.js';
 import { viaOf, routeLegKm, routeLegsKm, routeBlockHoursOneWay, findRefuelStop, techStopPenalty, techStopDemandShare, REFUEL_TURN_COST_SHARE } from './rivalStops.js';
 import { sameSovereign, sovereignCountry } from '../data/territories.js';
@@ -3928,12 +3929,17 @@ export function computeCompetitorRoutePnL(competitor, routeKey, cfg, month = 1, 
   const airportCost = seats * (AIRPORT_COST_PER_SEAT[tier] ?? 16) * flightsPerWk * (via ? 1 + REFUEL_TURN_COST_SHARE : 1);
   const paxCost     = weeklyPax * (PAX_SERVICE_COST[tier] ?? 28);
   const fixed       = type ? tails * ((type.weeklyLease ?? 0) + (type.baseMaintenancePerWk ?? 0)) : fixedPR;
-  const cost        = Math.round(opCost + airportCost + paxCost + fixed);
+  // Belly cargo (models/bellyCargo.js): what this route's holds carried this
+  // week, in a belly-cargo world. `world.belly` is absent everywhere else.
+  const belly       = world?.belly ? rivalBellyPnL(world.belly, competitor, routeKey, fuelMult) : null;
+  const cost        = Math.round(opCost + airportCost + paxCost + fixed) + (belly?.cost ?? 0);
+  const revenueAll  = Math.round(revenue) + (belly?.revenue ?? 0);
 
   return {
-    revenue:    Math.round(revenue),
+    revenue:    revenueAll,
     cost,
-    profit:     Math.round(revenue) - cost,
+    profit:     revenueAll - cost,
+    ...(belly ? { bellyTonnes: belly.tonnes, bellyRevenue: belly.revenue, bellyProfit: belly.profit } : {}),
     pax:        weeklyPax,
     flights:    flightsPerWk,
     loadFactor: capOneWay > 0 ? paxOneWay / capOneWay : 0,
@@ -3964,6 +3970,7 @@ export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts =
   let totalRevenue = 0;
   let totalCost    = 0;
   let routeCount   = 0;
+  let bellyRevenue = 0, bellyProfit = 0, bellyTonnes = 0;
 
   for (const [routeKey, cfg] of Object.entries(competitor.routes)) {
     const p = computeCompetitorRoutePnL(competitor, routeKey, cfg, month, pairCounts, worldFx);
@@ -3973,6 +3980,7 @@ export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts =
     totalPax     += p.pax;
     totalRevenue += p.revenue;
     totalCost    += p.cost;
+    if (p.bellyRevenue) { bellyRevenue += p.bellyRevenue; bellyProfit += p.bellyProfit ?? 0; bellyTonnes += p.bellyTonnes ?? 0; }
   }
 
   totalCost += Math.round(competitorOverhead(routeCount));
@@ -3984,6 +3992,8 @@ export function computeCompetitorWeeklyStats(competitor, month = 1, pairCounts =
     weeklyRevenue: totalRevenue,
     weeklyCost:    totalCost,
     weeklyProfit,
+    // Belly cargo memo lines (already inside revenue, cost and profit above).
+    ...(bellyRevenue > 0 ? { weeklyBellyRevenue: bellyRevenue, weeklyBellyProfit: bellyProfit, weeklyBellyTonnes: bellyTonnes } : {}),
   };
 }
 

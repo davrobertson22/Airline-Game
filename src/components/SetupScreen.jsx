@@ -122,6 +122,7 @@ export default function SetupScreen() {
   const [rivalPressure,     setRivalPressure]     = useState('normal');   // 'relaxed' | 'normal' | 'fierce'
   const [rivalMergers,      setRivalMergers]      = useState(true);
   const [rivalFreight,      setRivalFreight]      = useState(true);
+  const [bellyCargo,        setBellyCargo]        = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
   const cardRef = useRef(null);
 
@@ -237,6 +238,7 @@ export default function SetupScreen() {
       ...(rivalPressure !== 'normal' ? { rivalPressure } : {}),
       ...(!rivalMergers ? { rivalMergers: false } : {}),
       ...(!rivalFreight ? { rivalFreight: false } : {}),
+      ...(!bellyCargo ? { bellyCargo: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
     });
   }
@@ -768,6 +770,15 @@ export default function SetupScreen() {
               {rivalFreight
                 ? 'Established full-service rivals start freighter lanes from their hubs and compete with yours for the freight.'
                 : 'Freight stays yours alone: rivals never fly freighters.'}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={bellyCargo} onChange={e => setBellyCargo(e.target.checked)} />
+              Belly cargo
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {bellyCargo
+                ? 'Passenger flights carry freight in their holds, yours and your rivals\u2019, and share each lane with the freighters.'
+                : 'Freight flies on freighters only, as in games started before November 2026.'}
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />

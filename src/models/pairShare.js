@@ -51,7 +51,7 @@ import { rivalIndexFor, isLegacy, runNetworkTick } from './network.js';
 import { blendJetAgeAppeal, jetAgeFields } from './jetAge.js';
 import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { memberPairKeysOf } from '../utils/market.js';
-import { campaignDemandBoostPct } from '../data/overhead.js';
+import { campaignDemandBoostPct, awarenessDemandMultiplier } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
 import { fuelStationsOn } from '../data/fuelStations.js';
@@ -79,6 +79,8 @@ import {
   currentGameDate,
   CLASS_FARE_MULTIPLIERS,
   routeDistanceKm,
+  bellyMarketForState,
+  bookBellyOnResult,
 } from '../utils/simulation.js';
 
 // TW: Headwinds declares its own `pairKeyOf`. Tailwinds already exports the
@@ -940,6 +942,17 @@ export function projectRouteAddition(state, spec) {
       rivalIndexFor(state),
     );
     if (!result) return { result, share };
+    // Belly cargo (models/bellyCargo.js, belly-cargo worlds): what this route's
+    // holds would carry with it flying, booked exactly as the tick books it.
+    const bellyMarket = bellyMarketForState({
+      ...state, fleet: fleetPlus,
+      routes: routesPlus.map((r) => (r.id === PREVIEW_ROUTE_ID ? { ...r, weeksOpen } : r)),
+    }, {
+      gameDate, demandMultFor: buildEventDemandModel(state.activeEvents).multFor,
+      groundedIds: state.crewGroundedIds ?? null,
+      demandMult: awarenessDemandMultiplier(state.awareness ?? 5),
+    });
+    if (bellyMarket) bookBellyOnResult(result, route, bellyMarket.player.get(PREVIEW_ROUTE_ID), fuelMultiplier);
     // Landing fees are charged per departure by weeklyTick and are NOT inside
     // simulateRoute's `profit`. Surfaced rather than folded in: `profit` keeps
     // the meaning both call sites already display, and a caller that wants the

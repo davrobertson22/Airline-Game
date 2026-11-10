@@ -274,7 +274,9 @@ export function competitorCargoLanePnL(carrier, laneKey, cfg, { month = 6, conte
   const cap        = (type.payloadTonnes ?? 0) * freq;
   const el         = Math.min(1.6, Math.pow(ref / yieldPrice, CARGO_YIELD_ELASTICITY));
   const others     = cargoOthersWeightedCap(contest, a, b, carrier?.id);
-  const pool       = pool0 * evMult * FREIGHTER_CAPTURE_RATE;
+  // Belly-cargo worlds: passenger holds have already carried part of the lane.
+  const bellyLeft  = world?.belly?.poolFactor ? world.belly.poolFactor(a, b) : 1;
+  const pool       = pool0 * evMult * FREIGHTER_CAPTURE_RATE * bellyLeft;
   const demandTonnes = pool * el * (others > 0 ? cap / (cap + others) : 1);
 
   const sim = simulateCargoRoute(

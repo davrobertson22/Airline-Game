@@ -4,7 +4,7 @@ import { useGame, slotsUsedAt as slotsUsedAtEngine, cargoRouteDenial } from '../
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
 import { isOutOfService } from '../data/maintenance.js';
-import { simulateCargoNetwork, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
+import { simulateCargoNetwork, bellyPoolFactorOf, formatMoney, formatPercent, SLOTS_PER_GATE, cargoSlotsUsedAt, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor, maxFrequency, currentGameDate, effectiveRangeKm, forecastRangeMod, calendarYear } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, routeDistance } from '../utils/market.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import AddGateButton from './AddGateButton.jsx';
@@ -332,7 +332,7 @@ export default function CargoRoutePlanner({ mode, setMode, embedded = false, ini
     // freight — and adds connecting freight to those routes too.
     const existing  = state.cargoRoutes ?? [];
     const fleetPlus = [...state.fleet, ac];
-    const cargoOpts = { gameDate: gd, competitors: state.competitors };
+    const cargoOpts = { gameDate: gd, competitors: state.competitors, bellyPoolFactor: bellyPoolFactorOf(state, gd) };
     const after        = simulateCargoNetwork([...existing, route], fleetPlus, cargoOpts);
     const result       = after.results.get('p') ?? null;
     const resultLaunch = simulateCargoNetwork([...existing, { ...route, weeksOpen: 0 }], fleetPlus, cargoOpts).results.get('p') ?? null;

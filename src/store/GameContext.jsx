@@ -1,7 +1,7 @@
 import { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { normalizeLivery, isLiveryShaped } from '../data/livery.js';
 import {
-  weeklyTick, defaultConfig,
+  weeklyTick, defaultConfig, bellyMarketForState,
   weeklyBlockHours, maxWeeklyBlockHoursFor, SLOTS_PER_GATE, routeDistanceKm,
   CLASS_FARE_MULTIPLIERS, maxFrequency, effectiveRangeKm, cabinRangeFix, newAircraftConfig, grandfatherRouteRanges, weekToGameDate,
   routePairKey, defaultClassPrices, clampClassPrice, hydrateRoute, normalizeRouteStops,
@@ -95,6 +95,7 @@ import {
 import { LABOR_GROUP_MAP, LABOR_GROUPS } from '../data/labor.js';
 import { checkRouteRestrictions, runwayShortfall, standShortfall } from '../data/airportRestrictions.js';
 import { economyCycleWorld, newEconomyCycle, tickEconomyCycle } from '../models/economyCycle.js';
+import { bellyCargoOn, clampBellyRate, applyBellyRates } from '../models/bellyCargo.js';
 import { rollIncident, incidentCauseLine } from '../models/incidents.js';
 import { issueMandate, mandateMet, mandateDesc, mandateTitle, mandateIcon, quarterOf, MANDATE } from '../models/boardMandates.js';
 import { deliverySchedule } from '../data/delivery.js';
@@ -2163,6 +2164,11 @@ function reducer(state, action) {
         // an era save without the flag keeps its propliners' demand for life.
         // Inert in a classic game (no era calendar).
         jetAgeWorld: true,
+        // Belly cargo (models/bellyCargo.js): freight in the holds of passenger
+        // flights, for the player and the rivals, sharing each lane with the
+        // freighters. New games only — a save without the flag keeps freight
+        // on freighters alone, and its freighter lanes keep their whole market.
+        ...(action.bellyCargo !== false ? { bellyCargoWorld: true } : {}),
         // Production lines (data/productionLines.js, models/lineBook.js): every
         // aircraft comes off a factory line shared with the rivals, who order
         // and wait too; era games add launch customers. Staged purchase
@@ -4058,6 +4064,28 @@ function reducer(state, action) {
           r.id === action.routeId ? { ...r, yieldPrice } : r
         ),
       };
+    }
+
+    // Belly cargo rates (models/bellyCargo.js). One rate per city pair, like
+    // fares; a pair with no entry follows the market reference.
+    // action: { origin, destination, rate } — rate null/0 returns the pair to the market.
+    case 'SET_BELLY_RATE': {
+      if (!bellyCargoOn(state) || !action.origin || !action.destination) return state;
+      const rate = clampBellyRate(action.origin, action.destination, action.rate);
+      return { ...state, bellyRates: applyBellyRates(state.bellyRates,
+        [[action.origin, action.destination]], rate == null ? { mode: 'reference' } : { mode: 'set', value: rate }) };
+    }
+    // action: { routeIds?: [...], mode: 'pct' | 'set' | 'reference', value } — every
+    // nonstop passenger route when routeIds is absent.
+    case 'BULK_SET_BELLY_RATES': {
+      if (!bellyCargoOn(state)) return state;
+      const ids = Array.isArray(action.routeIds) ? new Set(action.routeIds) : null;
+      const pairs = (state.routes ?? [])
+        .filter(r => (!ids || ids.has(r.id)) && !(Array.isArray(r.stops) && r.stops.length > 2))
+        .map(r => [r.origin, r.destination]);
+      const seen = new Set();
+      const unique = pairs.filter(([a, b]) => { const k = routePairKey(a, b); if (seen.has(k)) return false; seen.add(k); return true; });
+      return { ...state, bellyRates: applyBellyRates(state.bellyRates, unique, { mode: action.mode, value: action.value }) };
     }
 
     // Freight mass pricing: many freighters repriced in one action (Routes ▸
@@ -6332,6 +6360,13 @@ function reducer(state, action) {
         demandMultFor: buildEventDemandModel(allEvents).multFor,
         fuelMult: clampImpact(allEvents.reduce((m, ev) => m * (ev.effects?.fuelMult ?? 1), 1)),
       };
+      // Belly cargo (models/bellyCargo.js): the same market the player's tick
+      // just flew in, so rival holds and rival freighters see the same lanes.
+      const aiBelly = bellyMarketForState(state, {
+        gameDate, demandMultFor: aiWorld.demandMultFor,
+        groundedIds: state.crewGroundedIds ?? null,
+      });
+      if (aiBelly) aiWorld.belly = aiBelly;
 
       // Adaptive competitor AI: expansion, cuts, capacity responses, pricing
       // reactions, distress/fire sales, bankruptcies, mergers, and startups.
@@ -6560,6 +6595,7 @@ function reducer(state, action) {
         cargoRevenue:    report.totalCargoRevenue   ?? 0,
         cargoProfit:     report.totalCargoProfit    ?? 0,
         cargoTonnes:     report.totalCargoTonnes    ?? 0,
+        ...(report.totalBellyRevenue != null ? { bellyRevenue: report.totalBellyRevenue, bellyTonnes: report.totalBellyTonnes ?? 0, bellyCost: report.totalBellyCost ?? 0 } : {}),
         charterRevenue:  report.totalCharterRevenue ?? 0,
         charterProfit:   report.totalCharterProfit  ?? 0,
         charterPenalties: charterPenalties,
@@ -6643,6 +6679,7 @@ function reducer(state, action) {
         revenue:        report.totalRevenue ?? 0,   // grand total operating revenue (incl. cargo + partner)
         partnerRevenue: report.totalPartnerRevenue ?? 0,
         cargoRevenue:   report.totalCargoRevenue   ?? 0,
+        ...(report.totalBellyRevenue != null ? { bellyRevenue: report.totalBellyRevenue } : {}),
         charterRevenue: report.totalCharterRevenue ?? 0,
         cost:           historyEntry.totalCost,
         profit:         historyEntry.profit,
@@ -7600,6 +7637,9 @@ function reconcileState(parsed) {
     ...(parsed.loyaltyPoolsWorld === true ? { loyaltyPoolsWorld: true } : {}),
     // The jet age — the new-game flag, carried only when present.
     ...(parsed.jetAgeWorld === true ? { jetAgeWorld: true } : {}),
+    // Belly cargo — the new-game flag and the player's own rates, carried only when present.
+    ...(parsed.bellyCargoWorld === true ? { bellyCargoWorld: true } : {}),
+    ...(parsed.bellyRates && Object.keys(parsed.bellyRates).length > 0 ? { bellyRates: parsed.bellyRates } : {}),
     ...(parsed.travelPartners && Object.keys(parsed.travelPartners).length > 0
       ? { travelPartners: parsed.travelPartners } : {}),
     ...(parsed.travelPartnerMemory && Object.keys(parsed.travelPartnerMemory).length > 0

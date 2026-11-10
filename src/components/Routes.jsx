@@ -23,6 +23,7 @@ import InfoTip from './InfoTip.jsx';
 import Callout from './Callout.jsx';
 import ReassignRouteButton from './ReassignRouteButton.jsx';
 import FareEditor, { CLASS_ORDER, CLASS_LABELS, CLASS_COLORS, referenceClassPrices } from './FareEditor.jsx';
+import { bellyCargoOn } from '../models/bellyCargo.js';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
   PROFIT_LABELS, PROFIT_SHORT, PROFIT_HELP,
@@ -595,8 +596,11 @@ export default function Routes() {
     }
     const routeIds = groupsToAdjust.flatMap(g => g.routes.map(r => r.id));
     if (routeIds.length === 0 || Object.keys(pct).length === 0) return;
-    dispatch({ type: 'BULK_ADJUST_PRICING', routeIds, pct });
-    const parts = Object.entries(pct).map(([cls, n]) => `${CLASS_LABELS[cls]} ${n > 0 ? '+' : ''}${n}%`);
+    // The belly box is not a cabin: it moves the pairs' belly rates instead.
+    const { [BELLY_KEY]: bellyPct, ...cabinPct } = pct;
+    if (Object.keys(cabinPct).length > 0) dispatch({ type: 'BULK_ADJUST_PRICING', routeIds, pct: cabinPct });
+    if (bellyPct != null) dispatch({ type: 'BULK_SET_BELLY_RATES', routeIds, mode: 'pct', value: bellyPct });
+    const parts = Object.entries(pct).map(([cls, n]) => `${CLASS_LABELS[cls] ?? BULK_EXTRA_LABELS[cls]} ${n > 0 ? '+' : ''}${n}%`);
     addToast({
       type: 'success',
       title: 'Pricing updated',
@@ -612,11 +616,13 @@ export default function Routes() {
     const n = groupsToReset.length;
     const ok = await confirm({
       title: `Reset fares on ${n} route${n !== 1 ? 's' : ''} to reference?`,
-      body: 'Every cabin on the selected routes goes back to its market reference fare. Any custom fares on them are replaced.',
+      body: 'Every cabin on the selected routes goes back to its market reference fare. Any custom fares on them are replaced.'
+        + (bellyCargoOn(state) ? ' Belly cargo rates on them go back to following the market too.' : ''),
       confirmLabel: 'Reset to ref',
     });
     if (!ok) return;
     dispatch({ type: 'BULK_RESET_PRICING', routeIds });
+    if (bellyCargoOn(state)) dispatch({ type: 'BULK_SET_BELLY_RATES', routeIds, mode: 'reference' });
     addToast({
       type: 'success',
       title: 'Fares reset',
@@ -1084,6 +1090,7 @@ export default function Routes() {
       {/* Bulk-edit selection bar — appears when one or more cards are ticked */}
       {selectedGroups.length > 0 && (
         <SelectionActionBar
+          bellyOn={bellyCargoOn(state)}
           groups={selectedGroups}
           onApplyToGroups={(g, pct) => { applyPctToGroups(g, pct); clearSelection(); }}
           onResetToRef={bulkResetToRef}
@@ -1254,6 +1261,7 @@ export default function Routes() {
       {/* Filter-based bulk pricing modal */}
       {showBulkModal && (
         <BulkPricingModal
+          bellyOn={bellyCargoOn(state)}
           allGroups={groupsWithStats}
           onApplyToGroups={applyPctToGroups}
           onClose={() => setShowBulkModal(false)}
@@ -2066,6 +2074,11 @@ function aircraftCountIn(groups) {
   return groups.reduce((s, g) => s + g.routes.length, 0);
 }
 
+// Belly cargo (belly-cargo worlds) rides the same percentage row as the cabins:
+// one more box, moving the selected pairs' belly rates.
+const BELLY_KEY = 'belly';
+const BULK_EXTRA_LABELS = { [BELLY_KEY]: 'Belly cargo' };
+
 // A row of per-class percentage inputs. `values` maps class → string; empty/0 means
 // "leave this cabin unchanged". onChange(cls, rawString) bubbles edits up.
 function PerClassPercentRow({ classes, values, onChange }) {
@@ -2080,7 +2093,7 @@ function PerClassPercentRow({ classes, values, onChange }) {
         const tint = !isNaN(n) && n !== 0 ? (n > 0 ? 'var(--green)' : 'var(--red)') : 'var(--border)';
         return (
           <label key={cls} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 }}>
-            <span style={{ color: CLASS_COLORS[cls], fontWeight: 600 }}>{CLASS_LABELS[cls]}</span>
+            <span style={{ color: CLASS_COLORS[cls] ?? '#e8833a', fontWeight: 600 }}>{CLASS_LABELS[cls] ?? BULK_EXTRA_LABELS[cls]}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               <input
                 type="number"
@@ -2108,7 +2121,7 @@ function PerClassPercentRow({ classes, values, onChange }) {
 //
 // Lets the player target routes by per-class occupancy (load-factor) range, then
 // shift fares by a percentage on every matching route at once.
-function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
+function BulkPricingModal({ allGroups, onApplyToGroups, onClose, bellyOn = false }) {
   const presentClasses = classesPresentIn(allGroups);
 
   // Per-class occupancy filter: { enabled, min, max } as percentages (0–100).
@@ -2220,7 +2233,7 @@ function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
         <div style={{ ...label, marginBottom: 8 }}>2 · Adjust fares by %</div>
         <div style={{ marginBottom: 18 }}>
           <PerClassPercentRow
-            classes={presentClasses}
+            classes={bellyOn ? [...presentClasses, BELLY_KEY] : presentClasses}
             values={pct}
             onChange={(cls, v) => setPct(p => ({ ...p, [cls]: v }))}
           />
@@ -2251,7 +2264,7 @@ function BulkPricingModal({ allGroups, onApplyToGroups, onClose }) {
 // Appears when the player has ticked one or more route cards. Offers the same
 // per-class % adjustment, applied only to the explicitly selected routes, plus a
 // one-click reset of every cabin back to its reference fare.
-function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onApplyFrequency, onCloseGroups, onClear }) {
+function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onApplyFrequency, onCloseGroups, onClear, bellyOn = false }) {
   const [pct, setPct] = useState({});
   const [catering, setCatering] = useState('');
   const classes = classesPresentIn(groups);
@@ -2278,7 +2291,7 @@ function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCateri
         <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{aircraftCountIn(groups)} aircraft</div>
       </div>
       <PerClassPercentRow
-        classes={classes}
+        classes={bellyOn ? [...classes, BELLY_KEY] : classes}
         values={pct}
         onChange={(cls, v) => setPct(p => ({ ...p, [cls]: v }))}
       />

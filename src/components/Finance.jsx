@@ -503,6 +503,10 @@ function PLStatement({ proj }) {
   const cargoResults    = report.cargoRouteResults ?? [];
   const ytdCargoRev     = ytd(financialHistory, 'cargoRevenue');
   const cargoRoutesState = state.cargoRoutes ?? [];
+  // Belly cargo (belly-cargo worlds) — inside totRev, broken out like freighter cargo.
+  const totBellyRev     = report.totalBellyRevenue ?? 0;
+  const totBellyTonnes  = report.totalBellyTonnes ?? 0;
+  const ytdBellyRev     = ytd(financialHistory, 'bellyRevenue');
 
   // Catering / layover / compensation — canonical totals; per-route detail for display.
   const { onTimeRate } = laborEffects(labor, avgUtilization, state.satisfaction ?? null);
@@ -961,6 +965,19 @@ function PLStatement({ proj }) {
                     {report.refinerySavings ? ((report.refinerySavings >= 0 ? '+' : '−') + formatMoney(Math.abs(report.refinerySavings))) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>—</td>
+                </tr>
+              )}
+              {totBellyRev > 0 && (
+                <tr data-testid="pl-belly-cargo">
+                  <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
+                    <Glyph e="📦" /> Belly cargo <span style={{ color: '#e8833a', fontWeight: 600 }}>(passenger holds)</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                      {totBellyTonnes.toLocaleString()} t/wk each way · handling and carrying fuel are in the cost lines below
+                    </span>
+                  </td>
+                  {pw && <td style={{ textAlign: 'right', color: 'var(--green)', fontSize: 12 }}>{pw.bellyRevenue ? '+' + formatMoney(pw.bellyRevenue) : '—'}</td>}
+                  <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 500 }}>+{formatMoney(totBellyRev)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{ytdBellyRev ? formatMoney(ytdBellyRev) : '—'}</td>
                 </tr>
               )}
               {totCargoRev > 0 && (
@@ -2934,7 +2951,7 @@ function downsampleStats(rows, maxPoints = 150) {
       // flows → per-week average
       paxOrganic: avg('paxOrganic'), paxConnecting: avg('paxConnecting'), paxInterline: avg('paxInterline'),
       flights: avg('flights'), revenue: avg('revenue'), partnerRevenue: avg('partnerRevenue'),
-      cargoRevenue: avg('cargoRevenue'), cost: avg('cost'), profit: avg('profit'),
+      cargoRevenue: avg('cargoRevenue'), bellyRevenue: avg('bellyRevenue'), cost: avg('cost'), profit: avg('profit'),
       // stocks → last in bucket
       routes: last.routes, destinations: last.destinations, fleet: last.fleet, cash: last.cash,
       // efficiency → average
@@ -3126,7 +3143,9 @@ function Statistics() {
   const points = useMemo(() => downsampleStats(windowed).map(p => ({
     ...p,
     paxTotal: (p.paxOrganic ?? 0) + (p.paxConnecting ?? 0) + (p.paxInterline ?? 0),
-    passengerRev: Math.max(0, (p.revenue ?? 0) - (p.partnerRevenue ?? 0) - (p.cargoRevenue ?? 0) - (p.charterRevenue ?? 0)),
+    // Belly cargo (belly-cargo worlds) is freight: it sits in the Cargo band, not Passenger.
+    passengerRev: Math.max(0, (p.revenue ?? 0) - (p.partnerRevenue ?? 0) - (p.cargoRevenue ?? 0) - (p.bellyRevenue ?? 0) - (p.charterRevenue ?? 0)),
+    cargoRevenue: (p.cargoRevenue ?? 0) + (p.bellyRevenue ?? 0),
     lfPct: (p.loadFactor ?? 0) * 100,
     yieldCents: (p.yield ?? 0) * 100,
   })), [windowed]);

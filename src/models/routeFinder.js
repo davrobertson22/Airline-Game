@@ -48,7 +48,7 @@ import {
 import { metroPairKeyOf, memberPairKeysOf, airportAppeal, regionOf, cargoCityPairDemand, cargoReferenceYield } from '../utils/market.js';
 import { pairDemandNow } from './demand.js';
 import {
-  currentGameDate, simulateCargoRoute, cargoLaneAllocations, CARGO_YIELD_ELASTICITY,
+  currentGameDate, simulateCargoRoute, cargoLaneAllocations, CARGO_YIELD_ELASTICITY, bellyPoolFactorOf,
 } from '../utils/simulation.js';
 import { projectRouteAddition, pairMarketShare } from './pairShare.js';
 import { normalizeCateringLevel } from '../data/catering.js';
@@ -498,7 +498,10 @@ export function cargoLaneServed(state, origin, destination, { gameDate = null } 
   const mine = (state?.cargoRoutes ?? [])
     .filter((r) => pairKey(r.origin, r.destination) === key)
     .map((r) => ({ ...r, weeksOpen: null }));
-  const alloc = cargoLaneAllocations(mine, fleet, 1.0, { gameDate: gd, competitors: state?.competitors ?? [] });
+  // Belly-cargo worlds: the lane freighters see is what passenger holds left.
+  const bellyLeft = bellyPoolFactorOf(state, gd);
+  const alloc = cargoLaneAllocations(mine, fleet, 1.0, { gameDate: gd, competitors: state?.competitors ?? [],
+    ...(bellyLeft ? { demandMultFor: bellyLeft } : {}) });
   let yourTonnes = 0, yourCap = 0;
   for (const r of mine) {
     const ac = fleet.find((a) => a.id === r.aircraftId);

@@ -14,7 +14,7 @@ import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
   maintenanceMultiplier, ageLabel,
-  simulateRoute, simulateCargoRoute, simulateCargoNetwork, weeklyBlockHours, currentGameDate,
+  simulateRoute, simulateCargoRoute, simulateCargoNetwork, bellyPoolFactorOf, weeklyBlockHours, currentGameDate,
   maxWeeklyBlockHoursFor, CLASS_FARE_MULTIPLIERS, routeDistanceKm, weekToGameDate, aircraftHubMaintFactor,
   freighterLandingCategory, fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   aircraftUtilization,
@@ -820,8 +820,8 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   // rival contest and freight connecting through your airports.
   const cargoNet       = useMemo(() => simulateCargoNetwork(cargoRoutes, state.fleet ?? [], {
     gameDate: gd, demandMultFor: (o, d) => evModel.multFor(o, d), competitors: state.competitors ?? [],
-    labor: state.labor ?? null, fuelMultiplier: fuelMult,
-  }), [cargoRoutes, state.fleet, state.competitors, state.labor, fuelMult, evModel, gd.month]);
+    labor: state.labor ?? null, fuelMultiplier: fuelMult, bellyPoolFactor: bellyPoolFactorOf(state, gd),
+  }), [cargoRoutes, state.fleet, state.competitors, state.labor, fuelMult, evModel, gd.month, state.routes, state.bellyRates]);
   const cargoAlloc     = cargoNet.allocations;
   const aircraftRoutes = [...routes, ...cargoRoutes].filter(r => r.aircraftId === aircraft.id);
   const routeResults   = aircraftRoutes.map(r => {

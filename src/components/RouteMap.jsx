@@ -3,7 +3,7 @@ import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { getAircraftType } from '../data/aircraft.js';
 import {
-  simulateRoute, simulateCargoRoute, simulateCargoNetwork, formatMoney, currentGameDate,
+  simulateRoute, simulateCargoRoute, simulateCargoNetwork, bellyPoolFactorOf, formatMoney, currentGameDate,
   fleetAvgUtilization, buildEventDemandModel, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, routeStops, isMultiStop,
 } from '../utils/simulation.js';
@@ -818,7 +818,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     const needsFallback = cargoRoutes.some(r => !cargoRrById[r.id]);
     const net = needsFallback
       ? simulateCargoNetwork(cargoRoutes, fleet, { gameDate: gd, competitors, labor: state.labor ?? null,
-          fuelMultiplier: proj.fuelMultiplier }) : null;
+          fuelMultiplier: proj.fuelMultiplier, bellyPoolFactor: bellyPoolFactorOf(state, gd) }) : null;
     const alloc = net?.allocations ?? null;
     return cargoRoutes.map(r => {
       const origin   = getAirport(r.origin);

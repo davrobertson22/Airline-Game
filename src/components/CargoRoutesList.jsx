@@ -5,7 +5,7 @@ import AirportLink from './AirportLink.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { groundedTitle } from '../data/maintenance.js';
-import { simulateCargoRoute, simulateCargoNetwork, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
+import { simulateCargoRoute, simulateCargoNetwork, bellyPoolFactorOf, formatMoney, formatPercent, currentGameDate } from '../utils/simulation.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { connectingFreightTitle } from '../utils/connectingFreight.js';
 import OutOfRangeBadge from './OutOfRangeBadge.jsx';
@@ -74,7 +74,8 @@ export default function CargoRoutesList({ airportFilter = 'all', hideViewToggle 
     // SHARE of a shared lane, not N copies of the full market.
     // The whole network in one pass (the tick's own simulateCargoNetwork), so
     // freight connecting through your airports shows on the legs that carry it.
-    const net   = simulateCargoNetwork(cargoRoutes, fleet, { gameDate: gd, competitors: state.competitors });
+    const net   = simulateCargoNetwork(cargoRoutes, fleet, { gameDate: gd, competitors: state.competitors,
+      bellyPoolFactor: bellyPoolFactorOf(state, gd) });
     const alloc = net.allocations;
     return cargoRoutes.map(route => {
       const aircraft = fleet.find(a => a.id === route.aircraftId);
