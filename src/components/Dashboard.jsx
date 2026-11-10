@@ -7,7 +7,9 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
-import { crewStatus, crewParkedAlertText } from '../data/labor.js';
+import { crewStatus, crewParkedAlertText, OTP_UTILIZATION_FREE } from '../data/labor.js';
+import { INCIDENT, incidentRisk, incidentCauseLine } from '../models/incidents.js';
+import { economyCycleWorld } from '../models/economyCycle.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { isReserve } from '../data/reserve.js';
 import { getAirport } from '../data/airports.js';
@@ -639,7 +641,20 @@ export default function Dashboard() {
           good:     flying.filter(e => spare(e) && e.p >= 0.5 && e.p < 0.9).length,
           full:     flying.filter(e => spare(e) && e.p >= 0.9).length,
         };
-        const avgColor = avgPct >= 0.75 ? 'var(--green)' : avgPct >= 0.4 ? 'var(--yellow)' : 'var(--red)';
+        // Colour by what utilisation costs as well as what it earns. Green used
+        // to run from 75% all the way up, while the engine starts taking on-time
+        // points above OTP_UTILIZATION_FREE and, in demand-model-v4 games, puts
+        // a fleet past 85% at risk of a meltdown (models/incidents.js).
+        const avgColor = avgPct > INCIDENT.utilisationSafe ? 'var(--yellow)'
+          : avgPct >= 0.6 ? 'var(--green)' : avgPct >= 0.4 ? 'var(--yellow)' : 'var(--red)';
+        const meltdown = economyCycleWorld(state) ? incidentRisk(state, avgPct) : null;
+        const slackNote = meltdown?.prob > 0
+          ? `Meltdown risk this week: ${(meltdown.prob * 100).toFixed(0)}% (${incidentCauseLine(meltdown.causes)}). Add spare aircraft, trim hours or lift crew morale.`
+          : avgPct > INCIDENT.utilisationSafe
+            ? `Past ${Math.round(INCIDENT.utilisationSafe * 100)}% the schedule has no slack: on-time suffers${economyCycleWorld(state) ? ' and the risk of an operational meltdown starts to build' : ''}.`
+            : avgPct > OTP_UTILIZATION_FREE
+              ? `Above ${Math.round(OTP_UTILIZATION_FREE * 100)}% the timetable starts to lose the slack that absorbs delays, so on-time slips a little.`
+              : null;
         return (
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -667,6 +682,11 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+            {slackNote && (
+              <div data-utilisation-note style={{ fontSize: 12, marginTop: 8, color: meltdown?.prob > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                {slackNote}
+              </div>
+            )}
           </div>
         );
       })()}

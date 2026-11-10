@@ -3,7 +3,7 @@ import { requestDepartureBoard } from './Departures.jsx';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { useGame, slotsUsedAt as slotsUsedAtEngine } from '../store/GameContext.jsx';
-import { AIRPORTS, getAirport, baseTierOf, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
+import { AIRPORTS, getAirport, baseTierOf, gateMonthlyFee, totalGateMonthlyFee, getGateRentV4 } from '../data/airports.js';
 import { demandWorldActive, demandFactor } from '../data/demandWorld.js';
 import {
   baseCityPairDemand, referencePrice, formatMoney, formatPercent, SLOTS_PER_GATE,
@@ -104,7 +104,7 @@ function GateLeaseCard({ code }) {
 
       <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
         {held > 0
-          ? <>You hold {held} gate{held === 1 ? '' : 's'} here for {formatMoney(nowFee)}/mo. Each one is worth {SLOTS_PER_GATE} departures a week, and gates get dearer the more of an airport you take.</>
+          ? <>You hold {held} gate{held === 1 ? '' : 's'} here for {formatMoney(nowFee)}/mo. Each one is worth {SLOTS_PER_GATE} departures a week{getGateRentV4() ? ', and from the 11th gate here each one is cheaper' : ', and gates get dearer the more of an airport you take'}.</>
           : <>A gate at {code} is what lets you schedule departures here at all — {SLOTS_PER_GATE} a week per gate. No up-front cost; you pay for as long as you hold it, flying or not.</>}
       </div>
 

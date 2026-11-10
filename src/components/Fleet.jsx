@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useProgressiveCount } from '../utils/useProgressiveCount.js';
 import NumberStepper from './NumberStepper.jsx';
+import { tailMaintenanceFn } from '../utils/tailCosts.js';
 import { calendarYear as eraCalendarYear } from '../utils/simulation.js';
 import { designAgeQualityPts } from '../models/demand.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
@@ -862,7 +863,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
   // The tick's own age for the running-cost curve: D-check credit and a
   // freighter conversion's credit both bring it down (data/maintenance.js).
   const maintMlt = maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft));
-  const weeklyMaint = Math.round((type?.baseMaintenancePerWk ?? 0) * maintMlt);
+  const weeklyMaint = tailMaintenanceFn(state)(aircraft);   // the tick's bill (budget, labour, facility)
   const weeklyLease = aircraft.ownershipType === 'owned' ? 0 : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
   const detailLeaseLeft = leaseRemainingWeeks(aircraft);
   const ageColor    = ageYrs < 5 ? 'var(--green)' : ageYrs < 12 ? 'var(--yellow)' : 'var(--red)';
@@ -1570,7 +1571,7 @@ function FleetByType({ fleet, routes, cargoRoutes = [] }) {
         // Total weekly fixed costs
         const totalFixed = aircraft.reduce((s, a) => {
           const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? type?.weeklyLease ?? 0);
-          const maint = Math.round((type?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(effectiveMaintAgeWeeks(a)));
+          const maint = tailMaintenanceFn(state)(a);
           return s + lease + maint;
         }, 0);
 
@@ -1742,7 +1743,7 @@ function FleetByCategory({ fleet, routes, cargoRoutes = [] }) {
         const totalFixed = catFleet.reduce((s, a) => {
           const t = getAircraftType(a.typeId);
           const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? t?.weeklyLease ?? 0);
-          const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(effectiveMaintAgeWeeks(a)));
+          const maint = tailMaintenanceFn(state)(a);
           return s + lease + maint;
         }, 0);
 
@@ -2223,7 +2224,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
   }, 0);
   const weeklyMaintTotal = fleet.reduce((s, a) => {
     const t = getAircraftType(a.typeId);
-    return s + Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(effectiveMaintAgeWeeks(a)));
+    return s + tailMaintenanceFn(state)(a);
   }, 0);
 
   const selectedAircraft = fleet.find(a => a.id === selectedId);
@@ -2298,7 +2299,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
         return u.overCap ? Math.max(u.flyingHours, u.peakHours) : u.flyingHours;
       }
       case 'fixed': {
-        const maint = Math.round((t?.baseMaintenancePerWk ?? 0) * maintenanceMultiplier(effectiveMaintAgeWeeks(a)));
+        const maint = tailMaintenanceFn(state)(a);
         const lease = a.ownershipType === 'owned' ? 0 : (a.weeklyLease ?? t?.weeklyLease ?? 0);
         return lease + maint;
       }
@@ -3371,7 +3372,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
               const route  = routes.find(r => r.aircraftId === aircraft.id);
               const ageWks = aircraft.ageWeeks ?? 0;
               const maintM = maintenanceMultiplier(effectiveMaintAgeWeeks(aircraft));
-              const maint  = Math.round((type?.baseMaintenancePerWk ?? 0) * maintM);
+              const maint  = tailMaintenanceFn(state)(aircraft);
               const lease  = aircraft.ownershipType === 'owned' ? 0 : (aircraft.weeklyLease ?? type?.weeklyLease ?? 0);
               const ageYrs = ageWks / 52;
               const ageColor = ageYrs < 5 ? 'var(--green)' : ageYrs < 12 ? 'var(--yellow)' : 'var(--red)';

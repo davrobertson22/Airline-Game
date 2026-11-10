@@ -7,11 +7,12 @@ import {
   breakEvenLoadFactor,
   weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor,
-  stateLoungeFields, stateGroundHandlingFields, stateCateringFields,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, weeklyGateFeeAt,
 } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { effectiveMaintAgeWeeks } from '../data/maintenance.js';
-import { getAirport, gateMonthlyFee, totalGateMonthlyFee } from '../data/airports.js';
+import { getAirport } from '../data/airports.js';
+import { tailMaintenanceFn } from '../utils/tailCosts.js';
 import InfoTip from './InfoTip.jsx';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
@@ -419,13 +420,13 @@ function PLStatement({ proj }) {
   const totQual = report.totalQuality;
 
   // Per-aircraft detail rows (totals come from the engine report below).
+  const tailMaint = tailMaintenanceFn(state);   // the report's own per-tail figure (utils/tailCosts.js)
   const fleetData = fleet.map(a => {
     const type    = getAircraftType(a.typeId);
     const isOwned = a.ownershipType === 'owned';
     const lease   = isOwned ? 0 : (a.weeklyLease ?? type?.weeklyLease ?? 0);
     // Match what weeklyTick actually charges: budget × morale multiplier × per-tail mod
-    const maint   = Math.round((type?.baseMaintenancePerWk ?? 0)
-      * maintenanceMultiplier(effectiveMaintAgeWeeks(a)) * maintenanceBudget * maintenanceCostMultiplier * (a.maintMod ?? 1.0));
+    const maint   = tailMaint(a);
     return { aircraft: a, type, lease, maint, isOwned };
   });
   // Canonical fleet costs from the engine.
@@ -436,7 +437,7 @@ function PLStatement({ proj }) {
   // Gate detail rows use the same bulk pricing / weekly proration the engine uses.
   const gatesData = Object.entries(state.gates ?? {}).map(([code, count]) => {
     const airport   = getAirport(code);
-    const weeklyFee = airport ? Math.round(totalGateMonthlyFee(airport, count) / 4) : 0;
+    const weeklyFee = airport ? weeklyGateFeeAt(state, code, count) : 0;   // the tick's own figure
     return { code, airport, count, weeklyFee };
   });
   const totGates = report.totalGateFees;
@@ -464,6 +465,7 @@ function PLStatement({ proj }) {
   const totHQCost = report.totalHQCost;
   const hqInfo    = hqBracket(fleet.length);
   const ytdHQCost = ytd(financialHistory, 'hqCost');
+  const ytdHubInvestment = ytd(financialHistory, 'hubInvestment');
 
   // Hub investment
   const hubs = state.hubs ?? {};
@@ -1342,7 +1344,7 @@ function PLStatement({ proj }) {
                   <tr key={g.code}>
                     <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
                       {g.code} — {g.airport?.city} · {g.count} gate{g.count !== 1 ? 's' : ''}
-                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>{formatMoney(gateMonthlyFee(g.airport) * g.count)}/mo</span>
+                      {g.count > 1 && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>avg {formatMoney(Math.round(g.weeklyFee / g.count))} a gate</span>}
                     </td>
                     {pw && <td />}
                     <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{formatMoney(-g.weeklyFee)}</td>
@@ -1452,7 +1454,7 @@ function PLStatement({ proj }) {
                 colSpan={pw ? 4 : 3}
                 expanded={sections.ga ?? true}
                 onToggle={() => toggleSection('ga')}
-                summary={<TotalRow label="G&amp;A (collapsed)" prior={pw ? -(pw.hqCost ?? 0) : undefined} weekly={-totGA} ytd={-(ytdHQCost)} />}
+                summary={<TotalRow label="G&amp;A (collapsed)" prior={pw ? -((pw.hqCost ?? 0) + (pw.hubInvestment ?? 0)) : undefined} weekly={-totGA} ytd={-(ytdHQCost + ytdHubInvestment)} />}
               >
                 <tr>
                   <td style={{ paddingLeft: 28, color: 'var(--text-muted)', fontSize: 13 }}>
@@ -1475,10 +1477,10 @@ function PLStatement({ proj }) {
                     </td>
                     {pw && <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{pw.hubInvestment ? formatMoney(-(pw.hubInvestment)) : '—'}</td>}
                     <td style={{ textAlign: 'right', color: 'var(--red)', fontSize: 13 }}>{formatMoney(-totHubInvestment)}</td>
-                    <td />
+                    <td style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12 }}>{ytdHubInvestment > 0 ? formatMoney(-ytdHubInvestment) : '—'}</td>
                   </tr>
                 )}
-                <TotalRow label="Total G&amp;A" prior={pw ? -((pw.hqCost ?? 0) + (pw.hubInvestment ?? 0)) : undefined} weekly={-totGA} ytd={-ytdHQCost} />
+                <TotalRow label="Total G&amp;A" prior={pw ? -((pw.hqCost ?? 0) + (pw.hubInvestment ?? 0)) : undefined} weekly={-totGA} ytd={-(ytdHQCost + ytdHubInvestment)} />
               </CollapsibleSection>
             )}
 
@@ -2131,8 +2133,8 @@ function AirportBreakdown({ proj }) {
           <tbody>
             {airports.map(({ code, airport, routes: aptRoutes, revenue, pax }) => {
               const gateCount  = gates[code] ?? 0;
-              const monthlyFee = gateMonthlyFee(airport) * gateCount;
-              const weeklyFee  = Math.round(monthlyFee / 4.33);
+              // The bill the tick charges (it used to be first-gate price x count over a different weeks-per-month).
+              const weeklyFee  = weeklyGateFeeAt(state, code, gateCount);
               const net        = revenue - weeklyFee;
               const tierColor  = { mega: '#a98bff', major: '#3ea6ff', regional: '#38d39f' }[airport?.tier] ?? 'var(--text-muted)';
               const routeList  = [...new Set(aptRoutes.map(r => r.origin === code ? r.destination : r.origin))];
