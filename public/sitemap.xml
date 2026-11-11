@@ -74,7 +74,7 @@
   </url>
   <url>
     <loc>https://www.tailwindsairlinegame.com/competition-and-alliances.html</loc>
-    <lastmod>2026-11-09</lastmod>
+    <lastmod>2026-11-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -171,6 +171,12 @@
   <url>
     <loc>https://www.tailwindsairlinegame.com/devlog/small-charters-business-jets-and-a-plane-finder-that-ranks.html</loc>
     <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.tailwindsairlinegame.com/devlog/smarter-rivals-airlines-that-plan-routes-price-them-and.html</loc>
+    <lastmod>2026-11-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

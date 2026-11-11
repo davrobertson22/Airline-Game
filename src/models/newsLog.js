@@ -38,10 +38,10 @@ const BIG_INTAKE = 5;
 // event already carries a written `description`, so the news tab prints that
 // rather than re-authoring the sentence in two places.
 const COMPETITOR_TIER = {
-  bankrupt: 1, ceased: 1, merger: 1, startup: 1, fireSale: 1, fareWar: 1, secondHub: 1,
+  bankrupt: 1, ceased: 1, merger: 1, startup: 1, fireSale: 1, fareWar: 1, secondHub: 1, restructure: 1,
   fareWarEnd: 2, mktBlitz: 2, launch: 2, cut: 2, recovered: 2,
   allianceJoin: 2, allianceLeave: 2,
-  quality: 3, boost: 3, trim: 3, aircraftOrder: 3,
+  quality: 3, boost: 3, trim: 3, aircraftOrder: 3, renewal: 3,
   // Rival freight arms (competitorCargo.js).
   cargoLaunch: 2, cargoCut: 2, cargoBoost: 3, cargoTrim: 3,
 };
@@ -64,6 +64,7 @@ const COMPETITOR_ICON = {
   fareWar: '⚔️', fareWarEnd: '🕊️', mktBlitz: '📣', secondHub: '🏛️',
   launch: '🛫', cut: '🛬', boost: '📈', trim: '📉', quality: '⭐',
   allianceJoin: '🤝', allianceLeave: '💔', aircraftOrder: '🏭',
+  restructure: '⚖️', renewal: '♻️',
   cargoLaunch: '📦', cargoCut: '📦', cargoBoost: '📦', cargoTrim: '📦',
 };
 

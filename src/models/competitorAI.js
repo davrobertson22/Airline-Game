@@ -29,6 +29,11 @@ import { ALLIANCES, applyAllianceEra } from '../data/alliances.js';
 import { featureLive } from '../data/eraFeatures.js';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { viaOf, routeLegKm, findRefuelStop, techStopDemandShare } from './rivalStops.js';
+import {
+  inHomeMarket, routeTouchesHome, homeCountryOf, secondaryAirportsFor, launchFrequency,
+  buildPairContest, fareBand, YIELD_STEP, ageMaintenanceMult, RENEWAL_AGE_YEARS,
+  rivalLaneSeats, houseMakerOf, isOtherHouse, OTHER_HOUSE_VALUE,
+} from './rivalBrain.js';
 
 /**
  * Routes a rival set lists for a carrier (models/rivalSets.js) that it lost
@@ -50,6 +55,7 @@ import {
   buildPairIncumbents,
   pickLargerCompetitorAircraftType,
   isPreferredType,
+  competitorCanFly,
 } from './demand.js';
 import { quotePlan } from './lineBook.js';
 import { buildRivalFromSpec, rivalChance } from './rivalSets.js';
@@ -188,6 +194,39 @@ function upgaugeSeatCeiling(distKm, tier) {
   return tier === 'budget' ? Math.min(byStage, 250) : byStage;
 }
 
+// ── Look before launching (2026-11-11 audit) ────────────────────────────────
+/** Candidates, best-scored first, whose route P&L is worked out before one is chosen. */
+const LAUNCH_SHORTLIST = 8;
+/** Smart-rival worlds: uncontested regional airports added to that shortlist. */
+const LAUNCH_SHORTLIST_SECONDARY = 4;
+/** Aircraft types costed for each candidate. */
+const LAUNCH_TYPES_CONSIDERED = 5;
+/** A full-service carrier values a home regional spoke above its own P&L: it feeds the hub. */
+const HUB_FEED_VALUE = 1.25;
+
+// ── Smart-rival worlds (state.smartRivalsWorld: new games) ───────────────────
+/** Weeks a route sits on the load cap before its fare goes up. */
+const YIELD_FULL_WEEKS = 4;
+/** Below this load a fare above the floor comes down. */
+const YIELD_SOFT_LF = 0.70;
+/** A carrier with at least this many routes is restructured the first time it fails. */
+const RESTRUCTURE_MIN_ROUTES = 4;
+/** What a restructured carrier's costs are multiplied by, and for how long. */
+export const RESTRUCTURE_COST_RELIEF = 0.92;
+export const RESTRUCTURE_RELIEF_WEEKS = 156;
+/** Quality points a restructuring costs. */
+const RESTRUCTURE_QUALITY_HIT = 4;
+/** The most airframes a failed carrier's liquidation lists. */
+export const LIQUIDATION_MAX_AIRFRAMES = 60;
+/**
+ * Cash a smart-world carrier holds before paying most of its profit out: half
+ * a year of costs (real airlines hold about a quarter of annual revenue), and
+ * never less than the floor.
+ */
+export const SMART_CASH_WEEKS     = 13;
+export const SMART_CASH_FLOOR     = 60_000_000;
+export const SMART_CASH_RETENTION = 0.12;
+
 /** Standard takeover premium over the target's market cap. */
 export const ACQUISITION_PREMIUM = 1.25;
 
@@ -303,7 +342,16 @@ export const DIVIDEND_RETENTION      = 0.35;
  * Apply dividend policy to a week's profit: how much of `profit` a carrier
  * actually adds to its cash pile given its current balance.
  */
-export function retainedProfit(cash, profit) {
+export function retainedProfit(cash, profit, { weeklyCost = null } = {}) {
+  if (weeklyCost != null) {
+    // Smart-rival worlds: the cash target follows the size of the airline.
+    // Up to the target it keeps everything; past it, a sliver; past twice
+    // it, nothing — the rest goes to shareholders.
+    if (profit <= 0) return profit;
+    const target = Math.max(SMART_CASH_FLOOR, weeklyCost * SMART_CASH_WEEKS);
+    if (cash < target) return profit;
+    return cash < target * 2 ? Math.round(profit * SMART_CASH_RETENTION) : 0;
+  }
   if (profit <= 0 || cash < DIVIDEND_CASH_THRESHOLD) return profit;
   return Math.round(profit * DIVIDEND_RETENTION);
 }
@@ -529,7 +577,7 @@ export function tickCompetitorAI(competitors, ctx) {
     playerMarketCap = 0,
     playerCampaignSpend = {},   // { [airportCode]: $/wk } — player's targeted marketing
     calendarYear = null,        // era worlds: real year (null = classic)
-    world = null,               // this week's world events { demandMultFor, fuelMult } — see computeCompetitorRoutePnL
+    world: worldIn = null,      // this week's world events { demandMultFor, fuelMult } — see computeCompetitorRoutePnL
     lines = null,               // production-line worlds: the tick's booking ledger (lineBook.makeTickLedger)
     entrants = null,            // rival set (era games): rivals waiting for their founding year — models/rivalSets.js
     noRandomStartups = false,   // setup option: only the set's own entrants ever join mid-game
@@ -542,8 +590,14 @@ export function tickCompetitorAI(competitors, ctx) {
     playerCargoRoutes = [],     // state.cargoRoutes — the player's freighters, for the freight contest
     playerFleet = [],           // state.fleet — to read those freighters' types
     stopsWorld = false,         // new games: refuelling stops + listed routes kept as goals (models/rivalStops.js)
+    smart = false,              // new games: pair contest, yield management, regional airports, fleet age, restructuring (models/rivalBrain.js)
   } = ctx ?? {};
   const pressureCfg = RIVAL_PRESSURE[pressure] ?? null;
+  // Smart-rival worlds: every route P&L in this tick reads the pair contest —
+  // who offers what on each city pair, the player included — as the week opens.
+  const world = smart
+    ? { ...(worldIn ?? {}), contest: worldIn?.contest ?? buildPairContest(competitors, playerRoutes) }
+    : worldIn;
 
   const events = [];
 
@@ -587,12 +641,23 @@ export function tickCompetitorAI(competitors, ctx) {
   let updated = competitors.map(airline => {
     let c = { ...airline };
 
+    // Smart-rival worlds: airframes age a week; restructuring relief runs out.
+    if (smart && c.fleet?.length) c.fleet = c.fleet.map(f => ({ ...f, ageWeeks: (f.ageWeeks ?? 0) + 1 }));
+    if (c.costRelief != null && weekNumber >= (c._reliefUntil ?? 0)) {
+      const { costRelief: _relief, _reliefUntil: _until, ...rest } = c;
+      c = rest;
+    }
+
     // Lazy init (new games AND old saves migrate transparently).
     if (!c._archetype) c._archetype = assignArchetype(c);
     if (c.allianceId === undefined) {
       c.allianceId = ALLIANCES.find(a => a.memberIds.includes(c.id))?.id ?? null;
     }
     const arch = ARCHETYPES[c._archetype] ?? ARCHETYPES.balanced;
+    // Seats a type flies on a lane: the lane's limit, and in smart-rival
+    // worlds the tier's cabin (rivalBrain.CABIN_DENSITY).
+    const laneSeats = (t, d) => smart ? rivalLaneSeats(t, d, c.tier) : maxSeatsForRange(t, d);
+    const typeOpts  = (demand) => smart ? { smart, demand: demand ?? null, home: homeCountryOf(c), house: houseMakerOf(c) } : null;
 
     const lastProfit = (c.profitHistory && c.profitHistory.length)
       ? c.profitHistory[c.profitHistory.length - 1] : 0;
@@ -745,6 +810,7 @@ export function tickCompetitorAI(competitors, ctx) {
     //     timer below); growth takes the most profitable full route first.
     const loadMap = { ...(c._routeLoad ?? {}) };
     const trimmed = new Set();
+    const repriced = new Set();
     {
       for (const key of routeKeys) {
         const p = pnl[key];
@@ -756,6 +822,35 @@ export function tickCompetitorAI(competitors, ctx) {
       }
       let movesLeft = CAPACITY_MOVES_PER_ACT;
 
+      // Smart-rival worlds — yield management. A route that keeps selling out
+      // is under-priced: the fare goes up a step before any flights are added,
+      // as far as the carrier's band allows (further when it has the pair to
+      // itself). A soft route's fare comes down toward the floor. Every move
+      // has to pay on the route's own P&L, and a repriced route is left alone
+      // by the capacity moves below until its new loads are in.
+      if (smart) {
+        for (const key of routeKeys) {
+          const cfg = routes[key];
+          const p   = pnl[key];
+          if (!cfg || !p || inWar(key) || planned(key)) continue;
+          const band   = fareBand(c, incumbents.get(key) ?? 1);
+          const streak = loadMap[key] ?? 0;
+          let next = null;
+          if (p.loadFactor >= CAPACITY_FULL_LF && streak >= YIELD_FULL_WEEKS && cfg.priceMultiplier < band.ceiling) {
+            next = Math.min(band.ceiling, cfg.priceMultiplier + YIELD_STEP);
+          } else if (p.loadFactor < YIELD_SOFT_LF && cfg.priceMultiplier > band.floor) {
+            next = Math.max(band.floor, cfg.priceMultiplier - YIELD_STEP);
+          }
+          if (next == null) continue;
+          const trial = { ...cfg, priceMultiplier: +next.toFixed(4) };
+          if (projected(key, trial) <= p.profit) continue;
+          routes[key] = trial;
+          repriced.add(key);
+          // The fare is doing the work: the sell-out streak waits for it.
+          if (loadMap[key] > 0) loadMap[key] = Math.max(0, loadMap[key] - actEvery);
+        }
+      }
+
       // Trim candidates: chronically thin routes, plus routes that are losing
       // money without being full — a smaller schedule is tried before the loss
       // timer below withdraws them (right-size, then exit).
@@ -763,7 +858,7 @@ export function tickCompetitorAI(competitors, ctx) {
         && (lossMap[k] ?? 0) >= actEvery;
       const thin = routeKeys
         .filter(k => ((loadMap[k] ?? 0) <= -THIN_WEEKS_TO_TRIM || losingUnfull(k))
-          && !inWar(k) && routes[k].frequency > MIN_FREQUENCY && !planned(k))
+          && !inWar(k) && routes[k].frequency > MIN_FREQUENCY && !planned(k) && !repriced.has(k))
         .sort((x, y) => (pnl[x]?.loadFactor ?? 0) - (pnl[y]?.loadFactor ?? 0));
       for (const key of thin) {
         if (movesLeft <= 0) break;
@@ -794,7 +889,7 @@ export function tickCompetitorAI(competitors, ctx) {
 
       const canGrow = !c.fireSale && (lastProfit > 0 || cash > reserve * 2);
       const full = routeKeys
-        .filter(k => canGrow && (loadMap[k] ?? 0) >= FULL_WEEKS_TO_GROW && (pnl[k]?.profit ?? 0) > 0 && !planned(k))
+        .filter(k => canGrow && (loadMap[k] ?? 0) >= FULL_WEEKS_TO_GROW && (pnl[k]?.profit ?? 0) > 0 && !planned(k) && !repriced.has(k))
         .sort((x, y) => (pnl[y]?.profit ?? 0) - (pnl[x]?.profit ?? 0));
       for (const key of full) {
         if (movesLeft <= 0) break;
@@ -809,13 +904,14 @@ export function tickCompetitorAI(competitors, ctx) {
         // Dense schedule: fly something bigger rather than a 22nd flight.
         if (cfg.frequency >= UPGAUGE_FROM_FREQUENCY) {
           const bigger = pickLargerCompetitorAircraftType(dist, Math.ceil((cfg.seats ?? type.seats) * UPGAUGE_MIN_SEAT_STEP), {
-            prefer:   (t) => projected(key, { ...cfg, aircraftType: t.id, seats: maxSeatsForRange(t, dist), tails }),
+            prefer:   (t) => projected(key, { ...cfg, aircraftType: t.id, seats: laneSeats(t, dist), tails }),
             maxSeats: upgaugeSeatCeiling(dist, c.tier),
             fleetPref: c.fleetPref,
+            smart,
             // Already on a preferred type: step up only within the preference.
             strictPref: isPreferredType(type, c.fleetPref),
           });
-          if (bigger && projected(key, { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails }) > p.profit) {
+          if (bigger && projected(key, { ...cfg, aircraftType: bigger.id, seats: laneSeats(bigger, dist), tails }) > p.profit) {
             const cost = tailDeposit(bigger, tails) - tailSalvage(type, tails);
             if (cash - cost < reserve) continue;
             if (lines) {
@@ -824,7 +920,7 @@ export function tickCompetitorAI(competitors, ctx) {
               const q = quote(bigger, tails);
               if (q.delay > AI_LINE_GIVE_UP_WEEKS) continue;
               cash -= cost;
-              placeOrder('upgauge', key, bigger, q, { seats: maxSeatsForRange(bigger, dist) },
+              placeOrder('upgauge', key, bigger, q, { seats: laneSeats(bigger, dist) },
                 { type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
                   description: `${c.name} up-gauged ${a} → ${b} to the larger ${bigger.name ?? bigger.id} — the route keeps selling out.` });
               movesLeft--;
@@ -832,7 +928,7 @@ export function tickCompetitorAI(competitors, ctx) {
             }
             cash -= cost;
             fleet = fleet.map(f => f.routeKey === key ? { ...f, typeId: bigger.id, ageWeeks: 0 } : f);
-            routes[key] = { ...cfg, aircraftType: bigger.id, seats: maxSeatsForRange(bigger, dist), tails };
+            routes[key] = { ...cfg, aircraftType: bigger.id, seats: laneSeats(bigger, dist), tails };
             loadMap[key] = 0;
             movesLeft--;
             events.push({ type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
@@ -871,6 +967,22 @@ export function tickCompetitorAI(competitors, ctx) {
         movesLeft--;
         events.push({ type: 'boost', airlineId: c.id, name: c.name, routeKey: key,
           description: `${c.name} added flights on ${a} → ${b} (${cfg.frequency} → ${newFreq}×/wk) — the route keeps selling out.` });
+      }
+    }
+
+    // 1b. Smart-rival worlds — fleet age. Each route carries what its
+    //     airframes now cost to maintain (rivalBrain.ageMaintenanceMult); the
+    //     route P&L reads it, and step 7c renews the oldest.
+    if (smart) {
+      const ageSum = {}, ageN = {};
+      for (const f of fleet) {
+        ageSum[f.routeKey] = (ageSum[f.routeKey] ?? 0) + (f.ageWeeks ?? 0);
+        ageN[f.routeKey]   = (ageN[f.routeKey] ?? 0) + 1;
+      }
+      for (const key of Object.keys(routes)) {
+        if (!ageN[key]) continue;
+        const m = +ageMaintenanceMult(ageSum[key] / ageN[key]).toFixed(3);
+        if (m !== (routes[key].maintMult ?? 1)) routes[key] = { ...routes[key], maintMult: m };
       }
     }
 
@@ -1053,7 +1165,12 @@ export function tickCompetitorAI(competitors, ctx) {
           if (code !== c.homeHub) touch[code] = (touch[code] ?? 0) + 1;
         }
       }
-      const [bestCode, touches] = Object.entries(touch).sort(([, x], [, y]) => y - x)[0] ?? [null, 0];
+      // Smart-rival worlds: a hub is a base, so it is opened in the carrier's
+      // home market, never at a foreign airport it happens to fly to a lot
+      // (rivalBrain.js).
+      const [bestCode, touches] = Object.entries(touch)
+        .filter(([code]) => !smart || inHomeMarket(c, code, calendarYear))
+        .sort(([, x], [, y]) => y - x)[0] ?? [null, 0];
       if (bestCode && touches >= SECOND_HUB_MIN_TOUCHES) {
         c.secondaryHub = bestCode;
         events.push({ type: 'secondHub', airlineId: c.id, name: c.name, airport: bestCode,
@@ -1077,53 +1194,65 @@ export function tickCompetitorAI(competitors, ctx) {
       ? pickListedRoute(c, network, { weekNumber, playerPairs }) : null;
     const roomToGrow = listedCand != null || Object.keys(routes).length + launchesOnOrder < carrierMaxRoutes(c);
     if (roomToGrow && healthy && cash > reserve) {
-      const cand = listedCand ?? pickExpansionTarget(c, network, { incumbents, playerPairs, playerHubs, playerNotice, stops: stopsWorld });
+      // Smart-rival worlds — look before launching: each shortlisted route is
+      // costed on the carrier's own route P&L (aircraft, schedule, who else is
+      // on the pair) and only one that pays is opened. A route its rival set
+      // lists is opened whether or not it pays (the set asked for it), on the
+      // best aircraft for it. Elsewhere the best-scored route is opened on the
+      // tier's usual aircraft at its nominal schedule, as it always was.
+      const evaluate = smart ? (cd, o = {}) => planLaunch(c, cd, {
+        fleet, nRoutes: Object.keys(routes).length, incumbents, month, world, ...o }) : null;
+      const cand = listedCand
+        ? (smart ? { ...listedCand, plan: evaluate(listedCand, { force: true }) } : listedCand)
+        : pickExpansionTarget(c, network, { incumbents, playerPairs, playerHubs, playerNotice,
+            stops: stopsWorld, calendarYear, smart, evaluate });
       const candCfg = cand?.via ? { via: cand.via } : {};
+      const options = !cand ? []
+        : cand.plan ? cand.plan.options
+        : rankCompetitorAircraftTypes(cand.legKm, c.tier, c.fleetPref).slice(0, lines ? AI_LINE_ALTERNATIVES : 1).map(type => ({
+            type, frequency: cand.frequency, seats: maxSeatsForRange(type, cand.legKm),
+            tails: tailsForCompetitorRoute(cand.key, candCfg, cand.frequency) }));
       if (cand && lines) {
         // Production lines: order the frames; the route opens when they
         // arrive. A favourite whose line is booked solid gives way to the next
         // type down the list that can still be had in reasonable time.
         if (!planned(cand.key)) {
-          const tails = tailsForCompetitorRoute(cand.key, candCfg, cand.frequency);
           let best = null;
-          for (const t of rankCompetitorAircraftTypes(cand.legKm, c.tier, c.fleetPref).slice(0, AI_LINE_ALTERNATIVES)) {
-            if (cash - tailDeposit(t, tails) < reserve) continue;
-            const q = quote(t, tails);
-            if (!best || q.weeks[tails - 1] < best.q.weeks[tails - 1]) best = { t, q };
-            if (q.delay <= AI_LINE_PATIENCE_WEEKS) { best = { t, q }; break; }
+          for (const o of options.slice(0, AI_LINE_ALTERNATIVES)) {
+            if (cash - tailDeposit(o.type, o.tails) < reserve) continue;
+            const q = quote(o.type, o.tails);
+            if (!best || q.weeks[o.tails - 1] < best.q.weeks[best.o.tails - 1]) best = { o, q };
+            if (q.delay <= AI_LINE_PATIENCE_WEEKS) { best = { o, q }; break; }
           }
           if (best && best.q.delay <= AI_LINE_GIVE_UP_WEEKS) {
-            const { t: type, q } = best;
-            cash -= tailDeposit(type, tails);
+            const { o, q } = best;
+            cash -= tailDeposit(o.type, o.tails);
             const [a, b] = cand.key.split('-');
-            placeOrder('launch', cand.key, type, q, {
-              frequency:       cand.frequency,
+            placeOrder('launch', cand.key, o.type, q, {
+              frequency:       o.frequency,
               priceMultiplier: cand.priceMultiplier,
-              aircraftType:    type.id,
-              seats:           maxSeatsForRange(type, cand.legKm),
+              aircraftType:    o.type.id,
+              seats:           o.seats,
               ...candCfg,
             }, launchEvent(c, cand, a, b));
           }
         }
       } else if (cand) {
-        const type = pickCompetitorAircraftType(cand.legKm, c.tier, c.fleetPref);
-        if (type) {
-          const tails = tailsForCompetitorRoute(cand.key, candCfg, cand.frequency);
-          const cost  = tailDeposit(type, tails);
-          if (cash - cost >= reserve) {
-            cash -= cost;
-            for (let i = 0; i < tails; i++) fleet.push(makeCompetitorTail(c.id, type.id, cand.key, false));
-            routes[cand.key] = {
-              frequency:       cand.frequency,
-              priceMultiplier: cand.priceMultiplier,
-              aircraftType:    type.id,
-              seats:           maxSeatsForRange(type, cand.legKm),
-              tails,
-              ...candCfg,
-            };
-            const [a, b] = cand.key.split('-');
-            events.push(launchEvent(c, cand, a, b));
-          }
+        // The best plan the carrier can pay the deposits for.
+        const o = options.find(x => cash - tailDeposit(x.type, x.tails) >= reserve);
+        if (o) {
+          cash -= tailDeposit(o.type, o.tails);
+          for (let i = 0; i < o.tails; i++) fleet.push(makeCompetitorTail(c.id, o.type.id, cand.key, false));
+          routes[cand.key] = {
+            frequency:       o.frequency,
+            priceMultiplier: cand.priceMultiplier,
+            aircraftType:    o.type.id,
+            seats:           o.seats,
+            tails:           o.tails,
+            ...candCfg,
+          };
+          const [a, b] = cand.key.split('-');
+          events.push(launchEvent(c, cand, a, b));
         }
       }
     }
@@ -1138,11 +1267,11 @@ export function tickCompetitorAI(competitors, ctx) {
         if (!viaOf(cfg) || planned(key)) continue;
         const [a, b] = key.split('-');
         const direct = routeDistance(a, b);
-        const type = pickCompetitorAircraftType(direct, c.tier, c.fleetPref);
+        const type = pickCompetitorAircraftType(direct, c.tier, c.fleetPref, typeOpts(pnl[key]?.demandOneWay));
         if (!type) continue;
         const { via, ...rest } = cfg;
         const tails  = tailsForRoute(direct, cfg.frequency);
-        const next   = { ...rest, aircraftType: type.id, seats: maxSeatsForRange(type, direct), tails };
+        const next   = { ...rest, aircraftType: type.id, seats: laneSeats(type, direct), tails };
         const nowProfit = pnl[key]?.profit ?? computeCompetitorRoutePnL(c, key, cfg, month, incumbents, world)?.profit ?? 0;
         if (projected(key, next) <= nowProfit) continue;
         const old  = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : null;
@@ -1164,6 +1293,47 @@ export function tickCompetitorAI(competitors, ctx) {
         loadMap[key] = 0;
         events.push(event);
         break;
+      }
+    }
+
+    // 7c. Smart-rival worlds — fleet renewal. A healthy carrier replaces the
+    //     airframes on its oldest route once they are past RENEWAL_AGE_YEARS,
+    //     when the new ones would earn more and it can pay for them. A carrier
+    //     that cannot keeps flying old metal at a rising maintenance bill.
+    if (smart && !c.fireSale && (lastProfit > 0 || cash > reserve * 2)) {
+      const oldMult = ageMaintenanceMult(RENEWAL_AGE_YEARS * 52);
+      const oldest = Object.keys(routes)
+        .filter(k => routes[k].aircraftType && !planned(k) && !inWar(k) && (routes[k].maintMult ?? 1) >= oldMult)
+        .sort((x, y) => (routes[y].maintMult ?? 1) - (routes[x].maintMult ?? 1))[0];
+      if (oldest) {
+        const cfg    = routes[oldest];
+        const [a, b] = oldest.split('-');
+        const legKm  = routeLegKm(oldest, cfg);
+        const old    = getAircraftType(cfg.aircraftType);
+        const now    = pnl[oldest] ?? computeCompetitorRoutePnL(c, oldest, cfg, month, incumbents, world);
+        const type   = pickCompetitorAircraftType(legKm, c.tier, c.fleetPref, typeOpts(now?.demandOneWay));
+        const tails  = cfg.tails ?? 1;
+        const next   = type ? { ...cfg, aircraftType: type.id, seats: laneSeats(type, legKm), maintMult: 1 } : null;
+        const cost   = type ? tailDeposit(type, tails) - tailSalvage(old, tails) : Infinity;
+        if (next && cash - cost >= reserve && projected(oldest, next) > (now?.profit ?? -Infinity)) {
+          const years = Math.round(fleet.filter(f => f.routeKey === oldest).reduce((m, f) => Math.max(m, f.ageWeeks ?? 0), 0) / 52);
+          const event = { type: 'renewal', airlineId: c.id, name: c.name, routeKey: oldest, typeId: type.id,
+            description: type.id === old?.id
+              ? `${c.name} replaced its ${years}-year-old ${old?.name ?? 'aircraft'} fleet on ${a} → ${b} with new ones.`
+              : `${c.name} retired its ${years}-year-old ${old?.name ?? 'aircraft'} fleet on ${a} → ${b} for the ${type.name ?? type.id}.` };
+          if (lines) {
+            const q = quote(type, tails);
+            if (q.delay <= AI_LINE_GIVE_UP_WEEKS) {
+              cash -= cost;
+              placeOrder('upgauge', oldest, type, q, { seats: next.seats }, event);
+            }
+          } else {
+            cash -= cost;
+            fleet = fleet.map(f => f.routeKey === oldest ? { ...f, typeId: type.id, ageWeeks: 0 } : f);
+            routes[oldest] = next;
+            events.push(event);
+          }
+        }
       }
     }
 
@@ -1193,16 +1363,28 @@ export function tickCompetitorAI(competitors, ctx) {
   });
 
   // ── Lifecycle: bankruptcies ────────────────────────────────────────────────
+  // Smart-rival worlds: a carrier of any size is restructured the first time
+  // it fails — it sheds its loss-making routes, its debts are written down and
+  // it flies on with cheaper contracts for three years. The second failure is
+  // final, and its aircraft are listed for sale (the reducer offers them to
+  // the player). Elsewhere a failed carrier simply closes, as it always did.
   const survivors = [];
   for (const c of updated) {
     const broke = (c.cash ?? 0) < BANKRUPT_CASH_FLOOR
       || (c.fireSale && (c._distressWeeks ?? 0) >= BANKRUPT_DISTRESS_WKS);
-    if (broke) {
-      events.push({ type: 'bankrupt', airlineId: c.id, name: c.name,
-        description: `${c.name} has ceased operations — creditors seized its fleet.` });
-    } else {
-      survivors.push(c);
+    if (!broke) { survivors.push(c); continue; }
+    if (smart && !c._restructured && Object.keys(c.routes ?? {}).length >= RESTRUCTURE_MIN_ROUTES) {
+      const r = restructureCarrier(c, { month, incumbents, world, weekNumber, lines });
+      survivors.push(r.carrier);
+      events.push({ type: 'restructure', airlineId: c.id, name: c.name, dropped: r.dropped,
+        description: `${c.name} has entered bankruptcy protection and keeps flying: ${r.dropped} loss-making route${r.dropped === 1 ? ' is' : 's are'} gone, its debts are written down and its costs cut. A second failure will close it.` });
+      continue;
     }
+    events.push({ type: 'bankrupt', airlineId: c.id, name: c.name,
+      ...(smart ? { fleet: liquidationFleetOf(c) } : {}),
+      description: smart
+        ? `${c.name} has ceased operations — its aircraft are being sold off.`
+        : `${c.name} has ceased operations — creditors seized its fleet.` });
   }
   updated = survivors;
 
@@ -1297,7 +1479,7 @@ export function tickCompetitorAI(competitors, ctx) {
       // based). A miss is final: it never gets off the ground this game.
       if ((r.chance ?? 100) < 100
           && !(Math.random() < rivalChance(r, [...playerHubs, ...updated.map(c => c.homeHub)]))) continue;
-      const { _skippedRoutes, _viaStop, ...built } = buildRivalFromSpec(r, { idSeed: weekNumber, takenLogos: updated.map(c => c.logoId), stops: stopsWorld });
+      const { _skippedRoutes, _viaStop, ...built } = buildRivalFromSpec(r, { idSeed: weekNumber, takenLogos: updated.map(c => c.logoId), stops: stopsWorld, smart });
       const newbie = { ...built, isStartup: true, foundedWeek: weekNumber };
       updated = [...updated, newbie];
       events.push({ type: 'startup', airlineId: newbie.id, name: newbie.name,
@@ -1330,7 +1512,7 @@ export function tickCompetitorAI(competitors, ctx) {
         foundedWeek: weekNumber,
         _archetype: Math.random() < 0.6 ? 'expansionist' : 'aggressive',
       };
-      newbie = buildCompetitorFleet(newbie);
+      newbie = buildCompetitorFleet(newbie, { recut: smart });
       updated = [...updated, newbie];
       events.push({ type: 'startup', airlineId: id, name: spec.name,
         description: `A new airline, ${spec.name}, has launched operations out of ${spec.homeHub}.` });
@@ -1372,15 +1554,84 @@ export function tickCompetitorAI(competitors, ctx) {
 // ─── Expansion target selection ──────────────────────────────────────────────
 
 /**
- * Choose the best new route for a carrier given its archetype.
- * Returns { key, dist, frequency, priceMultiplier, onPlayerPair } or null.
+ * Cost a candidate route before it is opened: the aircraft types that suit it,
+ * each at the schedule its seats call for, on the carrier's own route P&L.
+ *
+ * @param {object} c     the carrier
+ * @param {object} cand  { key, legKm, priceMultiplier, via? }
+ * @param {object} o     { fleet, nRoutes, incumbents, month, world, force }
+ *   force: keep plans that lose money too (a route the rival set lists).
+ * @returns {{ demand: number, options: object[] }} options best first:
+ *   { type, frequency, seats, tails, profit, value }. Empty when nothing pays.
+ *
+ * Profit is the mean of this month and the month half a year on, so a route is
+ * not opened on its peak season alone. `value` is profit against the lease
+ * bill it ties up (a carrier is short of cash before it is short of routes),
+ * lifted for a type the carrier already flies and lowered for one from the
+ * maker it does not lean to (rivalBrain.houseMakerOf).
  */
-export function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerHubs, playerNotice, stops = false }) {
+export function planLaunch(c, cand, { fleet = [], nRoutes = 0, incumbents = null, month = 1, world = null, force = false } = {}) {
+  const candCfg = cand.via ? { via: cand.via } : {};
+  // The pair as it would be with this carrier on it.
+  const counts = { get: (k) => (incumbents?.get(k) ?? 0) + (k === cand.key ? 1 : 0) };
+  const offMonth = ((month + 5) % 12) + 1;
+  const probe = computeCompetitorRoutePnL(c, cand.key,
+    { frequency: 7, priceMultiplier: cand.priceMultiplier, ...candCfg }, month, counts, world);
+  const probeOff = computeCompetitorRoutePnL(c, cand.key,
+    { frequency: 7, priceMultiplier: cand.priceMultiplier, ...candCfg }, offMonth, counts, world);
+  if (!probe) return { demand: 0, options: [] };
+  const demand = ((probe.demandOneWay ?? 0) + (probeOff?.demandOneWay ?? probe.demandOneWay ?? 0)) / 2;
+  const owned  = new Set(fleet.map(f => f.typeId));
+  // A new route has to cover the head-office cost it adds (demand.js competitorOverhead).
+  const hurdle = force ? -Infinity : 40_000 * 1.15 * Math.pow(Math.max(1, nRoutes), 0.15);
+  const options = [];
+  const house = houseMakerOf(c);
+  const types = rankCompetitorAircraftTypes(cand.legKm, c.tier, c.fleetPref, { smart: true, demand, home: homeCountryOf(c), house });
+  for (const type of types.slice(0, LAUNCH_TYPES_CONSIDERED)) {
+    const seats     = rivalLaneSeats(type, cand.legKm, c.tier);
+    const frequency = launchFrequency(demand, seats);
+    const tails     = tailsForCompetitorRoute(cand.key, candCfg, frequency);
+    const cfg = { frequency, priceMultiplier: cand.priceMultiplier, aircraftType: type.id, seats, tails, ...candCfg };
+    const p1 = computeCompetitorRoutePnL(c, cand.key, cfg, month, counts, world);
+    const p2 = computeCompetitorRoutePnL(c, cand.key, cfg, offMonth, counts, world);
+    if (!p1) continue;
+    const profit = (p1.profit + (p2?.profit ?? p1.profit)) / 2;
+    if (!(profit > hurdle)) continue;
+    const capital = Math.max(1, tails * (type.weeklyLease ?? 1));
+    const common  = owned.has(type.id) ? (c.tier === 'budget' ? 1.3 : 1.15) : 1;
+    const lean    = isOtherHouse(type, house) ? OTHER_HOUSE_VALUE : 1;
+    options.push({ type, frequency, seats, tails, profit,
+      value: profit > 0 ? (profit / Math.sqrt(capital)) * common * lean : profit });
+  }
+  options.sort((x, y) => y.value - x.value);
+  return { demand, options };
+}
+
+/**
+ * Choose the best new route for a carrier given its archetype.
+ *
+ * Candidates are scored the way they always were — demand, distance, who is
+ * already there, and the archetype's taste (an aggressive carrier likes the
+ * player's routes, a niche one avoids crowds). Smart-rival worlds (`smart`,
+ * new games — the 2026-11-11 audit) change three things:
+ *   · home market — aircraft are based at home (the hub, a second hub, and
+ *     focus cities in the carrier's own market), and every route has an end
+ *     there (rivalBrain.js);
+ *   · look before launching — with `evaluate` (planLaunch), the best-scored
+ *     few are costed and the one worth most is opened; one that would lose
+ *     money is never opened;
+ *   · the home market's regional airports join the pool.
+ *
+ * Returns { key, dist, legKm, frequency, priceMultiplier, onPlayerPair, via?,
+ * plan? } or null. Without `evaluate` the best-scored candidate is returned
+ * at the tier's nominal schedule, as before.
+ */
+export function pickExpansionTarget(airline, routes, { incumbents, playerPairs, playerHubs, playerNotice, stops = false, calendarYear = null, smart = false, evaluate = null }) {
   const arch = airline._archetype ?? 'balanced';
   const hub  = airline.homeHub;
 
   // Bases: fortress builds only from its hub(s); growth archetypes also expand
-  // from their busiest network airports (focus cities).
+  // from their busiest network airports at home (focus cities).
   const bases = new Set([hub]);
   if (airline.secondaryHub) bases.add(airline.secondaryHub);
   if (arch === 'expansionist' || arch === 'aggressive' || arch === 'copycat') {
@@ -1389,27 +1640,31 @@ export function pickExpansionTarget(airline, routes, { incumbents, playerPairs, 
       for (const code of key.split('-')) touch[code] = (touch[code] ?? 0) + 1;
     }
     Object.entries(touch)
+      .filter(([code]) => !smart || inHomeMarket(airline, code, calendarYear))
       .sort(([, a], [, b]) => b - a)
       .slice(0, 2)
       .forEach(([code]) => bases.add(code));
   }
 
   const playerHubSet = new Set(playerHubs ?? []);
-  let best = null;
+  const pool = smart ? [...bigAirports(), ...secondaryAirportsFor(airline, calendarYear)] : bigAirports();
+  const cands = [];
+  const seen  = new Set();
 
   for (const base of bases) {
-    for (const ap of bigAirports()) {
+    for (const ap of pool) {
       if (ap.code === base) continue;
       const key = pairKeyOf(base, ap.code);
-      if (routes[key]) continue;
+      if (routes[key] || (smart && seen.has(key))) continue;
+      if (smart && !routeTouchesHome(airline, base, ap.code, calendarYear)) continue;
       const dist = routeDistance(base, ap.code);
       if (!dist || dist < 300) continue;
       // Out of range nonstop: refuelling-stop worlds look for one stop that
       // works (models/rivalStops.js); the stop costs it passengers and distance.
       let via = null, legKm = dist, flownKm = dist, stopShare = 1;
-      if (!pickCompetitorAircraftType(dist, airline.tier, airline.fleetPref)) {
+      if (!competitorCanFly(dist, airline.fleetPref)) {
         const stop = stops ? findRefuelStop(base, ap.code, { home: getAirport(airline.homeHub)?.country ?? null }) : null;
-        if (!stop || !pickCompetitorAircraftType(Math.max(...stop.legsKm), airline.tier, airline.fleetPref)) continue;
+        if (!stop || !competitorCanFly(Math.max(...stop.legsKm), airline.fleetPref)) continue;
         via = stop.via; legKm = Math.max(...stop.legsKm); flownKm = stop.flownKm;
         stopShare = techStopDemandShare(base, via, ap.code);
       }
@@ -1422,12 +1677,14 @@ export function pickExpansionTarget(airline, routes, { incumbents, playerPairs, 
       const devFactor = (devNow + Math.max(devNow, marketDevTarget(MARKET_DEV_REF_FREQ))) / 2;
       const demand = baseCityPairDemand(base, ap.code) * devFactor * stopShare;
       if (!demand || demand < 40) continue;
+      seen.add(key);
 
       const inc          = incumbents.get(key) ?? 0;
       const onPlayerPair = playerPairs.has(key);
       const touchesPlayerHub = playerHubSet.has(base) || playerHubSet.has(ap.code);
 
-      let score = demand / (1 + flownKm / 9000) / (1 + inc * 0.6);
+      const baseScore = demand / (1 + flownKm / 9000) / (1 + inc * 0.6);
+      let score = baseScore;
       switch (arch) {
         case 'aggressive':
           if (onPlayerPair)     score *= 1 + 1.6 * playerNotice;
@@ -1450,22 +1707,101 @@ export function pickExpansionTarget(airline, routes, { incumbents, playerPairs, 
         default:
           break;
       }
-      if (!best || score > best.score) {
-        best = { key, dist, demand, score, onPlayerPair, via, legKm };
-      }
+      cands.push({ key, dist, demand, score, bias: score / baseScore, onPlayerPair, via, legKm, inc,
+        secondary: ap.tier === 'regional', fromHub: base === hub || base === airline.secondaryHub });
     }
   }
-  if (!best) return null;
+  if (!cands.length) return null;
+  cands.sort((x, y) => y.score - x.score);
 
-  const seatsTarget = { budget: 160, legacy: 250, premium: 330 }[airline.tier] ?? 200;
-  const frequency   = Math.max(3, Math.min(21, Math.round(best.demand / (seatsTarget * 0.75))));
-  const priceBase   = TIER_PRICE_MULT[airline.tier] ?? 1.0;
-  // Undercut modestly when deliberately entering the player's market.
-  const undercut = best.onPlayerPair && (arch === 'aggressive' || arch === 'copycat') ? 0.93 : 1.0;
-  const priceMultiplier = +(priceBase * undercut * (0.97 + Math.random() * 0.06)).toFixed(3);
+  const priceBase = TIER_PRICE_MULT[airline.tier] ?? 1.0;
+  const priceOf = (cd) => {
+    // Undercut modestly when deliberately entering the player's market.
+    const undercut = cd.onPlayerPair && (arch === 'aggressive' || arch === 'copycat') ? 0.93 : 1.0;
+    return +(priceBase * undercut * (0.97 + Math.random() * 0.06)).toFixed(3);
+  };
+  const shape = (cd, priceMultiplier, frequency, plan = null) => ({
+    key: cd.key, dist: cd.dist, legKm: cd.legKm, frequency, priceMultiplier, onPlayerPair: cd.onPlayerPair,
+    ...(cd.via ? { via: cd.via } : {}), ...(plan ? { plan } : {}) });
 
-  return { key: best.key, dist: best.dist, legKm: best.legKm, frequency, priceMultiplier, onPlayerPair: best.onPlayerPair,
-           ...(best.via ? { via: best.via } : {}) };
+  if (!evaluate) {
+    const best = cands[0];
+    const seatsTarget = { budget: 160, legacy: 250, premium: 330 }[airline.tier] ?? 200;
+    const frequency   = Math.max(3, Math.min(21, Math.round(best.demand / (seatsTarget * 0.75))));
+    return shape(best, priceOf(best), frequency);
+  }
+
+  // The shortlist: the best-scored, plus — where regional airports are in the
+  // pool — the best of those nobody serves, which a score built on raw demand
+  // would never surface.
+  const shortlist = cands.slice(0, LAUNCH_SHORTLIST);
+  if (smart) {
+    const listed = new Set(shortlist.map(cd => cd.key));
+    shortlist.push(...cands.filter(cd => cd.secondary && cd.inc === 0 && !listed.has(cd.key)).slice(0, LAUNCH_SHORTLIST_SECONDARY));
+  }
+  let pick = null;
+  for (const cd of shortlist) {
+    const priceMultiplier = priceOf(cd);
+    const plan = evaluate({ key: cd.key, legKm: cd.legKm, priceMultiplier, ...(cd.via ? { via: cd.via } : {}) });
+    const top  = plan?.options?.[0];
+    if (!top) continue;
+    const feed  = cd.secondary && cd.fromHub && airline.tier !== 'budget' ? HUB_FEED_VALUE : 1;
+    const worth = top.value * cd.bias * feed;
+    if (!pick || worth > pick.worth) pick = { cd, priceMultiplier, plan, worth };
+  }
+  if (!pick) return null;
+  return shape(pick.cd, pick.priceMultiplier, pick.plan.options[0].frequency, pick.plan);
+}
+
+/**
+ * Restructuring (smart-rival worlds): the carrier keeps the routes that make
+ * money — at least MIN_ROUTES of its best — and loses the rest with their
+ * aircraft and any on order for them. Its cash is reset to its reserve (debt
+ * swapped for equity), and it flies on cheaper contracts for
+ * RESTRUCTURE_RELIEF_WEEKS. Its service takes a knock. Once only: the flag
+ * stays, and the next failure closes it.
+ */
+function restructureCarrier(c, { month, incumbents, world, weekNumber, lines }) {
+  const ranked = Object.keys(c.routes ?? {})
+    .map(key => ({ key, profit: computeCompetitorRoutePnL(c, key, c.routes[key], month, incumbents, world)?.profit ?? -Infinity }))
+    .sort((x, y) => y.profit - x.profit);
+  const keep = new Set(ranked.filter((r, i) => i < MIN_ROUTES || r.profit > 0).map(r => r.key));
+  const routes = {};
+  for (const key of keep) routes[key] = c.routes[key];
+  const gone = (key) => key != null && !String(key).startsWith('cargo:') && !keep.has(key);
+  const plans = (c.linePlans ?? []).filter(p => {
+    if (!gone(p.routeKey)) return true;
+    if (lines) lines.remove(p.lineId, (p.weeks ?? []).filter(w => w >= lines.absWeek));
+    return false;
+  });
+  const { fireSale: _fs, _fareWars: _fw, _mktBlitz: _mb, ...rest } = c;
+  const floor = QUALITY_FLOOR[c.tier] ?? 48;
+  return {
+    dropped: ranked.length - keep.size,
+    carrier: {
+      ...rest,
+      routes,
+      fleet: (c.fleet ?? []).filter(f => !gone(f.routeKey)),
+      ...(c.linePlans ? { linePlans: plans } : {}),
+      cash: CASH_RESERVE[c.tier] ?? 8_000_000,
+      fireSale: false,
+      _distressWeeks: 0,
+      _routeLoss: {},
+      _restructured: weekNumber,
+      costRelief: RESTRUCTURE_COST_RELIEF,
+      _reliefUntil: weekNumber + RESTRUCTURE_RELIEF_WEEKS,
+      baseQualityScore: Math.max(floor, (c.baseQualityScore ?? 60) - RESTRUCTURE_QUALITY_HIT),
+    },
+  };
+}
+
+/** A failed carrier's airframes, for the liquidation sale: [{ typeId, ageWeeks }], youngest first. */
+function liquidationFleetOf(c) {
+  return (c.fleet ?? [])
+    .filter(f => f?.typeId && getAircraftType(f.typeId))
+    .map(f => ({ typeId: f.typeId, ageWeeks: f.ageWeeks ?? 0 }))
+    .sort((x, y) => x.ageWeeks - y.ageWeeks)
+    .slice(0, LIQUIDATION_MAX_AIRFRAMES);
 }
 
 /** Pair keys a carrier's rival set lists (models/rivalSets.js `routes`). */

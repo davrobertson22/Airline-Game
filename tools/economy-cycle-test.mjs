@@ -96,7 +96,10 @@ await test('a new lease signs at the cycle’s rate; the Market quotes the same 
 await test('v3 and classic saves get no key and draw no extra random number', () => {
   for (const m of [3, null]) {
     let draws = 0;
-    const base = airline(m);
+    // Smart rivals (models/rivalBrain.js) cost routes on the demand model, so the
+    // number of dice they roll differs between v1/v3 and v4. This test counts the
+    // cycle's own draw, so it runs on a field that decides the old way.
+    const { smartRivalsWorld: _smart, ...base } = airline(m);
     Math.random = () => { draws++; return 0.37; };
     let s = gameReducer(base, { type: 'ADVANCE_WEEK' });
     const d1 = draws; draws = 0;

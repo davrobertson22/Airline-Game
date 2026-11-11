@@ -18,6 +18,7 @@ import { Glyph, GlyphLabel } from './Icons.jsx';
 import { buyoutNudgeToast } from '../utils/headwinds.js';
 import { exportRivalSet } from '../models/rivalSets.js';
 import { metroPairKeyOf } from '../data/metros.js';
+import { groupLots, LIQUIDATION_WEEKS } from '../models/liquidation.js';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -182,6 +183,14 @@ export default function Competition() {
         playerSharePrice={state.sharePrice ?? null}
       />
 
+      {/* ── Liquidation sale (models/liquidation.js) ──────────────────────── */}
+      <LiquidationSale
+        lots={state.liquidationLots}
+        absWeek={((state.year ?? 1) - 1) * 52 + (state.week ?? 1)}
+        cash={state.cash}
+        onBuy={(lotId) => dispatch({ type: 'BUY_LIQUIDATION_AIRCRAFT', lotId })}
+      />
+
       {/* ── Contested routes ──────────────────────────────────────────────── */}
       <SectionHeader><Glyph e="⚔" /> Contested Routes</SectionHeader>
       {contestedKeys.length === 0 ? (
@@ -221,6 +230,65 @@ export default function Competition() {
 
       <RivalSetShare state={state} />
     </div>
+  );
+}
+
+// ─── Liquidation sale (models/liquidation.js) ────────────────────────────────
+// A closed rival's aircraft, on sale for a few weeks at book value and
+// delivered the moment they are bought. Renders nothing when nothing is listed.
+export function LiquidationSale({ lots, absWeek, cash, onBuy }) {
+  const rows = groupLots(lots, absWeek);
+  if (rows.length === 0) return null;
+  const cell = { padding: '6px 10px', fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap' };
+  const head = { ...cell, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  return (
+    <>
+      <SectionHeader><Glyph e="🏷️" /> Liquidation sale</SectionHeader>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 8px', lineHeight: 1.5 }}>
+        Aircraft from airlines that have closed. Each is sold at its book value, owned outright and
+        delivered straight away — no order queue. A sale runs for {LIQUIDATION_WEEKS} weeks.
+      </div>
+      <div style={{ overflowX: 'auto', marginBottom: 24 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={head}>From</th>
+              <th style={head}>Aircraft</th>
+              <th style={head}>Age</th>
+              <th style={head}>Seats</th>
+              <th style={head}>Left</th>
+              <th style={head}>Closes in</th>
+              <th style={{ ...head, textAlign: 'right' }}>Price each</th>
+              <th style={head} />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const type = getAircraftType(r.typeId);
+              const short = cash < r.price;
+              return (
+                <tr key={r.key} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={cell}>{r.airlineName}</td>
+                  <td style={cell}>{type?.name ?? r.typeId}</td>
+                  <td style={cell}>{r.ageYears < 1 ? 'Under a year' : `${r.ageYears} yr`}</td>
+                  <td style={cell}>{type?.seats ?? '—'}</td>
+                  <td style={cell}>{r.count}</td>
+                  <td style={cell}>{r.weeksLeft} wk</td>
+                  <td style={{ ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(r.price)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>
+                    <button type="button" className="btn" disabled={short}
+                      title={short ? `You need ${formatMoney(r.price - cash)} more` : 'Joins your fleet now, idle'}
+                      onClick={() => onBuy(r.lotId)}>
+                      Buy one
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

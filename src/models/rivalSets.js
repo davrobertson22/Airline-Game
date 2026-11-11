@@ -368,7 +368,7 @@ export function pickRandomLogo(takenLogos = [], rng = Math.random) {
 }
 
 /** The competitor object the game runs for one rival of a set. */
-export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [], stops = false } = {}) {
+export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [], stops = false, smart = false } = {}) {
   const base = {
     id: `set_${slug(spec.name)}_${(hash(`${spec.name}|${idSeed}`) % 46656).toString(36)}`,
     name: spec.name,
@@ -404,7 +404,7 @@ export function buildRivalFromSpec(spec, { idSeed = 0, takenLogos = [], stops = 
   } else {
     c.routes = generateStarterRoutes(c, n);
   }
-  const built = buildCompetitorFleet(c);
+  const built = buildCompetitorFleet(c, { recut: smart });
   return { ...built, ...(skipped.length ? { _skippedRoutes: skipped } : {}), ...(viaStop.length ? { _viaStop: viaStop } : {}) };
 }
 
