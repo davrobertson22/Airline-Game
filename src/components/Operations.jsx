@@ -35,7 +35,8 @@ import {
 import { competitorMarketingSpend } from '../models/competitorAI.js';
 import { getAirport } from '../data/airports.js';
 import { useState, useEffect } from 'react';
-import { normalizeCateringLevel } from '../data/catering.js';
+import { normalizeCateringRef } from '../data/cateringPlans.js';
+import CateringPlans from './CateringPlans.jsx';
 import CateringSelector from './CateringSelector.jsx';
 import CateringContracts from './CateringContracts.jsx';
 import InfoTip from './InfoTip.jsx';
@@ -1115,15 +1116,24 @@ export default function Operations({ section = null } = {}) {
 
       <div className="card" style={{ padding: '14px 18px' }}>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-          The catering level applied to every newly-opened route. You can still override it
+          The catering level or service plan applied to every newly-opened route. You can still override it
           per route on the Routes page. Existing routes are unaffected.
         </div>
         <CateringSelector
-          value={normalizeCateringLevel(state.defaultCateringLevel)}
+          value={normalizeCateringRef(state.defaultCateringLevel, state.cateringPlans)}
           onChange={(level) => dispatch({ type: 'SET_DEFAULT_CATERING', level })}
+          plans={state.cateringPlans}
           label={null}
         />
       </div>
+
+      <div style={{
+        fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 20, marginBottom: 10,
+      }}>
+        Service Plans
+      </div>
+      <CateringPlans />
 
       <div style={{
         fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',

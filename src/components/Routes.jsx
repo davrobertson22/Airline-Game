@@ -17,7 +17,8 @@ import AirportSelect from './AirportSelect.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { isReserve } from '../data/reserve.js';
 import ReserveNotice, { reserveOptionTag } from './ReserveNotice.jsx';
-import { normalizeCateringLevel, CATERING_LEVELS, CATERING_LEVEL_ORDER } from '../data/catering.js';
+import { CATERING_LEVELS, CATERING_LEVEL_ORDER } from '../data/catering.js';
+import { normalizeCateringRef, cateringRefName, planRef } from '../data/cateringPlans.js';
 import CateringSelector from './CateringSelector.jsx';
 import InfoTip from './InfoTip.jsx';
 import Callout from './Callout.jsx';
@@ -43,7 +44,7 @@ import {
   isMultiStop, simulateTagRoute, routeStops, routeBlockHours, routeLandingFee,
   maxClassPrice, isRouteActive, routeActiveMonths, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor, committedPeakBlockHours, committedPeakBlockHoursIn, routesCommittedTo, blockHourFit,
-  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport,
+  stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateCateringKitchenReport,
   routePairKey,
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
@@ -654,7 +655,7 @@ export default function Routes() {
     addToast({
       type: 'success',
       title: 'Catering updated',
-      message: `${groupsToSet.length} route${groupsToSet.length !== 1 ? 's' : ''} set to ${CATERING_LEVELS[normalizeCateringLevel(level)].name}`,
+      message: `${groupsToSet.length} route${groupsToSet.length !== 1 ? 's' : ''} set to ${cateringRefName(level, state.cateringPlans)}`,
     });
     clearSelection();
   }
@@ -1091,6 +1092,7 @@ export default function Routes() {
       {selectedGroups.length > 0 && (
         <SelectionActionBar
           bellyOn={bellyCargoOn(state)}
+          cateringPlans={state.cateringPlans}
           groups={selectedGroups}
           onApplyToGroups={(g, pct) => { applyPctToGroups(g, pct); clearSelection(); }}
           onResetToRef={bulkResetToRef}
@@ -1749,7 +1751,7 @@ function ExpandedGroupPanel({ group, getResult, onClose, onPriceChange, onAddFli
   });
 
   const dist = sims[0]?.result?.distance;
-  const catLevels     = [...new Set(group.routes.map(r => normalizeCateringLevel(r.cateringLevel)))];
+  const catLevels     = [...new Set(group.routes.map(r => normalizeCateringRef(r.cateringLevel, state.cateringPlans)))];
   const groupCatLevel = catLevels.length === 1 ? catLevels[0] : null;
 
   return (
@@ -1788,7 +1790,11 @@ function ExpandedGroupPanel({ group, getResult, onClose, onPriceChange, onAddFli
             onChange={(level) => dispatch({ type: 'SET_ROUTE_CATERING', routeIds: group.routes.map(r => r.id), level })}
             distKm={dist}
             compact
+            plans={state.cateringPlans}
+            config={sims[0]?.aircraft?.config ?? null}
             capNote={group.routes[0] ? stateCateringCapReport(state, group.routes[0].origin, group.routes[0].destination,
+              groupCatLevel ?? 'full', routeStops(group.routes[0])) : null}
+            kitchenNote={group.routes[0] ? stateCateringKitchenReport(state, group.routes[0].origin, group.routes[0].destination,
               groupCatLevel ?? 'full', routeStops(group.routes[0])) : null}
             label={groupCatLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
           />
@@ -1859,7 +1865,7 @@ function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, o
     : quality >= 70 ? 'var(--green)' : quality >= 45 ? 'var(--yellow)' : 'var(--red)';
 
   // ── Catering (per route, shown/edited at the city-pair level) ──────────────
-  const catLevels      = [...new Set(routes.map(r => normalizeCateringLevel(r.cateringLevel)))];
+  const catLevels      = [...new Set(routes.map(r => normalizeCateringRef(r.cateringLevel, state.cateringPlans)))];
   const groupCatLevel  = catLevels.length === 1 ? catLevels[0] : null;  // null = mixed
   const totalCatRev    = sims.reduce((s, { result }) => s + (result?.cateringRevenue ?? 0), 0);
   const totalCatCost   = sims.reduce((s, { result }) => s + (result?.cateringCost    ?? 0), 0);
@@ -1988,7 +1994,10 @@ function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, o
             onChange={setGroupCatering}
             distKm={dist}
             compact
+            plans={state.cateringPlans}
+            config={sims[0]?.aircraft?.config ?? null}
             capNote={routes[0] ? stateCateringCapReport(state, origin, destination, groupCatLevel ?? 'full', routeStops(routes[0])) : null}
+            kitchenNote={routes[0] ? stateCateringKitchenReport(state, origin, destination, groupCatLevel ?? 'full', routeStops(routes[0])) : null}
             label={groupCatLevel ? 'Catering service' : 'Catering service · mixed across aircraft'}
           />
         </div>
@@ -2264,7 +2273,7 @@ function BulkPricingModal({ allGroups, onApplyToGroups, onClose, bellyOn = false
 // Appears when the player has ticked one or more route cards. Offers the same
 // per-class % adjustment, applied only to the explicitly selected routes, plus a
 // one-click reset of every cabin back to its reference fare.
-function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onApplyFrequency, onCloseGroups, onClear, bellyOn = false }) {
+function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCatering, onApplyFrequency, onCloseGroups, onClear, bellyOn = false, cateringPlans = null }) {
   const [pct, setPct] = useState({});
   const [catering, setCatering] = useState('');
   const classes = classesPresentIn(groups);
@@ -2327,6 +2336,13 @@ function SelectionActionBar({ groups, onApplyToGroups, onResetToRef, onSetCateri
             {CATERING_LEVEL_ORDER.map(id => (
               <option key={id} value={id}>{CATERING_LEVELS[id].name}</option>
             ))}
+            {Object.values(cateringPlans ?? {}).length > 0 && (
+              <optgroup label="Your service plans">
+                {Object.values(cateringPlans).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                  <option key={p.id} value={planRef(p.id)}>{p.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <button
             className="btn btn-ghost"

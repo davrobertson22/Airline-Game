@@ -11,7 +11,7 @@ import {
   buildEventDemandModel, deployableFleetForRoute, deploymentShortfall, maxWeeklyBlockHoursFor,
   maxFrequency, SLOTS_PER_GATE, isRouteActive, routeActiveMonths, committedBlockHoursByMonth,
   effectiveRangeKm, forecastRangeMod, calendarYear,
-  stateCateringCapReport,
+  stateCateringCapReport, stateCateringKitchenReport,
   newAircraftConfig, typicalSeatsOf,
 } from '../utils/simulation.js';
 import {
@@ -25,7 +25,7 @@ import {
 } from '../models/aircraftRecommender.js';
 import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions, standShortfall } from '../data/airportRestrictions.js';
-import { normalizeCateringLevel } from '../data/catering.js';
+import { normalizeCateringRef } from '../data/cateringPlans.js';
 import CateringSelector from './CateringSelector.jsx';
 import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
 import TagRoutePlanner from './TagRoutePlanner.jsx';
@@ -460,7 +460,7 @@ export default function RoutePlanner() {
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [frequency, setFrequency] = useState(7);
   const [fares, setFares]         = useState({}); // per-cabin overrides; {} = all reference
-  const [cateringLevel, setCateringLevel] = useState(normalizeCateringLevel(state.defaultCateringLevel));
+  const [cateringLevel, setCateringLevel] = useState(normalizeCateringRef(state.defaultCateringLevel, state.cateringPlans));
   const [season, setSeason] = useState(null); // null = year-round; else { months:[..] }
   // Cabin configuration used for the forecast (defaults to an idle aircraft's real
   // layout when you own one of the selected type, otherwise all-economy).
@@ -1388,7 +1388,9 @@ export default function RoutePlanner() {
                   {/* Catering */}
                   <div style={{ flexBasis: '100%' }}>
                     <CateringSelector value={cateringLevel} onChange={setCateringLevel} distKm={routeData.dist}
-                      capNote={origin && dest ? stateCateringCapReport(state, origin, dest, cateringLevel) : null} />
+                      plans={state.cateringPlans} config={effectiveConfig ?? null}
+                      capNote={origin && dest ? stateCateringCapReport(state, origin, dest, cateringLevel) : null}
+                      kitchenNote={origin && dest ? stateCateringKitchenReport(state, origin, dest, cateringLevel) : null} />
                   </div>
 
                   {/* Seasonal operating window */}

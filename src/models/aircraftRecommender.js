@@ -47,7 +47,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getAircraftType } from '../data/aircraft.js';
-import { normalizeCateringLevel } from '../data/catering.js';
+import { normalizeCateringRef } from '../data/cateringPlans.js';
 import {
   defaultConfig, defaultClassPrices, effectiveRangeKm, forecastRangeMod, maxFrequency, routeActiveMonths,
   newAircraftConfig, maxWeeklyBlockHoursFor } from '../utils/simulation.js';
@@ -120,7 +120,7 @@ export function rankAircraftForRoute(state, {
 } = {}) {
   if (!origin || !destination || origin === destination) return [];
   const fleet = state.fleet ?? [];
-  const catering = normalizeCateringLevel(cateringLevel ?? state.defaultCateringLevel);
+  const catering = normalizeCateringRef(cateringLevel ?? state.defaultCateringLevel, state.cateringPlans);
   const fares = classPrices ?? defaultClassPrices(ticketPrice);
 
   const out = [];
