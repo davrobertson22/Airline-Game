@@ -588,7 +588,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             }}>
               <Glyph e="🚀" /> <strong>Launch order.</strong> The {type.name} enters service in {type.eis}. As a launch customer
               you take the first slots on the line from January {type.eis}, one every {lineAlloc?.gap ?? lead} week{(lineAlloc?.gap ?? lead) === 1 ? '' : 's'}, at {Math.round(discount * 100)}% off list
-              (bulk + launch{(launchTerms.discount > 0.08) ? ' + loyalty' : ''}). Minimum {launchTerms.minQty} aircraft, paid in full now.{' '}
+              ({orderDiscount(quantity) > 0 ? 'bulk + ' : ''}launch{(launchTerms.discount > 0.08) ? ' + loyalty' : ''}). Minimum {launchTerms.minQty} aircraft{launchTerms.built ? <> (scaled to the {launchTerms.built.toLocaleString()} ever built)</> : null}, paid in full now.{' '}
               <strong>Launch orders are firm: they cannot be cancelled.</strong>
             </div>
           )}

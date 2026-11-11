@@ -189,5 +189,16 @@ test('the setup screen offers production lines, on by default', () => {
   assert.match(html, /factory lines you share with your rivals/);
 });
 
+test('An-225 launch checkout: one aircraft, scaled to the one ever built', () => {
+  const s = era({ startYear: 1986 });
+  const { html, placed, paid } = checkoutAndOrder(s, 'an225', 'buy', 1);
+  assert.equal(placed.length, 1, 'a one-aircraft launch order is accepted');
+  assert.match(html, /Minimum 1 aircraft \(scaled to the 1 ever built\)/);
+  assert.doesNotMatch(html, /bulk \+ launch/, 'no bulk discount on one aircraft');
+  assert.ok(paid > 0);
+  seedSave(s);
+  assert.match(cardOf(render(React.createElement(Marketplace)), 'Antonov An-225 Mriya'), /at least 1 \(1 ever built\)/);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

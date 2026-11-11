@@ -1369,7 +1369,7 @@ export default function Marketplace() {
                     background: 'rgba(163,113,247,0.10)', border: '1px solid rgba(163,113,247,0.3)',
                   }}>
                     <strong><Glyph e="🚀" /> Launch customers wanted.</strong>{' '}
-                    Announced for {type.eis}. Order at least {launch.minQty} by {deliveryDateLabel(launch.closesAbs)}, paid in full when you order:{' '}
+                    Announced for {type.eis}. Order at least {launch.minQty}{launch.built ? ` (${launch.built.toLocaleString()} ever built)` : ''} by {deliveryDateLabel(launch.closesAbs)}, paid in full when you order:{' '}
                     {Math.round(launch.discount * 100)}% off on top of the bulk discount (up to {Math.round(MAX_TOTAL_DISCOUNT * 100)}% in all),
                     first deliveries January {type.eis}, then one every {lineGapWeeks(lineOf(type))} weeks or more. Launch orders are firm.
                   </div>
