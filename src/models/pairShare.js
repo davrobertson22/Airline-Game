@@ -47,11 +47,11 @@ import {
   computeConnectingDemand,
   HUB_TIERS,
 } from './demand.js';
-import { rivalIndexFor, isLegacy, runNetworkTick } from './network.js';
+import { rivalIndexFor, isLegacy, runNetworkTick, seatItineraries, connectionLegState } from './network.js';
 import { airlineWeeks, hubTimetable, scheduleInputsOf } from './schedule.js';
 import { blendJetAgeAppeal, jetAgeFields } from './jetAge.js';
 import { getAlliance, allianceMembers } from '../data/alliances.js';
-import { memberPairKeysOf } from '../utils/market.js';
+import { memberPairKeysOf, routeDistance } from '../utils/market.js';
 import { campaignDemandBoostPct, awarenessDemandMultiplier } from '../data/overhead.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
@@ -594,7 +594,7 @@ function reportLegs(state) {
     if (!r || isMultiStop(r)) continue;
     const eco = rr.classSummary?.economy;
     const gaveUp = rr.connecting?.displacedPax ?? 0;      // back to the load before any connection boarded
-    const k = pairKeyOf(r.origin, r.destination);
+    const k = routePairKey(r.origin, r.destination);
     const p = (pooled[k] ??= { seats: 0, room: 0, ecoPax: 0, ecoRev: 0, a: r.origin, b: r.destination });
     const seats = rr.configuredSeatsOneWay ?? 0;
     p.seats  += seats;
@@ -618,7 +618,7 @@ function seatableOver(state, net, key) {
   const out = [];
   for (const e of seatItineraries(bothWays, legs).entries) {
     const [o, d] = String(e.od).split('→');
-    const first = pairKeyOf(o, e.hub) === key, second = pairKeyOf(e.hub, d) === key;
+    const first = routePairKey(o, e.hub) === key, second = routePairKey(e.hub, d) === key;
     if (!first && !second) continue;
     const km1 = routeDistance(o, e.hub) || 1, km2 = routeDistance(e.hub, d) || 1;
     out.push([e.revenue / e.pax, e.pax, (first ? km1 : km2) / (km1 + km2), (e.displacedRevenue ?? 0) / e.pax]);
@@ -697,6 +697,8 @@ export function projectConnectingFeed(state, spec) {
   const demandMultFor = (a, b) => eventModel.multFor(a, b) * worldMult;
   const rivalIndex = rivalIndexFor(state);
   const legacy     = isLegacy(rivalIndex);
+  // Connection-seat games seat whole itineraries (see reportLegs above).
+  const seatWorld  = state.connectionSeatsWorld === true && !legacy;
 
   // The network tick is the expensive half of a projection and it does not
   // know which AIRCRAFT is being previewed: its inputs are the route list (the
