@@ -38,7 +38,7 @@ import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEff
          CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
          absorbCrewFor, crewUnitsForBodies, starterCrewTopUp, CREW_INSTANT_AIRCRAFT,
          erodePayPremium, autoReplacePlan, crewRequired, opsReserveCover, reserveMoraleBonus,
-         autoStaffPlan, crewSpare, releaseSeveranceBase, RESERVE_TARGET_MAX, RESERVE_PAY_RATE,
+         autoStaffPlan, autoReleasePlan, crewSpare, releaseSeveranceBase, RESERVE_TARGET_MAX, RESERVE_PAY_RATE,
          crewBodies, laborBillUnits } from '../data/labor.js';
 import { relativePay, weeklyIntakeUnits, intakeUsed } from '../models/talentMarket.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
@@ -1853,7 +1853,14 @@ function rootReducer(state, action) {
   const next = withStarterCrew(state, reducer(state, action));
   // Fleet renewal before crew auto-replace, so the crew plan sees the fleet
   // after any old tail has been sold.
-  if (action?.type === 'ADVANCE_WEEK') return withAutoReplace(state, withFleetRenewal(state, next));
+  // Release before hiring, so the hiring pass sees the airline it will staff.
+  if (action?.type === 'ADVANCE_WEEK') return withAutoReplace(state, withAutoRelease(withFleetRenewal(state, next)));
+  // Switching release on, or lowering a reserve level with it on, acts at once.
+  if (next && next !== state && next.crewAutoRelease && next.crewPipeline
+      && (action?.type === 'SET_AUTO_RELEASE' || action?.type === 'SET_RESERVE_TARGET')) {
+    const released = withAutoRelease(next);
+    return next.crewAutoStaff ? withAutoStaff(released) : released;
+  }
   // "Keep me fully staffed" also acts the moment there is something new to
   // staff — an aircraft leased or bought, an order placed, an airline acquired,
   // the switch or a reserve level changed — rather than a week later.
@@ -1980,6 +1987,40 @@ function renewOne(state, newId, toasts) {
 // reserve level — leavers replaced, aircraft on order crewed in time — as
 // ordinary HIRE_CREW actions, at the normal cost and training wait. A hire the
 // airline cannot afford is cut to what it can; the rest is tried again next week.
+function withAutoRelease(next) {
+  if (!next?.crewPipeline || !next.crewAutoRelease || !next.labor) return next;
+  const typeOf = (a) => getAircraftType(a.typeId);
+  const plan = autoReleasePlan(next.labor, next.fleet ?? [], typeOf, next.pendingOrders ?? [],
+    (id) => relativePay(next, id, next.labor?.[id]?.payMultiplier ?? 1.0));
+  if (plan.length === 0) return next;
+  let s = next;
+  const let_go = [];
+  let paid = 0;
+  for (const { group, bodies } of plan) {
+    // Severance per person, from the reducer itself, so the cap below and the
+    // charge can never disagree. A release the airline cannot pay for waits.
+    const one = reducer(s, { type: 'RELEASE_CREW', group, bodies: 1 });
+    const each = s.cash - one.cash;
+    const n = each > 0 ? Math.min(bodies, Math.floor(Math.max(0, s.cash) / each)) : bodies;
+    if (n < 1) continue;
+    const after = reducer(s, { type: 'RELEASE_CREW', group, bodies: n });
+    if (after === s) continue;
+    paid += s.cash - after.cash;
+    s = after;
+    let_go.push(`${n.toLocaleString()} ${LABOR_GROUP_MAP[group].name.toLowerCase()}`);
+  }
+  if (let_go.length === 0) return next;
+  return {
+    ...s,
+    pendingToasts: [...(s.pendingToasts ?? []), {
+      type: 'info', title: '🧑‍✈️ Spare staff released',
+      message: `Released ${let_go.join(', ')} above your reserve level (${formatMoney(paid)} severance). `
+        + 'Aircraft on order keep their crews. Switch this off in Company ▸ Operations to keep spare staff for growth.',
+      duration: 9000,
+    }],
+  };
+}
+
 function withAutoStaff(next) {
   if (!next?.crewPipeline || !next.crewAutoStaff || !next.labor) return next;
   const typeOf = (a) => getAircraftType(a.typeId);
@@ -4824,6 +4865,13 @@ function reducer(state, action) {
       // The hires themselves are made by withAutoStaff right after this.
       if (!state.crewPipeline) return state;
       return { ...state, crewAutoStaff: action.enabled === true };
+    }
+
+    case 'SET_AUTO_RELEASE': {
+      // action: { enabled } — release staff above each group's reserve level at
+      // the end of every week (labor.js autoReleasePlan; withAutoRelease below).
+      if (!state.crewPipeline) return state;
+      return { ...state, crewAutoRelease: action.enabled === true };
     }
 
     case 'SET_RESERVE_TARGET': {

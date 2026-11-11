@@ -589,7 +589,7 @@ function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexi
 //
 // One row per group, in people; one switch that does the hiring; a reserve
 // level per group; and spare staff priced and translated into aircraft.
-function StaffingSummary({ crew, labor, dispatch, autoStaff, plan, cash, wagePerUnit, commonType, reserveOtp }) {
+function StaffingSummary({ crew, labor, dispatch, autoStaff, autoRelease = false, plan, cash, wagePerUnit, commonType, reserveOtp }) {
   const rows = LABOR_GROUPS.map(g => {
     const c = crew[g.id];
     const have = crewBodies(g.id, c.available);
@@ -618,7 +618,8 @@ function StaffingSummary({ crew, labor, dispatch, autoStaff, plan, cash, wagePer
     <div className="card" data-staffing-summary style={{ marginBottom: 12, padding: '14px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>Staffing</div>
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, cursor: 'pointer', maxWidth: 520 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 520 }}>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, cursor: 'pointer' }}>
           <input type="checkbox" checked={autoStaff} style={{ marginTop: 2 }}
             onChange={e => dispatch({ type: 'SET_AUTO_STAFF', enabled: e.target.checked })} />
           <span>
@@ -629,6 +630,18 @@ function StaffingSummary({ crew, labor, dispatch, autoStaff, plan, cash, wagePer
             </span>
           </span>
         </label>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoRelease} style={{ marginTop: 2 }}
+            onChange={e => dispatch({ type: 'SET_AUTO_RELEASE', enabled: e.target.checked })} />
+          <span>
+            <strong>Release staff above my reserve level</strong>
+            <span style={{ color: 'var(--text-muted)' }}>
+              {' '}· at the end of each week, staff your fleet and aircraft on order no longer need are let go
+              for {RELEASE_SEVERANCE_WEEKS} weeks' pay each. Leave it off to keep them on reserve pay for growth.
+            </span>
+          </span>
+        </label>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -1513,7 +1526,7 @@ export default function Operations({ section = null } = {}) {
 
       {crewOn && crew && (
         <StaffingSummary
-          crew={crew} labor={labor} dispatch={dispatch} autoStaff={autoStaff}
+          crew={crew} labor={labor} dispatch={dispatch} autoStaff={autoStaff} autoRelease={crewOn && state.crewAutoRelease === true}
           plan={hirePlan} cash={state.cash ?? 0} wagePerUnit={wagePerUnit}
           commonType={commonType}
           reserveOtp={reserveOtpBonus(labor, fleet, typeOfAircraft)}

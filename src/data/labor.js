@@ -1276,3 +1276,35 @@ export function crewHireAllPlan(labor, fleet, typeOf, relPayOf = null, ahead = n
   const cost = plan.reduce((s, p) => s + crewHireCost(p.group, crewUnitsForBodies(p.group, p.bodies)), 0);
   return { hires: plan, cost };
 }
+
+// ─── Release staff above my reserve level automatically ──────────────────────
+//
+// The other half of "Keep me fully staffed" (2026-11-11). Attrition is ~0.4% a
+// week, so an airline that cuts an aircraft carries its crews on reserve pay
+// for years unless someone presses Release — in the bot lab, one retired
+// aircraft in five was 16% of the wage bill. With `state.crewAutoRelease` on,
+// the week's end releases each group down to
+//
+//     (fleet + every aircraft on order) × (1 + reserve level)
+//       + the cover Keep me fully staffed keeps for leavers   + one person
+//
+// at the normal severance. The cover and the spare person mean the two
+// switches can never fight: nothing it hires is ever over this line. Aircraft
+// on order keep their crews however far out they are, and only trained staff
+// on the line are released — never anyone in training or being recruited.
+//
+// @returns {{ group: string, bodies: number }[]}
+export function autoReleasePlan(labor, fleet, typeOf, pendingOrders = [], relPayOf = null) {
+  const out = [];
+  for (const g of LABOR_GROUPS) {
+    const s = labor?.[g.id];
+    if (!s || s.headcount == null) continue;
+    const per = CREW_PER_UNIT[g.id] ?? 1;
+    const book = crewRequiredForOrderBook(g.id, fleet, pendingOrders ?? [], typeOf) * (1 + reserveTarget(labor, g.id));
+    const pay = relPayOf ? relPayOf(g.id) : (s.payMultiplier ?? 1.0);
+    const keep = book + crewReplaceCover(g.id, book, pay, s.morale ?? 80);
+    const bodies = Math.floor((crewAvailable(labor, g.id) - keep) * per + 1e-9) - 1;
+    if (bodies >= 1) out.push({ group: g.id, bodies });
+  }
+  return out;
+}
