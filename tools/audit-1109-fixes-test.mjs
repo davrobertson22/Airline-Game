@@ -153,7 +153,7 @@ test('an idle fleet carries no slack warning', () => {
 test('the thresholds come from the engine', () => {
   const s = src('src/components/Dashboard.jsx');
   assert.match(s, /avgPct > INCIDENT\.utilisationSafe \? 'var\(--yellow\)'/);
-  assert.match(s, /incidentRisk\(state, avgPct\)/);
+  assert.match(s, /incidentRisk\(state, avgPct[,)]/);
   assert.equal(INCIDENT.utilisationSafe, 0.85);
 });
 

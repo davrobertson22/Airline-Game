@@ -7,7 +7,7 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { costBridge, bridgeInputsFromReport } from '../utils/pnlBridge.js';
 import { getAircraftType } from '../data/aircraft.js';
-import { crewStatus, crewParkedAlertText, OTP_UTILIZATION_FREE } from '../data/labor.js';
+import { crewStatus, crewParkedAlertText, OTP_UTILIZATION_FREE, opsReserveCover } from '../data/labor.js';
 import { INCIDENT, incidentRisk, incidentCauseLine } from '../models/incidents.js';
 import { economyCycleWorld } from '../models/economyCycle.js';
 import { isOutOfService, effectiveMaintAgeWeeks } from '../data/maintenance.js';
@@ -647,7 +647,8 @@ export default function Dashboard() {
         // a fleet past 85% at risk of a meltdown (models/incidents.js).
         const avgColor = avgPct > INCIDENT.utilisationSafe ? 'var(--yellow)'
           : avgPct >= 0.6 ? 'var(--green)' : avgPct >= 0.4 ? 'var(--yellow)' : 'var(--red)';
-        const meltdown = economyCycleWorld(state) ? incidentRisk(state, avgPct) : null;
+        const meltdown = economyCycleWorld(state) ? incidentRisk(state, avgPct,
+          state.crewPipeline ? opsReserveCover(state.labor, state.fleet ?? [], (a) => getAircraftType(a.typeId)) : 0) : null;
         const slackNote = meltdown?.prob > 0
           ? `Meltdown risk this week: ${(meltdown.prob * 100).toFixed(0)}% (${incidentCauseLine(meltdown.causes)}). Add spare aircraft, trim hours or lift crew morale.`
           : avgPct > INCIDENT.utilisationSafe

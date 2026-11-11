@@ -19,7 +19,7 @@ import { cargoCityPairDemand, cargoReferenceYield, referencePrice,
          cargoBackhaulFactor, cargoSeasonalFactor,
          loadDemandScale, weeklyLoadJitter, LOAD_CEILING, expectedCarried,
          metroPairKeyOf, memberPairKeysOf, setDemandModel, sectorCostKm, sectorTaxiHours } from './market.js';
-import { LABOR_GROUPS, fleetCrewScale, laborEffects } from '../data/labor.js';
+import { LABOR_GROUPS, fleetCrewScale, laborEffects, laborBillUnits, RESERVE_PAY_RATE } from '../data/labor.js';
 import { weeklyFamilyBaseCost, activeFamilies, FAMILY_INFO,
          fleetComplexityMultiplier, COMPLEXITY_AFFECTED_GROUPS } from '../data/families.js';
 import {
@@ -5742,25 +5742,22 @@ export function weeklyTick(state) {
       brandReach: brandReachFor(hubQuality,
         [route.origin, route.destination],
         partnerContestedKeys.has(pairKeyOf(route.origin, route.destination))),
+
       // Lounge appeal (business segment), day-pass coverage and the premium
-      // ground-contract discount. Spread conditionally so a game with no lounges
-      // produces a byte-identical route object and the golden master is unmoved.
+      // ground-contract discount — the same three the previews attach via
+      // stateLoungeFields.
       ...loungeFieldsFor(route.origin, route.destination),
+      ...(hcfRoute ? { hubCostFactors: hcfRoute } : {}),
       // Travel partners: the segment lifts, and (partnership worlds) the
       // leisure/business split on the result that their requirements count.
       ...travelFieldsFor(route.origin, route.destination),
       ...loyaltyFieldsFor(route.origin, route.destination),
-      // Earned pricing headroom (demand model v4 / NWR only; {} elsewhere, so
-      // every older world's route object is byte-identical).
-      ...statePricingFields(state, route.origin, route.destination),
       ...(tpWorld ? { travelPartnerTrack: true } : {}),
-      ...(hcfRoute ? { hubCostFactors: hcfRoute } : {}),
       ...(() => { const g = handlingFactorFor([route.origin, route.destination]); return g != null ? { groundHandlingFactor: g } : {}; })(),
-      ...nwrLoadFieldsFor(route),
     };
 
     const rkRoute = [route.origin, route.destination].sort().join('-');
-    const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, laborWithSeniority, fuelMultiplier,
+    const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
       demandAllocations.get(route.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
       eventDemandMultFor(route.origin, route.destination), ancillaries, competitors, rivalIndex);
     return { originTier, destTier, hubQuality, hcfRoute, routeWithHubBonus, result };
@@ -5945,55 +5942,10 @@ export function weeklyTick(state) {
       continue;
     }
 
-    // Inject hub quality bonus from the best hub on this route.
-    // Tier 0 (Focus City) is a valid designation — compare against null, not truthy.
-    const originTier  = hubs[route.origin]?.tier;
-    const destTier    = hubs[route.destination]?.tier;
-    let hubQuality  = Math.max(
-      originTier != null ? (HUB_TIERS[originTier]?.qualityBonus ?? 0) : 0,
-      destTier   != null ? (HUB_TIERS[destTier]?.qualityBonus   ?? 0) : 0,
-    );
-    // Fortress bonus: a dominated (>60% share) International Gateway grants
-    // +2 quality and +0.05 price-sensitivity reduction on routes touching it.
-    const fortress =
-      (originTier === 3 && (hubContestMap?.[route.origin]?.playerShare      ?? 0) > 0.6) ||
-      (destTier   === 3 && (hubContestMap?.[route.destination]?.playerShare ?? 0) > 0.6);
-    if (fortress) hubQuality += 2;
-    const hcfRoute = hubCostFactorsFor([route.origin, route.destination]);
-    const routeWithHubBonus = {
-      ...route,
-      hubSpokes: spokeCounts[route.hub] ?? 0,
-      ...(hubQuality > 0 ? { hubQualityBonus: hubQuality } : {}),
-      priceSensitivityReduction: Math.min(0.40,
-        sensReductionFor(hubQuality) + (fortress ? 0.05 : 0)),
-      // Targeted campaign strength at either endpoint, ridden into the demand
-      // model rather than multiplied onto revenue afterwards (see the
-      // marketingLift note below).
-      marketingBoost: campaignBoostFor(route.origin, route.destination),
-      // Awareness / reputation / loyalty / alliance / rival ad drag, ridden in
-      // the same way for the same reason (see brandReachFor).
-      brandReach: brandReachFor(hubQuality,
-        [route.origin, route.destination],
-        partnerContestedKeys.has(pairKeyOf(route.origin, route.destination))),
-
-      // Lounge appeal (business segment), day-pass coverage and the premium
-      // ground-contract discount — the same three the previews attach via
-      // stateLoungeFields.
-      ...loungeFieldsFor(route.origin, route.destination),
-      ...(hcfRoute ? { hubCostFactors: hcfRoute } : {}),
-      // Travel partners: the segment lifts, and (partnership worlds) the
-      // leisure/business split on the result that their requirements count.
-      ...travelFieldsFor(route.origin, route.destination),
-      ...loyaltyFieldsFor(route.origin, route.destination),
-      ...(tpWorld ? { travelPartnerTrack: true } : {}),
-      ...(() => { const g = handlingFactorFor([route.origin, route.destination]); return g != null ? { groundHandlingFactor: g } : {}; })(),
-    };
-
-    const rkRoute = [route.origin, route.destination].sort().join('-');
-    const result = simulateRoute(routeWithHubBonus, aircraft, gameDate, labor, fuelMultiplier,
-      demandAllocations.get(route.id) ?? null, encroachByPair(rkRoute), avgUtilization, satisfaction,
-      eventDemandMultFor(route.origin, route.destination), ancillaries, competitors, rivalIndex);
-    if (!result) continue;
+    const sim = legSim(route, aircraft);
+    if (!sim.result) continue;
+    const { originTier, destTier, hubQuality, hcfRoute, routeWithHubBonus } = sim;
+    let result = sim.result;
 
     // Connecting passengers: additional revenue from hub-feed and partner agreements.
     // The cannibalizationMap factor reduces connecting demand on routes where a
@@ -6478,6 +6430,20 @@ export function weeklyTick(state) {
   //    aircraft family beyond the first (split pilot pools, extra type ratings).
   const complexityMult = fleetComplexityMultiplier(fleet);
   let totalLaborCosts = 0;
+  // Reserve staff (labor.js "Reserve staff"): people held above the requirement
+  // are paid the reserve rate. Crew-pipeline saves only — elsewhere headcount
+  // is not state and the bill is the fleet's, as it always was. Billed even
+  // with no aircraft: an airline that sold its fleet still has a payroll.
+  let totalReservePay = 0;
+  if (labor && state.crewPipeline === true) {
+    for (const group of LABOR_GROUPS) {
+      const payMult = labor[group.id]?.payMultiplier ?? 1.0;
+      const famMult = COMPLEXITY_AFFECTED_GROUPS.includes(group.id) ? complexityMult : 1.0;
+      const { reserve } = laborBillUnits(group.id, labor, fleet, a => getAircraftType(a.typeId), true);
+      totalReservePay += Math.round(group.baseWeeklyPerAircraft * payMult * reserve * RESERVE_PAY_RATE * famMult * getEraCostScale());
+    }
+    totalLaborCosts += totalReservePay;
+  }
   if (labor && fleet.length > 0) {
     for (const group of LABOR_GROUPS) {
       const payMult = labor[group.id]?.payMultiplier ?? 1.0;
@@ -6798,6 +6764,7 @@ export function weeklyTick(state) {
     totalCompensation:      Math.round(totalCompensation),
     totalGateFees:          Math.round(totalGateFees),
     totalLaborCosts:        Math.round(totalLaborCosts),
+    totalReservePay:        Math.round(totalReservePay),
     totalFamilyBaseCosts:   Math.round(totalFamilyBaseCosts),
     totalMroBaseCosts:      Math.round(totalMroBaseCosts),
     // Connectivity & lounges. Always present (0 when unused) so the Finance page

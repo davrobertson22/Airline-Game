@@ -37,7 +37,9 @@ import { sovereignCountry } from '../data/territories.js';
 import { DEFAULT_LABOR_STATE, DEFAULT_MAINTENANCE_BUDGET, moraleTarget, laborEffects,
          CREW_LEAD_WEEKS, crewHireCost, crewAttritionRate, ensureCrewSeeded, splitStarterHire,
          absorbCrewFor, crewUnitsForBodies, starterCrewTopUp, CREW_INSTANT_AIRCRAFT,
-         erodePayPremium, autoReplacePlan, crewRequired } from '../data/labor.js';
+         erodePayPremium, autoReplacePlan, crewRequired, opsReserveCover, reserveMoraleBonus,
+         autoStaffPlan, crewSpare, releaseSeveranceBase, RESERVE_TARGET_MAX, RESERVE_PAY_RATE,
+         crewBodies, laborBillUnits } from '../data/labor.js';
 import { relativePay, weeklyIntakeUnits, intakeUsed } from '../models/talentMarket.js';
 import { accrueMaintenance, startCheck, completeCheck, dueInfo, checkCost, checkDurationWeeks,
          isOutOfService, maintNavMultiplier, seedMaintenance, MAX_SCHEDULE_AHEAD_WEEKS,
@@ -161,7 +163,7 @@ import {
 } from '../data/credit.js';
 import { routeLaunchCost, DEPRECIATION_YEARS, valueRemaining, tailBookValue,
          marketingAwarenessGain, MARKETING_PCT_MAX, AWARENESS_FLOOR, AWARENESS_DECAY_RATE,
-         campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor, setEraCostScale } from '../data/overhead.js';
+         campaignStrengthGain, CAMPAIGN_DECAY_RATE, shareOfVoiceFactor, setEraCostScale, getEraCostScale } from '../data/overhead.js';
 import { normalizeCateringLevel } from '../data/catering.js';
 import {
   normalizeCateringRef, sanitizeCateringPlan, cateringPlanSaveError, cateringPlanUsage, planRef,
@@ -1849,7 +1851,17 @@ function rootReducer(state, action) {
   const next = withStarterCrew(state, reducer(state, action));
   // Fleet renewal before crew auto-replace, so the crew plan sees the fleet
   // after any old tail has been sold.
-  return action?.type === 'ADVANCE_WEEK' ? withAutoReplace(state, withFleetRenewal(state, next)) : next;
+  if (action?.type === 'ADVANCE_WEEK') return withAutoReplace(state, withFleetRenewal(state, next));
+  // "Keep me fully staffed" also acts the moment there is something new to
+  // staff — an aircraft leased or bought, an order placed, an airline acquired,
+  // the switch or a reserve level changed — rather than a week later.
+  if (next && next !== state && next.crewAutoStaff && next.crewPipeline && (
+       action?.type === 'SET_AUTO_STAFF' || action?.type === 'SET_RESERVE_TARGET'
+    || (next.fleet?.length ?? 0) > (state?.fleet?.length ?? 0)
+    || (next.pendingOrders?.length ?? 0) > (state?.pendingOrders?.length ?? 0))) {
+    return withAutoStaff(next);
+  }
+  return next;
 }
 
 // Delivered tails carrying `replacing` take over their predecessor's routes
@@ -1962,8 +1974,60 @@ function renewOne(state, newId, toasts) {
 // what is on order, so crew training for a delivery are not mistaken for spare
 // people; and the hire is marked `replace`, so it starts training ahead of any
 // growth hire waiting in the recruiting queue instead of behind it.
+// "Keep me fully staffed" (labor.js autoStaffPlan): bring every group to its
+// reserve level — leavers replaced, aircraft on order crewed in time — as
+// ordinary HIRE_CREW actions, at the normal cost and training wait. A hire the
+// airline cannot afford is cut to what it can; the rest is tried again next week.
+function withAutoStaff(next) {
+  if (!next?.crewPipeline || !next.crewAutoStaff || !next.labor) return next;
+  const typeOf = (a) => getAircraftType(a.typeId);
+  const plan = autoStaffPlan(next.labor, next.fleet ?? [], typeOf,
+    (id) => relativePay(next, id, next.labor?.[id]?.payMultiplier),
+    { pendingOrders: next.pendingOrders ?? [], absWeek: absoluteWeek(next.year ?? 1, next.week ?? 1) });
+  if (plan.length === 0) return next;
+  let s = next;
+  const growth = [];
+  let growthCost = 0, deliveries = 0;
+  for (const { group, bodies, replaceBodies, forDeliveries } of plan) {
+    const each = crewHireCost(group, crewUnitsForBodies(group, 1));
+    const hire = (n, replace) => {
+      const afford = each > 0 ? Math.floor(Math.max(0, s.cash) / each) : n;
+      const m = Math.min(n, afford);
+      if (m < 1) return 0;
+      const before = s.cash;
+      const hired = reducer(s, { type: 'HIRE_CREW', group, bodies: m, ...(replace ? { replace: true } : {}) });
+      if (hired === s) return 0;
+      s = hired;
+      if (!replace) growthCost += before - s.cash;
+      return m;
+    };
+    hire(replaceBodies, true);
+    const grown = hire(bodies - replaceBodies, false);
+    // Worth telling the player about only when it is a real hire: more than a
+    // person or two of routine cover.
+    if (grown >= 3) {
+      growth.push(`${grown.toLocaleString()} ${LABOR_GROUP_MAP[group].name.toLowerCase()}`);
+      deliveries = Math.max(deliveries, forDeliveries);
+    }
+  }
+  if (growth.length === 0) return s;
+  return {
+    ...s,
+    pendingToasts: [...(s.pendingToasts ?? []), {
+      type: 'info', title: '🧑‍✈️ Crew hired for you',
+      message: `Keep me fully staffed hired ${growth.join(', ')} (${formatMoney(growthCost)} training)`
+        + (deliveries > 0 ? ` for ${deliveries} aircraft arriving soon.` : '.')
+        + ' They join the line as they finish training — see Company ▸ Operations.',
+      duration: 9000,
+    }],
+  };
+}
+
 function withAutoReplace(prev, next) {
   if (!next || next === prev || !next.crewPipeline || !next.labor) return next;
+  // "Keep me fully staffed" replaces leavers AND hires for growth, so it takes
+  // over from the per-group boxes entirely.
+  if (next.crewAutoStaff) return withAutoStaff(next);
   const plan = autoReplacePlan(next.labor, next.fleet ?? [], (a) => getAircraftType(a.typeId),
     (id) => relativePay(next, id, next.labor?.[id]?.payMultiplier),
     { pendingOrders: next.pendingOrders ?? [], absWeek: absoluteWeek(next.year ?? 1, next.week ?? 1) });
@@ -2152,6 +2216,11 @@ function reducer(state, action) {
         // ever brought across, reconcileState seeds it fully staffed for the
         // fleet it already flies (see ensureCrewSeeded), never with nobody.
         crewPipeline: true,
+        // "Keep me fully staffed" (labor.js autoStaffPlan) starts ON in a new
+        // game: crew are hired to each group's reserve level, including for
+        // aircraft on order, without the player sizing each hire. Existing
+        // saves carry no flag and keep hiring by hand until they switch it on.
+        crewAutoStaff: true,
         // Realistic utilisation: aircraft schedule up to 100 block hours a week
         // (maxWeeklyBlockHoursFor), not the classic 140. New games only, like
         // the crew pipeline — saves without the flag keep 140h for life.
@@ -2177,6 +2246,12 @@ function reducer(state, action) {
         // when the timetable makes it. New games only — a save without the flag
         // keeps the old rule (every flight connects, 1.5 h) for life.
         ...(action.hubBanks !== false ? { hubBanksWorld: true } : {}),
+        // Connection seats (models/network.js seatItineraries): a connection
+        // boards on both of its flights or neither, best fares first, and a
+        // full flight gives a local seat to a connection worth more, up to the
+        // share the hub's tier holds. New games only — a save without the flag
+        // keeps nonstop-first seating for life.
+        connectionSeatsWorld: true,
         // Production lines (data/productionLines.js, models/lineBook.js): every
         // aircraft comes off a factory line shared with the rivals, who order
         // and wait too; era games add launch customers. Staged purchase
@@ -4730,6 +4805,52 @@ function reducer(state, action) {
       };
     }
 
+    case 'SET_AUTO_STAFF': {
+      // action: { enabled } — "Keep me fully staffed": hire every group to its
+      // reserve level, including for aircraft on order (labor.js autoStaffPlan).
+      // The hires themselves are made by withAutoStaff right after this.
+      if (!state.crewPipeline) return state;
+      return { ...state, crewAutoStaff: action.enabled === true };
+    }
+
+    case 'SET_RESERVE_TARGET': {
+      // action: { group, target } — this group's reserve level, as a fraction of
+      // its requirement (0 – RESERVE_TARGET_MAX).
+      if (!state.crewPipeline || !LABOR_GROUP_MAP[action.group]) return state;
+      const current = state.labor ?? DEFAULT_LABOR_STATE;
+      const target = Math.max(0, Math.min(RESERVE_TARGET_MAX, Math.round((Number(action.target) || 0) * 100) / 100));
+      return {
+        ...state,
+        labor: {
+          ...current,
+          [action.group]: {
+            ...(current[action.group] ?? { payMultiplier: 1.0, morale: 80 }),
+            reserveTarget: target,
+          },
+        },
+      };
+    }
+
+    case 'RELEASE_CREW': {
+      // action: { group, bodies } — let spare staff go. Only people ABOVE the
+      // requirement can be released (nobody an aircraft needs), and each is
+      // owed severance: RELEASE_SEVERANCE_WEEKS of full line pay.
+      if (!state.crewPipeline || !LABOR_GROUP_MAP[action.group]) return state;
+      const current = state.labor ?? DEFAULT_LABOR_STATE;
+      const g = current[action.group];
+      if (!g || g.headcount == null) return state;
+      const typeOf = (a) => getAircraftType(a.typeId);
+      const spare = crewSpare(current, action.group, state.fleet ?? [], typeOf);
+      const units = Math.min(spare, Math.max(0, crewUnitsForBodies(action.group, Math.floor(Number(action.bodies) || 0))));
+      if (!(units > 1e-9)) return state;
+      const severance = Math.round(releaseSeveranceBase(action.group, units) * (g.payMultiplier ?? 1) * getEraCostScale());
+      return {
+        ...state,
+        cash: state.cash - severance,
+        labor: { ...current, [action.group]: { ...g, headcount: Math.max(0, Math.round((g.headcount - units) * 100) / 100) } },
+      };
+    }
+
     case 'SET_PAY_INDEXED': {
       // action: { group, indexed } — hold this group's pay multiplier where it is
       // instead of letting the premium drift back toward market (~6%/yr,
@@ -6193,6 +6314,22 @@ function reducer(state, action) {
         }
       }
 
+      // Reserve pay, said once. Staff above the requirement used to cost
+      // nothing; a save from before that carrying a real surplus (an acquired
+      // airline whose aircraft were sold) meets the charge here, with the two
+      // ways out. New games never see it: they start with no spare staff.
+      if (state.crewPipeline && !state.reservePayNoticed
+          && (report.totalReservePay ?? 0) >= 0.02 * (report.totalLaborCosts ?? 0) && (report.totalReservePay ?? 0) > 0) {
+        newToasts.push({
+          type: 'info', icon: '🧑‍✈️',
+          title: 'Spare staff are now paid as reserves',
+          message: `You have more trained staff than your fleet needs. They are now paid ${Math.round(RESERVE_PAY_RATE * 100)}% of a normal wage `
+            + `(${formatMoney(report.totalReservePay)} this week) and in return lift morale and on-time performance. `
+            + 'Keep them for growth or release them in Company ▸ Operations.',
+          duration: 14000,
+        });
+      }
+
       // Encroachment notifications — a rival entering or leaving one of your routes.
       for (const ev of encroachEvents ?? []) {
         if (ev.type === 'enter') {
@@ -6243,7 +6380,11 @@ function reducer(state, action) {
         // The market catches up: a premium over 1.0× erodes ~6%/yr (labor.js) —
         // unless the player has locked this group's rate (SET_PAY_INDEXED).
         const g = g0.indexed ? g0 : { ...g0, payMultiplier: erodePayPremium(g0.payMultiplier) };
-        const target   = grievedMoraleTarget(moraleTarget(g.payMultiplier), grievancePrev?.[id]);
+        // Reserve staff lift what pay alone buys (labor.js "Reserve staff"):
+        // rosters with slack. Zero without spare people or the crew pipeline.
+        const reserveLift = state.crewPipeline && g.headcount != null
+          ? reserveMoraleBonus(currentLabor, id, state.fleet ?? [], (a) => getAircraftType(a.typeId)) : 0;
+        const target   = grievedMoraleTarget(Math.min(100, moraleTarget(g.payMultiplier) + reserveLift), grievancePrev?.[id]);
         const newMorale = g.morale + (target - g.morale) * 0.12;
         const morale = Math.max(5, Math.min(100, Math.round(newMorale * 10) / 10));
         if (!state.crewPipeline || g.headcount == null) {
@@ -7032,7 +7173,8 @@ function reducer(state, action) {
       // crews can melt down. Zero risk — and no random draw — for an airline
       // with slack; nothing at all outside v4.
       const incident = economyCycleWorld(state)
-        ? rollIncident(state, fleetAvgUtilizationOf(state.fleet, state.routes, state.cargoRoutes), Math.random)
+        ? rollIncident(state, fleetAvgUtilizationOf(state.fleet, state.routes, state.cargoRoutes), Math.random,
+            state.crewPipeline ? opsReserveCover(state.labor, state.fleet ?? [], (a) => getAircraftType(a.typeId)) : 0)
         : null;
       if (incident) {
         forcedRepHit += incident.reputationHit;
@@ -7163,6 +7305,7 @@ function reducer(state, action) {
         hubThroughput:     newHubThroughput,
         loans:             updatedLoans,
         labor:             updatedLabor,
+        ...(state.crewPipeline ? { reservePayNoticed: true } : {}),
         laborRelations:    updatedRelations,
         maintenanceBudget: mainBudget,
         mroBases:          tickedBases,
@@ -7721,6 +7864,8 @@ function reconcileState(parsed) {
     ...(parsed.bellyCargoWorld === true ? { bellyCargoWorld: true } : {}),
     // Hub banks — the new-game flag and the player's per-hub settings, carried only when present.
     ...(parsed.hubBanksWorld === true ? { hubBanksWorld: true } : {}),
+    // Connection seats — the new-game flag, carried only when present.
+    ...(parsed.connectionSeatsWorld === true ? { connectionSeatsWorld: true } : {}),
     ...(parsed.hubBanksWorld === true && parsed.hubBanks && Object.keys(parsed.hubBanks).length > 0 ? { hubBanks: parsed.hubBanks } : {}),
     ...(parsed.bellyRates && Object.keys(parsed.bellyRates).length > 0 ? { bellyRates: parsed.bellyRates } : {}),
     ...(parsed.travelPartners && Object.keys(parsed.travelPartners).length > 0
