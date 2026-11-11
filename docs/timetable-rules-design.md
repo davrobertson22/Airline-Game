@@ -1,17 +1,23 @@
 # Timetables That Matter: Design
 
-Status: **proposal, nothing built.** Written 2026-11-10 from a Discord
-suggestion ("Better Scheduling Mode"). The first half of that suggestion, a
-timetable editor you can type into, is built in Tailwinds (see "What is
-already built"). This document covers the half that changes the game.
+Status: **proposal for the parts not yet built.** Written 2026-11-10 from a
+Discord suggestion ("Better Scheduling Mode"), corrected the same evening
+after reading Headwinds.
 
-Scope chosen by Dave (2026-11-10): **peak-hour demand and slot pricing**, and
-**hub connection waves**. Night curfews and overnighting at outstations were
-suggested too and are left out of this design (§10). The automatic timetable
-must stay competent: a player who never opens the Schedule page is not
-punished, and a player who tunes it gains a modest edge.
+- The typed timetable editor is built in both games (see the last section).
+- **Hub connection waves already exist in Headwinds** as hub banks (shipped
+  2026-11-05, new worlds, flag `hubBanksWorld`). The first draft of this
+  document designed them from scratch without having seen that. §5 is now a
+  port plan for Tailwinds, not a new design.
+- **Peak-hour demand and slot pricing** (§3, §4) are new for both games and
+  nothing of them is built.
 
-Intended for both games, Tailwinds first. New games and new worlds only.
+Scope chosen by Dave (2026-11-10): peak-hour demand and slot pricing, and hub
+connection waves. Night curfews were suggested too and are left out (§10).
+The automatic timetable must stay competent: a player who never opens the
+Schedule page is not punished, and a player who tunes it gains a modest edge.
+
+New games and new worlds only.
 
 ## 1. Where things stand
 
@@ -32,11 +38,13 @@ Intended for both games, Tailwinds first. New games and new worlds only.
   movement at a major airport and $3,800 at a mega one), the same at 03:00 as
   at 08:00. On a short trunk they come to roughly a tenth to a sixth of
   revenue, so they are big enough to steer behaviour.
-- Connections are worked out per hub from frequency alone. Every pair of the
-  player's routes at a hub connects, with a fixed 1.5 hour connect time
-  (`CONNECT_TIME_HOURS`), and an A to C itinerary through the hub is sold at
-  the lower of its two legs' frequencies. Rival one-stop itineraries work the
-  same way where the hub package is on.
+- In Tailwinds, connections are worked out per hub from frequency alone.
+  Every pair of the player's routes at a hub connects, with a fixed 1.5 hour
+  connect time (`CONNECT_TIME_HOURS`), and an A to C itinerary through the hub
+  is sold at the lower of its two legs' frequencies. Rival one-stop
+  itineraries work the same way where the hub package is on.
+- In Headwinds worlds with hub banks, connections already come from the
+  timetable (§5). Everything else in this list is the same in both games.
 - AI rivals have no timetable at all.
 - New Tailwinds games cap aircraft at 100 block hours a week, so a tail has
   about 68 hours of ground time a week to arrange. There is room to move
@@ -44,8 +52,11 @@ Intended for both games, Tailwinds first. New games and new worlds only.
 
 ## 2. Principles
 
+These govern the new peak-hour rules (§3, §4). Hub banks follow Headwinds'
+rules as built (§5).
+
 1. **The tick stays weekly.** The timetable is boiled down to a few factors
-   per route and per hub pair, and the existing weekly model consumes them.
+   per route, and the existing weekly model consumes them.
    No flight-by-flight simulation.
 2. **Automatic is par.** Every factor is calibrated so the automatic timetable
    scores 1.0, give or take a couple of percent. That is a test, not a hope
@@ -119,97 +130,108 @@ movement falls in, local time at that airport.
   book), and the price already produces the behaviour.
 - Gate rent and the slot count per gate do not change.
 
-## 5. Hub connection waves
+## 5. Hub connection waves: port Headwinds' hub banks
 
-Today any two routes at a hub connect. With this on, a connection exists only
-if the timetable makes it.
+Headwinds has had this since 2026-11-05 in new worlds. The rules, from its
+engine (`packages/engine/src/models/schedule.js`, "Hub banks" and
+"Connections from the timetable") and its devlog:
 
-For a hub H and two spokes A and C:
+- A bank is a time of day at a hub. Flights land in the hour before it and
+  leave in the hour after, so any inbound makes any outbound.
+- Every designated hub, focus cities included, is banked by default: 3 banks
+  a day, 4 at bigger hubs, 6 at the biggest (`autoBankCount`). The player can
+  pick 3, 4 or 6, set custom times (up to 8, at least 90 minutes apart, hub
+  local time), or choose Rolling for no banks.
+- **The automatic timetable banks for you.** Each rotation through a banked
+  hub leaves on a departure wave, and the aircraft waits at the far end, up
+  to 4 hours, or overnight for the day's first bank, so that it comes back
+  for an arrival wave. That waiting is the cost of banking: a busy tail fits
+  fewer rotations.
+- **Connections come from the timetable.** A connection works when the
+  inbound lands 40 minutes to 6 hours before the onward flight leaves. How
+  many of the possible connections work, and the real wait, decide how the
+  itinerary competes. A pair the timetable never connects sells nothing.
+- By its own devlog, the automatic banks connect nearly as many passengers as
+  the old every-pair assumption did, and a hub left on Rolling connects far
+  fewer. That is the "automatic stays competent" rule, already met.
+- The Schedule page has a panel per hub: a 24-hour strip of arrivals and
+  departures with banks shaded, connections a week, average wait, connecting
+  passengers and how long aircraft wait for banks. A flight moved off a bank
+  is marked, and Snap to the bank puts it back.
 
-- Take every arrival at H from A in the week. For each, find the next
-  departure to C. The wait between them scores:
-  - shorter than the minimum connect time (45 minutes; 75 where either leg is
-    long haul): no connection;
-  - from the minimum up to an hour past it: 1.0;
-  - then falling steadily, to 0.4 at four hours and to nothing at six.
-- Do the same for C to A. The pair's **connection quality** q is the average
-  score over all arrivals in both directions. Better hub tiers can shorten
-  the minimum connect time, which gives hub upgrades something new to do.
-- q replaces the two things that are fixed today:
-  - the itinerary's sellable frequency, today the lower of its two legs'
-    frequencies, is multiplied by q over par, where par is the q the
-    automatic timetable achieves on a reference set of airlines. Bounded
-    **0 to 1.15**;
-  - the connect time in the trip-time penalty becomes the real average wait
-    instead of 1.5 hours.
-- So a hub on the automatic timetable sells what it sells today. A hub whose
-  banks are tuned by hand sells up to 15 percent more connecting frequency.
-  A spoke that lands after everything has left sells none.
-- Rival hubs stay at par. A candidate route in the Route Finder is not
-  timetabled yet, so its forecast assumes par connections; the forecast is
-  then honest for anyone on the automatic timetable.
-- Rotations stay rigid in this version: out, turn, back, turn, as charged
-  today. The player tunes waves by choosing when rotations leave. Holding an
-  aircraft at the outstation to hit a later bank is the natural next step and
-  is the same mechanism as overnighting (§10).
+Two of the four ideas in the Discord post are therefore covered there: waves,
+and aircraft sleeping at the outstation to make the morning bank.
 
-### Cost
+### What the Tailwinds port involves
 
-The tick needs every tail's week. `airlineWeeks` is already cached per tail by
-route signature, so it is rebuilt only for tails whose routes changed. The
-arrivals and departures per hub and spoke are built once per state change and
-reused by every Route Finder forecast row. Scoring a hub's top 150 markets is
-a few thousand binary searches.
+- A world flag for new games, as in Headwinds (`hubBanksWorld`), set at
+  `START_GAME`, with a setup-screen option to turn it off.
+- `models/schedule.js`: Tailwinds' copy was ported from Headwinds before
+  banks existed. It needs the bank section, the banked automatic week and the
+  timetable connections. The typed-time code in Tailwinds must then ask the
+  week for a rotation's length (`durAt`), as the Headwinds copy already does.
+- **Charters.** Tailwinds only. A charter is a fixed block the customer
+  times; the banked week has to place round it, and a charter never waits
+  for a bank. This is the one piece with no Headwinds answer.
+- The connection maths in the tick and in every preview (`network.js`,
+  `pairShare.js`, the Route Finder), kept in step as CLAUDE.md requires.
+- AI rivals. Headwinds worlds are mostly other players, who all have
+  timetables. Tailwinds rivals are all AI with none. Proposed: rival hubs
+  connect at the rate the automatic banks achieve, so the player neither
+  gains nor loses against them by default.
+- The hub panel, the bank settings, Snap to the bank, guides and Help.
+- Utilisation. Banked tails fit fewer rotations, and new Tailwinds games
+  already cap aircraft at 100 block hours a week. The two need checking
+  together on real saves before this ships.
 
-## 6. The automatic timetable, version 2
+## 6. The automatic timetable and peak hours
 
-This is the piece the whole design rests on. If the automatic timetable is
-not good, "automatic stays competent" is false and every casual player loses
-a few percent for nothing.
+With banks, the automatic timetable already has a shape: flights cluster at
+bank times. Peak-hour demand and slot pricing (§3, §4) then need only two
+things from it.
 
-- **Avoid the dead hours.** Rotations are placed so that short-haul
-  departures and long-haul arrivals stay out of the night band where the
-  tail's week allows it.
-- **Spread a pair through the day.** All of an airline's departures on one
-  pair are spaced across the operating day, not just within each tail's
-  morning wave as now.
-- **A bank clock per hub.** Each hub gets fixed bank times from its tier
-  alone (a focus city two a day, a fortress hub eight). A rotation that
-  touches the hub is nudged, within a few hours of where even spacing would
-  put it, so that it either leaves at a bank time or lands 45 to 90 minutes
-  before one, whichever scores better. Because the clock depends only on the
-  hub, each tail is still timetabled on its own. Adding a route never
-  reshuffles the rest of the airline, and the per-tail cache keeps working.
-- Still a pure function of the airline's state, the same on every device and
-  on the Headwinds server.
-- Under the flag only. Existing saves keep today's automatic timetable to the
-  minute.
+- **Where the banks sit.** The preset bank times decide whether a hub's waves
+  land in peak or off-peak bands. Presets should put the first and last
+  banks on the business peaks, so an untouched hub scores par on demand.
+  Custom bank times, which already exist in Headwinds, become the player's
+  lever: move the banks off the peaks to save on slots, or keep them there
+  for business demand.
+- **Routes that touch no banked hub**, and Rolling hubs, are placed as today,
+  with two additions: keep short-haul departures and long-haul arrivals out
+  of the night band where the tail's week allows, and spread an airline's
+  departures on one pair through the day (§3, bunching).
+
+Still a pure function of the airline's state, the same on every device and
+on the Headwinds server, and under a flag so existing saves and worlds keep
+today's timetable to the minute.
 
 ## 7. What the player sees
 
-- **Schedule page.** With a flight selected, the timeline shades the peak and
-  night bands at that route's origin. The panel shows the flight's demand
-  score, its slot band at each end and what connects to it.
-- **Hub view.** A new view on the Schedule page: for one hub, arrivals and
-  departures by hour through the day, so banks are visible, and a list of the
-  biggest connections that just miss ("BNE arrives 08:10, MEL left 07:55,
-  about 140 passengers a week").
-- **Route detail.** One line: timetable demand 1.02, slot cost 1.12, 86
-  percent of arrivals connect.
+- **Hub banks (T1, Tailwinds).** What Headwinds players have now: the hub
+  panel on the Schedule page with its 24-hour strip, the bank settings, the
+  marker on flights that miss a bank and Snap to the bank.
+- **Peak hours (T2 on).** With a flight selected, the timeline shades the
+  peak and night bands at that route's origin, and the panel shows the
+  flight's demand score and its slot band at each end. The hub strip shades
+  the same bands, so it is plain which banks are peak banks.
+- **Route detail.** One line: timetable demand 1.02, slot cost 1.12.
 - **Advisor.** Tips for the worst cases only: flights in the dead hours, a
-  spoke that misses the bank, a trunk with bunched departures.
-- **Reset to automatic** already exists and becomes "let the game do it".
+  trunk with bunched departures.
+- **Reset to automatic** already exists and stays the "let the game do it"
+  button.
 
 ## 8. Tests that define done
 
-- Flag off: golden master parity, byte for byte.
+- Flag off: golden master parity, byte for byte, in both repos.
+- **Hub banks in Tailwinds** carry over Headwinds' own bank and connection
+  tests, plus new ones for charters on a banked tail.
 - **Competent automatic.** Over a few hundred generated airlines of different
-  shapes, the automatic timetable scores at least 0.97 on demand, at most
-  1.03 of par on landing fees and at least par on connection quality.
+  shapes, the automatic timetable scores at least 0.97 on peak-hour demand
+  and at most 1.03 of par on landing fees.
 - **Bounded edge.** On reference airlines, the best timetable found by search
-  is worth no more than about 5 percent of profit over automatic.
+  is worth no more than a few percent of profit over automatic.
 - A deliberately bad timetable is worse, by a bounded amount.
-- Same state, same factors, on every device.
+- Same state, same factors, on every device and on the server.
 - Tick and Route Finder time on the large reference saves do not move by more
   than a few percent.
 
@@ -217,59 +239,59 @@ a few percent for nothing.
 
 | Package | What | Changes the game? |
 |---|---|---|
-| T0 | Typed timetable editor. Built in Tailwinds; port to Headwinds. | No |
-| T1 | Scoring engine and read-outs. The Schedule page, hub view and route detail show what a timetable would be worth. | No. Shows numbers only |
-| T2 | Automatic timetable version 2, under the flag. | No |
-| T3 | Peak-hour demand and slot pricing take effect in new games. | Yes |
-| T4 | Hub waves take effect in new games. | Yes |
-| T5 | Headwinds port: server guard, world flag, tick. | Yes |
+| T0 | Typed timetable editor. Built in both games. | No |
+| T1 | Port hub banks from Headwinds to Tailwinds, new games only. | Yes, Tailwinds |
+| T2 | Peak-hour scoring and read-outs in both games: the Schedule page and route detail show what a timetable would be worth. | No. Shows numbers only |
+| T3 | Peak-hour demand and slot pricing take effect in new games and worlds. | Yes, both |
 
-T1 before T3 is deliberate. Players and Dave see the scores on real airlines
-for a release before anything depends on them, and the par calibration is
-done on real saves instead of guesses.
+T1 is a port of code that is live and tested, so it can start as soon as the
+charter question is settled. T2 before T3 is deliberate: players and Dave see
+the scores on real airlines for a release before anything depends on them,
+and par is calibrated on real saves instead of guesses.
 
-Guides to update when T3 ships: `public/strategy.html` says demand and
-connections are worked out from weekly frequency, not clock times. The
-in-game Help and the Schedule page's own "it doesn't change demand or costs"
-line change at the same time.
+Guides to update when T1 ships in Tailwinds: `public/strategy.html` says
+demand and connections are worked out from weekly frequency, not clock times.
+The in-game Help and the Schedule page's own "it doesn't change demand or
+costs" line change at the same time.
 
 ## 10. Left out
 
-- **Night curfews.** Not chosen. They fit this design cleanly later: a curfew
-  is a band the scheduler cannot use at that airport, on top of the slot
-  price table.
-- **Overnighting at outstations.** Not chosen. It needs a rotation that can
-  hold at the spoke, which §5 also wants for tighter banks. If waves prove
-  popular this is the follow-up.
+- **Night curfews.** Not chosen. They fit cleanly later: a curfew is a band
+  the scheduler cannot use at that airport, on top of the slot price table.
+- **Overnighting as a choice.** Headwinds' banked week already holds an
+  aircraft overnight at the outstation when that makes the first bank. A
+  control for the player to ask for it on a given route is not in this
+  design.
 - **Slot scarcity and slot auctions.** See §4.
 - **Timetables for AI rivals.** Rivals fly at par.
 
 ## 11. Decisions for Dave
 
-1. **Size of the edge.** Proposed: demand 0.80 to 1.04 per route, landing
-   fees 0.60 to 1.35 by band, connections 0 to 1.15 per hub pair, adding up
-   to no more than about 5 percent of profit over automatic. Bigger, smaller?
-2. **One flag or two.** Proposed: one flag, `timetableRules`, with a version
-   number like the demand model (1 is peak hours and slots, 2 adds waves), so
-   T3 and T4 can ship separately but a game carries one setting.
-3. **Bunching** (§3). Recommended, because without it a pair's departures can
-   all leave together at 08:00 and score well. It does add work to the
-   automatic timetable.
-4. **Regular timetables.** The suggestion mentions premium airlines having
+1. **Port hub banks to Tailwinds as they are** (§5), on by default for new
+   games with a setup option to turn them off? Recommended yes.
+2. **Charters and banks.** Proposed: a charter keeps its fixed times and
+   never waits for a bank; the tail's own flights are banked round it.
+3. **Size of the peak-hour edge.** Proposed: demand 0.80 to 1.04 per route,
+   landing fees 0.60 to 1.35 by band, adding up to no more than a few percent
+   of profit over automatic. Bigger, smaller?
+4. **One flag or two.** Banks have their own flag in Headwinds already.
+   Proposed: a second flag, `peakHours`, for §3 and §4, so the two can ship
+   and be switched separately.
+5. **Bunching** (§3). Recommended, because without it a pair's departures can
+   all leave together at 08:00 and score well. It adds work to the automatic
+   timetable.
+6. **Regular timetables.** The suggestion mentions premium airlines having
    fixed departures. A small business bonus (about 1 percent) for a route
    that leaves at the same clock times every day would reward that and the
-   new week editor. Recommended as a later addition, not in T3.
-5. **Hub tier and minimum connect time** (§5). Should better hubs connect
-   faster? Recommended yes, modestly (45 minutes down to 35 at a fortress).
-6. **Headwinds.** Every airline there is a player with a timetable, so the
-   contest is symmetric. Should peak prices at an airport rise with how many
+   week editor. Recommended as a later addition, not in T3.
+7. **Headwinds.** Should peak prices at an airport rise with how many
    players use that hour? Proposed: no in the first version.
-7. **T1 first.** Ship the read-outs a release ahead of the effects, as §9
-   proposes, or go straight to effects?
+8. **T2 first.** Ship the read-outs a release ahead of the effects, or go
+   straight to effects?
 
-## What is already built (T0, Tailwinds, 2026-11-10)
+## What is already built (T0, 2026-11-10)
 
-Operations ▸ Schedule: click a flight and the panel takes
+Operations ▸ Schedule, in both games: click a flight and the panel takes
 
 - a typed departure time for that flight, on its own day (local time at the
   route's origin; 07:30, 0730, 19 and 7pm all read);
@@ -278,16 +300,21 @@ Operations ▸ Schedule: click a flight and the panel takes
   and a three-day row.
 
 Two departures closer than a round trip are refused with the earliest time
-that works. A time taken by a flight the player set on another route, or by a
-charter, moves that day's flight to the nearest free time and says so; with
-no room within twelve hours the flight is left automatic. Cosmetic like the
-rest of the editor: no world flag, all saves.
+that works. A time taken by a flight the player set on another route (or, in
+Tailwinds, by a charter) moves that day's flight to the nearest free time and
+says so; with no room within twelve hours the flight is left automatic. In
+Headwinds bank worlds the round trip includes the wait for the bank. No
+world flag, all saves and worlds.
 
 Code: `models/schedule.js` (`parseClock`, `timetableRows`,
 `pinsForTimetable`, `blockerFor`), `components/ScheduleTimeline.jsx`
-(`TimetableForm`, `timetableNotice`). Tests: `tools/schedule-test.mjs` (54,
-16 new) and `tools/schedule-ui-test.mjs` (24, 7 new); the new ones fail on
-the code before the change. Checked in Chromium at desktop and phone widths:
-typing, set, single-day change, clashes, guards, nudge, drag, reload.
+(`TimetableForm`, `timetableNotice`).
 
-Not ported to Headwinds yet (its folder was not linked to the session).
+- Tailwinds: committed as `33be8b1`. `tools/schedule-test.mjs` (54, 16 new)
+  and `tools/schedule-ui-test.mjs` (24, 7 new).
+- Headwinds: built, waiting on Dave's commit. `tools/schedule-test.mjs` (48,
+  17 new, two of them for bank worlds) and `tools/schedule-ui-test.mjs` (20,
+  8 new). Golden master PARITY OK.
+- Both checked in Chromium at desktop and phone widths: typing, set,
+  single-day change, clashes, guards, nudge, drag, reload; Headwinds also in
+  a bank world.
