@@ -96,7 +96,7 @@ export const SCREEN_GUIDE = [
   { key: 'departures', tab: 'operations', sub: 'Departure Board', map: 'departures',
     what: 'The departure board for any airport.' },
   { key: 'schedule', tab: 'operations', sub: 'Schedule', mapText: `Network${S}Departures${S}Schedule`,
-    what: 'Each aircraft\'s weekly timeline; hub banks at your hubs.' },
+    what: 'Each aircraft\'s weekly timeline. Click a flight to type its departure time or set its route\'s whole week; drag to move.' },
   { key: 'maintenance', tab: 'maintenance', map: 'maintenance',
     what: 'Heavy C and D checks (book them), the maintenance budget and jet bases.' },
   { key: 'ancillaries', tab: 'ancillaries', map: 'ancillaries',
