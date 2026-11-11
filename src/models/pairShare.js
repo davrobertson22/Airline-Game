@@ -579,35 +579,80 @@ function memoNetworkTick(state, { origin, destination, weeklyFrequency, ticketPr
 // itineraries with the previewed leg left open. What reaches the previewed
 // leg is then seated on it by projectConnectingFeed, from the projection's own
 // passengers. Exact when the rest of the network flies this week what it flew
-// last week; a leg with no report yet (opened this week) is not counted on.
-const REPORT_LEGS = new WeakMap();
+// last week.
+//
+// A leg with no report yet — a route opened since the last week was flown, or
+// every route in a game that has not flown a week — is projected instead
+// (projectRouteAddition, the mature week, the same week the preview itself
+// quotes). It used to be left out, so the connections over it were not counted
+// at all: a player who opened six spokes in one sitting was quoted the seventh
+// as if none of the six existed. Measured on a six-spoke JFK hub, 7x JFK–DEN:
+// previews $5,382/wk of connecting revenue, tick $25,040.
+const STATE_LEGS = new WeakMap();
 function reportLegs(state) {
-  const report = state?.lastReport;
-  if (!report || typeof report !== 'object') return {};
-  const had = REPORT_LEGS.get(report);
+  if (!state || typeof state !== 'object') return {};
+  const had = STATE_LEGS.get(state);
   if (had) return had;
+  const report = state.lastReport && typeof state.lastReport === 'object' ? state.lastReport : null;
   const routeById = new Map((state.routes ?? []).map(r => [r.id, r]));
   const hubs = state.hubs ?? {};
   const pooled = {};
-  for (const rr of report.routeResults ?? []) {
-    const r = routeById.get(rr.routeId);
-    if (!r || isMultiStop(r)) continue;
-    const eco = rr.classSummary?.economy;
-    const gaveUp = rr.connecting?.displacedPax ?? 0;      // back to the load before any connection boarded
+  const reported = new Set();
+  const add = (r, { seats, pax, ecoPax, ecoRev }) => {
     const k = routePairKey(r.origin, r.destination);
     const p = (pooled[k] ??= { seats: 0, room: 0, ecoPax: 0, ecoRev: 0, a: r.origin, b: r.destination });
-    const seats = rr.configuredSeatsOneWay ?? 0;
     p.seats  += seats;
-    p.room   += Math.max(0, Math.round(seats * 0.95) - ((rr.passengers ?? 0) + gaveUp));
-    p.ecoPax += (eco?.passengers ?? 0) + gaveUp;
-    p.ecoRev += (eco?.revenue ?? 0) + (rr.connecting?.displacedRevenue ?? 0);
+    p.room   += Math.max(0, Math.round(seats * 0.95) - pax);
+    p.ecoPax += ecoPax;
+    p.ecoRev += ecoRev;
+  };
+  for (const rr of report?.routeResults ?? []) {
+    const r = routeById.get(rr.routeId);
+    if (!r || isMultiStop(r)) continue;
+    reported.add(r.id);
+    const eco = rr.classSummary?.economy;
+    const gaveUp = rr.connecting?.displacedPax ?? 0;      // back to the load before any connection boarded
+    add(r, {
+      seats:  rr.configuredSeatsOneWay ?? 0,
+      pax:    (rr.passengers ?? 0) + gaveUp,
+      ecoPax: (eco?.passengers ?? 0) + gaveUp,
+      ecoRev: (eco?.revenue ?? 0) + (rr.connecting?.displacedRevenue ?? 0),
+    });
   }
+  // Legs with no report: projected. Set before the loop so a projection that
+  // found its way back here would read the reported legs rather than recurse.
   const legs = {};
+  STATE_LEGS.set(state, legs);
+  const month = currentGameDate(state)?.month ?? 6;
+  const fleet = state.fleet ?? [];
+  for (const r of state.routes ?? []) {
+    if (reported.has(r.id) || isMultiStop(r) || !isRouteActive(r, month)) continue;
+    const aircraft = fleet.find(a => a.id === r.aircraftId);
+    if (!aircraft) continue;
+    const pairFare = state.routePricing?.[routePairKey(r.origin, r.destination)];
+    const leg = projectRouteAddition(state, {
+      origin: r.origin, destination: r.destination, aircraft,
+      weeklyFrequency: r.weeklyFrequency ?? 7,
+      // Fares belong to the pair (hydrateRoute); a route with no pair fare flies its own.
+      ticketPrice: pairFare?.economy ?? r.ticketPrice,
+      classPrices: pairFare ?? r.classPrices,
+      season: r.season, replacesRouteId: r.id,
+      ...(r.tankering != null ? { tankering: r.tankering } : {}),
+      legOnly: true,
+    })?.mature;
+    if (!leg) continue;
+    const eco = leg.classSummary?.economy;
+    add(r, {
+      seats:  leg.configuredSeatsOneWay ?? 0,
+      pax:    leg.passengers ?? 0,
+      ecoPax: eco?.passengers ?? 0,
+      ecoRev: eco?.revenue ?? 0,
+    });
+  }
   for (const [k, p] of Object.entries(pooled)) {
     const tiers = [hubs[p.a]?.tier, hubs[p.b]?.tier].filter(t => t != null);
     legs[k] = connectionLegState({ ...p, tier: tiers.length ? Math.max(...tiers) : null });
   }
-  REPORT_LEGS.set(report, legs);
   return legs;
 }
 
@@ -1089,6 +1134,9 @@ export function projectRouteAddition(state, spec) {
   };
 
   const mature = runAt(matureWeeks);
+  // reportLegs() asks only what the leg carries (and must not ask for the
+  // connecting feed, which is what is asking).
+  if (spec.legOnly) return mature.result ? { mature: mature.result } : null;
   const launch = runAt(launchWeeks);
   if (!mature.result) return null;
   const connecting = projectConnectingFeed(state, {

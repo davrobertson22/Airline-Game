@@ -272,10 +272,17 @@ function tickQuote(state, { origin, dest, frame, freq }) {
   const next = withNoRolls(() => gameReducer(s, { type: 'ADVANCE_WEEK' }));
   const rr = next.lastReport?.routeResults?.find(r => r.routeId === probe.id);
   assert.ok(rr, 'tick produced no result for the probe route');
-  const connecting = rr.connecting?.totalRevenue ?? 0;
+  // Connection-seat games: the tick books a connection that took a local
+  // passenger's seat at its full fare and takes that local off the O&D count.
+  // The previews quote the route before anyone gives up a seat, with connecting
+  // revenue net of what those locals would have paid. Same total, so put the
+  // tick on the previews' basis before comparing the parts.
+  const gaveUp = rr.connecting?.displacedPax ?? 0;
+  const connecting = (rr.connecting?.totalRevenue ?? 0) - (rr.connecting?.displacedRevenue ?? 0);
   return {
     freq: probe.weeklyFrequency,
-    pax: rr.passengers, lf: rr.loadFactor,
+    pax: rr.passengers + gaveUp,
+    lf: gaveUp > 0 && rr.configuredSeatsOneWay > 0 ? (rr.passengers + gaveUp) / rr.configuredSeatsOneWay : rr.loadFactor,
     odRevenue: rr.revenue - connecting,
     connecting,
     opProfit: rr.profit,                     // routeRevenue − opCost − landing fee
@@ -381,6 +388,34 @@ const fail = (checks) => assert.equal(checks.length, 0, '\n      ' + checks.join
 test('capacity-capped spoke off a fed hub: three quotes agree', () => {
   const { state, spare } = world();
   fail(reconcile('capped hub spoke', state, { origin: HUB, dest: 'DEN', frame: spare, freq: 7 }).checks);
+});
+
+// 1b. The same spoke, read for its connections, in a world that has not flown
+//     a week: no route has a report yet, which is also the state of every route
+//     a player opens in one sitting. The previews used to leave such legs out,
+//     so nothing connected over them: 7x JFK-DEN was quoted $5,382/wk of
+//     connecting revenue and the tick paid $25,040. They are now projected
+//     (pairShare.js reportLegs). If a future world fills this flight with local
+//     passengers, the fixture check below says so: pick a probe with seats left.
+test('no week flown yet: connections over legs with no report are quoted', () => {
+  // Which rivals START_GAME deals decides whether this flight has seats left
+  // for a connection, so take the first world in which it does.
+  const fare = Math.round(referencePrice(HUB, 'DEN'));
+  let picked = null;
+  for (const seed of [4242, 1, 5555, 7, 99, 1234, 31337, 2026]) {
+    const w = world({ seed });
+    const p = projectRouteAddition(w.state, { origin: HUB, destination: 'DEN', aircraft: w.spare, weeklyFrequency: 7,
+                                              ticketPrice: fare, classPrices: defaultClassPrices(fare) });
+    if (p?.mature && p.mature.loadFactor <= 0.9) { picked = w; break; }
+  }
+  assert.ok(picked, 'fixture: no seed leaves 7x JFK-DEN with seats for a connection — pick another probe');
+  const { state, spare } = picked;
+  assert.equal(state.lastReport ?? null, null, 'fixture: this world should not have flown a week');
+  const r = reconcile('unflown network', state, { origin: HUB, dest: 'DEN', frame: spare, freq: 7 });
+  assert.ok(r.t.connecting > 5000, `fixture: the tick should seat real connections here, paid ${fmt$(r.t.connecting)}`);
+  assert.ok(r.f.connecting > r.t.connecting * 0.5,
+    `the finder quoted ${fmt$(r.f.connecting)} of connecting revenue; the tick paid ${fmt$(r.t.connecting)}`);
+  fail(r.checks);
 });
 
 // 2. The same hub, on a pair thin enough that demand decides the load factor.
