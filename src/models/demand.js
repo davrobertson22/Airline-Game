@@ -2929,7 +2929,7 @@ export function rankCompetitorAircraftTypes(distKm, tier, pref = null) {
   // DC-6Bs, not A350s). Classic: the 2026 market — lines 30+ years closed have
   // no airworthy frames (aircraft.js AIRFRAME_MARKET_LIFETIME_YEARS).
   const eraYear = getEraCalendarYear();
-  const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm
+  const capable = AIRCRAFT_TYPES.filter(t => !t.aiSkip && (t.range ?? 0) >= distKm
     && (eraYear != null ? aircraftOrderable(t, eraYear) : aircraftAvailability(t, 2026) !== 'expired'));
   if (capable.length === 0) return [];
 
@@ -2964,7 +2964,7 @@ export function pickLargerCompetitorAircraftType(distKm, minSeats, { prefer = nu
   // of the world's calendar year, not 2026. Without this a 1962 rival that
   // filled a Vanguard stepped straight onto an A321neo (Discord 2026-09-08).
   const eraYear = getEraCalendarYear();
-  const capable = AIRCRAFT_TYPES.filter(t => (t.range ?? 0) >= distKm
+  const capable = AIRCRAFT_TYPES.filter(t => !t.aiSkip && (t.range ?? 0) >= distKm
     && (t.seats ?? 0) >= minSeats && (t.seats ?? 0) <= maxSeats
     // A step up must actually add seats on THIS lane, not just on paper.
     && maxSeatsForRange(t, distKm) >= minSeats
@@ -3076,7 +3076,7 @@ export function healAnachronisticCompetitorFleets(competitors, calYear) {
       // this is a downgrade to period metal, not a free up-gauge.
       const wasSeats = cfg.seats ?? getAircraftType(cfg.aircraftType)?.seats ?? Infinity;
       const type = preferredTypes(AIRCRAFT_TYPES
-        .filter(t => (t.range ?? 0) >= dist && maxSeatsForRange(t, dist) <= wasSeats && aircraftOrderable(t, calYear)), c.fleetPref)
+        .filter(t => !t.aiSkip && (t.range ?? 0) >= dist && maxSeatsForRange(t, dist) <= wasSeats && aircraftOrderable(t, calYear)), c.fleetPref)
         .slice().sort((x, y) => Math.abs(maxSeatsForRange(x, dist) - target) - Math.abs(maxSeatsForRange(y, dist) - target))[0];
       if (!type) { delete routes[routeKey]; continue; }   // nothing of the era can fly it — drop the route
       routes[routeKey] = { ...cfg, aircraftType: type.id, seats: maxSeatsForRange(type, dist), tails: tailsForCompetitorRoute(routeKey, cfg, cfg.frequency ?? 7) };
