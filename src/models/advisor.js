@@ -33,7 +33,7 @@ import { crewStatus } from '../data/labor.js';
 import { relativePay } from './talentMarket.js';
 import { outstandingBalance } from '../data/credit.js';
 import {
-  routeStops, aircraftUtilization, maxWeeklyBlockHoursFor, currentGameDate, formatMoney,
+  routeStops, aircraftUtilization, committedRoutesByAircraft, maxWeeklyBlockHoursFor, currentGameDate, formatMoney,
 } from '../utils/simulation.js';
 import { slotUsageFor } from '../store/GameContext.jsx';
 import { SLOTS_PER_GATE } from '../utils/simulation.js';
@@ -190,10 +190,15 @@ function adviceSpareHours(state) {
   const cap = maxWeeklyBlockHoursFor(state);
   const month = currentGameDate(state)?.month ?? null;
   const hits = [];
+  // Each tail's own routes and charters, indexed once: utilisation walks the
+  // tables it is given, and the whole tables for every tail is fleet × routes.
+  const committed = committedRoutesByAircraft(state?.routes ?? [], state?.cargoRoutes ?? [], state?.charters ?? []);
+  const NONE = [];
   for (const a of state?.fleet ?? []) {
     if (a.status !== 'assigned') continue;
     if (isReserve(a)) continue;
-    const u = aircraftUtilization({ aircraft: a, routes: state.routes ?? [], cargoRoutes: state.cargoRoutes ?? [], charters: state.charters ?? [], month, capHours: cap });
+    const mine = committed.get(a.id);
+    const u = aircraftUtilization({ aircraft: a, routes: mine?.pax ?? NONE, cargoRoutes: mine?.cargo ?? NONE, charters: mine?.charters ?? NONE, month, capHours: cap });
     if (u.routes.length === 0 || u.grounded) continue;
     const spare = cap - u.peakHours;
     if (spare >= ADVISOR.spareHoursMin) hits.push({ a, spare, used: u.peakHours });

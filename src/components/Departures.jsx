@@ -6,7 +6,7 @@ import {
 import { getAircraftType } from '../data/aircraft.js';
 import { getAirport } from '../data/airports.js';
 import { routeLegs, routeStops, fleetAvgUtilization, currentGameDate, isRouteActive } from '../utils/simulation.js';
-import { airlineWeeks, weekDepartures, wrapWeek } from '../models/schedule.js';
+import { airlineWeeks, weekDepartures, wrapWeek, scheduleInputsOf } from '../models/schedule.js';
 import { utcOffsetMinutes } from '../data/timezones.js';
 import { laborEffects } from '../data/labor.js';
 import { isOutOfService, groundedKind } from '../data/maintenance.js';
@@ -110,9 +110,11 @@ export default function Departures({ initialAirport = null }) {
   // because they take time on their tails: without them a route on a tail
   // flying a charter would print at a different time from the schedule editor.
   const month = currentGameDate(state).month;
+  // Hub-bank games bank the timetable: the board reads the same week the editor shows.
   const weeks = useMemo(() => airlineWeeks({
-    fleet, routes, cargoRoutes: state.cargoRoutes ?? [], charters: state.charters ?? [],
-  }, month), [fleet, routes, state.cargoRoutes, state.charters, month]);
+    ...scheduleInputsOf(state), fleet, routes, cargoRoutes: state.cargoRoutes ?? [], charters: state.charters ?? [],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, month), [fleet, routes, state.cargoRoutes, state.charters, month, state.hubs, state.hubBanks, state.hubBanksWorld]);
 
   const rows = useMemo(() => {
     // The player's own departures, in BOTH directions — every route is a round

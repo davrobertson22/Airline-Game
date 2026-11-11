@@ -263,6 +263,15 @@ const WIKI = [
     blurb: 'Unlock connecting traffic',
     blocks: [
       { p: 'A hub is an airport where your routes connect, letting passengers transfer between your flights. Connecting revenue comes from **real one-stop itineraries** sold over the hub, every spoke you add opens new city-pair markets, plus a residual feed from gateway and partner traffic. Hubs also cut operating costs on routes touching them: own ground staff, own flight kitchens, crews sleeping at home, and (at Major Hub and above) on-site line maintenance.' },
+      { h: 'Hub banks (games started from 10 November 2026)' },
+      { p: 'Your hubs run on **banks**: waves of arrivals, then departures. A passenger can connect when the inbound flight lands **40 minutes to 6 hours** before the onward one leaves, and a shorter wait sells better. A pair of spokes your timetable never connects sells no connecting tickets.' },
+      { ul: [
+        'The **automatic timetable banks every hub for you**: 3 banks a day at a Focus City or Hub, 4 at a Major Hub, 6 at an International Gateway. You never have to open the editor.',
+        'Aircraft **wait at the far end** (up to 4 hours, or overnight before the day\u2019s first bank) to come back on a wave. That is what banking costs: a busy aircraft fits fewer round trips.',
+        '**Company ▸ Operations ▸ Schedule** has a card per hub: arrivals and departures through the day, connections a week, the average wait. Choose 3, 4 or 6 banks, your own bank times, or **Rolling** (no waiting, but far fewer connections).',
+        'A flight you move off a bank is marked on the timeline, and **Snap to the bank** puts it back. Charters keep the customer\u2019s times and connect nobody.',
+        'Older games, and new games with **Hub banks** unticked at setup, keep the old rule: every pair of flights at a hub connects.',
+      ] },
       { h: 'Focus cities' },
       { ul: [
         'A cheap starter designation: **5 gates**, $1M, active immediately.',

@@ -7,8 +7,9 @@ after reading Headwinds.
 - The typed timetable editor is built in both games (see the last section).
 - **Hub connection waves already exist in Headwinds** as hub banks (shipped
   2026-11-05, new worlds, flag `hubBanksWorld`). The first draft of this
-  document designed them from scratch without having seen that. §5 is now a
-  port plan for Tailwinds, not a new design.
+  document designed them from scratch without having seen that. §5 describes
+  them and the Tailwinds port, **built 2026-11-10** on Dave's go-ahead and
+  waiting on his commit.
 - **Peak-hour demand and slot pricing** (§3, §4) are new for both games and
   nothing of them is built.
 
@@ -162,27 +163,46 @@ engine (`packages/engine/src/models/schedule.js`, "Hub banks" and
 Two of the four ideas in the Discord post are therefore covered there: waves,
 and aircraft sleeping at the outstation to make the morning bank.
 
-### What the Tailwinds port involves
+### The Tailwinds port (built 2026-11-10)
 
-- A world flag for new games, as in Headwinds (`hubBanksWorld`), set at
-  `START_GAME`, with a setup-screen option to turn it off.
-- `models/schedule.js`: Tailwinds' copy was ported from Headwinds before
-  banks existed. It needs the bank section, the banked automatic week and the
-  timetable connections. The typed-time code in Tailwinds must then ask the
-  week for a rotation's length (`durAt`), as the Headwinds copy already does.
-- **Charters.** Tailwinds only. A charter is a fixed block the customer
-  times; the banked week has to place round it, and a charter never waits
-  for a bank. This is the one piece with no Headwinds answer.
-- The connection maths in the tick and in every preview (`network.js`,
-  `pairShare.js`, the Route Finder), kept in step as CLAUDE.md requires.
-- AI rivals. Headwinds worlds are mostly other players, who all have
-  timetables. Tailwinds rivals are all AI with none. Proposed: rival hubs
-  connect at the rate the automatic banks achieve, so the player neither
-  gains nor loses against them by default.
-- The hub panel, the bank settings, Snap to the bank, guides and Help.
-- Utilisation. Banked tails fit fewer rotations, and new Tailwinds games
-  already cap aircraft at 100 block hours a week. The two need checking
-  together on real saves before this ships.
+- **New games only.** `START_GAME` sets `hubBanksWorld`; the setup screen has
+  a Hub banks tick box, on by default. A save without the flag keeps the old
+  rule for life (`hubTimetableOf` returns null and the tick is untouched).
+- **`models/schedule.js`** is now Headwinds' module plus charters. On tails
+  with no charter it gives the same weeks and the same connection figures as
+  Headwinds' copy: 9,733 generated weeks compared, 5,846 of them banked, no
+  differences.
+- **Charters** (Tailwinds only). A charter is placed first, at exactly the
+  times it has with no banks, and no bank setting moves it. It never waits
+  for a bank, is never marked off-bank, connects no passengers and cannot be
+  snapped, moved or given typed times. The tail's own flights are banked
+  round it.
+- **Tick and previews.** The same three hooks as Headwinds: the network tick
+  reads the timetable (`network.js`), the weekly tick passes it
+  (`simulation.js`), and a route preview builds the timetable with the new
+  route on its tail (`pairShare.js`). Only on the modern connection rules
+  (`rivalItineraries`), which every game runs unless a save says otherwise.
+- **AI rivals** have no timetable and keep the old rule, as in Headwinds.
+- **UI.** The hub panel (`HubBanksPanel.jsx`, copied), the bank lines and
+  Snap to the bank in a flight's panel, the off-bank mark, the departure
+  board, `SET_HUB_BANKS` in the reducer.
+- **Balance** (`tools/contested-balance-probe.mjs`, fixed dice, 104 weeks,
+  JFK and ORD hubs, 36 routes at the start against the stock rivals):
+
+  | Network | Old rule | Automatic banks | Rolling |
+  |---|---|---|---|
+  | Each route within what one tail can fly (`FEASIBLE=95`) | cash 788M | 779M (−1.1%) | 754M (−4.3%) |
+  | Stock probe (14 transatlantic rotations a week on one tail) | cash 911M | 862M (−5.4%) | 736M (−19%) |
+
+  The second row overstates it: those tails are asked for more flying than a
+  week holds, which no real game allows, and a timetable cannot place flights
+  that do not fit. The first row is the one that matches play.
+- **Tests.** `tools/hub-banks-test.mjs` (26: Headwinds' 16 minus the server
+  one, plus new games, saves and charters) and `tools/hub-banks-ui-test.mjs`
+  (8). 27 of them fail on the code before the change. Full suite passes (293).
+  Checked in Chromium at desktop and phone widths: the hub card, every bank
+  setting, a charter on a banked tail, off-bank mark and snap, reload, and
+  the typed-time checks again in a bank game and in an old-rule save.
 
 ## 6. The automatic timetable and peak hours
 
@@ -239,20 +259,18 @@ today's timetable to the minute.
 
 | Package | What | Changes the game? |
 |---|---|---|
-| T0 | Typed timetable editor. Built in both games. | No |
-| T1 | Port hub banks from Headwinds to Tailwinds, new games only. | Yes, Tailwinds |
+| T0 | Typed timetable editor. **Built in both games.** | No |
+| T1 | Port hub banks from Headwinds to Tailwinds, new games only. **Built 2026-11-10.** | Yes, Tailwinds |
 | T2 | Peak-hour scoring and read-outs in both games: the Schedule page and route detail show what a timetable would be worth. | No. Shows numbers only |
 | T3 | Peak-hour demand and slot pricing take effect in new games and worlds. | Yes, both |
 
-T1 is a port of code that is live and tested, so it can start as soon as the
-charter question is settled. T2 before T3 is deliberate: players and Dave see
+T2 before T3 is deliberate: players and Dave see
 the scores on real airlines for a release before anything depends on them,
 and par is calibrated on real saves instead of guesses.
 
-Guides to update when T1 ships in Tailwinds: `public/strategy.html` says
-demand and connections are worked out from weekly frequency, not clock times.
-The in-game Help and the Schedule page's own "it doesn't change demand or
-costs" line change at the same time.
+The guides that said Tailwinds leaves the clock out (`public/strategy.html`,
+`public/hub-strategy.html`), the in-game Help and the Schedule page's own
+copy were updated with T1. They will need another line each when T3 ships.
 
 ## 10. Left out
 
@@ -267,10 +285,11 @@ costs" line change at the same time.
 
 ## 11. Decisions for Dave
 
-1. **Port hub banks to Tailwinds as they are** (§5), on by default for new
-   games with a setup option to turn them off? Recommended yes.
-2. **Charters and banks.** Proposed: a charter keeps its fixed times and
-   never waits for a bank; the tail's own flights are banked round it.
+1. ~~Port hub banks to Tailwinds as they are.~~ **Yes (Dave, 2026-11-10).
+   Built**, on by default for new games with a setup option to turn them off.
+2. **Charters and banks.** Built as proposed, for Dave to confirm: a charter
+   keeps its fixed times and never waits for a bank; the tail's own flights
+   are banked round it.
 3. **Size of the peak-hour edge.** Proposed: demand 0.80 to 1.04 per route,
    landing fees 0.60 to 1.35 by band, adding up to no more than a few percent
    of profit over automatic. Bigger, smaller?

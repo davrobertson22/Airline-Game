@@ -804,5 +804,77 @@ test('typed times: the pins go through SET_ROUTE_SCHEDULES like any others', () 
   assert.equal(next.cash, st.cash, 'still costs nothing');
 });
 
+// Hub-bank worlds: a rotation through a banked hub may wait for the next wave,
+// so its length depends on when it leaves. Typed times have to ask the week.
+const bankedState = (routes) => ({
+  hubBanksWorld: true, hubs: { SYD: { tier: 2, tierSince: 0 } },
+  fleet: [{ id: 'p', typeId: jet.id }],
+  routes: routes.map(r => ({ ...r, aircraftId: 'p' })), cargoRoutes: [],
+});
+const bankedWeekOf = (routes) => airlineWeeks(bankedState(routes), 6).get('p');
+
+test('typed times in a hub-bank world: lengths come from the week, so set flights never overlap', () => {
+  const routes = [route('a', ['SYD', 'MEL'], 14), route('b', ['SYD', 'BNE'], 7)];
+  const w = bankedWeekOf(routes);
+  assert.equal(w.banked, true, 'fixture: a banked week');
+  // Fixture: somewhere in the day this rotation is longer than its bare block time (it waits for a bank).
+  const bare = routeRotation(routes[0], jet).durMin;
+  const lens = Array.from({ length: 288 }, (_, k) => w.durAt('a', utcOfLocal(0, k * 5, SYD)));
+  assert.ok(Math.max(...lens) > bare, 'fixture: a wait somewhere in the day');
+  const longAt = lens.indexOf(Math.max(...lens)) * 5;
+  // Two times one BARE round trip apart, the first where the wait is longest: too close here.
+  const tight = pinsForTimetable(w, 'a', [{ tod: longAt, days: ALL }, { tod: longAt + ceil5(bare), days: ALL }], SYD);
+  assert.equal(tight.error, 'too-close');
+  assert.equal(tight.dur, Math.max(...lens), 'and the length quoted is the real one, wait included');
+  // A full round trip apart, waits included, is fine.
+  const fine = pinsForTimetable(w, 'a', [{ tod: longAt, days: ALL }, { tod: (longAt + ceil5(Math.max(...lens)) + 240) % 1440, days: ALL }], SYD);
+  if (!fine.error) {
+    const after = bankedWeekOf(routes.map(x => (x.id === 'a' ? { ...x, schedule: { starts: fine.pins } } : x)));
+    noOverlap(after.blocks);
+    assert.deepEqual(after.demoted, []);
+  }
+});
+
+test('typed times in a hub-bank world: never overlap, never unseat a set flight (fuzz)', () => {
+  let seed = 7;
+  const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 0x100000000; };
+  const dests = ['MEL', 'BNE', 'ADL', 'CBR', 'OOL', 'HBA'];
+  let ok = 0, bumped = 0, waits = 0;
+  for (let n = 0; n < 300; n++) {
+    const picks = [...dests].sort(() => rnd() - 0.5).slice(0, 1 + Math.floor(rnd() * 2));
+    const routes = picks.map((d, i) => route(`r${i}`, ['SYD', d], 3 + Math.floor(rnd() * (i ? 5 : 12))));
+    const w0 = bankedWeekOf(routes);
+    for (const r of routes.slice(1)) {
+      const keep = w0.blocks.filter(b => b.routeId === r.id).filter(() => rnd() < 0.5).map(b => b.start);
+      if (keep.length) r.schedule = { starts: keep };
+    }
+    const w = bankedWeekOf(routes);
+    if (!w.blocks.some(b => b.routeId === 'r0')) continue;
+    const fixedBefore = w.blocks.filter(b => b.pinned).map(b => `${b.routeId}@${b.start}`).sort();
+    const rows = timetableRows(w, 'r0', SYD, Math.floor(rnd() * 7)).map(r => ({
+      tod: Math.floor(rnd() * 288) * 5,
+      days: r.days.map(on => (rnd() < 0.15 ? !on : on)),
+    }));
+    const r = pinsForTimetable(w, 'r0', rows, SYD);
+    if (!r || r.error) continue;
+    ok++; bumped += r.bumped.length;
+    const after = bankedWeekOf(routes.map(x => (x.id === 'r0' ? { ...x, schedule: { starts: r.pins } } : x)));
+    noOverlap(after.blocks);
+    assert.deepEqual(after.demoted, [], `run ${n}`);
+    assert.deepEqual(after.blocks.filter(b => b.routeId === 'r0' && b.pinned).map(b => b.start), r.pins, `run ${n}: every pin stands`);
+    assert.deepEqual(after.blocks.filter(b => b.pinned && b.routeId !== 'r0').map(b => `${b.routeId}@${b.start}`).sort(), fixedBefore, `run ${n}`);
+    waits += after.blocks.filter(b => b.routeId === 'r0' && b.pinned && b.waitMin).length;
+    // One flight retimed on its own, through the same rule the editor uses.
+    const one = after.blocks.find(b => b.routeId === 'r0' && b.pinned);
+    const to = utcOfLocal(localDayTime(one.start, SYD).day, Math.floor(rnd() * 288) * 5, SYD);
+    if (to !== one.start) {
+      assert.equal(blockerFor(after, 'r0', one.dur, to, one) === null, canPlace(after, 'r0', one.dur, to, one), `run ${n}: blockerFor and canPlace agree`);
+    }
+  }
+  assert.ok(ok > 100, `enough accepted runs (${ok})`);
+  assert.ok(bumped > 10, `the fuzz reaches the clash path (${bumped})`);
+  assert.ok(waits > 50, `and flights that wait for a bank (${waits})`);
+});
+
 console.log(`\nschedule-test: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -176,6 +176,27 @@ test('spare block hours: a lightly flown tail is flagged with its hours', () => 
   assert.match(hit.detail, new RegExp(`${maxWeeklyBlockHoursFor(s)}h`));
 });
 
+test('spare block hours: a charter on the tail is hours it does not have to spare', () => {
+  // The tail's routes and contracts come from one index over the tables
+  // (committedRoutesByAircraft). A charter books the same airframe, so it has
+  // to be in that index: without it a chartered tail reads as emptier than it is.
+  const s = tick(airline({ dests: ['BOS'], freq: 3, idle: 0 }), 2);
+  const tail = s.routes[0].aircraftId;
+  const usedOf = (state) => {
+    const hit = airlineAdvice(state, state.lastReport).find(a => a.id === 'spare-hours');
+    return hit ? Number(/(\d+)h used/.exec(hit.items[0].value)[1]) : null;
+  };
+  const plain = usedOf(s);
+  assert.ok(plain > 0);
+  const charter = (status) => ({ ...s, charters: [{ id: 'ch1', origin: 'JFK', destination: 'ORD', aircraftId: tail, weeklyFrequency: 4, status }] });
+  assert.ok(usedOf(charter('active')) > plain, 'an active charter adds its block hours');
+  assert.ok(usedOf(charter('positioning')) > plain, 'so does one still positioning');
+  assert.equal(usedOf(charter('completed')), plain, 'a finished contract holds nothing');
+  // Enough charter flying to fill the week: the tail has nothing to spare.
+  const full = { ...s, charters: [{ id: 'ch1', origin: 'JFK', destination: 'LAX', aircraftId: tail, weeklyFrequency: 12, status: 'active' }] };
+  assert.equal(usedOf(full), null, 'a tail filled by a charter is not offered more flying');
+});
+
 test('heavy checks due: flagged; scheduled ones are not; overdue is priority 1', () => {
   const due = { ...BASE, fleet: BASE.fleet.map((a, i) => i === 0 ? { ...a, hoursSinceC: C_HOURS_DUE + 10 } : a) };
   const hit = airlineAdvice(due, due.lastReport).find(a => a.id === 'checks-due');

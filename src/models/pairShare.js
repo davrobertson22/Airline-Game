@@ -48,6 +48,7 @@ import {
   HUB_TIERS,
 } from './demand.js';
 import { rivalIndexFor, isLegacy, runNetworkTick } from './network.js';
+import { airlineWeeks, hubTimetable, scheduleInputsOf } from './schedule.js';
 import { blendJetAgeAppeal, jetAgeFields } from './jetAge.js';
 import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { memberPairKeysOf } from '../utils/market.js';
@@ -447,6 +448,8 @@ export function pairMarketShare(state, origin, destination, opts = {}) {
 
 /** Sentinel id for the not-yet-real route a projection is built around. */
 export const PREVIEW_ROUTE_ID = '__preview__';
+/** The tail a previewed route flies when the preview names a type, not a tail. */
+export const PREVIEW_AIRCRAFT_ID = '__preview_ac__';
 
 /**
  * Split one pair's pooled demand into a single route's slice, exactly the way
@@ -545,12 +548,12 @@ let networkTickRuns = 0;
 /** Test seam: how many network ticks projections have actually run (memo misses). */
 export function networkTickRunCount() { return networkTickRuns; }
 
-function memoNetworkTick(state, { origin, destination, weeklyFrequency, ticketPrice, gameDate, replacesRouteId }, compute) {
+function memoNetworkTick(state, { origin, destination, weeklyFrequency, ticketPrice, gameDate, replacesRouteId, ttSig = '' }, compute) {
   if (!state || typeof state !== 'object') return compute();
   const key = [
     origin, destination, weeklyFrequency ?? 7, ticketPrice ?? '',
     gameDate?.month ?? 6, gameDate?.absWeek ?? '', gameDate?.week ?? '', gameDate?.year ?? '',
-    replacesRouteId ?? '',
+    replacesRouteId ?? '', ttSig,
   ].join('|');
   let perState = NETWORK_TICK_MEMO.get(state);
   if (!perState) { perState = new Map(); NETWORK_TICK_MEMO.set(state, perState); }
@@ -649,11 +652,31 @@ export function projectConnectingFeed(state, spec) {
   // it here (TheCookiesGuy, Discord, 14 Sep 2026). Remember the answer per
   // (state, lane, frequency, fare, calendar) and hand it back.
   const key = routePairKey(origin, destination);
-  const net = memoNetworkTick(state, { origin, destination, weeklyFrequency, ticketPrice, gameDate, replacesRouteId }, () => {
+  // Hub-bank games: connections work when the timetable says they do, so the
+  // preview builds the timetable the tick will — with this route in it, on the
+  // tail that would fly it (a bare type flies it alone, as a new route on an
+  // idle tail does). The touched tails' weeks join the memo key, so two types
+  // whose flights land on the same waves still share one tick.
+  let timetable = null, ttSig = '';
+  if (state.hubBanksWorld === true) {
+    const own = aircraft?.id != null && fleet.some(a => a.id === aircraft.id);
+    const acId = own ? aircraft.id : PREVIEW_AIRCRAFT_ID;
+    const ttFleet = own || !aircraft?.typeId ? fleet : [...fleet, { id: PREVIEW_AIRCRAFT_ID, typeId: aircraft.typeId }];
+    const ttRoutes = routes.map(r => (r === probe ? { ...probe, aircraftId: acId } : r));
+    const weeks = airlineWeeks({ ...scheduleInputsOf(state), fleet: ttFleet, routes: ttRoutes }, month);
+    timetable = hubTimetable(weeks, {
+      paxIds: new Set(ttRoutes.map(r => r.id)), hubs: new Set(Object.keys(hubs)),
+    });
+    const old = replacesRouteId ? (state.routes ?? []).find(r => r.id === replacesRouteId)?.aircraftId : null;
+    ttSig = [...new Set([acId, old].filter(Boolean))]
+      .map(id => (weeks.get(id)?.blocks ?? []).map(b => `${b.routeId}@${b.start}+${b.dur}`).join(','))
+      .join('/');
+  }
+  const net = memoNetworkTick(state, { origin, destination, weeklyFrequency, ticketPrice, gameDate, replacesRouteId, ttSig }, () => {
     networkTickRuns++;
     return networkSliceFor(runNetworkTick({
       routes, competitors, allianceMembership, codeshareAgreements, allianceDef,
-      gameDate, hubs, gates, routeCountByAirport, slotsByAirport, demandMultFor, rivalIndex,
+      gameDate, hubs, gates, routeCountByAirport, slotsByAirport, demandMultFor, rivalIndex, timetable,
     }), key);
   });
   const contestFactors = net.contestFactors;

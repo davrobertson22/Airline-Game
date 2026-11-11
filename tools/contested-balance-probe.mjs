@@ -6,10 +6,13 @@
 // capacity-capped vs demand-limited in the final week.
 //
 //   node --import ./tools/_register-loader.mjs tools/contested-balance-probe.mjs [weeks=104]
+//   HUB_BANKS=auto|rolling|3|4|6 … a hub-bank game, both hubs on that setting
+//   FEASIBLE=95 … cap each route at what one tail can fly in 95 block hours a week
 import { gameReducer, freshState } from '../src/store/GameContext.jsx';
 import { getAircraftType } from '../src/data/aircraft.js';
 import { seedCrewFor, DEFAULT_LABOR_STATE } from '../src/data/labor.js';
 import { getAirport } from '../src/data/airports.js';
+import { routeRotation } from '../src/models/schedule.js';
 import { defaultConfig, defaultClassPrices, distanceKm, referencePrice } from '../src/utils/simulation.js';
 
 // FIXRAND=1 pins Math.random to 0.5 so two engines see identical events,
@@ -25,6 +28,14 @@ const fleet = [], routes = [], routePricing = {}, gates = {};
 const addRoute = (o, d, freq) => {
   const t = distanceKm(getAirport(o), getAirport(d)) > 4000 ? wide : narrow;
   const ac = mkAc(t); fleet.push(ac);
+  // FEASIBLE=<block hours>: no route flies more than one tail can in that many
+  // hours a week. The stock network puts 14 transatlantic rotations a week on
+  // one aircraft, which no real game allows and no timetable can hold — fine
+  // for a model that only reads frequency, misleading for one that reads times.
+  if (process.env.FEASIBLE) {
+    const rot = routeRotation({ id: 'x', origin: o, destination: d, stops: [o, d] }, t).durMin / 60;
+    freq = Math.max(1, Math.min(freq, Math.floor(Number(process.env.FEASIBLE) / rot)));
+  }
   routes.push({ id: `r${routes.length}`, origin: o, destination: d, stops: [o, d], aircraftId: ac.id, weeklyFrequency: freq, weeksOpen: 30 });
   routePricing[[o, d].sort().join('-')] = defaultClassPrices(Math.round(referencePrice(o, d)));
   gates[o] = (gates[o] ?? 0) + 1; gates[d] = (gates[d] ?? 0) + 1;
@@ -39,7 +50,16 @@ st = { ...st, cash: 500_000_000, fleet, routes, routePricing, gates,
   hubs: { JFK: { tier: 2, tierSince: 0 }, ORD: { tier: 1, tierSince: 0 } },
   newWorldRestrictions: true,
   // TW: on by default (freshState); RIVAL_ITIN=0 turns rival one-stops off for a before/after.
-  rivalItineraries: process.env.RIVAL_ITIN !== '0' };
+  rivalItineraries: process.env.RIVAL_ITIN !== '0',
+  // HUB_BANKS=auto|rolling|3|4|6: a hub-bank game (connections from the
+  // timetable, models/schedule.js), both hubs on that setting. Unset: the old
+  // every-flight-connects rule, whatever START_GAME now defaults to.
+  hubBanksWorld: process.env.HUB_BANKS ? true : undefined,
+  ...(process.env.HUB_BANKS ? {
+    hubBanks: process.env.HUB_BANKS === 'auto' ? {}
+      : Object.fromEntries(['JFK', 'ORD'].map(h => [h, process.env.HUB_BANKS === 'rolling'
+        ? { mode: 'rolling' } : { mode: 'banks', count: Number(process.env.HUB_BANKS) }])),
+  } : {}) };
 // TW: the crew pipeline is on by default and an unstaffed tail is grounded —
 // seed a crew for the fleet, as the era playbot does.
 st = { ...st, labor: seedCrewFor(st.labor ?? DEFAULT_LABOR_STATE, st.fleet, (a) => getAircraftType(a.typeId)) };

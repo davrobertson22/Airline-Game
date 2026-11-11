@@ -128,7 +128,7 @@ import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
 import { buildCargoContest, computeCompetitorCargoStats, withCargoStats, cargoTailKey } from '../models/competitorCargo.js';
 import { applyCargoYields } from '../models/cargoYieldBulk.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
-import { normalizeStarts } from '../models/schedule.js';
+import { normalizeStarts, normalizeHubBankSetting } from '../models/schedule.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -2169,6 +2169,11 @@ function reducer(state, action) {
         // freighters. New games only — a save without the flag keeps freight
         // on freighters alone, and its freighter lanes keep their whole market.
         ...(action.bellyCargo !== false ? { bellyCargoWorld: true } : {}),
+        // Hub banks (models/schedule.js): designated hubs run on waves, the
+        // automatic timetable aims flights at them, and a connection sells only
+        // when the timetable makes it. New games only — a save without the flag
+        // keeps the old rule (every flight connects, 1.5 h) for life.
+        ...(action.hubBanks !== false ? { hubBanksWorld: true } : {}),
         // Production lines (data/productionLines.js, models/lineBook.js): every
         // aircraft comes off a factory line shared with the rivals, who order
         // and wait too; era games add launch customers. Staged purchase
@@ -4133,6 +4138,30 @@ function reducer(state, action) {
         routes: routes.some((r, i) => r !== state.routes[i]) ? routes : state.routes,
         cargoRoutes: cargoRoutes.some((r, i) => r !== (state.cargoRoutes ?? [])[i]) ? cargoRoutes : state.cargoRoutes,
       };
+    }
+
+    // action: { banks: { [hubCode]: setting | null } } — hub-bank games only.
+    // How each designated hub runs its waves: { mode: 'rolling' },
+    // { mode: 'banks', count: 3|4|6 } or { mode: 'banks', times: [local min] };
+    // null puts the hub back on Automatic. Free, instant, and the tick reads
+    // it: the automatic week re-aims every flight through the hub, and
+    // connections there are counted from the timetable (models/schedule.js).
+    case 'SET_HUB_BANKS': {
+      if (state.hubBanksWorld !== true) return state;
+      const want = action.banks;
+      if (!want || typeof want !== 'object' || Array.isArray(want)) return state;
+      const cur = state.hubBanks ?? {};
+      const next = { ...cur };
+      let changed = false;
+      for (const code of Object.keys(want)) {
+        if (state.hubs?.[code]?.tier == null) continue;   // not one of our hubs
+        const set = normalizeHubBankSetting(want[code]);
+        const before = normalizeHubBankSetting(cur[code]);
+        if (JSON.stringify(set) === JSON.stringify(before)) continue;
+        changed = true;
+        if (set) next[code] = set; else delete next[code];
+      }
+      return changed ? { ...state, hubBanks: next } : state;
     }
 
     // ── Hub management ────────────────────────────────────────────────────────
@@ -7644,6 +7673,9 @@ function reconcileState(parsed) {
     ...(parsed.jetAgeWorld === true ? { jetAgeWorld: true } : {}),
     // Belly cargo — the new-game flag and the player's own rates, carried only when present.
     ...(parsed.bellyCargoWorld === true ? { bellyCargoWorld: true } : {}),
+    // Hub banks — the new-game flag and the player's per-hub settings, carried only when present.
+    ...(parsed.hubBanksWorld === true ? { hubBanksWorld: true } : {}),
+    ...(parsed.hubBanksWorld === true && parsed.hubBanks && Object.keys(parsed.hubBanks).length > 0 ? { hubBanks: parsed.hubBanks } : {}),
     ...(parsed.bellyRates && Object.keys(parsed.bellyRates).length > 0 ? { bellyRates: parsed.bellyRates } : {}),
     ...(parsed.travelPartners && Object.keys(parsed.travelPartners).length > 0
       ? { travelPartners: parsed.travelPartners } : {}),

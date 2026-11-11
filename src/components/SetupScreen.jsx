@@ -123,6 +123,7 @@ export default function SetupScreen() {
   const [rivalMergers,      setRivalMergers]      = useState(true);
   const [rivalFreight,      setRivalFreight]      = useState(true);
   const [bellyCargo,        setBellyCargo]        = useState(true);
+  const [hubBanks,          setHubBanks]          = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
   const cardRef = useRef(null);
 
@@ -239,6 +240,7 @@ export default function SetupScreen() {
       ...(!rivalMergers ? { rivalMergers: false } : {}),
       ...(!rivalFreight ? { rivalFreight: false } : {}),
       ...(!bellyCargo ? { bellyCargo: false } : {}),
+      ...(!hubBanks ? { hubBanks: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
     });
   }
@@ -779,6 +781,15 @@ export default function SetupScreen() {
               {bellyCargo
                 ? 'Passenger flights carry freight in their holds, yours and your rivals\u2019, and share each lane with the freighters.'
                 : 'Freight flies on freighters only, as in games started before November 2026.'}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={hubBanks} onChange={e => setHubBanks(e.target.checked)} />
+              Hub banks
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {hubBanks
+                ? 'Your hubs run on waves of arrivals and departures, and passengers connect only where your timetable lets them. The automatic schedule banks every hub for you.'
+                : 'Every pair of flights at a hub connects, whatever time they leave, as in games started before 10 November 2026.'}
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />
