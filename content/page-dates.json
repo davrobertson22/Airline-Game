@@ -60,9 +60,9 @@
     "blocks": "2d7100 7a3857 9f3407 46b396 3c69b1 cb8391 656ed4 c6ce57 7823f3 646d41 e0ff7b c6b931 727353 b34e57 0f33bb af78e7 6c62e8 3c0c70 b2d863 214043 897d38 6af316 81d5d1 93c6c0 78c583 890504 ef0372 f9305c 32099d e956a9 e8545f 066ad8 0a01e6 0a8c01 4cf672 ea344f 7e14e2 9b1e32 339589"
   },
   "public/competition-and-alliances.html": {
-    "updated": "2026-11-09",
-    "hash": "cdbb0a01358cf4d9",
-    "blocks": "cb837d ebcb8d b6a6c9 8eed2e ea1406 74a311 e7b54a b597b7 1205f7 71e6bd 63c774 ab6a60 b0ef86 20692e 127f7e ade7e5 7859ad ca0ae7 cede1c eedaf7 4b4ccc 8a3d8a 948ea2 abf8f5 a32d90 e7a488 25f406 1336a1 62b2f4 d27708 6abd04 3e8516 ed942a fb2f3d 23197d de9918 17e8c9 74b3f3 502675 3e4a2e 4f1a85 c7a3e0 3d9d0f 75cec0 cbe86c a3a679 90fbfd c76273 24d1de 651f91 9f1398 d40a05 35cb3f 39a8b7 1386cb 7907f2 da95d9 f310e0 36813d f8687d 5014c2 a4aad9 0e6550 f5a7ee 3655ec 7953be 0d9fce e47c73 40e8db e492cb accab7 84e8dc 0e481b 0a421d cc8636 b99196 1a1da8 59c117 775b73 ae2f49 e7d734 0942b2 89cd4d 92ea29 d6e75e 0df8d4 e26441 6e46f7 ef6542 492965 bde2f2 8f4d7f 6b6478 36c97f 421576 5ef6dc 250dbd 4082f5 1a8d84 1ea11c"
+    "updated": "2026-11-11",
+    "hash": "4de57da054c8a65f",
+    "blocks": "cb837d ebcb8d b6a6c9 8eed2e ea1406 74a311 e7b54a b597b7 1205f7 3f8865 63c774 ab6a60 b0ef86 20692e 127f7e b09d3e 93a962 a849e3 43a14a 363633 e98d04 ece63b 6cbc0d bc24c7 5e5893 ade7e5 7859ad ca0ae7 cede1c eedaf7 4b4ccc 8a3d8a 948ea2 abf8f5 a32d90 e7a488 25f406 1336a1 62b2f4 d27708 6abd04 3e8516 ed942a fb2f3d 23197d de9918 17e8c9 74b3f3 502675 3e4a2e 4f1a85 c7a3e0 3d9d0f 75cec0 cbe86c a3a679 90fbfd c76273 24d1de 651f91 9f1398 d40a05 35cb3f 39a8b7 1386cb 7907f2 da95d9 f310e0 36813d f8687d 5014c2 a4aad9 0e6550 f5a7ee 3655ec 7953be 0d9fce e47c73 40e8db e492cb accab7 84e8dc 0e481b 0a421d cc8636 b99196 1a1da8 59c117 775b73 ae2f49 e7d734 0942b2 89cd4d 92ea29 d6e75e 0df8d4 e26441 6e46f7 ef6542 492965 bde2f2 df453b 8f4d7f 6b6478 36c97f 421576 5ef6dc 250dbd 4082f5 1a8d84 1ea11c"
   },
   "public/contact.html": {
     "updated": "2026-07-12",
@@ -92,7 +92,7 @@
   },
   "public/devlog/2026-11.html": {
     "updated": "2026-11-11",
-    "hash": "e52799e31c499516"
+    "hash": "697bf29f14c3aeb7"
   },
   "public/devlog/aircraft-audit-part-two-real-turboprop-figures-one-runway.html": {
     "updated": "2026-09-24",
@@ -130,6 +130,10 @@
     "updated": "2026-09-16",
     "hash": "fff9a2a3740e51d4"
   },
+  "public/devlog/smarter-rivals-airlines-that-plan-routes-price-them-and.html": {
+    "updated": "2026-11-11",
+    "hash": "222c8401353ac16a"
+  },
   "public/devlog/start-in-1950-and-fly-the-century.html": {
     "updated": "2026-08-31",
     "hash": "804743cb1f011343"
@@ -148,7 +152,7 @@
   },
   "public/devlog.html": {
     "updated": "2026-11-11",
-    "hash": "51904c919792c7e8"
+    "hash": "2578c1597675993f"
   },
   "public/faq.html": {
     "updated": "2026-10-16",
