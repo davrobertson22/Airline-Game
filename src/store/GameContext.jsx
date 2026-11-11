@@ -128,6 +128,8 @@ import {
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
 import { buildCargoContest, computeCompetitorCargoStats, withCargoStats, cargoTailKey } from '../models/competitorCargo.js';
+import { buildPairContest } from '../models/rivalBrain.js';
+import { lotsFromEvents, liveLots, LIQUIDATION_WEEKS } from '../models/liquidation.js';
 import { applyCargoYields } from '../models/cargoYieldBulk.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
 import { normalizeStarts, normalizeHubBankSetting } from '../models/schedule.js';
@@ -2103,7 +2105,10 @@ function reducer(state, action) {
       // keeps the field freshState() already drew, so a default game is
       // unchanged. Random start-ups then refill to the same proportion of it.
       const _rivalCount = RIVAL_COUNT_OPTIONS[action.rivalCount] ?? null;
-      const _randomField = _rivalCount != null ? sampleAndInitializeCompetitors(_rivalCount) : _fresh.competitors;
+      // Smart rivals (rivalBrain.js, below): a new game's field is founded on
+      // aircraft sized to its routes, so it is drawn here rather than taken
+      // from freshState()'s.
+      const _randomField = sampleAndInitializeCompetitors(_rivalCount ?? 25, { smart: true });
       let _competitors = _randomField;
       let _entrants = null;
       const _setToasts = [];
@@ -2124,7 +2129,7 @@ function reducer(state, action) {
         const built = starters.map((r, i) => {
           // New games fly listed routes through a refuelling stop when nothing
           // of the era reaches nonstop (rivalStopsWorld, below).
-          const { _skippedRoutes, _viaStop, ...c } = buildRivalFromSpec(r, { idSeed: i, takenLogos: _logosInUse, stops: true });
+          const { _skippedRoutes, _viaStop, ...c } = buildRivalFromSpec(r, { idSeed: i, takenLogos: _logosInUse, stops: true, smart: true });
           _logosInUse.push(c.logoId);
           if (_skippedRoutes?.length) skipped.push(`${c.name}: ${_skippedRoutes.join(', ')}`);
           viaStops += _viaStop?.length ?? 0;
@@ -2272,6 +2277,14 @@ function reducer(state, action) {
         // can, and keep a rival set's listed routes as goals. NEW games only —
         // existing saves carry no flag and never route through a stop.
         rivalStopsWorld: true,
+        // Smart rivals (models/rivalBrain.js, the 2026-11-11 audit): AI carriers
+        // cost a route before opening it, fly aircraft that suit it and are
+        // still built, stay in their home market, price sold-out routes up,
+        // win and lose passengers on what they and you offer, serve regional
+        // airports, pay for old fleets, and are restructured before they
+        // close. NEW games only — existing saves carry no flag and keep the
+        // rivals they started with.
+        smartRivalsWorld: true,
         // Market development (docs/market-development-design.md): a city pair's
         // market grows with the service it gets and fades slowly when that
         // service leaves. NEW games only — existing saves carry no flag and keep
@@ -5319,6 +5332,34 @@ function reducer(state, action) {
       };
     }
 
+    // ─── Liquidation sale (models/liquidation.js) ────────────────────────────
+    // Buy one airframe a closed rival left behind: owned, delivered now, at
+    // the age it was flying at.
+    case 'BUY_LIQUIDATION_AIRCRAFT': {
+      // action: { lotId }
+      const lot  = (state.liquidationLots ?? []).find(l => l.id === action.lotId);
+      const type = lot ? getAircraftType(lot.typeId) : null;
+      if (!lot || !type || state.cash < lot.price) return state;
+      const usedTails = state.fleet.map(a => a.tailNumber).filter(Boolean);
+      const bought = {
+        id:            uid(),
+        typeId:        lot.typeId,
+        name:          `${type.name} (ex-${lot.airlineName})`,
+        tailNumber:    generateTailNumber(state.hub, state.airlineName, usedTails),
+        status:        'idle',
+        ageWeeks:      lot.ageWeeks ?? 0,
+        config:        newAircraftConfig(type),
+        ownershipType: 'owned',
+        acquired:      true,
+      };
+      return {
+        ...state,
+        cash:  state.cash - lot.price,
+        fleet: [...state.fleet, bought],
+        liquidationLots: state.liquidationLots.filter(l => l.id !== lot.id),
+      };
+    }
+
     case 'ACQUIRE_COMPETITOR': {
       // action: { competitorId }
       const target = (state.competitors ?? []).find(c => c.id === action.competitorId);
@@ -6582,13 +6623,23 @@ function reducer(state, action) {
 
       // Adaptive competitor AI: expansion, cuts, capacity responses, pricing
       // reactions, distress/fire sales, bankruptcies, mergers, and startups.
-      const aiPlayerRoutes = state.routes.map(r => ({
-        origin:          r.origin,
-        destination:     r.destination,
-        weeklyFrequency: r.weeklyFrequency,
-        ticketPrice:     state.routePricing?.[routePairKey(r.origin, r.destination)]?.economy
-                           ?? r.ticketPrice,
-      }));
+      // Smart-rival worlds also weigh what each of your flights offers — its
+      // seats and its quality score, as this week's tick flew them.
+      const aiSmart = state.smartRivalsWorld === true;
+      const aiFlown = aiSmart ? new Map((report.routeResults ?? []).map(rr => [rr.routeId, rr])) : null;
+      const aiPlayerRoutes = state.routes.map(r => {
+        const flown = aiFlown?.get(r.id);
+        return {
+          origin:          r.origin,
+          destination:     r.destination,
+          weeklyFrequency: r.weeklyFrequency,
+          ticketPrice:     state.routePricing?.[routePairKey(r.origin, r.destination)]?.economy
+                             ?? r.ticketPrice,
+          ...(flown?.configuredSeatsOneWay > 0 && r.weeklyFrequency > 0
+            ? { seats: flown.configuredSeatsOneWay / r.weeklyFrequency } : {}),
+          ...(flown?.qualityScore != null ? { quality: flown.qualityScore } : {}),
+        };
+      });
       const { competitors: aiCompetitors, events: competitorEvents, entrants: aiEntrants } =
         tickCompetitorAI(currentCompetitors, {
           weekNumber,
@@ -6611,6 +6662,8 @@ function reducer(state, action) {
           cargo:             state.rivalFreight === true,
           // Refuelling stops + listed routes as goals (new games only).
           stopsWorld:        state.rivalStopsWorld === true,
+          // Smart rivals (models/rivalBrain.js; new games only).
+          smart:             aiSmart,
           playerCargoRoutes: state.cargoRoutes ?? [],
           playerFleet:       state.fleet ?? [],
           // Production-line games: rivals order aircraft off the shared lines
@@ -6632,6 +6685,9 @@ function reducer(state, action) {
       // instead of hoarding (keeps late-game acquisitions attainable).
       const approxMonth = gameMonth;
       const compPairCounts = buildPairIncumbents(aiCompetitors, state.routes);
+      // Smart-rival worlds: the books are kept on the pair contest — what each
+      // airline, you included, offers on each city pair after this week's moves.
+      if (aiSmart) aiWorld.contest = buildPairContest(aiCompetitors, aiPlayerRoutes);
       // Freight lanes share their pool the same way: every rival freighter and
       // the player's, on the lanes as they stand after this week's moves.
       const compCargoContest = aiCompetitors.some(c => c.cargoRoutes && Object.keys(c.cargoRoutes).length)
@@ -6640,7 +6696,8 @@ function reducer(state, action) {
         const stats            = withCargoStats(
           computeCompetitorWeeklyStats(c, approxMonth, compPairCounts, aiWorld),
           compCargoContest ? computeCompetitorCargoStats(c, { month: approxMonth, contest: compCargoContest, world: aiWorld }) : null);
-        const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit);
+        const newCompCash      = (c.cash ?? 0) + retainedProfit(c.cash ?? 0, stats.weeklyProfit,
+          aiSmart ? { weeklyCost: stats.weeklyCost } : undefined);
         const newProfitHistory = [...(c.profitHistory ?? []), stats.weeklyProfit].slice(-12);
         const { marketCap: compMarketCap, sharePrice: compSharePrice } =
           computeMarketCap(newProfitHistory, newCompCash, c.baseQualityScore, {
@@ -6659,7 +6716,12 @@ function reducer(state, action) {
       // Dramatic market news → toasts (launch/boost/cut stay in the debrief feed).
       for (const ev of competitorEvents) {
         if (ev.type === 'bankrupt') {
-          newToasts.push({ type: 'warning', title: `✈️ ${ev.name} Collapses`, message: ev.description, duration: 9000 });
+          newToasts.push({ type: 'warning', title: `✈️ ${ev.name} Collapses`, duration: 9000,
+            message: ev.fleet?.length
+              ? `${ev.description} ${ev.fleet.length} aircraft are for sale on the Competition tab for ${LIQUIDATION_WEEKS} weeks.`
+              : ev.description });
+        } else if (ev.type === 'restructure') {
+          newToasts.push({ type: 'info', title: `⚖️ ${ev.name} Restructures`, message: ev.description, duration: 9000 });
         } else if (ev.type === 'ceased') {
           newToasts.push({ type: 'info', title: `🛬 ${ev.name} Ceases Operations`, message: ev.description, duration: 9000 });
         } else if (ev.type === 'merger') {
@@ -7299,6 +7361,11 @@ function reducer(state, action) {
           ? { marketDev: advanceMarketDev(state, { month: weekToGameDate(state.week).monthIndex }) }
           : {}),
         ...(state.rivalEntrants ? { rivalEntrants: aiEntrants ?? state.rivalEntrants } : {}),
+        // Liquidation sales (models/liquidation.js): a closed rival's aircraft,
+        // on sale for a few weeks. The key exists only once something is listed.
+        ...((state.liquidationLots?.length || competitorEvents.some(e => e.type === 'bankrupt' && e.fleet?.length))
+          ? { liquidationLots: [...liveLots(state.liquidationLots, weekNumber + 1), ...lotsFromEvents(competitorEvents, weekNumber + 1)] }
+          : {}),
         encroachments:     updatedEncroachments,
         hubs:              hubsAfterBuild,
         hubConstruction:   newHubConstruction,
