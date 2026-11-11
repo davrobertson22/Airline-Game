@@ -2072,6 +2072,33 @@ input[type="range"].hw-range:focus-visible { outline: 2px solid var(--accent-dim
 .sched-leg-code { color: var(--accent-bright); font-weight: 600; }
 .sched-arrow { color: var(--text-dim); margin: 0 6px; }
 .sched-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* Typed departure times: one flight's own time, and the route's week as rows of a time and its days. */
+.sched-nudge { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; }
+.sched-time {
+  width: 62px; box-sizing: border-box; text-align: center; font-family: var(--font-mono); font-size: 13px; padding: 5px 4px;
+  background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text);
+}
+.sched-time:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.sched-time[aria-invalid="true"] { border-color: var(--red); }
+.sched-time::placeholder { color: var(--text-dim); }
+.sched-tt { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border-subtle); padding-top: 10px; }
+.sched-tt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+.sched-tt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sched-daypick { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.sched-daypick button {
+  width: 32px; padding: 5px 0; background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer;
+}
+.sched-daypick button + button { border-left: 1px solid var(--border); }
+.sched-daypick button[aria-pressed="true"] { background: var(--accent-dim); color: var(--accent-bright); font-weight: 600; }
+.sched-daypick button:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+.sched-tt-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.sched-add { background: none; border: none; padding: 0; font-size: 12px; color: var(--text-muted); cursor: pointer; text-decoration: underline dotted; }
+.sched-add:hover { color: var(--text); }
+.sched-meta.is-bad { color: var(--red); }
+.sched-notice { font-size: 12px; line-height: 1.5; padding: 7px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); border-left-width: 3px; color: var(--text); }
+.sched-notice.is-ok { border-left-color: var(--green); }
+.sched-notice.is-warn { border-left-color: var(--yellow); }
+.sched-notice.is-bad { border-left-color: var(--red); }
 /* Charters (Tailwinds): fixed, so hatched and never a grab cursor. */
 .sched-key-charter { background: repeating-linear-gradient(135deg, var(--yellow) 0 3px, transparent 3px 6px); border: 1px solid var(--yellow); }
 .sched-block.is-charter {
@@ -2083,6 +2110,10 @@ input[type="range"].hw-range:focus-visible { outline: 2px solid var(--accent-dim
 .sched-chip.is-charter { cursor: pointer; }
 @media (max-width: 640px) {
   .sched-label { padding: 4px 6px; }
+  /* 16px stops iOS zooming the page when a time box takes focus; bigger day buttons for thumbs. */
+  .sched-time { font-size: 16px; width: 72px; padding: 7px 4px; }
+  .sched-daypick button { width: 36px; padding: 9px 0; font-size: 12px; }
+  .sched-nudge { margin-left: 0; }
 }
 
 /* Segmented toggle (Satellite / Dark) — ported from Headwinds, where it also
@@ -2569,3 +2600,29 @@ body:has(.app-layout-map) .toast-stack { right: 70px !important; bottom: 100px !
 .cabin-product-extra { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
 .cabin-product-extra input { margin: 0; }
 .cabin-product-extra.is-off { opacity: .4; cursor: not-allowed; }
+
+/* ── Order form: cabin designer (AircraftCheckout) ──────────────────────── */
+.checkout-modal { max-width: 540px; }
+.checkout-plan {
+  --cabin-plan-max-h: min(46vh, 380px);
+  margin: 0 0 12px; padding: 8px 4px;
+  background: var(--surface); border-radius: 10px;
+}
+@media (max-width: 640px) {
+  .checkout-plan { --cabin-plan-max-h: 70vh; }
+}
+@media (min-width: 1100px) {
+  .checkout-modal.has-plan {
+    max-width: 1180px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 540px; align-items: start;
+  }
+  /* Pinned for the whole scroll: the column is one viewport of the modal
+     tall (not as tall as the form, or sticky has nowhere to stick). */
+  .checkout-modal.has-plan > .checkout-plan {
+    --cabin-plan-max-h: calc(92vh - 120px);
+    position: sticky; top: 0; align-self: start;
+    height: calc(92vh - 2px); margin: 0; padding: 14px 10px;
+    border-radius: 10px 0 0 10px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+}

@@ -169,7 +169,7 @@ import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxS
          isLegalEraStartYear, ERA_MIN_START_YEAR, ERA_MAX_START_YEAR,
          HORIZON_YEAR, horizonReached, pastHorizon } from '../data/era.js';
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
-import { productDenial } from '../data/seatProducts.js';
+import { productDenial, productFittingCost } from '../data/seatProducts.js';
 import { cleanHex, normalizeAirlineCode } from '../utils/logoBranding.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
@@ -2354,6 +2354,11 @@ function reducer(state, action) {
                             && canFitWifi(type)
                             && featureLive('wifi', calendarYear(state));
       const wifiFitCost     = wantsWifi ? wifiInstallCost() : 0;
+      // Seat products fitted on the line (lie-flats, suites, screens, a bar —
+      // data/seatProducts.js). Owned: part of the contract, like the Wi-Fi
+      // package. Leased: due at signing with the deposit. The same figure a
+      // refit to this cabin would charge, so ordering it is not a free refit.
+      const productFitCost  = productFittingCost(null, action.config);
       const fuelMod  = Math.round(engineFuelMod  * wingtipFuelMod  * 10000) / 10000;
       const rangeMod = Math.round(                  wingtipRangeMod * 10000) / 10000;
       const maintMod = Math.round(engineMaintMod                    * 10000) / 10000;
@@ -2380,7 +2385,7 @@ function reducer(state, action) {
       let orderQty  = quantity;
       let orderDisc = 0;
       if (action.ownershipType === 'owned') {
-        const unitCostAt = (disc) => Math.round(Math.round(eraPurchasePrice(type) * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost;
+        const unitCostAt = (disc) => Math.round(Math.round(eraPurchasePrice(type) * (1 - disc)) * enginePriceMod) + wingtipCost + wifiFitCost + productFitCost;
         const discountFor = (q) => isLaunch ? launchOrderDiscount(state, type, q) : orderDiscount(q);
         while (orderQty > 0) {
           orderDisc = discountFor(orderQty);
@@ -2449,13 +2454,13 @@ function reducer(state, action) {
         // here as well would bill for the same antenna twice.
         // Staged: the contract covers the airframe AND the line-fitted
         // connectivity package, and only the signing-week payments leave now.
-        const contractPrice   = unitTotalPrice + wifiFitCost;
+        const contractPrice   = unitTotalPrice + wifiFitCost + productFitCost;
         const schedule        = staged ? buildPaymentSchedule(contractPrice, currentAbsWeek, deliverAbsWeek) : null;
         const unitUpfrontCost = staged
           ? signingAmount(schedule, currentAbsWeek)
           : action.ownershipType === 'owned'
             ? contractPrice
-            : leaseDeposit + slotPremium;
+            : leaseDeposit + slotPremium + productFitCost;
         const canSign = staged
           ? cashBalance >= committedPreDelivery(runningPending) + preDeliveryTotal(contractPrice)
           : cashBalance >= unitUpfrontCost;

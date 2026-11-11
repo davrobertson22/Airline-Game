@@ -8,6 +8,7 @@ import {
   CLASS_SPACE_MULTIPLIERS,
   SEAT_QUALITY_COST_PER_ROUTE,
   SERVICE_QUALITY_COST_PER_ROUTE,
+  classSpaceUnits,
   weekToGameDate,
   configRangeMod, calendarYear, cruiseSpeedKmh, typicalSeatsOf } from '../utils/simulation.js';
 import {
@@ -20,6 +21,10 @@ import { makeSlotAllocator, slotPremiumPct, slotCalendar, launchWindow, launchOr
 import { withLineBook } from '../models/lineBook.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
+import CabinFloorPlan from './CabinFloorPlan.jsx';
+import { CabinBrushes, ProductRow, useMediaQuery } from './CabinDesigner.jsx';
+import { liveryFor } from '../data/livery.js';
+import { CABIN_KEYS, productFittingCost, productWeeklyCost, defaultProducts, compactProducts } from '../data/seatProducts.js';
 import { ReplacesSection, replacesForDispatch } from './FleetRenewal.jsx';
 import {
   buildPaymentSchedule, preDeliveryTotal, signingAmount, committedPreDelivery,
@@ -139,7 +144,9 @@ function ClassRow({ label, color, fareLabel, spaceLabel, value, max, onChange })
 
 // `replaceIds` presets the "Replaces" block (Fleet ▸ bulk replace); `onOrdered`
 // runs after a successful dispatch, before onClose.
-export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = null, onOrdered = null }) {
+//   initialConfig: an optional cabin to open the form with (classes, seat and
+//             service grade, products) instead of the type's typical cabin.
+export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = null, onOrdered = null, initialConfig = null }) {
   const { state, dispatch } = useGame();
   const { cash, fleet, pendingOrders = [], year, week } = state;
 
@@ -193,25 +200,63 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const [customName, setCustomName] = useState('');
 
   // ── Cabin configuration ───────────────────────────────────────────────────
-  const [first, setFirstRaw] = useState(0);
-  const [biz,   setBizRaw]   = useState(0);
-  const [prem,  setPremRaw]  = useState(0);
+  const [first, setFirstRaw] = useState(initialConfig?.firstClass ?? 0);
+  const [biz,   setBizRaw]   = useState(initialConfig?.businessClass ?? 0);
+  const [prem,  setPremRaw]  = useState(initialConfig?.premiumEconomy ?? 0);
   // A new aircraft arrives at the type's TYPICAL seating, where its headline range
   // applies; packing it up to the exit limit costs range (payloadRangeMod).
-  const [eco,   setEcoRaw]   = useState(typicalSeatsOf(type));
-  const [seatQ, setSeatQ]    = useState('standard');
-  const [servQ, setServQ]    = useState('standard');
+  const [eco,   setEcoRaw]   = useState(initialConfig?.economy ?? typicalSeatsOf(type));
+  const [seatQ, setSeatQ]    = useState(initialConfig?.seatQuality ?? 'standard');
+  const [servQ, setServQ]    = useState(initialConfig?.serviceQuality ?? 'standard');
+  // The cabin designer (CabinDesigner.jsx), the same one the refit modal uses:
+  // what is bolted into each cabin, and the brush for painting on the plan.
+  // Designing the cabin here means the aircraft is DELIVERED with it — no
+  // refit, no weeks in the shop after it arrives (Discord: VF84, 2026-11-08).
+  const [products, setProducts] = useState(() => ({ ...defaultProducts(), ...(initialConfig?.products ?? {}) }));
+  const [brush, setBrush]       = useState('businessClass');
+  // Wide screens put the plan beside the form; otherwise it sits in the cabin
+  // section, nose-up on phones. False during SSR, so the inline plan is the
+  // markup every test and first paint sees.
+  const wide   = useMediaQuery('(min-width: 1100px)');
+  const narrow = useMediaQuery('(max-width: 640px)');
 
   // Every hook above has now run unconditionally. Safe to bail.
   if (!type) return null;
 
+  const calYear = calendarYear(state);   // era worlds: product dates, and the new-build premium while the line is open (null = classic)
+  // Floor per seat of each class with THESE products: the number every max,
+  // clamp and the plan agree on (a 28" pitch fits more, a lie-flat fewer).
+  const space = Object.fromEntries(CABIN_KEYS.map(k => [k, classSpaceUnits({ products }, k)]));
+
   // Clamp economy whenever premium classes change to avoid over-allocation
   function clampEco(f, b, p, currentEco) {
-    const premUnits = f * CLASS_SPACE_MULTIPLIERS.firstClass
-                    + b * CLASS_SPACE_MULTIPLIERS.businessClass
-                    + p * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
-    const maxE = Math.max(0, Math.floor((maxSeats - premUnits) / CLASS_SPACE_MULTIPLIERS.economy));
+    const premUnits = f * space.firstClass + b * space.businessClass + p * space.premiumEconomy;
+    const maxE = Math.max(0, Math.floor((maxSeats - premUnits + 1e-9) / space.economy));
     return Math.min(currentEco, maxE);
+  }
+  // A stroke on the floor plan lands in the same four states the steppers edit.
+  function applyPainted(cfg) {
+    setFirstRaw(cfg.firstClass ?? 0);
+    setBizRaw(cfg.businessClass ?? 0);
+    setPremRaw(cfg.premiumEconomy ?? 0);
+    setEcoRaw(cfg.economy ?? 0);
+  }
+  // Change a cabin's product. If the new seat is bigger than the floor allows,
+  // that cabin gives up seats to fit rather than leaving the layout "over".
+  function setProduct(cls, patch) {
+    const next = { ...products, [cls]: { ...products[cls], ...patch } };
+    const sp = (k) => classSpaceUnits({ products: next }, k);
+    const counts = { firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco };
+    const others = CABIN_KEYS.filter(k => k !== cls).reduce((t, k) => t + counts[k] * sp(k), 0);
+    const fit = Math.max(0, Math.floor((maxSeats - others + 1e-9) / sp(cls)));
+    if (counts[cls] > fit) {
+      ({ firstClass: setFirstRaw, businessClass: setBizRaw, premiumEconomy: setPremRaw, economy: setEcoRaw })[cls](fit);
+    }
+    setProducts(next);
+  }
+  function toggleExtra(cls, key) {
+    const have = products[cls].extras ?? [];
+    setProduct(cls, { extras: have.includes(key) ? have.filter(k => k !== key) : [...have, key] });
   }
   function setFirst(v) { setFirstRaw(v); setEcoRaw(e => clampEco(v,   biz,  prem, e)); }
   function setBiz(v)   { setBizRaw(v);   setEcoRaw(e => clampEco(first, v,   prem, e)); }
@@ -226,32 +271,32 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
     setFirstRaw(f);
     setBizRaw(b);
     setPremRaw(p);
-    setEcoRaw(clampEco(f, b, p, Math.max(0, cfg.economy ?? 0)));
+    // A template saved with products brings them; one without resets to the
+    // defaults, as its seat counts assume the default floor per seat.
+    const tplProducts = { ...defaultProducts(), ...(cfg.products ?? {}) };
+    const sp = (k) => classSpaceUnits({ products: tplProducts }, k);
+    const maxE = Math.max(0, Math.floor((maxSeats - f * sp('firstClass') - b * sp('businessClass') - p * sp('premiumEconomy') + 1e-9) / sp('economy')));
+    setEcoRaw(Math.min(Math.max(0, cfg.economy ?? 0), maxE));
     setSeatQ(cfg.seatQuality ?? 'standard');
     setServQ(cfg.serviceQuality ?? 'standard');
+    setProducts(tplProducts);
   }
 
-  const usedUnits = first * CLASS_SPACE_MULTIPLIERS.firstClass
-                  + biz   * CLASS_SPACE_MULTIPLIERS.businessClass
-                  + prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy
-                  + eco   * CLASS_SPACE_MULTIPLIERS.economy;
+  const usedUnits = first * space.firstClass + biz * space.businessClass
+                  + prem * space.premiumEconomy + eco * space.economy;
   const over = usedUnits > maxSeats;
 
   const maxFirst = Math.floor(
-    (maxSeats - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy - eco * CLASS_SPACE_MULTIPLIERS.economy)
-    / CLASS_SPACE_MULTIPLIERS.firstClass
+    (maxSeats - biz * space.businessClass - prem * space.premiumEconomy - eco * space.economy + 1e-9) / space.firstClass
   );
   const maxBiz = Math.floor(
-    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy - eco * CLASS_SPACE_MULTIPLIERS.economy)
-    / CLASS_SPACE_MULTIPLIERS.businessClass
+    (maxSeats - first * space.firstClass - prem * space.premiumEconomy - eco * space.economy + 1e-9) / space.businessClass
   );
   const maxPrem = Math.floor(
-    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass - eco * CLASS_SPACE_MULTIPLIERS.economy)
-    / CLASS_SPACE_MULTIPLIERS.premiumEconomy
+    (maxSeats - first * space.firstClass - biz * space.businessClass - eco * space.economy + 1e-9) / space.premiumEconomy
   );
   const maxEco = Math.max(0, Math.floor(
-    (maxSeats - first * CLASS_SPACE_MULTIPLIERS.firstClass - biz * CLASS_SPACE_MULTIPLIERS.businessClass - prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy)
-    / CLASS_SPACE_MULTIPLIERS.economy
+    (maxSeats - first * space.firstClass - biz * space.businessClass - prem * space.premiumEconomy + 1e-9) / space.economy
   ));
 
   // Revenue index vs all-economy
@@ -269,6 +314,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
 
   // Freighters carry cargo, not passengers — no cabin layout to choose. Pass null
   // so delivery falls back to the (irrelevant) default config.
+  const orderProducts = compactProducts(products);
   const cabinConfig = isFreighter ? null : {
     firstClass:     first,
     businessClass:  biz,
@@ -276,7 +322,11 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
     economy:        eco,
     seatQuality:    seatQ,
     serviceQuality: servQ,
+    // Only carried when something is above the defaults, so an order that
+    // never touched the products is the same action it always was.
+    ...(orderProducts ? { products: orderProducts } : {}),
   };
+  const productsWeekly = cabinConfig ? productWeeklyCost(cabinConfig) : 0;
 
   // ── Engine / wingtip modifiers ────────────────────────────────────────────
   const selectedEngine    = engines.find(e => e.id === selectedEngineId) ?? defaultEngine;
@@ -325,7 +375,6 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
     ? (isLaunch ? launchOrderDiscount(state, type, quantity) : orderDiscount(quantity))
     : 0;
   const discPct         = Math.round(discount * 100);
-  const calYear         = calendarYear(state);   // era new-build premium while the line is open (null = classic)
   const baseUnitPrice   = isLaunch
     ? Math.round(eraPurchasePrice(type, calYear) * (1 - discount))
     : effectivePurchasePrice(type, mode === 'buy' ? quantity : 1, calYear);
@@ -354,7 +403,13 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const wantsWifi       = hasWifi && wifiOffered;
   const unitWifiFee     = (wantsWifi && mode === 'buy') ? wifiInstallCost() : 0;
   const totalWifiFee    = unitWifiFee * quantity;
-  const buyTotalDue     = totalBuyPrice + totalWifiFee;
+  // Seat products fitted on the line (lie-flats, suites, screens, a bar): the
+  // same productFittingCost(null, config) ORDER_AIRCRAFT charges. Owned, it is
+  // part of the contract like the Wi-Fi package; leased, it is due at signing.
+  const unitProductFee  = cabinConfig ? productFittingCost(null, cabinConfig) : 0;
+  const totalProductFee = unitProductFee * quantity;
+  const unitLineFit     = unitWifiFee + (mode === 'buy' ? unitProductFee : 0);
+  const buyTotalDue     = totalBuyPrice + totalWifiFee + totalProductFee;
 
   const baseWeeklyLease  = eraWeeklyLease(type, calYear);
   const engineLeaseAdj   = Math.round(baseWeeklyLease * (enginePriceMod - 1));
@@ -364,7 +419,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const totalWeeklyLease = unitWeeklyLease * quantity;
   const unitLeaseDeposit  = unitWeeklyLease * 12;   // 3 months (12 weeks) upfront
   const totalLeaseDeposit = unitLeaseDeposit * quantity;
-  const leaseDueNow       = totalLeaseDeposit + (mode === 'lease' ? totalSlotPremium : 0);
+  const leaseDueNow       = totalLeaseDeposit + (mode === 'lease' ? totalSlotPremium + totalProductFee : 0);
 
   // ── Staged payments (order book §2) ──────────────────────────────────────
   // Under the `orderBook` flag an owned order pays a deposit now, instalments
@@ -374,7 +429,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   // quote and the charge cannot disagree.
   // Launch orders are bought outright (no staged payments), as the reducer does.
   const staged          = mode === 'buy' && state.orderBook === true && !isLaunch;
-  const unitContract    = unitBuyPrice + unitWifiFee;
+  const unitContract    = unitBuyPrice + unitLineFit;
   const unitPreDelivery = preDeliveryTotal(unitContract);
   const committedPdp    = staged ? committedPreDelivery(pendingOrders) : 0;
   // Each frame's contract carries its own early-slot premium.
@@ -395,7 +450,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const maxAffordable = staged
     ? Math.max(0, Math.floor((cash - committedPdp) / Math.max(1, unitPreDelivery)))
     : mode === 'buy'
-      ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitWifiFee)))
+      ? Math.max(0, Math.floor(cash / (unitBuyPrice + unitLineFit)))
       : Math.max(0, Math.floor(cash / unitLeaseDeposit));
 
   function setQty(n) { setQuantity(Math.max(isLaunch ? launchTerms.minQty : 1, Math.min(100, n))); }
@@ -430,6 +485,23 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
     onClose();
   }
 
+  // The cabin plan: brushes + the paintable aircraft. One element, rendered
+  // beside the form on wide screens and inside the cabin section otherwise.
+  const cabinPlan = isFreighter ? null : (
+    <>
+      <CabinBrushes brush={brush} onBrush={setBrush} />
+      <CabinFloorPlan
+        type={type}
+        config={cabinConfig}
+        livery={liveryFor(state)}
+        maxSeats={maxSeats}
+        maxHeight="var(--cabin-plan-max-h)"
+        orientation={narrow ? 'vertical' : 'horizontal'}
+        editable={{ brush, onChange: applyPainted }}
+      />
+    </>
+  );
+
   // Shared section header style
   const sectionTitle = {
     fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
@@ -444,11 +516,19 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{
+      <div className={`checkout-modal${wide && !isFreighter ? ' has-plan' : ''}`} style={{
         background: 'var(--surface2)', borderRadius: 10,
-        maxWidth: 540, width: '100%', maxHeight: '92vh', overflowY: 'auto',
+        width: '100%', maxHeight: '92vh', overflowY: 'auto',
         border: '1px solid var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
       }}>
+        {/* Wide screens: the cabin plan stays pinned beside the form, so it
+            changes as the classes and products below are edited. */}
+        {wide && !isFreighter && (
+          <div className="checkout-plan" data-checkout-plan="side">
+            {cabinPlan}
+          </div>
+        )}
+        <div className="checkout-form">
         <AircraftPhoto src={type.image} alt={type.name} category={type.category} />
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -717,21 +797,17 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             {/* Saved templates */}
             <CabinTemplatePicker
               typeId={typeId}
-              currentConfig={{ firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco, seatQuality: seatQ, serviceQuality: servQ }}
+              currentConfig={cabinConfig}
               onApply={applyTemplate}
             />
 
-            {/* Seat bar */}
-            <div style={{ height: 12, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
-              {[
-                { units: first * CLASS_SPACE_MULTIPLIERS.firstClass,     color: CLASS_COLORS.firstClass },
-                { units: biz   * CLASS_SPACE_MULTIPLIERS.businessClass,  color: CLASS_COLORS.businessClass },
-                { units: prem  * CLASS_SPACE_MULTIPLIERS.premiumEconomy, color: CLASS_COLORS.premiumEconomy },
-                { units: eco   * CLASS_SPACE_MULTIPLIERS.economy,        color: CLASS_COLORS.economy },
-              ].map((seg, i) => seg.units > 0 && (
-                <div key={i} style={{ width: `${(seg.units / maxSeats) * 100}%`, background: seg.color }} />
-              ))}
-            </div>
+            {/* The cabin, drawn in the aircraft and paintable — the same
+                designer as the refit modal. Beside the form on wide screens. */}
+            {!wide && (
+              <div className="checkout-plan" data-checkout-plan="inline">
+                {cabinPlan}
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
               <span style={{ color: over ? 'var(--red)' : undefined }}>
                 {over
@@ -745,26 +821,26 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             <ClassRow
               label="First Class" color={CLASS_COLORS.firstClass}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.firstClass}× fare`}
-              spaceLabel={`${CLASS_SPACE_MULTIPLIERS.firstClass}× space`}
+              spaceLabel={`${+space.firstClass.toFixed(2)}× space`}
               value={first} max={maxFirst} onChange={setFirst}
             />
             <ClassRow
               label="Business Class" color={CLASS_COLORS.businessClass}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.businessClass}× fare`}
-              spaceLabel={`${CLASS_SPACE_MULTIPLIERS.businessClass}× space`}
+              spaceLabel={`${+space.businessClass.toFixed(2)}× space`}
               value={biz} max={maxBiz} onChange={setBiz}
             />
             <ClassRow
               label="Premium Economy" color={CLASS_COLORS.premiumEconomy}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.premiumEconomy}× fare`}
-              spaceLabel={`${CLASS_SPACE_MULTIPLIERS.premiumEconomy}× space`}
+              spaceLabel={`${+space.premiumEconomy.toFixed(2)}× space`}
               value={prem} max={maxPrem} onChange={setPrem}
             />
 
             <ClassRow
               label="Economy" color={CLASS_COLORS.economy}
               fareLabel={`${CLASS_FARE_MULTIPLIERS.economy}× fare`}
-              spaceLabel={`${CLASS_SPACE_MULTIPLIERS.economy}× space`}
+              spaceLabel={`${+space.economy.toFixed(2)}× space`}
               value={eco} max={maxEco} onChange={setEco}
             />
             {/* Sparse-cabin range callout */}
@@ -808,7 +884,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Service Quality</div>
                 <select
-                  value={servQ} onChange={e => setServQ(e.target.value)}
+                  value={servQ} onChange={e => setServQ(e.target.value)} data-service-quality
                   style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', cursor: 'pointer' }}
                 >
                   {QUALITY_OPTIONS.map(o => (
@@ -821,6 +897,34 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Cabin products: fitted on the line, so the aircraft arrives with them */}
+            <div style={{ marginTop: 14 }} data-cabin-products>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Cabin products</div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>
+                Fitted on the production line: the aircraft is delivered with this cabin, with no refit and no time in the shop.
+                A bigger seat takes more floor and its cabin gives up seats to fit.
+              </div>
+              {CABIN_KEYS.filter(k => ({ firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco })[k] > 0).map(cls => (
+                <ProductRow
+                  key={cls}
+                  cls={cls}
+                  seats={({ firstClass: first, businessClass: biz, premiumEconomy: prem, economy: eco })[cls]}
+                  products={products}
+                  currentConfig={null}
+                  showChanged={false}
+                  calYear={calYear}
+                  type={type}
+                  onTier={tier => setProduct(cls, { tier })}
+                  onExtra={key => toggleExtra(cls, key)}
+                />
+              ))}
+              {productsWeekly > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--red)', marginTop: 6 }}>
+                  Product upkeep +{formatMoney(productsWeekly)}/route/wk
+                </div>
+              )}
             </div>
 
             {/* Revenue preview */}
@@ -893,6 +997,12 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }}>
                     <span>Wi-Fi package — one-off{quantity > 1 ? ` × ${quantity}` : ''}</span>
                     <span style={{ color: 'var(--text)' }}>+{formatMoney(totalWifiFee)}</span>
+                  </div>
+                )}
+                {totalProductFee > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: 'var(--text-muted)' }} data-product-fee>
+                    <span>Cabin products — one-off{quantity > 1 ? ` × ${quantity}` : ''}</span>
+                    <span style={{ color: 'var(--text)' }}>+{formatMoney(totalProductFee)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 700, fontSize: 15 }}>
@@ -989,6 +1099,12 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                     <span style={{ color: 'var(--yellow)' }}>{formatMoney(totalSlotPremium)}</span>
                   </div>
                 )}
+                {totalProductFee > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontWeight: 700, fontSize: 14 }} data-product-fee>
+                    <span>Cabin products, one-off (due now)</span>
+                    <span style={{ color: canAfford ? 'var(--green)' : 'var(--red)' }}>{formatMoney(totalProductFee)}</span>
+                  </div>
+                )}
                 {!canAfford && (
                   <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, textAlign: 'right' }}>
                     Need {formatMoney(leaseDueNow - cash)} more{maxAffordable > 0 ? ` · can afford ${maxAffordable}` : ''}
@@ -1062,6 +1178,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             </button>
           </div>
 
+        </div>
         </div>
       </div>
     </div>

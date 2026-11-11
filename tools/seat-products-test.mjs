@@ -233,5 +233,17 @@ test('an order with a product the era refuses is refused', () => {
   assert.equal((out.pendingOrders ?? []).length, (base.pendingOrders ?? []).length, 'nothing ordered');
 });
 
+test('an order pays for the products on the line (owned: in the contract; leased: at signing)', () => {
+  const base = { ...freshState(), phase: 'playing', cash: 5e8, year: 1, week: 1 };
+  const cfgPlain = legacy({ businessClass: 12, economy: 150 });
+  const cfgBeds  = withProducts({ businessClass: 12, economy: 150 }, flatJ);
+  for (const ownershipType of ['owned', 'lease']) {
+    const plain = gameReducer(base, { type: 'ORDER_AIRCRAFT', typeId: 'a320neo', ownershipType, quantity: 1, config: cfgPlain });
+    const beds  = gameReducer(base, { type: 'ORDER_AIRCRAFT', typeId: 'a320neo', ownershipType, quantity: 1, config: cfgBeds });
+    assert.ok(plain.cash < base.cash, `the ${ownershipType} order went through`);
+    assert.equal(plain.cash - beds.cash, 12 * 40_000, `${ownershipType}: the beds cost exactly their fitting`);
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
