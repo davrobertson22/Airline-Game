@@ -17,6 +17,7 @@ import { WorldPreview, AutoRoller, useCopyText, fmtRollPct } from './DemandWorld
 import { loadAirportMarkets } from './AllAirportsTable.jsx';
 import { DEMAND_MODEL_LATEST } from '../utils/market.js';
 import { parseRivalSet, splitRivalSet, exampleRivalSet, RIVAL_SET_MAX_START } from '../models/rivalSets.js';
+import { SANDBOX_CASH_PRESETS, SANDBOX_CASH_MIN, SANDBOX_CASH_MAX, sandboxStartCash, parseSandboxCash } from '../models/sandbox.js';
 
 // ── Accent colour palette ────────────────────────────────────────────────────
 // Lives in utils/logoBranding.js now (the rival colours draw from it too);
@@ -125,6 +126,11 @@ export default function SetupScreen() {
   const [bellyCargo,        setBellyCargo]        = useState(true);
   const [hubBanks,          setHubBanks]          = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
+  // Sandbox (models/sandbox.js): chosen here and fixed for the life of the game.
+  const [sandbox,           setSandbox]           = useState(false);
+  const [sandboxPick,       setSandboxPick]       = useState(250_000_000);   // a preset, or 'custom'
+  const [sandboxText,       setSandboxText]       = useState('');
+  const [sandboxInstant,    setSandboxInstant]    = useState(false);
   const cardRef = useRef(null);
 
   // Each step renders in place, so the window keeps the scroll offset from the
@@ -153,7 +159,11 @@ export default function SetupScreen() {
   // Founders' equity shown in the subtitle. Reads the live constant (never a
   // hardcoded figure) and follows the era picker, since an era start is seeded
   // on the era-scaled amount rather than the modern one.
-  const seedCapital      = eraSeedCapital(STARTING_CAPITAL, eraInvalid ? null : startYear);
+  // A sandbox opens on the money the player chose, era-scaled the same way.
+  const sandboxTyped     = sandboxPick === 'custom' ? parseSandboxCash(sandboxText) : null;
+  const sandboxInvalid   = sandbox && sandboxPick === 'custom' && sandboxTyped == null;
+  const sandboxCash      = sandboxStartCash(sandboxPick === 'custom' ? (sandboxTyped ?? STARTING_CAPITAL) : sandboxPick);
+  const seedCapital      = eraSeedCapital(sandbox ? sandboxCash : STARTING_CAPITAL, eraInvalid ? null : startYear);
   const seedCapitalLabel = `$${seedCapital.toLocaleString('en-US')}`;
 
   const seedValue   = cleanDemandSeed(demandSeed);
@@ -201,7 +211,7 @@ export default function SetupScreen() {
     // hub. Treat a stray submit as "next step", never as "launch".
     if (step < 3) { if (canContinue) setStep(s => s + 1); return; }
     if (!airlineName.trim()) { setStep(1); return; }
-    if (eraInvalid || seedInvalid || rivalInvalid || rolling) return;
+    if (eraInvalid || seedInvalid || rivalInvalid || sandboxInvalid || rolling) return;
     // A randomized world is rolled here, not in the reducer: it needs the
     // generated market table (~200 KB, loaded on demand) to place the tier lines.
     let demandWorld = null;
@@ -242,6 +252,7 @@ export default function SetupScreen() {
       ...(!bellyCargo ? { bellyCargo: false } : {}),
       ...(!hubBanks ? { hubBanks: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
+      ...(sandbox ? { sandbox: true, startCash: sandboxCash, ...(sandboxInstant ? { sandboxInstantDelivery: true } : {}) } : {}),
     });
   }
 
@@ -469,6 +480,89 @@ export default function SetupScreen() {
           {/* ════ STEP 3 — Options & launch ════ */}
           <div style={{ display: step === 3 ? 'block' : 'none' }}>
 
+          {/* ── Sandbox (models/sandbox.js) ── */}
+          <div className="form-group">
+            <label className="form-label"><Glyph e="🧪" /> Sandbox</label>
+            <button
+              type="button"
+              aria-pressed={sandbox}
+              onClick={() => {
+                const on = !sandbox;
+                setSandbox(on);
+                // A sandbox is for trying things: objectives start off (switch
+                // them back on below if you want them).
+                setEnableObjectives(!on);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                padding: '12px 14px', background: 'var(--surface2)',
+                border: `1px solid ${sandbox ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0,
+                background: sandbox ? 'var(--accent)' : 'var(--surface3)', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: 2, left: sandbox ? 18 : 2, width: 16, height: 16,
+                  borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>Sandbox game</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {sandbox
+                    ? 'Choose your starting money and try anything: aircraft, marketing, loyalty, hubs. The game is marked Sandbox for its whole life.'
+                    : 'Start with the money you choose, to try things out. Off: the usual $10M start.'}
+                </div>
+              </div>
+            </button>
+            {sandbox && (
+              <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 6 }}>Starting money</div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {[...SANDBOX_CASH_PRESETS, 'custom'].map(v => {
+                    const on = sandboxPick === v;
+                    const label = v === 'custom' ? 'Custom'
+                      : v >= 1e9 ? `$${v / 1e9}B` : `$${v / 1e6}M`;
+                    return (
+                      <button key={v} type="button" onClick={() => setSandboxPick(v)} aria-pressed={on}
+                        style={{
+                          padding: '4px 10px', fontSize: 12, borderRadius: 14, cursor: 'pointer',
+                          border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                          background: on ? 'rgba(56,139,253,0.15)' : 'var(--surface2)',
+                          color: on ? 'var(--accent)' : 'var(--text-muted)',
+                        }}>{label}</button>
+                    );
+                  })}
+                  {sandboxPick === 'custom' && (
+                    <input className="form-input" type="text" inputMode="decimal" value={sandboxText}
+                      onChange={e => setSandboxText(e.target.value)} placeholder="e.g. 400m or 2b"
+                      aria-label="Starting money" aria-invalid={sandboxInvalid}
+                      style={{ width: 140, padding: '4px 8px', fontSize: 12 }} />
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: sandboxInvalid && sandboxText.trim() ? 'var(--red)' : 'var(--text-muted)', marginTop: 6 }}>
+                  {sandboxInvalid
+                    ? (sandboxText.trim() ? 'That isn\u2019t an amount. Try 400m, 2b or 75,000,000.' : `Type any amount from $${SANDBOX_CASH_MIN / 1e6}M to $${SANDBOX_CASH_MAX / 1e9}B.`)
+                    : startYear != null
+                      ? <>You start with <strong>{seedCapitalLabel}</strong>: era games scale it to {startYear} money, like the usual $10M.</>
+                      : <>You start with <strong>{seedCapitalLabel}</strong> of founders' equity.</>}
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={sandboxInstant} onChange={e => setSandboxInstant(e.target.checked)} />
+                  Instant deliveries
+                </label>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+                  {sandboxInstant
+                    ? 'Aircraft arrive the moment you sign, paid in full, with no wait on the factory line. Crew you hire start work at once.'
+                    : 'Aircraft come off the factory line and crew train, as in a normal game.'}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Board Objectives toggle ── */}
           <div className="form-group">
             <label className="form-label">Game Options</label>
@@ -516,7 +610,7 @@ export default function SetupScreen() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {enableObjectives
                     ? 'Earn cash rewards by hitting strategic milestones and financial targets'
-                    : 'Sandbox mode, no objectives, play freely'}
+                    : 'No objectives, play freely'}
                 </div>
               </div>
             </button>
@@ -946,9 +1040,10 @@ export default function SetupScreen() {
                 key="wizard-launch"
                 type="button"
                 className="btn btn-primary"
-                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: rolling || rivalInvalid ? 0.6 : 1 }}
-                disabled={rolling || rivalInvalid}
-                title={rivalInvalid ? 'Fix the rival set, or switch back to random rivals' : undefined}
+                style={{ flex: 1, padding: 12, fontSize: 15, fontWeight: 700, opacity: rolling || rivalInvalid || sandboxInvalid ? 0.6 : 1 }}
+                disabled={rolling || rivalInvalid || sandboxInvalid}
+                title={rivalInvalid ? 'Fix the rival set, or switch back to random rivals'
+                  : sandboxInvalid ? 'Type a starting amount for the sandbox, like 400m or 2b' : undefined}
                 onClick={handleStart}
               >
                 {rolling ? 'Rolling the world…' : 'Launch Airline →'}

@@ -19,6 +19,7 @@ import { absoluteWeek } from '../utils/fuel.js';
 import { deliverySchedule, deliveryLead } from '../data/delivery.js';
 import { makeSlotAllocator, slotPremiumPct, slotCalendar, launchWindow, launchOrderDiscount, lineInfo, lineOf } from '../data/productionLines.js';
 import { withLineBook } from '../models/lineBook.js';
+import { instantDeliveryOn } from '../models/sandbox.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import CabinTemplatePicker from './CabinTemplatePicker.jsx';
 import CabinFloorPlan from './CabinFloorPlan.jsx';
@@ -192,6 +193,9 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
     return lw?.open ? lw : null;
   })();
   const isLaunch = !!launchTerms;
+  // Sandbox instant deliveries (models/sandbox.js): the reducer delivers at
+  // signing, off the line and paid in full, so the form quotes exactly that.
+  const instant = instantDeliveryOn(state) && !isLaunch;
   // null = the standard week (no premium); an absWeek = start looking there.
   const [slotFrom, setSlotFrom] = useState(null);
 
@@ -359,13 +363,15 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   const pendingOfType  = pendingOrders.filter(o => o.typeId === typeId);
   // Production lines: the allocator ORDER_AIRCRAFT uses, over the same line
   // (your orders and every rival's), so the weeks on screen are the weeks you get.
-  const lineState = linesWorld ? withLineBook(state, currentAbsWeek) : null;
+  const lineState = linesWorld && !instant ? withLineBook(state, currentAbsWeek) : null;
   const lineAlloc = lineState ? makeSlotAllocator(lineState, type, {
     absWeek:   currentAbsWeek,
     fromWeek:  isLaunch ? null : slotFrom,
     notBefore: isLaunch ? launchTerms.eisAbs : null,
   }) : null;
-  const deliveryWeeks  = lineAlloc
+  const deliveryWeeks  = instant
+    ? Array.from({ length: quantity }, () => currentAbsWeek)
+    : lineAlloc
     ? Array.from({ length: quantity }, () => lineAlloc.take())
     : deliverySchedule(type, pendingOrders, currentAbsWeek, quantity);
   const firstDelivery = deliveryWeeks[0];
@@ -434,7 +440,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
   // unpaid ones already on the book. Same helpers ORDER_AIRCRAFT uses, so the
   // quote and the charge cannot disagree.
   // Launch orders are bought outright (no staged payments), as the reducer does.
-  const staged          = mode === 'buy' && state.orderBook === true && !isLaunch;
+  const staged          = mode === 'buy' && state.orderBook === true && !isLaunch && !instant;
   const unitContract    = unitBuyPrice + unitLineFit;
   const unitPreDelivery = preDeliveryTotal(unitContract);
   const committedPdp    = staged ? committedPreDelivery(pendingOrders) : 0;
@@ -484,7 +490,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
       name:          customName.trim() || null,
       // Production lines: where to start looking for slots (the reducer does
       // the rest). Omitted = the standard week, no premium.
-      slotFromWeek:  linesWorld && !isLaunch && slotFrom != null ? slotFrom : undefined,
+      slotFromWeek:  linesWorld && !isLaunch && !instant && slotFrom != null ? slotFrom : undefined,
       ...(replaces.length && !isLaunch ? { replaces, replaceDisposal } : {}),
     });
     // After the order, so the switch sees the aircraft it has to crew.
@@ -586,7 +592,9 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span><Glyph e="📅" /></span>
               <span>
-                {quantity === 1 ? (
+                {instant ? (
+                  <><strong>Delivered the moment you sign</strong> · Sandbox instant delivery{quantity > 1 ? `, all ${quantity} at once` : ''}</>
+                ) : quantity === 1 ? (
                   <>First delivery in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear})</>
                 ) : (
                   <><strong>{quantity} aircraft</strong> · first in <strong>{firstDelivery - currentAbsWeek}w</strong> (Wk {firstWIM} {firstMon} Y{firstYear}), last in <strong>{lastDelivery - currentAbsWeek}w</strong> (Wk {lastWIM} {lastMon} Y{lastYear}) · {lineAlloc ? `at least ${lineAlloc.gap}w apart` : `every ${lead}w`}</>
@@ -596,7 +604,7 @@ export default function AircraftCheckout({ typeId, mode, onClose, replaceIds = n
                 )}
               </span>
             </div>
-            {quantity > 1 && (
+            {quantity > 1 && !instant && (
               <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(56,139,253,0.2)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                 {deliveryWeeks.map((absW, i) => {
                   const { displayYear: dy, monthName: mn, weekInMonth: wim } = absWeekToDisplay(absW);

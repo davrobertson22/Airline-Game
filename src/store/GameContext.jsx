@@ -179,6 +179,7 @@ import { eraFareIndex, eraFuelMean, ERA_FUEL_MIN_INDEX, eraRevenueScale, eraPaxS
 import { featureLive, ERA_FEATURE_MESSAGE } from '../data/eraFeatures.js';
 import { productDenial, productFittingCost } from '../data/seatProducts.js';
 import { cleanHex, normalizeAirlineCode } from '../utils/logoBranding.js';
+import { sandboxStartCash, instantDeliveryOn } from '../models/sandbox.js';
 
 // How many weeks of the compact long-term KPI series (state.statsHistory) to
 // retain. 1820 weeks = 35 game years — comfortably covers the Statistics page's
@@ -1856,6 +1857,12 @@ function rootReducer(state, action) {
   // after any old tail has been sold.
   // Release before hiring, so the hiring pass sees the airline it will staff.
   if (action?.type === 'ADVANCE_WEEK') return withAutoReplace(state, withAutoRelease(withFleetRenewal(state, next)));
+  // Sandbox instant deliveries arrive mid-week, so a frame that replaces a tail
+  // swaps in now rather than waiting for the tick (then is crewed below).
+  if (action?.type === 'ORDER_AIRCRAFT' && instantDeliveryOn(next)) {
+    const renewed = withFleetRenewal(state, next);
+    return renewed.crewAutoStaff && renewed.crewPipeline && renewed !== state ? withAutoStaff(renewed) : renewed;
+  }
   // Switching release on, or lowering a reserve level with it on, acts at once.
   if (next && next !== state && next.crewAutoRelease && next.crewPipeline
       && (action?.type === 'SET_AUTO_RELEASE' || action?.type === 'SET_RESERVE_TARGET')) {
@@ -1872,6 +1879,53 @@ function rootReducer(state, action) {
     return withAutoStaff(next);
   }
   return next;
+}
+
+// One delivered tail from one order: the weekly tick's deliveries and a
+// sandbox's instant deliveries (models/sandbox.js) both build it here, so an
+// instant aircraft is exactly the aircraft the order would have become.
+// `fleet` is the airline's fleet, for the name of a tail being replaced.
+function aircraftFromOrder(order, { tailNumber, fleet, calYear }) {
+  const ordType = getAircraftType(order.typeId);
+  const DELIVERY_LEASE_TERMS = { 'Turboprop': 52, 'Regional Jet': 78, 'Narrow Body': 104, 'Wide Body': 156 };
+  const deliveredLeaseTerm = order.ownershipType === 'lease'
+    ? (DELIVERY_LEASE_TERMS[ordType?.category] ?? 104)
+    : undefined;
+  return {
+    id:            uid(),
+    typeId:        order.typeId,
+    name:          order.name,
+    tailNumber,
+    status:        'idle',
+    ageWeeks:      eraDeliveredAgeWeeks(ordType, calYear),
+    config:        order.config ?? (ordType ? newAircraftConfig(ordType) : defaultConfig(100)),
+    ownershipType: order.ownershipType,
+    weeklyLease:        order.weeklyLease ?? 0,
+    // Carry the security deposit onto the tail. Without this the money
+    // paid at order time had no record attached to the aircraft, so
+    // nothing downstream — redelivery, early return — could give it back.
+    leaseDeposit:       order.leaseDeposit ?? 0,
+    leaseTermWeeks:     deliveredLeaseTerm,
+    leaseRemainingWeeks: deliveredLeaseTerm,
+    fuelMod:       order.fuelMod   ?? 1.0,
+    rangeMod:      order.rangeMod  ?? 1.0,
+    maintMod:      order.maintMod  ?? 1.0,
+    engineId:      order.engineId  ?? null,
+    engineLabel:   order.engineLabel ?? null,
+    hasWingtips:   order.hasWingtips ?? false,
+    // An order placed BEFORE the airframe gate existed can still be
+    // carrying hasWifi on a Constellation. Gate it at delivery too, or a
+    // pre-change order arrives fitted and pays WIFI_WEEKLY_OPEX forever
+    // on a tail the fleet page says can never be fitted.
+    hasWifi:       (order.hasWifi ?? false) && canFitWifi(ordType),
+    // Fleet renewal: the swap itself runs right after the tick
+    // (withFleetRenewal). Absent on an ordinary delivery.
+    ...(order.replacesAircraftId ? { replacing: {
+      aircraftId: order.replacesAircraftId,
+      name:       (fleet ?? []).find(a => a.id === order.replacesAircraftId)?.name ?? order.replacesName ?? null,
+      disposal:   replaceDisposalOf(order.replaceDisposal),
+    } } : {}),
+  };
 }
 
 // Delivered tails carrying `replacing` take over their predecessor's routes
@@ -2179,7 +2233,12 @@ function reducer(state, action) {
       const _demandModel = action.demandModel === DEMAND_MODEL_CLASSIC ? DEMAND_MODEL_CLASSIC
         : isDemandModel(action.demandModel) ? action.demandModel : DEMAND_MODEL_LATEST;
       setDemandModel(_demandModel);
-      const _startCash = eraSeedCapital(STARTING_CASH, _startYear);
+      // Sandbox (models/sandbox.js): the player chose the starting money. It is
+      // era-scaled exactly like the usual $10M. Outside a sandbox a startCash
+      // on the action is ignored.
+      const _sandbox = action.sandbox === true;
+      const _startCash = eraSeedCapital(_sandbox && action.startCash != null
+        ? sandboxStartCash(action.startCash) : STARTING_CASH, _startYear);
       const _fresh = freshState();
       // Custom rival set (models/rivalSets.js), pasted in at setup. Re-checked
       // here: a set with any error is ignored and the game gets the random
@@ -2264,6 +2323,9 @@ function reducer(state, action) {
           rivalRosterCap: _competitors.length,
           rivalEntrants:  _entrants,
         } : {}),
+        // Sandbox: fixed for the life of the game (no action switches it).
+        ...(_sandbox ? { sandbox: true } : {}),
+        ...(_sandbox && action.sandboxInstantDelivery === true ? { sandboxInstantDelivery: true } : {}),
         ...(action.noRandomStartups === true ? { noRandomStartups: true } : {}),
         ...(action.emptyHub === true ? { emptyHubStart: true } : {}),
         // Field options (setup screen → Rivals). Absent = the usual behaviour.
@@ -2568,7 +2630,11 @@ function reducer(state, action) {
       // world without the flag, take the classic path below unchanged.
       // Launch orders are bought outright, whatever the world: the deal is cash
       // up front for the discount and the first slots on the line.
-      const staged = action.ownershipType === 'owned' && state.orderBook === true && !isLaunch;
+      // Sandbox instant deliveries (models/sandbox.js): the frames arrive at
+      // signing, so they take no slot on the line and an owned frame is paid in
+      // full now. A launch order still waits for entry into service.
+      const instant = instantDeliveryOn(state) && !isLaunch;
+      const staged = action.ownershipType === 'owned' && state.orderBook === true && !isLaunch && !instant;
 
       // Bulk-order discount (owned purchases only) — resolve the affordable quantity
       // first so requesting 100 can't grab the 20% tier on a few affordable frames.
@@ -2605,16 +2671,17 @@ function reducer(state, action) {
       // later frames move on. Default start is the standard week (no premium);
       // an earlier slotFromWeek buys an early slot. Launch frames start at
       // entry into service.
-      const allocator = linesWorld ? makeSlotAllocator(withLineBook(state, currentAbsWeek), type, {
+      const allocator = linesWorld && !instant ? makeSlotAllocator(withLineBook(state, currentAbsWeek), type, {
         absWeek:   currentAbsWeek,
         fromWeek:  isLaunch ? null : (Number.isFinite(action.slotFromWeek) ? action.slotFromWeek : null),
         notBefore: isLaunch ? eraDenial.eisAbs : null,
       }) : null;
 
       for (let i = 0; i < orderQty; i++) {
-        const deliverAbsWeek = allocator
-          ? allocator.peek()
-          : deliverySchedule(type, runningPending, currentAbsWeek, 1)[0];
+        const deliverAbsWeek = instant ? currentAbsWeek
+          : allocator
+            ? allocator.peek()
+            : deliverySchedule(type, runningPending, currentAbsWeek, 1)[0];
         // Early-slot premium on list price: part of an owned frame's price (and
         // so of a staged contract), or a one-off fee on a lease.
         const premiumPct  = allocator ? slotPremiumPct(type, deliverAbsWeek, currentAbsWeek) : 0;
@@ -2712,6 +2779,31 @@ function reducer(state, action) {
             ? { ...p, replacesAircraftId: oldId, replacesName: oldName, replaceDisposal: disposal } : p) };
         }
         runningPending = probe.pendingOrders;
+      }
+
+      // Instant: this batch leaves the book for the fleet now, built exactly as
+      // the tick would build it. A frame that replaces a tail swaps in right
+      // after this action (rootReducer → withFleetRenewal).
+      if (instant) {
+        const batch = new Set(newOrders.map(o => o.id));
+        const arriving = runningPending.filter(o => batch.has(o.id));
+        const fleet = [...state.fleet];
+        for (const o of arriving) {
+          const tailNumber = generateTailNumber(state.hub, state.airlineName, fleet.map(a => a.tailNumber).filter(Boolean));
+          fleet.push(aircraftFromOrder(o, { tailNumber, fleet: state.fleet, calYear: calendarYear(state) }));
+        }
+        const n = arriving.length;
+        return {
+          ...state,
+          cash:          cashBalance,
+          fleet,
+          pendingOrders: runningPending.filter(o => !batch.has(o.id)),
+          pendingToasts: [...(state.pendingToasts ?? []), {
+            type: 'success', icon: '✈', duration: 6000,
+            title: n === 1 ? `Aircraft delivered: ${arriving[0].name}` : `${n} ${type.name}s delivered`,
+            message: `Sandbox instant delivery: ${n === 1 ? 'it is' : 'they are'} in your fleet and ready for routes.`,
+          }],
+        };
       }
 
       return {
@@ -4920,7 +5012,11 @@ function reducer(state, action) {
       // Starter crew: while the airline is still crewing up its first couple of
       // aircraft, hires start work immediately. The training cost is charged
       // either way; only the wait is waived.
-      const { instant, trained } = splitStarterHire(group, count, have, state.fleet ?? [], (a) => getAircraftType(a.typeId));
+      // Sandbox instant deliveries (models/sandbox.js): no wait for anything, so
+      // every hire starts work now, outside the talent market's intake limit.
+      const { instant, trained } = instantDeliveryOn(state)
+        ? { instant: count, trained: 0 }
+        : splitStarterHire(group, count, have, state.fleet ?? [], (a) => getAircraftType(a.typeId));
       const nowAbsWeek   = absoluteWeek(state.year ?? 1, state.week ?? 1);
       const readyAbsWeek = nowAbsWeek + (CREW_LEAD_WEEKS[group] ?? 1);
       // Talent market (models/talentMarket.js): a group can only take on so many
@@ -7285,45 +7381,7 @@ function reducer(state, action) {
           ...deliveredAircraft.map(a => a.tailNumber),
         ].filter(Boolean);
         const tailNumber = generateTailNumber(state.hub, state.airlineName, usedTails);
-        const DELIVERY_LEASE_TERMS = { 'Turboprop': 52, 'Regional Jet': 78, 'Narrow Body': 104, 'Wide Body': 156 };
-        const deliveredLeaseTerm = order.ownershipType === 'lease'
-          ? (DELIVERY_LEASE_TERMS[ordType?.category] ?? 104)
-          : undefined;
-        deliveredAircraft.push({
-          id:            uid(),
-          typeId:        order.typeId,
-          name:          order.name,
-          tailNumber,
-          status:        'idle',
-          ageWeeks:      eraDeliveredAgeWeeks(ordType, calendarYear(state)),
-          config:        order.config ?? (ordType ? newAircraftConfig(ordType) : defaultConfig(100)),
-          ownershipType: order.ownershipType,
-          weeklyLease:        order.weeklyLease ?? 0,
-          // Carry the security deposit onto the tail. Without this the money
-          // paid at order time had no record attached to the aircraft, so
-          // nothing downstream — redelivery, early return — could give it back.
-          leaseDeposit:       order.leaseDeposit ?? 0,
-          leaseTermWeeks:     deliveredLeaseTerm,
-          leaseRemainingWeeks: deliveredLeaseTerm,
-          fuelMod:       order.fuelMod   ?? 1.0,
-          rangeMod:      order.rangeMod  ?? 1.0,
-          maintMod:      order.maintMod  ?? 1.0,
-          engineId:      order.engineId  ?? null,
-          engineLabel:   order.engineLabel ?? null,
-          hasWingtips:   order.hasWingtips ?? false,
-          // An order placed BEFORE the airframe gate existed can still be
-          // carrying hasWifi on a Constellation. Gate it at delivery too, or a
-          // pre-change order arrives fitted and pays WIFI_WEEKLY_OPEX forever
-          // on a tail the fleet page says can never be fitted.
-          hasWifi:       (order.hasWifi ?? false) && canFitWifi(ordType),
-          // Fleet renewal: the swap itself runs right after the tick
-          // (withFleetRenewal). Absent on an ordinary delivery.
-          ...(order.replacesAircraftId ? { replacing: {
-            aircraftId: order.replacesAircraftId,
-            name:       agedFleet.find(a => a.id === order.replacesAircraftId)?.name ?? order.replacesName ?? null,
-            disposal:   replaceDisposalOf(order.replaceDisposal),
-          } } : {}),
-        });
+        deliveredAircraft.push(aircraftFromOrder(order, { tailNumber, fleet: agedFleet, calYear: calendarYear(state) }));
         newToasts.push({
           type:     'success',
           title:    `Aircraft Delivered: ${order.name}`,

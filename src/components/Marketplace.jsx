@@ -26,6 +26,7 @@ import { OrderReplacementLine, OrderFilterBar, useOrderFilter } from './FleetRen
 import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { lineStatus, launchWindow, slotPremiumPct, MAX_TOTAL_DISCOUNT, lineGapWeeks, lineOf } from '../data/productionLines.js';
 import { withLineBook, soloFleetBoard, orderCancelTerms } from '../models/lineBook.js';
+import { instantDeliveryOn } from '../models/sandbox.js';
 import { cancelOrdersDialog } from '../utils/cancelOrdersCopy.js';
 import InfoTip from './InfoTip.jsx';
 import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS, ownedFamilyIds } from '../utils/marketFilters.js';
@@ -721,7 +722,7 @@ function MarketTable({ rows, sort, setSort, onCheckout, calYearRef = null }) {
                   </span>
                   {r.discPct > 0 && <span className="market-chip market-chip-green">-{r.discPct}%</span>}
                 </td>
-                <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{r.launch ? '—' : `${r.delivery}w`}</td>
+                <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{r.launch ? '—' : r.delivery === 0 ? 'Now' : `${r.delivery}w`}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button
                     className="btn btn-primary"
@@ -794,6 +795,8 @@ export default function Marketplace() {
   // Production lines (data/productionLines.js): factory lines shared with the
   // rivals, early slots at a premium, launch customers in era games.
   const linesWorld = state.productionLinesWorld === true;
+  // Sandbox instant deliveries: every order arrives at signing (models/sandbox.js).
+  const instantDel = instantDeliveryOn(state);
   const nowAbsWeek = absoluteWeek(year, week);
   const lineState  = useMemo(() => withLineBook(state, nowAbsWeek),
     [state.productionLinesWorld, state.productionLineScale, state.competitors, pendingOrders, nowAbsWeek]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1186,7 +1189,8 @@ export default function Marketplace() {
             lease:    eraWeeklyLease(type, calYear),
             buy:      buyPrice,
             discPct:  0,
-            delivery: linesWorld && !launchInfo(type)
+            delivery: instantDel && !launchInfo(type) ? 0
+              : linesWorld && !launchInfo(type)
               ? lineStatus(lineState, type, nowAbs).nextStandard - nowAbs
               : nextDeliveryWeeks(type, pendingOrders, nowAbs),
             worldFleet:  board[type.id]?.inService ?? 0,
@@ -1233,7 +1237,7 @@ export default function Marketplace() {
           // Delivery note. Production lines: the next slot at list price on the
           // shared line (rivals' orders included), plus the earliest slot.
           const launch        = launchInfo(type);
-          const ls            = linesWorld && !launch ? lineStatus(lineState, type, currentAbsWeek) : null;
+          const ls            = linesWorld && !launch && !instantDel ? lineStatus(lineState, type, currentAbsWeek) : null;
           const deliveryIn    = ls ? ls.nextStandard - currentAbsWeek : nextDeliveryWeeks(type, pendingOrders, currentAbsWeek);
           const boardRow      = board[type.id];
           const boardAirlines = (boardRow?.customers ?? []).filter(c => c.inService + c.onOrder > 0);
@@ -1430,8 +1434,8 @@ export default function Marketplace() {
                 {/* Delivery note */}
                 {!launch && (
                   <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                    <Glyph e="📅" /> Delivery in <strong>{deliveryIn} week{deliveryIn !== 1 ? 's' : ''}</strong>
-                    {ls ? ' at list price' : onOrder > 0 ? ` (${onOrder} already queued)` : ''}
+                    <Glyph e="📅" /> {instantDel ? <><strong>Delivered at signing</strong> (sandbox)</> : <>Delivery in <strong>{deliveryIn} week{deliveryIn !== 1 ? 's' : ''}</strong>
+                    {ls ? ' at list price' : onOrder > 0 ? ` (${onOrder} already queued)` : ''}</>}
                   </div>
                 )}
                 {ls && (

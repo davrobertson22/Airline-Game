@@ -41,11 +41,13 @@ import OnboardingTour, { TOUR_KEY } from './components/OnboardingTour.jsx';
 import BrandingModal from './components/BrandingModal.jsx';
 import { BRANDING_OPEN_EVENT } from './utils/openBranding.js';
 import { openAlertSettings, tagWeeklyBatch } from './utils/alertPrefs.js';
+import { useNavKeys, reachable, cyclePage, keyHint, classicKey, CLASSIC_KEY_SETTINGS } from './utils/navKeys.js';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
 import useNavFavourites from './hooks/useNavFavourites.js';
 import { toggleNavFavourite, NAV_FAVOURITES_LIMIT } from './utils/navFavourites.js';
 import HeadwindsPitch from './components/HeadwindsPitch.jsx';
+import SandboxBadge from './components/SandboxBadge.jsx';
 
 // Build stamp — injected by vite.config.js `define`. Guarded so non-Vite contexts
 // (e.g. node test harnesses that don't import App) never trip over the globals.
@@ -388,9 +390,15 @@ function AppInner() {
   }, []);
   useCloudSignInReturn(hydrated && !remote && state.phase !== 'setup', openFromCloudSignIn);
 
+  // Number keys for the classic nav bar (utils/navKeys.js). The handler is
+  // filled in below, once the bar is known; the hook has to sit above the
+  // early returns. The map view's keys live in MapShell.
+  const classicNavKeys = useRef(null);
+  useNavKeys((d) => classicNavKeys.current?.(d) === true);
+
   if (!hydrated) return null;
 
-  if (state.phase === 'setup') return <SetupScreen />;
+  if (state.phase === 'setup') { classicNavKeys.current = null; return <SetupScreen />; }
 
   function handleAdvanceWeek() {
     advanceWeek.current();
@@ -407,6 +415,22 @@ function AppInner() {
   }
 
   const navigate = (id) => { setActiveTab(layout === 'map' ? resolveMapPage(id) : id); setOpenGroup(null); };
+  // 1, 2, 3 … the bar left to right; a group's key again moves to its next
+  // page; 0 opens the pop-up alert settings.
+  classicNavKeys.current = layout === 'map' ? null : (d) => {
+    if (typeof document === 'undefined') return false;
+    if (d === CLASSIC_KEY_SETTINGS) {
+      if (!reachable(document.querySelector('.nav-tabs'))) return false;
+      openAlertSettings();
+      return true;
+    }
+    const grp = NAV_GROUPS.find((_, i) => classicKey(i) === d);
+    if (!grp || !reachable(document.querySelector(`[data-nav-key="${d}"]`))) return false;
+    // Partnerships only in games started with them, as in the bar below.
+    const children = grp.children?.filter((c) => c !== 'partners' || state.partnershipsWorld === true);
+    navigate(children ? cyclePage(children, activeTab) : grp.id);
+    return true;
+  };
   const switchLayout = (next) => {
     const l = writeLayout(next);
     setLayout(l);
@@ -684,6 +708,7 @@ function AppInner() {
         >
           <AirlineLogo id={state.logoId} customSrc={state.customLogo} size={28} radius={6} accentColor={state.logoColor} bgColor={state.logoBg} />
           <div className="topbar-airline">{state.airlineName}</div>
+          {state.sandbox === true && <SandboxBadge />}
         </button>
         <div className="topbar-spacer" />
         <div className="topbar-kpis">
@@ -739,7 +764,7 @@ function AppInner() {
           data-alert-settings
           style={{ fontSize: 12, padding: '5px 9px', display: 'inline-flex', alignItems: 'center' }}
           onClick={openAlertSettings}
-          title="Pop-up alerts — choose which weekly pop-ups show (Delete clears them all)"
+          title="Pop-up alerts — choose which weekly pop-ups show (key 0; Delete clears them all)"
           aria-label="Pop-up alerts"
         >
           <BellIcon size={13} />
@@ -855,7 +880,8 @@ function AppInner() {
 
       {/* Nav tabs (grouped) */}
       <div className="nav-tabs">
-        {NAV_GROUPS.map((g0) => {
+        {NAV_GROUPS.map((g0, gi) => {
+          const navKey = classicKey(gi);
           // Travel partnerships exist only in games started with them; older
           // saves hide the page rather than show it empty.
           const grp = g0.children && state.partnershipsWorld !== true
@@ -866,6 +892,8 @@ function AppInner() {
             return (
               <button
                 key={grp.id}
+                data-nav-key={navKey ?? undefined}
+                title={navKey ? `${t.label}${keyHint(navKey)}` : undefined}
                 className={`nav-tab ${activeTab === grp.id ? 'active' : ''}`}
                 onClick={() => navigate(grp.id)}
               >
@@ -880,6 +908,8 @@ function AppInner() {
           return (
             <div key={grp.label} className="nav-group">
               <button
+                data-nav-key={navKey ?? undefined}
+                title={navKey ? `${grp.label}: ${grp.children.map(tabLabel).join(' · ')}${keyHint(navKey)}, again for the next page` : undefined}
                 className={`nav-tab ${activeChild ? 'active' : ''} ${open ? 'open' : ''}`}
                 onClick={(e) => {
                   if (open) { setOpenGroup(null); return; }

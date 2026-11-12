@@ -52,6 +52,8 @@ const WIKI = [
         '**Stay cash-negative for 6 consecutive weeks**: even with no loans, running on empty for too long ends the game.',
       ] },
       { warn: 'Warning toasts appear before you hit either limit. Watch the Finance tab and act early, debt is much easier to manage before it spirals.' },
+      { h: 'Sandbox games' },
+      { p: 'Switch on **Sandbox** on the Launch step of a new game to try things out: choose your starting money ($10M up to $10B, or type any amount), and optionally **instant deliveries**, where aircraft arrive the moment you sign, paid in full, and crew you hire start work at once. Era games scale the money to their year, as they do the usual $10M. Everything else is the normal game, bankruptcy included. A sandbox is chosen at new game only and is marked **Sandbox** in the top bar and on its saves.' },
       { h: 'Why no two games play the same' },
       { p: 'Fuel prices fluctuate, random events fire at different times and intensities, aircraft failures are unpredictable, and regional booms or downturns hit different parts of the world each run. A strategy that won one game may struggle the next.' },
     ],
@@ -669,6 +671,13 @@ const WIKI = [
       { ul: [
         'Check **Company ▸ Competition** before opening a contested route, undercutting a stronger rival can be a losing battle.',
         'Reputation and loyalty are slow to build but pay off everywhere; invest in them steadily, not in panic.',
+      ] },
+      { h: 'Keyboard shortcuts' },
+      { ul: [
+        '**Number keys** open the main pages, numbered left to right as they appear on screen. In the map view: **1** Dashboard, **2**–**8** the bar along the bottom (Search, Network, Fleet and so on), **9** Guide, **0** Settings. In the classic layout: **1**, **2**, **3** … the menu bar, and **0** the pop-up alert settings.',
+        'Press a group\'s number again to move to its next page: in the map view **3**, **3**, **3** steps through Routes, Charters and Gates.',
+        '**Esc** closes the open page and goes back to the map (map view). **Delete** clears every pop-up.',
+        'Keys do nothing while you are typing in a box or while a dialog is open.',
       ] },
       { tip: 'You can reopen the quick tutorial any time with the ? button in the top bar. This wiki is here whenever you need the detail.' },
     ],

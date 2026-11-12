@@ -22,6 +22,7 @@ import { absoluteWeek } from '../utils/fuel.js';
 import { deliverySchedule } from '../data/delivery.js';
 import { lineStatus } from '../data/productionLines.js';
 import { withLineBook } from '../models/lineBook.js';
+import { instantDeliveryOn } from '../models/sandbox.js';
 import { leaseWillAutoRenew } from '../models/leaseRenewal.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
 import { Glyph } from './Icons.jsx';
@@ -621,7 +622,7 @@ export function BulkReplaceModal({ aircraftIds, onClose, onOrdered }) {
         lease: eraWeeklyLease(t, calYear),
         leaseBlock: leaseDenial(state, t.id)?.message ?? null,
         // Production lines: the next slot at list price on the shared line.
-        firstIn: (lineView
+        firstIn: instantDeliveryOn(state) ? 0 : (lineView
           ? lineStatus(lineView, t, nowAbs).nextStandard
           : deliverySchedule(t, state.pendingOrders ?? [], nowAbs, 1)[0]) - nowAbs,
       });
@@ -683,7 +684,7 @@ export function BulkReplaceModal({ aircraftIds, onClose, onOrdered }) {
                     <span style={{ color: all ? 'var(--green)' : 'var(--yellow)', fontWeight: 600 }}>Fits {fit.length} of {tails.length}</span>
                     {' · '}{t.freighter ? `${t.payloadTonnes}t` : `${t.seats} seats`}
                     {seatDelta != null && seatDelta !== 0 && ` (${seatDelta > 0 ? '+' : ''}${seatDelta} each)`}
-                    {' · '}{t.range.toLocaleString()} km{firstIn != null && ` · first delivery ${firstIn}w`}
+                    {' · '}{t.range.toLocaleString()} km{firstIn != null && (firstIn === 0 ? ' · delivered at signing' : ` · first delivery ${firstIn}w`)}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
                     {formatMoney(price)} each · or {formatMoney(lease)}/wk leased

@@ -6,6 +6,7 @@ import { makeRecord, SLOT_KEYS, requestPersistence, isPersisted } from '../store
 import AirlineLogo from './AirlineLogo.jsx';
 import { SaveIcon, FolderOpenIcon, CloseIcon } from './Icons.jsx';
 import CloudSaves from './CloudSaves.jsx';
+import SandboxBadge from './SandboxBadge.jsx';
 
 const NUM_SLOTS = SLOT_KEYS.length;
 
@@ -74,7 +75,7 @@ function SlotCard({ index, slot, mode, onSave, onLoad, onDelete }) {
             <AirlineLogo id={slot.logoId} customSrc={slot.customLogo} size={26} radius={5} accentColor={slot.logoColor} bgColor={slot.logoBg} />
             <div>
               <div className="save-slot-airline-name">{slot.airlineName}</div>
-              <div className="save-slot-hub">{slot.hub}</div>
+              <div className="save-slot-hub">{slot.hub}{slot.sandbox && <> · <SandboxBadge /></>}</div>
             </div>
           </div>
           <div className="save-slot-meta">

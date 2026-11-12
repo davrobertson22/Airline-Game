@@ -133,6 +133,9 @@ export function metaFromState(state) {
     week:        state?.week,
     year:        state?.year,
     startYear:   state?.startYear,
+    // Sandbox games (models/sandbox.js) are badged on their cards. Only present
+    // when true, so every other save's meta is exactly as it was.
+    ...(state?.sandbox === true ? { sandbox: true } : {}),
   };
 }
 

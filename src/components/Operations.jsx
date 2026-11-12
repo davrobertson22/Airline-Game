@@ -43,6 +43,7 @@ import Departures, { takeDepartureBoardRequest } from './Departures.jsx';
 import { consumeNavFilter } from '../utils/navIntent.js';
 import ScheduleTimeline from './ScheduleTimeline.jsx';
 import { Glyph } from './Icons.jsx';
+import { instantDeliveryOn } from '../models/sandbox.js';
 
 // ─── Headcount ────────────────────────────────────────────────────────────────
 //
@@ -401,7 +402,9 @@ function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexi
             </label>}
             {crew.instantRoom > 0 && (
               <div style={{ fontSize: 11, color: 'var(--green)', marginBottom: 4 }}>
-                ⚡ Starter crew — your first {CREW_INSTANT_AIRCRAFT} aircraft crew up instantly, no training wait
+                {crew.sandboxInstant
+                  ? '⚡ Sandbox instant deliveries: every hire starts work at once, no training wait'
+                  : `⚡ Starter crew — your first ${CREW_INSTANT_AIRCRAFT} aircraft crew up instantly, no training wait`}
               </div>
             )}
             {crew.training > 0 && (
@@ -448,7 +451,7 @@ function LaborCard({ group, groupState, fleetSize, headcount, dispatch, complexi
                     onClick={() => hireBodies(n)}
                     title={cost > cash ? 'Not enough cash to train this many'
                       : nothingNeeded ? `You already have enough ${group.name.toLowerCase()} for your fleet and everything on order — this hires ${n.toLocaleString()} more for growth`
-                      : instant ? 'Starter crew — starts work immediately'
+                      : instant ? (crew.sandboxInstant ? 'Sandbox — starts work immediately' : 'Starter crew — starts work immediately')
                       : hireTitle(n)}>
                     Hire {n.toLocaleString()} · {formatMoney(cost)}{instant ? ' · instant' : ''}
                   </button>
@@ -822,7 +825,9 @@ export default function Operations({ section = null } = {}) {
       ? Math.min(...batches.map(b => (b?.readyAbsWeek ?? 0))) - currentAbsWeek
       : null;
     // How much of the NEXT hire would start work immediately (starter crew).
-    const instantRoom = splitStarterHire(g.id, Number.MAX_SAFE_INTEGER, available, fleet, typeOfAircraft).instant;
+    // Sandbox instant deliveries: every hire starts work at once (HIRE_CREW).
+    const instantRoom = instantDeliveryOn(state) ? Number.MAX_SAFE_INTEGER
+      : splitStarterHire(g.id, Number.MAX_SAFE_INTEGER, available, fleet, typeOfAircraft).instant;
     // What the fleet will need once aircraft arriving inside this group's own
     // training lead time have landed. Hire buttons size off THIS, because a
     // pilot hired today is only usable in ten weeks.
@@ -875,6 +880,7 @@ export default function Operations({ section = null } = {}) {
     const moraleLift = reserveMoraleBonus(labor, g.id, fleet, typeOfAircraft);
     return [g.id, { spare, reserveLevel, reserveRatio, moraleLift,
                     required, available, training, recruiting, onTheWay, nextReady, instantRoom,
+                    sandboxInstant: instantDeliveryOn(state),
                     market, relPay, intakePerWeek, intakeLeft, recruitWeeks,
                     requiredAhead, arriving, orderBookRequired, hiringDueIn,
                     hireAhead, hireBook, leaversPerWeek, weeksToBook,
