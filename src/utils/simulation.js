@@ -702,6 +702,22 @@ function qualitySteps(current, next) {
        + Math.abs(lvl(next?.serviceQuality) - lvl(current?.serviceQuality));
 }
 
+// What a cabin costs to fit on the production line, per aircraft: its seat
+// products (lie-flats, suites, screens). ORDER_AIRCRAFT charges it at signing;
+// SET_ORDER_CABIN charges the difference when an order's cabin is changed
+// before delivery. One function, so the two cannot drift apart.
+export function lineFitCost(config) {
+  if (!config) return 0;
+  return productFittingCost(null, config);
+}
+
+// Changing the cabin of an aircraft still on order: it has not been built yet,
+// so it pays the difference in line fitting and nothing for labour or shop
+// time. Taking things out is free, as on a refit (no refunds).
+export function orderCabinChangeCost(current, next) {
+  return Math.max(0, lineFitCost(next) - lineFitCost(current));
+}
+
 /**
  * One-time cost to reconfigure a cabin: per seat moved between classes, plus a
  * flat fee per quality tier stepped on either axis. Returns 0 for a no-op.

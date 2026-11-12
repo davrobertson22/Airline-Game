@@ -21,6 +21,7 @@ import { useProgressiveCount } from '../utils/useProgressiveCount.js';
 import { absoluteWeek } from '../utils/fuel.js';
 import { nextDeliveryWeeks, orderProgress } from '../data/delivery.js';
 import AircraftCheckout from './AircraftCheckout.jsx';
+import FleetConfig from './FleetConfig.jsx';
 import { OrderReplacementLine, OrderFilterBar, useOrderFilter } from './FleetRenewal.jsx';
 import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { lineStatus, launchWindow, slotPremiumPct, MAX_TOTAL_DISCOUNT, lineGapWeeks, lineOf } from '../data/productionLines.js';
@@ -262,7 +263,7 @@ function DeliveryForecast({ pendingOrders, currentAbsWeek }) {
   );
 }
 
-export function OrderCard({ order, currentAbsWeek, onCancel, onRename, linesWorld = false }) {
+export function OrderCard({ order, currentAbsWeek, onCancel, onRename, onEditCabin = null, linesWorld = false }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft]     = useState('');
 
@@ -412,6 +413,20 @@ export function OrderCard({ order, currentAbsWeek, onCancel, onRename, linesWorl
           </>
         )}
 
+        {/* The cabin it is delivered with: fitted on the line, so a frame
+            ordered before the designer reached the order form needs no refit
+            after delivery. */}
+        {onEditCabin && !order.used && type && !type.freighter && (
+          <button
+            className="btn btn-ghost"
+            data-order-cabin={order.id}
+            onClick={() => onEditCabin(order)}
+            style={{ width: '100%', padding: '5px 8px', fontSize: 11, marginBottom: 12 }}
+          >
+            <Glyph e="💺" /> {cfg ? 'Edit cabin' : 'Choose cabin'} · delivered fitted, no refit
+          </button>
+        )}
+
         {/* Financials */}
         <div style={{
           display: 'flex', gap: 16, padding: '8px 0 10px',
@@ -520,7 +535,7 @@ export function OrderCard({ order, currentAbsWeek, onCancel, onRename, linesWorl
   );
 }
 
-function OrdersTab({ pendingOrders, year, week, onCancel, onRename, onBrowse, linesWorld = false }) {
+function OrdersTab({ pendingOrders, year, week, onCancel, onRename, onEditCabin = null, onBrowse, linesWorld = false }) {
   const currentAbsWeek = absoluteWeek(year, week);
   const sortedAll = useMemo(() => [...(pendingOrders ?? [])].sort((a, b) => a.deliverAbsWeek - b.deliverAbsWeek), [pendingOrders]);
   const orderFilter = useOrderFilter(sortedAll);
@@ -574,7 +589,7 @@ function OrdersTab({ pendingOrders, year, week, onCancel, onRename, onBrowse, li
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: 16 }}>
         {orderFilter.visible.map(order => (
-          <OrderCard key={order.id} order={order} currentAbsWeek={currentAbsWeek} onCancel={onCancel} onRename={onRename} linesWorld={linesWorld} />
+          <OrderCard key={order.id} order={order} currentAbsWeek={currentAbsWeek} onCancel={onCancel} onRename={onRename} onEditCabin={onEditCabin} linesWorld={linesWorld} />
         ))}
       </div>
     </div>
@@ -772,6 +787,7 @@ export default function Marketplace() {
     .join('\n');
 
   const [view, setView]                     = useState('browse'); // 'browse' | 'orders'
+  const [cabinOrderIds, setCabinOrderIds]   = useState(null); // order ids → cabin designer
   const [activeCategory, setActiveCategory] = useState('All');
   const [activeMfr, setActiveMfr]           = useState('All');
   const [query, setQuery]                   = useState('');
@@ -960,9 +976,13 @@ export default function Marketplace() {
           week={week}
           onCancel={handleCancelOrder}
           onRename={(order, name) => dispatch({ type: 'RENAME_ORDER', orderId: order.id, name })}
+          onEditCabin={(order) => setCabinOrderIds([order.id])}
           onBrowse={() => setView('browse')}
           linesWorld={linesWorld}
         />
+      )}
+      {cabinOrderIds && (
+        <FleetConfig orderIds={cabinOrderIds} onClose={() => setCabinOrderIds(null)} />
       )}
 
       {view === 'browse' && (

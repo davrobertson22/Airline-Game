@@ -14,6 +14,7 @@ import {
   applyScheduleTrimMigration, rangeStrandedRoutes,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
   calcReconfCost, refitWeeks, calendarYear, shortYearLabel, buildEventDemandModel,
+  lineFitCost, orderCabinChangeCost, configSeatUnits,
   syncCycleKnobs, fleetAvgUtilizationOf,
 } from '../utils/simulation.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
@@ -2495,7 +2496,7 @@ function reducer(state, action) {
       // data/seatProducts.js). Owned: part of the contract, like the Wi-Fi
       // package. Leased: due at signing with the deposit. The same figure a
       // refit to this cabin would charge, so ordering it is not a free refit.
-      const productFitCost  = productFittingCost(null, action.config);
+      const productFitCost  = lineFitCost(action.config);
       const fuelMod  = Math.round(engineFuelMod  * wingtipFuelMod  * 10000) / 10000;
       const rangeMod = Math.round(                  wingtipRangeMod * 10000) / 10000;
       const maintMod = Math.round(engineMaintMod                    * 10000) / 10000;
@@ -2783,6 +2784,67 @@ function reducer(state, action) {
           o.id === action.orderId ? { ...o, name } : o
         ),
       };
+    }
+
+    case 'SET_ORDER_CABIN': {
+      // action: { orderIds: [...], config }
+      // Change the cabin an order still on the queue will be delivered with:
+      // layout, seat grade, service and seat products are fitted on the line,
+      // so the frame arrives ready to fly — no refit, no shop time. Orders
+      // placed before the cabin designer reached the order form (Discord
+      // 2026-11-11: "have to reconfigure everything immediately after each
+      // delivery") were otherwise stuck with a post-delivery refit.
+      // Each order pays the difference in line fitting (orderCabinChangeCost);
+      // taking things out is free, as on a refit. A used-market order delivers
+      // the tail as it was sold, and a freighter has no cabin: neither changes.
+      const ids = new Set((Array.isArray(action.orderIds) ? action.orderIds : [action.orderId]).filter(Boolean));
+      const cfg = action.config;
+      if (ids.size === 0 || !cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return state;
+      const pending = state.pendingOrders ?? [];
+      const targets = pending.filter(o => ids.has(o.id) && !o.used);
+      if (targets.length === 0) return state;
+      const typeId = targets[0].typeId;
+      if (targets.some(o => o.typeId !== typeId)) return state;
+      const type = getAircraftType(typeId);
+      if (!type || type.freighter) return state;
+      const countsOk = ['firstClass', 'businessClass', 'premiumEconomy', 'economy']
+        .every(k => cfg[k] == null || (Number.isInteger(cfg[k]) && cfg[k] >= 0));
+      if (!countsOk || configSeatUnits(cfg) > (type.seats ?? 0) + 0.001) {
+        return { ...state, error: `That cabin does not fit a ${type.name}.` };
+      }
+      const refused = refuseCabinProducts(state, cfg, type);
+      if (refused) return refused;
+      const cost = targets.reduce((sum, o) => sum + orderCabinChangeCost(o.config ?? newAircraftConfig(type), cfg), 0);
+      if (cost > state.cash) {
+        return { ...state, error: `Not enough cash to fit ${targets.length === 1 ? 'this cabin' : `${targets.length} cabins`} (${formatMoney(cost)}).` };
+      }
+      const changed = new Set(targets.map(o => o.id));
+      let next = {
+        ...state,
+        cash: state.cash - cost,
+        pendingOrders: pending.map(o => (changed.has(o.id) ? { ...o, config: cfg } : o)),
+      };
+      // A denser or lighter cabin moves range, so an order named to replace a
+      // tail may no longer be able to take over its routes. Drop those tags
+      // (the replacement picker will say why) rather than fail at delivery.
+      const unfit = next.pendingOrders.filter(o =>
+        changed.has(o.id) && o.replacesAircraftId && !replacementCompatibility(next, o, o.replacesAircraftId).ok);
+      if (unfit.length > 0) {
+        const drop = new Set(unfit.map(o => o.id));
+        next = {
+          ...next,
+          pendingOrders: next.pendingOrders.map(o => {
+            if (!drop.has(o.id)) return o;
+            const { replacesAircraftId: _a, replacesName: _n, replaceDisposal: _d, ...rest } = o;
+            return rest;
+          }),
+          pendingToasts: [...(next.pendingToasts ?? []), {
+            type: 'warning', icon: '🔁', title: 'Replacement cleared',
+            message: `${unfit.length === 1 ? `${unfit[0].name} can no longer` : `${unfit.length} orders can no longer`} take over the routes of the aircraft ${unfit.length === 1 ? 'it was' : 'they were'} replacing with this cabin.`,
+          }],
+        };
+      }
+      return next;
     }
 
     case 'RETIRE_AIRCRAFT': {
