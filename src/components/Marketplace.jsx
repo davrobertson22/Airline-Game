@@ -26,6 +26,7 @@ import { OrderReplacementLine, OrderFilterBar, useOrderFilter } from './FleetRen
 import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { lineStatus, launchWindow, slotPremiumPct, MAX_TOTAL_DISCOUNT, lineGapWeeks, lineOf } from '../data/productionLines.js';
 import { withLineBook, soloFleetBoard, orderCancelTerms } from '../models/lineBook.js';
+import { cancelOrdersDialog } from '../utils/cancelOrdersCopy.js';
 import InfoTip from './InfoTip.jsx';
 import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_MARKET_FILTERS, ownedFamilyIds } from '../utils/marketFilters.js';
 import { designAgeQualityPts, DESIGN_AGE_GRACE_YEARS, DESIGN_AGE_CAP_YEARS, DESIGN_AGE_MAX_PENALTY } from '../models/demand.js';
@@ -535,7 +536,7 @@ export function OrderCard({ order, currentAbsWeek, onCancel, onRename, onEditCab
   );
 }
 
-function OrdersTab({ pendingOrders, year, week, onCancel, onRename, onEditCabin = null, onBrowse, linesWorld = false }) {
+export function OrdersTab({ pendingOrders, year, week, onCancel, onCancelMany = null, onRename, onEditCabin = null, onBrowse, linesWorld = false }) {
   const currentAbsWeek = absoluteWeek(year, week);
   const sortedAll = useMemo(() => [...(pendingOrders ?? [])].sort((a, b) => a.deliverAbsWeek - b.deliverAbsWeek), [pendingOrders]);
   const orderFilter = useOrderFilter(sortedAll);
@@ -583,7 +584,26 @@ function OrdersTab({ pendingOrders, year, week, onCancel, onRename, onEditCabin 
       }}>
         Order Details ({sorted.length})
       </div>
-      <OrderFilterBar orders={sorted} filter={orderFilter.filter} setFilter={orderFilter.setFilter} />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 auto' }}>
+          <OrderFilterBar orders={sorted} filter={orderFilter.filter} setFilter={orderFilter.setFilter} />
+        </div>
+        {/* Bulk cancel: every order the filter shows (narrow it by type,
+            purchase/lease or search first). Firm orders are left alone. */}
+        {onCancelMany && orderFilter.visible.length > 1 && (
+          <button
+            data-order-cancel-shown
+            onClick={() => onCancelMany(orderFilter.visible)}
+            style={{
+              padding: '5px 10px', fontSize: 11, borderRadius: 5, marginBottom: 10,
+              border: '1px solid rgba(248,81,73,0.3)', background: 'rgba(248,81,73,0.08)',
+              color: 'var(--red)', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            Cancel {orderFilter.visible.length === sorted.length ? 'all' : 'the'} {orderFilter.visible.length} shown…
+          </button>
+        )}
+      </div>
       {orderFilter.visible.length === 0 && (
         <div style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic', margin: '8px 0' }}>No orders match the filter.</div>
       )}
@@ -849,6 +869,17 @@ export default function Marketplace() {
     }
   }
 
+  async function handleCancelMany(orders) {
+    const d = cancelOrdersDialog(state, orders);
+    if (!d.allowed) {
+      await confirm({ title: 'These orders are firm', body: d.body, confirmLabel: 'OK' });
+      return;
+    }
+    if (await confirm({ title: d.title, body: d.body, danger: true, confirmLabel: `Cancel ${d.count} order${d.count === 1 ? '' : 's'}` })) {
+      dispatch({ type: 'CANCEL_ORDER', orderIds: d.ids });
+    }
+  }
+
   const ownedCounts = fleet.reduce((acc, a) => {
     acc[a.typeId] = (acc[a.typeId] || 0) + 1;
     return acc;
@@ -975,6 +1006,7 @@ export default function Marketplace() {
           year={year}
           week={week}
           onCancel={handleCancelOrder}
+          onCancelMany={handleCancelMany}
           onRename={(order, name) => dispatch({ type: 'RENAME_ORDER', orderId: order.id, name })}
           onEditCabin={(order) => setCabinOrderIds([order.id])}
           onBrowse={() => setView('browse')}

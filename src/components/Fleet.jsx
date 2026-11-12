@@ -12,6 +12,7 @@ import { getAircraftType, LEASE_BUYOUT_PREMIUM, AIRCRAFT_CATEGORIES } from '../d
 import { leaseBuyoutQuote, bulkBuyoutPlan } from '../models/leaseBuyout.js';
 import { hasPaymentSchedule, amountPaid } from '../models/orderPayments.js';
 import { orderCancelTerms, withLineBook } from '../models/lineBook.js';
+import { cancelOrdersDialog, orderCancellable } from '../utils/cancelOrdersCopy.js';
 import { getAirport } from '../data/airports.js';
 import {
   formatMoney, formatPercent,
@@ -2132,6 +2133,11 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
   }, []);
   const [showOnOrder,   setShowOnOrder]   = useState(false); // collapsible "On Order" panel
   const orderFilter = useOrderFilter(pendingOrders);
+  // Orders ticked for a bulk cancel. Filtering hides rows but never drops a
+  // tick; an order that delivered or was cancelled drops out on its own.
+  const [cancelPick, setCancelPick] = useState([]);
+  const pendingIds = new Set(pendingOrders.map(o => o.id));
+  const cancelPicked = cancelPick.filter(id => pendingIds.has(id));
 
   // What the reserve system will do for each broken tail at the NEXT tick —
   // computed by running the real reserve pass, so the badge on the row agrees
@@ -2232,6 +2238,19 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
         : `Lease orders are free to cancel before delivery.`;
     if (await confirm({ title: `Cancel the order for ${order.name}?`, body, danger: true, confirmLabel: 'Cancel order' })) {
       dispatch({ type: 'CANCEL_ORDER', orderId: order.id });
+    }
+  }
+
+  async function handleCancelPicked() {
+    const picked = pendingOrders.filter(o => cancelPicked.includes(o.id));
+    const d = cancelOrdersDialog(state, picked);
+    if (!d.allowed) {
+      await confirm({ title: 'These orders are firm', body: d.body, confirmLabel: 'OK' });
+      return;
+    }
+    if (await confirm({ title: d.title, body: d.body, danger: true, confirmLabel: `Cancel ${d.count} order${d.count === 1 ? '' : 's'}` })) {
+      dispatch({ type: 'CANCEL_ORDER', orderIds: d.ids });
+      setCancelPick([]);
     }
   }
 
@@ -2951,9 +2970,56 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
               <OrderFilterBar orders={pendingOrders} filter={orderFilter.filter} setFilter={orderFilter.setFilter} />
             </div>
           )}
+          {(() => {
+            // Bulk cancel: tick orders (or every order the filter shows) and
+            // cancel them in one go, each on its own terms.
+            const shownCancellable = orderFilter.visible.filter(o => orderCancellable(state, o)).map(o => o.id);
+            const allShown = shownCancellable.length > 0 && shownCancellable.every(id => cancelPicked.includes(id));
+            return (
+              <div data-order-bulk-bar style={{
+                display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 12,
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: shownCancellable.length ? 'pointer' : 'default', color: 'var(--text-muted)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select every order shown"
+                    data-order-pick-all
+                    disabled={shownCancellable.length === 0}
+                    checked={allShown}
+                    onChange={() => setCancelPick(allShown
+                      ? cancelPicked.filter(id => !shownCancellable.includes(id))
+                      : [...new Set([...cancelPicked, ...shownCancellable])])}
+                  />
+                  Select all shown
+                </label>
+                {cancelPicked.length > 0 && (
+                  <>
+                    <span style={{ color: 'var(--text-dim)' }}>{cancelPicked.length} selected</span>
+                    <button
+                      className="btn"
+                      data-order-cancel-picked
+                      style={{
+                        padding: '3px 10px', fontSize: 11,
+                        background: 'rgba(248,81,73,0.08)', color: 'var(--red)',
+                        border: '1px solid rgba(248,81,73,0.3)',
+                      }}
+                      onClick={handleCancelPicked}
+                    >
+                      Cancel {cancelPicked.length} order{cancelPicked.length === 1 ? '' : 's'}
+                    </button>
+                    <button className="btn btn-ghost" style={{ padding: '3px 10px', fontSize: 11 }} onClick={() => setCancelPick([])}>
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <table>
             <thead>
               <tr>
+                <th style={{ width: 28 }}></th>
                 <th>Aircraft</th>
                 <th>Engine</th>
                 <th>Type</th>
@@ -2964,7 +3030,7 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
             </thead>
             <tbody>
               {orderFilter.visible.length === 0 && (
-                <tr><td colSpan={6} style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>No orders match the filter.</td></tr>
+                <tr><td colSpan={7} style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>No orders match the filter.</td></tr>
               )}
               {orderFilter.visible.map(order => {
                 const type       = getAircraftType(order.typeId);
@@ -2974,8 +3040,23 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
                 const deliverY   = Math.floor((order.deliverAbsWeek - 1) / 52) + 1;
                 const _dWIY      = ((order.deliverAbsWeek - 1) % 52) + 1;
                 const { monthName: deliverMon, weekInMonth: deliverWIM } = weekToGameDate(_dWIY);
+                const firm       = !orderCancellable(state, order);
+                const picked     = cancelPicked.includes(order.id);
                 return (
                   <tr key={order.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        data-order-pick={order.id}
+                        aria-label={`Select ${order.name}`}
+                        disabled={firm}
+                        title={firm ? 'Launch-customer orders are firm' : undefined}
+                        checked={picked && !firm}
+                        onChange={() => setCancelPick(picked
+                          ? cancelPicked.filter(id => id !== order.id)
+                          : [...cancelPicked, order.id])}
+                      />
+                    </td>
                     <td>
                       <strong>{order.name}</strong>
                       <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
