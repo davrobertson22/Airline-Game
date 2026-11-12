@@ -477,7 +477,7 @@ export default function Dashboard() {
               value={formatMoney(brand)}
               color="blue"
               sub={sub}
-              onClick={() => requestNav('operations', { filter: { section: 'marketing' }, focus: 'marketing-budget' })}
+              onClick={() => requestNav('reputation', { focus: 'marketing-budget' })}
             />
           );
         })()}
