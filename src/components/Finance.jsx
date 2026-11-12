@@ -56,7 +56,7 @@ import { planForRef } from '../data/cateringPlans.js';
 import { isStationOpen, stationLevelDef } from '../data/groundStation.js';
 import {
   LOAN_PRODUCTS, AIRCRAFT_LOAN_ID, STARTING_CAPITAL, LOAN_MIN_PRINCIPAL,
-  creditRating, loanRate, borrowingCapacity, amortizedWeeklyPayment,
+  creditRating, loanRate, borrowingCapacity, borrowingLimits, amortizedWeeklyPayment,
   outstandingBalance, collateralValue, unencumberedOwnedFleet,
 } from '../data/credit.js';
 import { Glyph, GlyphLabel } from './Icons.jsx';
@@ -3485,7 +3485,16 @@ function Loans({ proj }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           {LOAN_PRODUCTS.map(p => {
             const rate = loanRate(state, p.id);
-            const cap  = borrowingCapacity(state, p.id);
+            const lim  = borrowingLimits(state, p.id);
+            const cap  = lim.capacity;
+            // Which limit set the figure (new games only; an old save's binding
+            // is always revenue or collateral, which carry no label) — from the
+            // engine, so the label can never disagree with what TAKE_LOAN allows.
+            const why  = {
+              coverage: 'limited by earnings',
+              leverage: 'limited by debt-to-equity',
+              lifeline: 'base allowance',
+            }[lim.binding];
             const isSelected = selectedProduct === p.id;
             return (
               <div
@@ -3504,7 +3513,7 @@ function Loans({ proj }) {
                   {(rate * 100).toFixed(1)}% APR
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
-                  {cap > 0 ? `Available ${formatMoney(cap)}` : 'Nothing available'}
+                  {cap > 0 ? `Available ${formatMoney(cap)}${why ? ` · ${why}` : ''}` : `Nothing available${why && why !== 'base allowance' ? ` · ${why}` : ''}`}
                 </div>
                 {p.secured && (
                   <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>

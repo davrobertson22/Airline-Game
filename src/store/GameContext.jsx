@@ -2345,6 +2345,12 @@ function reducer(state, action) {
         // share the hub's tier holds. New games only — a save without the flag
         // keeps nonstop-first seating for life.
         connectionSeatsWorld: true,
+        // Borrowing limits from earnings and equity (data/credit.js
+        // borrowingLimits): a loan's payments must fit within half of operating
+        // cash flow, and total debt within four times book equity. New games
+        // only — a save without the flag borrows on revenue and metal alone,
+        // for life.
+        creditCeilingsWorld: true,
         // Production lines (data/productionLines.js, models/lineBook.js): every
         // aircraft comes off a factory line shared with the rivals, who order
         // and wait too; era games add launch customers. Staged purchase
@@ -8100,6 +8106,8 @@ function reconcileState(parsed) {
     ...(parsed.hubBanksWorld === true ? { hubBanksWorld: true } : {}),
     // Connection seats — the new-game flag, carried only when present.
     ...(parsed.connectionSeatsWorld === true ? { connectionSeatsWorld: true } : {}),
+    // Borrowing limits from earnings and equity — the new-game flag, carried only when present.
+    ...(parsed.creditCeilingsWorld === true ? { creditCeilingsWorld: true } : {}),
     ...(parsed.hubBanksWorld === true && parsed.hubBanks && Object.keys(parsed.hubBanks).length > 0 ? { hubBanks: parsed.hubBanks } : {}),
     ...(parsed.bellyRates && Object.keys(parsed.bellyRates).length > 0 ? { bellyRates: parsed.bellyRates } : {}),
     ...(parsed.travelPartners && Object.keys(parsed.travelPartners).length > 0
