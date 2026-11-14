@@ -34,7 +34,9 @@ import { relativePay } from './talentMarket.js';
 import { outstandingBalance } from '../data/credit.js';
 import {
   routeStops, aircraftUtilization, committedRoutesByAircraft, maxWeeklyBlockHoursFor, currentGameDate, formatMoney,
+  calendarYear,
 } from '../utils/simulation.js';
+import { featureLive } from '../data/eraFeatures.js';
 import { slotUsageFor } from '../store/GameContext.jsx';
 import { SLOTS_PER_GATE } from '../utils/simulation.js';
 
@@ -344,6 +346,7 @@ function adviceDebt(state) {
 
 function adviceAncillaries(state) {
   if (state?.ancillaries != null) return [];
+  if (!featureLive('ancillaries', calendarYear(state))) return [];
   if ((state?.routes ?? []).length < 3) return [];
   return [{
     id: 'ancillaries', priority: 3, category: 'network',

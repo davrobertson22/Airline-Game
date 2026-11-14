@@ -312,5 +312,15 @@ test('Tailwinds new game, crew pipeline on: parked tails\' routes are not judged
   assert.ok(Array.isArray(airlineAdvice(s, s.lastReport)));
 });
 
+test('ancillaries: no nag in an era before unbundled fees exist; nag once they do', () => {
+  const s = { ...BASE, ancillaries: null };
+  assert.ok(s.routes.length >= 3, 'fixture should have 3+ routes');
+  assert.ok(ids(airlineAdvice(s, s.lastReport)).includes('ancillaries'), 'classic world: nag');
+  const y1977 = { ...s, startYear: 1977 - ((s.year ?? 1) - 1) };
+  assert.ok(!ids(airlineAdvice(y1977, y1977.lastReport)).includes('ancillaries'), '1977: no nag');
+  const y2010 = { ...s, startYear: 2010 - ((s.year ?? 1) - 1) };
+  assert.ok(ids(airlineAdvice(y2010, y2010.lastReport)).includes('ancillaries'), '2010: nag');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
