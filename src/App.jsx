@@ -7,6 +7,7 @@ import { ToastProvider, useToast } from './components/ToastSystem.jsx';
 import { ConfirmProvider } from './components/ConfirmModal.jsx';
 import WeeklyDebrief from './components/WeeklyDebrief.jsx';
 import AwayDigest from './components/AwayDigest.jsx';
+import HistoryCard from './components/HistoryCard.jsx';
 import SaveLoadModal from './components/SaveLoadModal.jsx';
 import { useCloudSignInReturn } from './cloud/useCloudSignInReturn.js';
 import { formatMoney, formatGameDate, weekToGameDate } from './utils/simulation.js';
@@ -530,6 +531,9 @@ function AppInner() {
 
       {/* "While you were away" — the world does not stop when the tab closes */}
       <AwayDigest />
+
+      {/* Aviation history milestones (era games) — waits for the debrief */}
+      <HistoryCard />
 
       {/* Advance-week error overlay — shows if reducer threw */}
       {state.advanceWeekError && (

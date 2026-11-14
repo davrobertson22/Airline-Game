@@ -8,11 +8,13 @@
 // this week" and then throws it away — it showed the first six competitor lines
 // and no more. This answers "when did that fare war start", "what did the board
 // pay me for that objective", "how long has that recession been running".
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { getAircraftType } from '../data/aircraft.js';
 import { formatMoney, yearLabel } from '../utils/simulation.js';
 import { NewsIcon } from './Icons.jsx';
+import { historyRowsThrough, HISTORY_CATEGORY } from '../data/historyMilestones.js';
+import { HISTORY_MODES, loadHistoryMode, saveHistoryMode, subscribeHistoryMode } from '../utils/historyPrefs.js';
 
 const CATEGORIES = [
   { id: 'world',       label: 'World',       icon: '🌍' },
@@ -20,6 +22,27 @@ const CATEGORIES = [
   { id: 'fleet',       label: 'Fleet',       icon: '✈️' },
   { id: 'company',     label: 'Company',     icon: '🏢' },
 ];
+// Era games only: aviation history (data/historyMilestones.js). Derived from the
+// calendar rather than stored in newsLog, so it is never trimmed by the cap.
+const HISTORY = { id: HISTORY_CATEGORY, label: 'History', icon: '🕰' };
+
+/**
+ * newsLog plus this save's history rows, oldest first. Rows are ordered by game
+ * week; within a week the history rows go last, so they read first in the
+ * newest-first list.
+ */
+export function mergeHistory(log, historyRows) {
+  if (!historyRows?.length) return log;
+  const abs = (it) => it.absWeek ?? (((it.year ?? 1) - 1) * 52 + (it.week ?? 0));
+  const out = [];
+  let h = 0;
+  for (const it of log) {
+    while (h < historyRows.length && abs(historyRows[h]) < abs(it)) out.push(historyRows[h++]);
+    out.push(it);
+  }
+  while (h < historyRows.length) out.push(historyRows[h++]);
+  return out;
+}
 
 const PAGE = 60;
 
@@ -36,6 +59,13 @@ function compose(item) {
   switch (item.kind) {
     case 'event_started':
       return { headline: '', sub: d.description ?? null };
+    case 'history_era':
+    case 'history_milestone':
+      return {
+        headline: d.dateLabel ? `· ${d.dateLabel}` : '',
+        sub: [d.body, d.launchCustomer ? 'Your airline is one of its launch customers.' : null, d.unlocks]
+          .filter(Boolean).join(' '),
+      };
     case 'event_ended':
       return { headline: 'has passed', sub: 'Conditions are back to normal.' };
 
@@ -235,13 +265,22 @@ export default function News() {
   const { state } = useGame();
   const net = useMyNetwork();
 
-  const [active, setActive] = useState(() => new Set(CATEGORIES.map((c) => c.id)));
+  const isEra = Number.isInteger(state?.startYear);
+  const categories = isEra ? [...CATEGORIES, HISTORY] : CATEGORIES;
+  const [active, setActive] = useState(() => new Set([...CATEGORIES, HISTORY].map((c) => c.id)));
+  const [historyMode, setHistoryMode] = useState(loadHistoryMode);
+  useEffect(() => subscribeHistoryMode(setHistoryMode), []);
   const [bigOnly, setBigOnly] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
   const [shownCount, setShownCount] = useState(PAGE);
   const [expanded, setExpanded] = useState(() => new Set());
 
-  const log = state?.newsLog ?? [];
+  const storedLog = state?.newsLog ?? [];
+  const log = useMemo(() => (isEra
+    ? mergeHistory(storedLog, historyRowsThrough({
+        startYear: state.startYear, year: state.year, week: state.week, launchPrograms: state.launchPrograms,
+      }))
+    : storedLog), [isEra, storedLog, state?.startYear, state?.year, state?.week, state?.launchPrograms]);
 
   const items = useMemo(() => {
     // Stored oldest-first (append is a push); the page reads newest-first.
@@ -291,7 +330,7 @@ export default function News() {
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '12px 0' }}>
-        {CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <button key={c.id} style={chip(active.has(c.id))} onClick={() => toggleCategory(c.id)}>
             {c.icon} {c.label}
           </button>
@@ -305,6 +344,16 @@ export default function News() {
           📍 Near my network
         </button>
       </div>
+      {isEra && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '-6px 0 14px', fontSize: 12 }}>
+          <span className="muted">🕰 History pop-ups:</span>
+          {HISTORY_MODES.map((m) => (
+            <button key={m.id} style={chip(historyMode === m.id)} onClick={() => saveHistoryMode(m.id)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {log.length === 0 && (
         <p className="muted">
@@ -386,7 +435,7 @@ export default function News() {
           Show older news
         </button>
       )}
-      {log.length >= 250 && items.length === page.length && page.length > 0 && (
+      {storedLog.length >= 250 && items.length === page.length && page.length > 0 && (
         <p className="muted" style={{ textAlign: 'center', marginTop: 16, fontSize: 12 }}>
           That's as far back as your save keeps news.
         </p>
