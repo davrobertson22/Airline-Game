@@ -177,6 +177,7 @@ const WIKI = [
       { h: 'Managing a route' },
       { p: 'Click any route to open its **Route Detail**, where you can see your performance, market share, the competitors flying the same city pair, connecting-passenger contribution and maintenance status. Adjust price, frequency, aircraft or catering here as conditions change.' },
       { tip: 'A new route ramps up over its first weeks as travellers discover it · don\'t panic if early load factors look soft. Give it time before judging it.' },
+      { tip: 'Changing the aircraft on a route does not restart the ramp. Use **Move** on the Routes list to put a route on another tail, or open the pair on the new aircraft and close the old one: an extra tail on a pair you already fly joins at the pair\'s maturity. A pair you closed is remembered for a few weeks (it loses two weeks of maturity for every week off), so a quick reopen is a swap, not a new launch.' },
     ],
   },
   {

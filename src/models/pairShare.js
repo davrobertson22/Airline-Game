@@ -56,6 +56,7 @@ import { campaignDemandBoostPct, awarenessDemandMultiplier } from '../data/overh
 import { getAircraftType } from '../data/aircraft.js';
 import { fuelSimMultiplierOf } from '../utils/fuelOps.js';
 import { fuelStationsOn } from '../data/fuelStations.js';
+import { inheritedWeeksOpen } from './pairMaturity.js';
 import {
   configBodies,
   defaultConfig,
@@ -1025,9 +1026,12 @@ export function projectRouteAddition(state, spec) {
 
   // Lane maturity. An established pair is already mature and does NOT re-ramp
   // when you add a tail; only a pair you have never flown starts at week 0.
+  // A pair you left a few weeks ago still remembers part of its maturity, so
+  // the launch week reads ADD_ROUTE's own helper (models/pairMaturity.js).
   const existingWeeks = others.reduce((m, r) => Math.max(m, r.weeksOpen ?? 0), 0);
   const matureWeeks   = Math.max(existingWeeks, 16);
-  const launchWeeks   = others.length > 0 ? existingWeeks : 0;
+  const launchWeeks   = others.length > 0 ? existingWeeks
+    : (replacesRouteId ? 0 : inheritedWeeksOpen(state, origin, destination));
 
   const hubQ = hubQualityFor(state, origin, destination);
   const hcf  = hubCostFactorsFor(state, [origin, destination]);

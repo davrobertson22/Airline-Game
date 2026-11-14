@@ -65,6 +65,7 @@ import {
 } from '../data/refinery.js';
 import { setFuelStationsEnabled, setFuelStationDiscounts, fuelStationsOn, FUEL_OPS_VERSION } from '../data/fuelStations.js';
 import { setJetAgeEnabled, jetAgeOn } from '../models/jetAge.js';
+import { inheritedWeeksOpen, rememberClosedPairs } from '../models/pairMaturity.js';
 import {
   FARM_LEVELS, canTakeFarm, makeFarm, farmCloseRefund, farmDiscountsOf, farmLevelDef,
 } from '../data/fuelFarm.js';
@@ -1851,8 +1852,14 @@ function withStarterCrew(prev, next) {
   };
 }
 
+const PAIR_MEMORY_SKIP = new Set(['START_GAME', 'RESET', 'LOAD_STATE']);
+
 function rootReducer(state, action) {
-  const next = withStarterCrew(state, reducer(state, action));
+  const next0 = withStarterCrew(state, reducer(state, action));
+  // A pair this action stopped flying (a close, a sale, a lease running out) is
+  // remembered for a few weeks so reopening it on another tail is a swap, not a
+  // launch (models/pairMaturity.js). Not across a new or loaded game.
+  const next = PAIR_MEMORY_SKIP.has(action?.type) ? next0 : rememberClosedPairs(state, next0);
   // Fleet renewal before crew auto-replace, so the crew plan sees the fleet
   // after any old tail has been sold.
   // Release before hiring, so the hiring pass sees the airline it will staff.
@@ -4101,7 +4108,10 @@ function reducer(state, action) {
         stops:           [action.origin, action.destination],
         aircraftId:      action.aircraftId,
         weeklyFrequency: weeklyFrequency,
-        weeksOpen:       0,
+        // Another tail on a pair you already fly (or left a moment ago) is not
+        // a launch: it joins at the pair's maturity (models/pairMaturity.js), so
+        // swapping the aircraft by hand no longer re-ramps the market.
+        weeksOpen:       inheritedWeeksOpen(state, action.origin, action.destination),
         launchCost,
         hub:             state.hub,
         // Seasonal flights: null = year-round. seasonState tracks dormant↔active so
@@ -4355,7 +4365,9 @@ function reducer(state, action) {
         aircraftId:      action.aircraftId,
         yieldPrice,
         weeklyFrequency,
-        weeksOpen:       0,
+        // A freighter added to a lane you fly (or left a moment ago) joins at its
+        // maturity, as passenger routes do (models/pairMaturity.js).
+        weeksOpen:       inheritedWeeksOpen(state, action.origin, action.destination, { kind: 'cargo' }),
         launchCost,
         hub:             state.hub,
         cargo:           true,
