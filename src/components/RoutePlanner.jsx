@@ -27,6 +27,7 @@ import { routeLaunchCost } from '../data/overhead.js';
 import { checkRouteRestrictions, standShortfall } from '../data/airportRestrictions.js';
 import { normalizeCateringRef } from '../data/cateringPlans.js';
 import CateringSelector from './CateringSelector.jsx';
+import { makePreset, PRESET_OPTIONS } from '../utils/cabinPresets.js';
 import CargoRoutePlanner, { ModeToggle } from './CargoRoutePlanner.jsx';
 import TagRoutePlanner from './TagRoutePlanner.jsx';
 import InfoTip from './InfoTip.jsx';
@@ -274,47 +275,63 @@ export function configSummary(cfg) {
   return parts.length ? parts.join('/') : '—';
 }
 
-/** Build a preset cabin layout sized to a type's total floor units (= type.seats). */
-// `typical` is the type's typical seating (where its headline range applies): the
-// default all-economy cabin fills to it, and 'dense' packs to the exit limit.
-export function makePreset(kind, seats, typical = seats) {
-  if (kind === 'dense') kind = 'economy', typical = seats;
-  const base = {
-    firstClass: 0, businessClass: 0, premiumEconomy: 0, economy: Math.min(seats, typical),
-    seatQuality: 'standard', serviceQuality: 'standard',
-  };
-  if (kind === 'twoClass') {
-    const biz = Math.max(1, Math.floor((seats * 0.15) / CLASS_SPACE_MULTIPLIERS.businessClass));
-    const eco = Math.max(0, Math.floor(seats - biz * CLASS_SPACE_MULTIPLIERS.businessClass));
-    return { ...base, businessClass: biz, economy: eco };
-  }
-  if (kind === 'threeClass') {
-    const biz  = Math.max(1, Math.floor((seats * 0.20) / CLASS_SPACE_MULTIPLIERS.businessClass));
-    const prem = Math.max(1, Math.floor((seats * 0.15) / CLASS_SPACE_MULTIPLIERS.premiumEconomy));
-    const used = biz * CLASS_SPACE_MULTIPLIERS.businessClass + prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
-    return { ...base, businessClass: biz, premiumEconomy: prem, economy: Math.max(0, Math.floor(seats - used)) };
-  }
-  if (kind === 'premiumHeavy') {
-    const first = Math.max(1, Math.floor((seats * 0.08) / CLASS_SPACE_MULTIPLIERS.firstClass));
-    const biz   = Math.max(1, Math.floor((seats * 0.30) / CLASS_SPACE_MULTIPLIERS.businessClass));
-    const prem  = Math.max(1, Math.floor((seats * 0.20) / CLASS_SPACE_MULTIPLIERS.premiumEconomy));
-    const used  = first * CLASS_SPACE_MULTIPLIERS.firstClass + biz * CLASS_SPACE_MULTIPLIERS.businessClass + prem * CLASS_SPACE_MULTIPLIERS.premiumEconomy;
-    return { ...base, firstClass: first, businessClass: biz, premiumEconomy: prem, economy: Math.max(0, Math.floor(seats - used)) };
-  }
-  return base; // 'economy'
-}
-
-const PRESET_OPTIONS = [
-  { id: 'economy',      label: 'All economy, typical seats (default)' },
-  { id: 'dense',        label: 'All economy, packed to the limit (less range)' },
-  { id: 'twoClass',     label: 'Two-class (business + economy)' },
-  { id: 'threeClass',   label: 'Three-class (business + prem. eco + economy)' },
-  { id: 'premiumHeavy', label: 'Premium-heavy (first + business + prem. eco)' },
-];
+// makePreset lives in utils/cabinPresets.js; re-exported for existing importers.
+export { makePreset };
 
 // ─── Cabin configurator (Route Planner) ─────────────────────────────────────────
 
+// Save the planner's cabin as a named template. Templates are per aircraft
+// type and are what the buy and refit dialogs offer, so a cabin worked out
+// here can be bought as-is.
+function SaveCabinTemplate({ typeId, config, templates }) {
+  const { dispatch } = useGame();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  if (!typeId || !config) return null;
+  const trimmed = name.trim();
+  const clash = trimmed && templates.some(t => t.name.toLowerCase() === trimmed.toLowerCase());
+  function save() {
+    if (!trimmed) return;
+    dispatch({ type: 'SAVE_CABIN_TEMPLATE', name: trimmed, typeId, config: { ...config } });
+    setName('');
+    setOpen(false);
+  }
+  if (!open) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <button type="button" className="btn btn-ghost" data-save-cabin-template="open"
+          style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setOpen(true)}>
+          + Save as template
+        </button>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          Saved templates appear in the Templates list when you buy or refit this aircraft type.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', maxWidth: 420 }}>
+        <input autoFocus type="text" placeholder="Template name (e.g. Premium Long-haul)"
+          value={name} maxLength={40}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setOpen(false); }}
+          style={{ flex: 1, padding: '5px 8px', fontSize: 12, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }} />
+        <button type="button" className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} disabled={!trimmed} onClick={save}>Save</button>
+        <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => { setOpen(false); setName(''); }}>Cancel</button>
+      </div>
+      {clash && (
+        <div style={{ fontSize: 10, color: 'var(--yellow)', marginTop: 4 }}>
+          A template with this name exists for this type — saving will overwrite it.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CabinConfigPanel({ type, config, onChange, source, onSourceChange, fleetOptions }) {
+  const { state: gameState } = useGame();
+  const templates = (gameState.cabinTemplates ?? []).filter(t => t.typeId === type?.id);
   const maxSeats = type?.seats ?? 0;
   const cfg = config ?? defaultConfig(maxSeats);
 
@@ -381,6 +398,13 @@ function CabinConfigPanel({ type, config, onChange, source, onSourceChange, flee
             ))}
           </optgroup>
         )}
+        {templates.length > 0 && (
+          <optgroup label="Your saved templates">
+            {templates.map(t => (
+              <option key={t.id} value={`tpl:${t.id}`}>{t.name} — {configSummary(t.config)}</option>
+            ))}
+          </optgroup>
+        )}
         <optgroup label="Presets">
           {PRESET_OPTIONS.map(p => (
             <option key={p.id} value={p.id}>{p.label}</option>
@@ -388,6 +412,8 @@ function CabinConfigPanel({ type, config, onChange, source, onSourceChange, flee
         </optgroup>
         <option value="custom">Custom (edited below)</option>
       </select>
+
+      <SaveCabinTemplate typeId={type?.id} config={cfg} templates={templates} />
 
       {/* Seat-count editors */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -753,6 +779,11 @@ export default function RoutePlanner() {
     const type = getAircraftType(selectedTypeId);
     if (!type) return;
     if (src === 'custom') return; // keep current edited layout
+    if (src.startsWith('tpl:')) {
+      const tpl = (state.cabinTemplates ?? []).find(t => `tpl:${t.id}` === src);
+      if (tpl) setCabinConfig({ ...newAircraftConfig(type), ...tpl.config });
+      return;
+    }
     const fleetMatch = fleetOfType.find(a => a.id === src);
     if (fleetMatch?.config) {
       setCabinConfig({ ...newAircraftConfig(type), ...fleetMatch.config });
