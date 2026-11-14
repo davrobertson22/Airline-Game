@@ -11,7 +11,7 @@ import { projectWeek } from '../utils/financeProjection.js';
 import { loyaltyCityTable } from '../utils/simulation.js';
 import { loyaltyProgramOn } from '../models/loyaltyPools.js';
 import { loyaltyMapPoints, LOYALTY_MAP_KEY, LOYALTY_FILL } from './loyaltyMapCore.js';
-import { getAlliance } from '../data/alliances.js';
+import { getAlliance, allianceMembers } from '../data/alliances.js';
 import { HUB_TIERS } from '../models/demand.js';
 import { Glyph } from './Icons.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
@@ -1010,7 +1010,10 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   // field sits faint behind them — the same treatment the positioning chart
   // gives the same distinction.
   const partnerRouteData = useMemo(() => {
-    const allianceMemberIds   = new Set(currentAlliance?.memberIds ?? []);
+    // Live membership, not the founding list: carriers join and leave blocs,
+    // and in era worlds nobody holds a founding seat until alliances open.
+    const allianceMemberIds   = new Set(currentAlliance
+      ? allianceMembers(currentAlliance.id, competitors).map(c => c.id) : []);
     const codesharePartnerIds = new Set(codeshareAgreements.map(a => a.competitorId));
     const myPairs = new Set((routes ?? []).map(r => [r.origin, r.destination].sort().join('-')));
     const result = [];

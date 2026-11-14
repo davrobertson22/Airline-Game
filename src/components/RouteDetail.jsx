@@ -15,7 +15,7 @@ import {
 import { playerCampaignBoost } from '../models/pairShare.js';
 import { rivalIndexFor, rivalOneStopOffersFor, rivalsOn, isLegacy } from '../models/network.js';
 import { blendJetAgeAppeal, jetAgeFields } from '../models/jetAge.js';
-import { getAlliance } from '../data/alliances.js';
+import { getAlliance, allianceMembers } from '../data/alliances.js';
 import {
   simulateRoute, referencePrice, distanceKm, formatMoney, formatPercent, currentGameDate,
   hubSpokeCounts, pairConnectivityBonus,
@@ -596,7 +596,7 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
   const connecting = useMemo(() => {
     // Build alliance/codeshare partner hub codes for external feed boost
     const allianceDef        = state.allianceMembership ? getAlliance(state.allianceMembership.allianceId) : null;
-    const alliancePartnerIds = allianceDef?.memberIds ?? [];
+    const alliancePartnerIds = allianceDef ? allianceMembers(allianceDef.id, state.competitors ?? []).map(c => c.id) : [];
     const codeshareIds       = (state.codeshareAgreements ?? []).map(a => a.competitorId);
     const allPartnerIds      = new Set([...alliancePartnerIds, ...codeshareIds]);
     const partnerHubCodes    = (state.competitors ?? [])
