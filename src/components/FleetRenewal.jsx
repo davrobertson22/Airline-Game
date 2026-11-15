@@ -554,7 +554,7 @@ export function RenewalNotice({ aircraft }) {
         <div>
           <strong style={{ color: 'var(--yellow)' }}>⏳ Waiting to replace {target?.name ?? aircraft.replacing.name}.</strong>{' '}
           {aircraft.replacing.waiting ? `${aircraft.replacing.waiting[0].toUpperCase()}${aircraft.replacing.waiting.slice(1)}. ` : ''}
-          It takes over the routes the week it is free.{' '}
+          It takes over the routes as soon as those routes come home.{' '}
           <button className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
             onClick={() => dispatch({ type: 'CLEAR_FLEET_REPLACEMENT', aircraftId: aircraft.id })}>
             Stop waiting

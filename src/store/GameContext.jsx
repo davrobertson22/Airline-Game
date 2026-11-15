@@ -529,14 +529,37 @@ export function planTypeReplacement(state, orderTypeId, fromTypeId) {
 export function replacementWait(state, oldTail) {
   if (!oldTail) return null;
   const id = oldTail.id;
-  if (isOutOfService(oldTail)) {
-    return oldTail.status === 'maintenance' ? `${oldTail.name} is in a maintenance check` : `${oldTail.name} is grounded`;
-  }
+  // A tail in the shop does NOT hold up its replacement (port of Headwinds
+  // b75a305; Discord, Kat the Fox, 2026-11-12: "this is not reserve, this is a
+  // replacement"). The new aircraft takes over the routes the week it arrives —
+  // any reserve cover on them ends — and the old one leaves from the shop. The
+  // waits left are commitments the old tail is flying for someone else: a
+  // reserve out covering a broken aircraft (whose routes would be grounded),
+  // or a charter contract. Both end within weeks and the swap follows.
   const ops = [...(state.routes ?? []), ...(state.cargoRoutes ?? [])];
-  if (ops.some(r => r.coverForAircraftId === id)) return `a reserve is covering ${oldTail.name}'s routes`;
   if (ops.some(r => r.aircraftId === id && r.coverForAircraftId)) return `${oldTail.name} is covering for another aircraft`;
   if (activeCharterOps(state.charters ?? []).some(c => c.aircraftId === id)) return `${oldTail.name} is flying a charter`;
   return null;
+}
+
+// End every reserve cover on the routes a replaced tail owns: they come home to
+// it so TRANSFER_ROUTES can hand them to the new tail. A reserve left flying
+// nothing goes back to standing by (its base is kept).
+function endCoversFor(state, aircraftId) {
+  const freed = new Set();
+  const home = (list) => (list ?? []).map(r => {
+    if (r.coverForAircraftId !== aircraftId) return r;
+    freed.add(r.aircraftId);
+    return { ...r, aircraftId, coverForAircraftId: null };
+  });
+  const routes = home(state.routes);
+  const cargoRoutes = home(state.cargoRoutes);
+  if (freed.size === 0) return state;
+  const flying = new Set([...routes, ...cargoRoutes].map(r => r.aircraftId));
+  return {
+    ...state, routes, cargoRoutes,
+    fleet: state.fleet.map(a => (freed.has(a.id) && !flying.has(a.id)) ? withRouteStatus(a, 'idle') : a),
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -1982,7 +2005,7 @@ function renewOne(state, newId, toasts) {
     return setTag(state, { ...tag, waiting: wait });
   }
 
-  let s = state;
+  let s = endCoversFor(state, old.id);
   // Scheduled routes only — no charter can be on it (replacementWait above).
   const moving = [...(s.routes ?? []), ...(s.cargoRoutes ?? [])].filter(r => r.aircraftId === old.id).length;
   if (moving > 0) {
@@ -1993,11 +2016,25 @@ function renewOne(state, newId, toasts) {
         title: `${nu.name} can't take over from ${oldName}`,
         message: `${c.reason}. ${nu.name} is idle and ${oldName} keeps its routes — move them by hand from the Fleet page.`,
       });
-      return setTag(s, null);
+      return setTag(state, null);   // covers left as they were
     }
     s = reducer(s, { type: 'TRANSFER_ROUTES', fromAircraftId: old.id, toAircraftId: nu.id });
   }
   s = setTag(s, null);
+
+  // A reserve's job is its standby slot, not routes (it flies none of its own),
+  // so the replacement takes over the slot: same base, through SET_RESERVE's own
+  // checks (idle, in service, base still a hub). The old tail leaves standby so
+  // a kept spare does not double the readiness bill (port of Headwinds b75a305;
+  // Discord: "replacing reserve aircraft doesn't place them on reserve").
+  let standby = null;
+  if (old.reserveBase && moving === 0) {
+    const stationed = reducer(s, { type: 'SET_RESERVE', aircraftId: nu.id, baseCode: old.reserveBase });
+    if (stationed.fleet?.find(a => a.id === nu.id)?.reserveBase === old.reserveBase) {
+      s = reducer(stationed, { type: 'CLEAR_RESERVE', aircraftId: old.id });
+      standby = old.reserveBase;
+    }
+  }
 
   let fate;
   if (tag.disposal === 'keep') {
@@ -2030,7 +2067,9 @@ function renewOne(state, newId, toasts) {
     title: `${nu.name} replaces ${oldName}`,
     message: (moving > 0
       ? `${nu.name} takes over ${moving} route${moving !== 1 ? 's' : ''} from ${oldName}. `
-      : `${oldName} was flying nothing, so there were no routes to move. `) + fate,
+      : standby
+        ? `${nu.name} takes over ${oldName}'s reserve slot at ${standby}. `
+        : `${oldName} was flying nothing, so there were no routes to move. `) + fate,
   });
   return s;
 }
