@@ -18,8 +18,8 @@ const Fleet = lazyPage(() => import('./components/Fleet.jsx'), 'Fleet');
 const Routes = lazyPage(() => import('./components/Routes.jsx'), 'Routes');
 const Marketplace = lazyPage(() => import('./components/Marketplace.jsx'), 'Marketplace');
 import Finance from './components/Finance.jsx';
-import { BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon, BulbIcon } from './components/Icons.jsx';
-import MapShell, { readLayout, writeLayout, MAP_TAB, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
+import { ArrowLeftIcon, BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon, BulbIcon } from './components/Icons.jsx';
+import MapShell, { readLayout, writeLayout, MAP_TAB, MAP_PAGES, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 const HubManagement = lazyPage(() => import('./components/HubManagement.jsx'), 'HubManagement');
 const Reputation = lazyPage(() => import('./components/Reputation.jsx'), 'Reputation');
 const Competition = lazyPage(() => import('./components/Competition.jsx'), 'Competition');
@@ -43,6 +43,7 @@ import BrandingModal from './components/BrandingModal.jsx';
 import { BRANDING_OPEN_EVENT } from './utils/openBranding.js';
 import { openAlertSettings, tagWeeklyBatch } from './utils/alertPrefs.js';
 import { useNavKeys, reachable, cyclePage, keyHint, classicKey, CLASSIC_KEY_SETTINGS } from './utils/navKeys.js';
+import { usePageHistory, useBackKey, BACK_KEY_LABEL } from './utils/pageHistory.js';
 import { gameAdBreak } from './utils/ads.js';
 import useIsMobile from './hooks/useIsMobile.js';
 import useNavFavourites from './hooks/useNavFavourites.js';
@@ -397,6 +398,31 @@ function AppInner() {
   const classicNavKeys = useRef(null);
   useNavKeys((d) => classicNavKeys.current?.(d) === true);
 
+  // ← Back to the previous screen (utils/pageHistory.js): the button in the
+  // classic nav bar and the map-view panel header, and the B key. Records every
+  // page change; switching layout or leaving the game clears it. Above the
+  // early returns, like every hook here.
+  const pageStillThere = (id) => {
+    if (layout === 'map') {
+      if (id === MAP_TAB) return true;
+      const p = MAP_PAGES[id];
+      return !!p && (!p.remoteOnly || remote) && (!p.when || p.when(state));
+    }
+    if (!TABS_BY_ID[id]) return false;
+    if (id === 'partners' && state.partnershipsWorld !== true) return false;
+    return true;
+  };
+  const pageHistory = usePageHistory(activeTab, setActiveTab, {
+    resetKey: `${layout}|${state.phase}`,
+    isValid: pageStillThere,
+    onBack: () => setOpenGroup(null),
+  });
+  useBackKey(() => {
+    if (state.phase === 'setup' || !pageHistory.canGoBack || typeof document === 'undefined') return false;
+    if (!reachable(document.querySelector('[data-nav-back]'))) return false;
+    return pageHistory.goBack();
+  });
+
   if (!hydrated) return null;
 
   if (state.phase === 'setup') { classicNavKeys.current = null; return <SetupScreen />; }
@@ -672,6 +698,9 @@ function AppInner() {
           tabLabel={tabLabel}
           activeTab={activeTab}
           navigate={navigate}
+          canGoBack={pageHistory.canGoBack}
+          backTarget={pageHistory.backTarget}
+          onBack={pageHistory.goBack}
           pages={mapPages}
           footer={footer}
           onAdvance={handleAdvanceWeek}
@@ -884,6 +913,20 @@ function AppInner() {
 
       {/* Nav tabs (grouped) */}
       <div className="nav-tabs">
+        <button
+          type="button"
+          data-nav-back
+          className="nav-tab nav-back"
+          onClick={pageHistory.goBack}
+          disabled={!pageHistory.canGoBack}
+          aria-label="Back to the previous screen"
+          title={pageHistory.canGoBack
+            ? `Back to ${tabLabel(pageHistory.backTarget) ?? 'the previous screen'}${keyHint(BACK_KEY_LABEL)}`
+            : 'Back (nothing to go back to yet)'}
+        >
+          <ArrowLeftIcon size={14} />
+          <span>Back</span>
+        </button>
         {NAV_GROUPS.map((g0, gi) => {
           const navKey = classicKey(gi);
           // Travel partnerships exist only in games started with them; older
