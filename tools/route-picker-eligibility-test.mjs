@@ -137,7 +137,7 @@ test('a plane with no block hours left is not offered', () => {
   // the subject here is the PICKER, not the migration.
   const saturated = {
     ...save,
-    scheduleTrimVersion: 1,
+    scheduleTrimVersion: 2,
     routes: [
       { ...save.routes[0], weeklyFrequency: 21 },
       { id: 'r1b', origin: HUB, destination: FAR1, aircraftId: 'ac_hub', weeklyFrequency: 21, weeksOpen: 20, hub: HUB, ticketPrice: 300, cateringLevel: 'full' },

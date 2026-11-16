@@ -21,12 +21,15 @@
 // cruiseKmh:            cruise speed override (km/h). Freighters share one
 //                       category, so they cannot take a speed from the category
 //                       table the way passenger types do — each carries its own.
-// eis:                  year of entry into service. Inert to the engine — nothing
-//                       reads it at runtime — but it is the vintage the delivered
-//                       -age bands below are derived from, and the consistency
-//                       suite uses it to check that every type's arrival age and
-//                       price floor match its generation. Without it those three
-//                       checks silently do not run.
+// eis:                  year of entry into service. Read at runtime: it decides
+//                       when a type appears in the market (marketFilters.js,
+//                       Marketplace.jsx), when era launch orders open and first
+//                       deliver (productionLines.js launchWindow), the design-age
+//                       quality penalty (demand.js) and the AI's fleet choice
+//                       (rivalBrain.js). A wrong year changes what players can buy
+//                       and when. It is also the vintage the delivered-age bands
+//                       below are derived from, and the consistency suite uses it
+//                       to check each type's arrival age and price floor.
 // deliveredAgeWeeks:    age (in weeks) the airframe arrives at. Used conversions
 //                       are NOT new builds: purchasePrice is what a frame of that
 //                       vintage costs, and it arrives already that old, so it
@@ -659,6 +662,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1800,
     crewCostPerKm: 4.28,
     baseMaintenancePerWk: 390_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The double-decker superjumbo. Unmatched capacity on ultra-high-demand routes — and priced for it: the most airframe money can buy.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/A6-EDY_A380_Emirates_31_jan_2013_jfk_%288442269364%29_%28cropped%29.jpg/960px-A6-EDY_A380_Emirates_31_jan_2013_jfk_%288442269364%29_%28cropped%29.jpg',
     configOptions: {
@@ -687,6 +691,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 132.14,
     crewCostPerKm: 1.21,
     baseMaintenancePerWk: 8_000,
+    cruiseKmh: 460,   // CASA: max cruise 248 kt
     description: 'Spanish STOL transport with impressive range. Popular in military and civil roles.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/CASA_CN-235_of_Royal_Moroccan_Air_Force.JPG/960px-CASA_CN-235_of_Royal_Moroccan_Air_Force.JPG',
   },
@@ -710,6 +715,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 80.94,
     crewCostPerKm: 0.95,
     baseMaintenancePerWk: 4_000,
+    cruiseKmh: 365,   // Let: cruise 365 km/h
     description: 'Czech twin-turboprop. Workhorse of Eastern European and African regional aviation.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/L410_UVP-E20.jpg/960px-L410_UVP-E20.jpg',
   },
@@ -722,7 +728,7 @@ export const AIRCRAFT_TYPES = [
     category: 'Regional Jet',
     eis: 2009,
     oop: 2018,   // year the production line closed (era worlds: second-hand only after this)
-    seats: 89,
+    seats: 85,   // Antonov: 68-85 seats, 85 one-class dense
     typicalSeats: 75,   // seats the headline range is quoted at
     deliveredAgeWeeks: 416,   // line closed 2018 — youngest frame left is ~8y old
     range: 3_500,
@@ -752,6 +758,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 137.18,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 8_800,
+    cruiseKmh: 556,   // ATR: max cruise 300 KTAS
     description: 'Small regional turboprop. Ideal for thin short-haul routes under 1,300 km.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/ATR_42-500_Hop%21_%28HOP%29_F-GPYK_-_MSN_537_%2810276128103%29.jpg/960px-ATR_42-500_Hop%21_%28HOP%29_F-GPYK_-_MSN_537_%2810276128103%29.jpg',
   },
@@ -770,6 +777,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 177.46,
     crewCostPerKm: 1.39,
     baseMaintenancePerWk: 14_000,
+    cruiseKmh: 510,   // ATR: max cruise 275 KTAS
     description: 'Workhorse turboprop. Excellent economics on short regional routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg/960px-F-WWEZ_%28948%29_ATR.72-212A%28500%29_FlyFireFly_TLS_30AUG11_%286097869500%29_%28cropped%29.jpg',
   },
@@ -795,6 +803,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 146,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 9_400,
+    cruiseKmh: 493,   // ATR factsheet: max cruise 266 KTAS
     description: 'The original ATR, on 1,800 shp PW120s and four-blade propellers. Slower and thirstier than the later 42s, but cheap: the type that opened up thin regional routes across Europe and the Americas from 1985.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/OY-MUH_ATR.42-300_Muk_Air_CPH_16AUG00_(5934231857).jpg?width=960',
   },
@@ -816,6 +825,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 140,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 9_000,
+    cruiseKmh: 556,   // ATR factsheet: max cruise 300 KTAS
     description: 'The second-generation ATR 42: PW127E engines, six-blade propellers and a new cabin. Almost everything the -600 does, without the glass cockpit, at about half the price second-hand.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/G-LMRE_-_ATR_42-500_-_Loganair_LHR_050326.jpg?width=960',
   },
@@ -837,6 +847,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 184,
     crewCostPerKm: 1.39,
     baseMaintenancePerWk: 15_000,
+    cruiseKmh: 515,   // ATR factsheet: max cruise 278 KTAS
     description: 'The first stretched ATR (the 72-201/202), on PW124B engines. Needs the longest runway of the family and burns the most, but 70 seats for the price of a used 50-seater.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/VASCO_ATR_72-200_(VN-B208)_at_Con_Dao_Airport.jpg?width=960',
   },
@@ -858,6 +869,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 181,
     crewCostPerKm: 1.39,
     baseMaintenancePerWk: 14_500,
+    cruiseKmh: 510,   // ATR factsheet: max cruise 275 KTAS
     description: 'The ATR 72-212A: PW127F engines and six-blade propellers, the best-selling ATR before the -600. Shorter take-off than the -200, and still the backbone of many regional fleets.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Tunisair_Express_ATR_72-212A,_TS-LBE_(8920606170).jpg?width=960',
   },
@@ -877,6 +889,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 172.14,   // ATR: at least 3% block fuel saving over the PW127M
     crewCostPerKm: 1.39,
     baseMaintenancePerWk: 12_600,   // ATR: 20% lower direct engine maintenance, 40% more time on wing
+    cruiseKmh: 510,   // ATR: max cruise 275 KTAS, same airframe as the -600
     description: 'The ATR 72-600 with Pratt & Whitney PW127XT engines, delivered from 2025 (Air Corsica first). Same airframe, 3% less fuel and markedly cheaper engine maintenance, for a little more money.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Aer_Lingus_Regional,_ATR_72-600_(EI-FAS)_%40_MAN,_Feb_2016.jpg?width=960',
   },
@@ -923,6 +936,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 415,
     crewCostPerKm: 1.50,
     baseMaintenancePerWk: 40_000,
+    cruiseKmh: 780,   // Boeing: cruise Mach 0.73-0.74
     description: 'The original 737 of 1968, launched by Lufthansa: the shortest and rarest of the family — only 30 built before airlines switched to the -200 stretch. Two-crew short-haul jet economics in a small, short-legged package.',
     image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Boeing_737-130,_Lufthansa_AN1039814.jpg?width=960',
   },
@@ -944,6 +958,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 431,
     crewCostPerKm: 1.58,
     baseMaintenancePerWk: 45_000,
+    cruiseKmh: 780,   // Boeing: cruise Mach 0.73-0.74
     description: 'The 737-200, built from 1968 to 1988 (as the -200 Advanced from 1971). Very cheap on the second-hand market but thirsty.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Pacific_Western_Airlines_-_Boeing_737-200_%2850445370143%29.jpg/960px-Pacific_Western_Airlines_-_Boeing_737-200_%2850445370143%29.jpg',
   },
@@ -1025,6 +1040,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 350,
     crewCostPerKm: 1.33,
     baseMaintenancePerWk: 45_000,
+    cruiseKmh: 795,   // Boeing 737 Classic: cruise Mach 0.745
     description: 'Shortest Classic 737. Modest capacity and useful range for thin routes, at a low entry price.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Boeing_737-500_Lufthansa_%28DLH%29_D-ABIE_-_MSN_24819_1979_-_Named_Hildesheim_%285590125906%29.jpg/960px-Boeing_737-500_Lufthansa_%28DLH%29_D-ABIE_-_MSN_24819_1979_-_Named_Hildesheim_%285590125906%29.jpg',
   },
@@ -1045,6 +1061,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 362.5,
     crewCostPerKm: 1.37,
     baseMaintenancePerWk: 47_600,
+    cruiseKmh: 795,   // Boeing 737 Classic: cruise Mach 0.745
     description: 'Classic 737 with CFM56-3 engines. Low entry price, but thirsty and expensive to maintain at its age.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Classic_Colors_Southwest_Airlines_N648SW_Boeing_737-3H4_SJC.jpg/960px-Classic_Colors_Southwest_Airlines_N648SW_Boeing_737-3H4_SJC.jpg',
   },
@@ -1129,6 +1146,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 416,
     crewCostPerKm: 1.39,
     baseMaintenancePerWk: 55_000,
+    cruiseKmh: 795,   // Boeing 737 Classic: cruise Mach 0.745
     description: 'Stretched Classic 737. Carries as many as a 737-800 for far less capital, but the CFM56-3s are thirsty and the airframe arrives old.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Boeing_737-400_%28Olympic_Airlines%29_%283554931490%29.jpg/960px-Boeing_737-400_%28Olympic_Airlines%29_%283554931490%29.jpg',
   },
@@ -1257,7 +1275,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 737 MAX 10',
     manufacturer: 'Boeing',
     category: 'Narrow Body',
-    eis: 2028,
+    eis: 2027,   // FAA certified 20 Oct 2026; first deliveries 2027
     seats: 230,
     typicalSeats: 198,   // seats the headline range is quoted at
     range: 5_740,
@@ -1343,12 +1361,12 @@ export const AIRCRAFT_TYPES = [
     baseMaintenancePerWk: 120_000,
     description: 'Original transatlantic twin. Long range in a smaller widebody package.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/United_Boeing_767-200_N74007_MD1.jpg/960px-United_Boeing_767-200_N74007_MD1.jpg',
+    // No winglet option: Aviation Partners' blended winglets were certified for the 767-300ER only.
     configOptions: {
       engines: [
         { id: 'cf6',    label: 'GE CF6-80A', description: 'Standard fitment. Broad MRO availability.', fuelMod: 1.00, priceMod: 1.00, default: true },
         { id: 'pw4000', label: 'PW4052', description: '2% better fuel economy at a modest price premium.', fuelMod: 0.98, priceMod: 1.015, maintMod: 1.02 },
       ],
-      wingtips: { label: 'Blended Winglets', description: 'Reduces fuel burn by ~3% and extends range by ~3%.', fuelMod: 0.97, rangeMod: 1.03, cost: 900_000 },
     },
   },
   {
@@ -1549,6 +1567,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1725,
     crewCostPerKm: 4.14,
     baseMaintenancePerWk: 275_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'Classic first-generation jumbo. Very cheap to buy but extremely thirsty.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Boeing_747-209B_-_China_Airlines_B-18255_0239713.jpg/960px-Boeing_747-209B_-_China_Airlines_B-18255_0239713.jpg',
   },
@@ -1616,6 +1635,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1338.25,
     crewCostPerKm: 4.14,
     baseMaintenancePerWk: 265_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The shortened long-ranger. Fewer seats than a standard 747 but extraordinary range. The first aircraft to operate true nonstop ultra-long-haul polar routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Kazakhstan_Airlines_Boeing_747SP_Maiwald.jpg/960px-Kazakhstan_Airlines_Boeing_747SP_Maiwald.jpg',
   },
@@ -1678,6 +1698,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1608.25,
     crewCostPerKm: 4.05,
     baseMaintenancePerWk: 310_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The Queen of the Skies. Placarded at the standard 605-seat 747 exit limit, cheap to acquire and able to reach almost anywhere — but four thirsty engines make it a high-density trunk aircraft rather than an efficient one.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Singapore_Airlines_B747-400_%289V-SPK%29_in_Tropical_livery.jpg/960px-Singapore_Airlines_B747-400_%289V-SPK%29_in_Tropical_livery.jpg',
   },
@@ -1693,13 +1714,14 @@ export const AIRCRAFT_TYPES = [
     seats: 605,
     typicalSeats: 416,   // seats the headline range is quoted at
     deliveredAgeWeeks: 312,   // arrives 6y old - out of production, bought used
-    range: 14045,   // Boeing: 7,585 nmi with 416 (3-class)
+    range: 14205,   // Boeing: 7,670 nmi with 416 (3-class)
     runwayFt: 10000,
     weeklyLease: 131000,
     purchasePrice: 66000000,
     fuelBurnPer100km: 1650,
     crewCostPerKm: 4.05,
     baseMaintenancePerWk: 318000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'A heavier 747-400 with an extra tank in the hold, built for Qantas to fly Melbourne to Los Angeles with a full load. Six passenger aircraft were built. More range than the -400, and more fuel to get it.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Qantas_Boeing_747-438ER_Spijkers.jpg/960px-Qantas_Boeing_747-438ER_Spijkers.jpg',
   },
@@ -1720,6 +1742,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1608.25,
     crewCostPerKm: 4.05,
     baseMaintenancePerWk: 310_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The domestic Jumbo. Built for high-frequency short sectors: strengthened for the cycles, stripped of its winglets and flown at a reduced max weight, which cuts its range to 3,700 km. In exchange it is the only 747 ever certified for the full 660-seat exit limit — 55 more than any other. Same price, same burn, same cabin as the -400; you are trading range for seats and nothing else.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/JAL_B747-400D(JA8905)_(4577998775).jpg/960px-JAL_B747-400D(JA8905)_(4577998775).jpg',
   },
@@ -1728,7 +1751,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Boeing 777X-8',
     manufacturer: 'Boeing',
     category: 'Wide Body',
-    eis: 2029,
+    eis: 2030,   // Boeing: the -8 passenger model follows the -8F (2028), not before 2030
     seats: 445,
     typicalSeats: 395,   // seats the headline range is quoted at
     range: 16_190,   // Boeing: 8,745 nmi at 395 seats (June 2026 'up to' 9,500 nmi states no cabin: reached with a light one, payloadRangeMod)
@@ -1776,6 +1799,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1400,
     crewCostPerKm: 4.14,
     baseMaintenancePerWk: 340_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'Latest and longest 747 — but Boeing never re-certified the exit limit, so 5.6 m of extra fuselage buys not one seat over the -400. What it buys instead: an eighth less fuel per seat and 1,400 km more range.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/D-ABYT_at_FRA.jpg/960px-D-ABYT_at_FRA.jpg',
   },
@@ -1877,6 +1901,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 118,
     crewCostPerKm: 0.85,
     baseMaintenancePerWk: 15_000,
+    cruiseKmh: 850,   // Bombardier: normal cruise Mach 0.80
     description: 'Super-midsize business jet. Ten seats, transcontinental range and a flat floor — the workhorse of the executive charter market.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Bombardier_Challenger_350_N360VJ_BWI_MD1.jpg/960px-Bombardier_Challenger_350_N360VJ_BWI_MD1.jpg',
   },
@@ -1899,6 +1924,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 345,
     crewCostPerKm: 1.04,
     baseMaintenancePerWk: 25_600,
+    cruiseKmh: 760,   // BAe: cruise about 410 kt
     description: 'Upgraded BAe 146 with FADEC engines. Quieter and more reliable than its predecessor.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/EI-RJU_Cityjet_British_Aerospace_Avro_RJ85%2C_takeoff_from_Schiphol_%28EHAM-AMS%29_runway_36L_pic1.JPG/960px-EI-RJU_Cityjet_British_Aerospace_Avro_RJ85%2C_takeoff_from_Schiphol_%28EHAM-AMS%29_runway_36L_pic1.JPG',
   },
@@ -1919,6 +1945,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 365,
     crewCostPerKm: 1.04,
     baseMaintenancePerWk: 26_400,
+    cruiseKmh: 760,   // BAe: cruise about 410 kt
     description: 'Quiet quad-jet with exceptional short-field performance. Perfect for city airports.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/British_Aerospace_BAe-146-200%2C_Eurowings_AN0107805.jpg/960px-British_Aerospace_BAe-146-200%2C_Eurowings_AN0107805.jpg',
   },
@@ -1942,6 +1969,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 34.67,
     crewCostPerKm: 0.63,
     baseMaintenancePerWk: 1_600,
+    cruiseKmh: 270,   // Britten-Norman: cruise about 145 kt
     description: 'Tiny island-hopper. Operates from grass strips and short runways.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Juist%2C_Flugplatz%2C_Britten-Norman_Islander_--_2014_--_3706.jpg/960px-Juist%2C_Flugplatz%2C_Britten-Norman_Islander_--_2014_--_3706.jpg',
   },
@@ -1964,6 +1992,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 51.93,
     crewCostPerKm: 0.63,
     baseMaintenancePerWk: 2_000,
+    cruiseKmh: 344,   // Cessna Grand Caravan EX: max cruise 186 KTAS
     description: 'Single-engine utility turboprop. Ideal for remote communities and island routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Iraqi_Air_Force_Cessna_208_Caravan_training_mission.jpg/960px-Iraqi_Air_Force_Cessna_208_Caravan_training_mission.jpg',
   },
@@ -1983,6 +2012,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 76.5,
     crewCostPerKm: 0.72,
     baseMaintenancePerWk: 7_500,
+    cruiseKmh: 835,   // Cessna: max cruise 451 KTAS
     description: 'Light business jet. Cheap to own, quick to turn, and happy on a 3,400 ft strip — the entry ticket to executive charter work.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Cessna_Citation_CJ4_525C_N194ME_FDK_MD1.jpg/960px-Cessna_Citation_CJ4_525C_N194ME_FDK_MD1.jpg',
   },
@@ -2043,6 +2073,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 162.83,
     crewCostPerKm: 1.33,
     baseMaintenancePerWk: 11_200,
+    cruiseKmh: 528,   // De Havilland: max cruise 285 kt
     description: 'The classic Dash 8 in its most popular variant. Cheap, reliable, and widely supported. A workhorse of thin short-haul routes worldwide.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Bombardier_DHC-8-315Q_Dash_8_-_Provincial_Airlines_-_PAL_%282012.03%29.jpg/960px-Bombardier_DHC-8-315Q_Dash_8_-_Provincial_Airlines_-_PAL_%282012.03%29.jpg',
   },
@@ -2063,6 +2094,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 190.48,
     crewCostPerKm: 1.46,
     baseMaintenancePerWk: 16_800,
+    cruiseKmh: 667,   // De Havilland: max cruise 360 kt
     description: 'Fast turboprop with longer range than ATR. Popular for inter-city routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Hamburg_Airport_Wider%C3%B8e_Bombardier_DHC-8-402Q_LN-WDR_%28DSC08713%29.jpg/960px-Hamburg_Airport_Wider%C3%B8e_Bombardier_DHC-8-402Q_LN-WDR_%28DSC08713%29.jpg',
   },
@@ -2124,6 +2156,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 70,
     crewCostPerKm: 0.72,
     baseMaintenancePerWk: 7_000,
+    cruiseKmh: 839,   // Embraer: max cruise 453 KTAS
     description: 'The best-selling light jet of its generation. A touch more frugal than the CJ4, and it works out of the shortest fields in the class.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Embraer_Phenom_300_N235EE_FDK_MD2.jpg/960px-Embraer_Phenom_300_N235EE_FDK_MD2.jpg',
   },
@@ -2203,7 +2236,6 @@ export const AIRCRAFT_TYPES = [
     description: 'Larger E-jet with solid range, perfect for medium-thin routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/KLM_Cityhopper_-_Embraer_190LR_-_AN2571563.jpg/960px-KLM_Cityhopper_-_Embraer_190LR_-_AN2571563.jpg',
     configOptions: {
-      wingtips: { label: 'Winglets', description: 'Blended winglets reduce fuel burn by ~2.5% and extend range on medium sectors.', fuelMod: 0.975, rangeMod: 1.025, cost: 300_000 },
     },
   },
   {
@@ -2214,7 +2246,7 @@ export const AIRCRAFT_TYPES = [
     eis: 2018,
     seats: 114,
     typicalSeats: 106,   // seats the headline range is quoted at
-    range: 5_460,
+    range: 5278,   // Embraer: 2,850 nm with a full cabin
     runwayFt: 4400,
     weeklyLease:       80_000,
     purchasePrice: 40000000,
@@ -2263,9 +2295,8 @@ export const AIRCRAFT_TYPES = [
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/EC-NFA_Embraer_E195-E2_Binter_VGO.jpg/960px-EC-NFA_Embraer_E195-E2_Binter_VGO.jpg',
     configOptions: {
       engines: [
-        { id: 'pw1900g', label: 'PW1922G', description: 'Standard fitment. Geared turbofan with class-leading fuel economy.', fuelMod: 1.00, priceMod: 1.00, default: true },
+        { id: 'pw1900g', label: 'PW1923G', description: 'Standard fitment. Geared turbofan with class-leading fuel economy.', fuelMod: 1.00, priceMod: 1.00, default: true },
       ],
-      wingtips: { label: 'Advanced Winglets', description: 'Integrated winglets further reduce drag and extend range on longer sectors.', fuelMod: 0.975, rangeMod: 1.025, cost: 400_000 },
     },
   },
 
@@ -2328,6 +2359,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 205,
     crewCostPerKm: 1.05,
     baseMaintenancePerWk: 32_000,
+    cruiseKmh: 904,   // Gulfstream: normal cruise Mach 0.85
     description: 'Ultra-long-range business jet. Nineteen seats and nearly 14,000 km — the only thing on this list that can take an executive party non-stop across the Pacific.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Gulfstream_G650ER%2C_EBACE_2018%2C_Le_Grand-Saconnex_%28BL7C0749%29.jpg/960px-Gulfstream_G650ER%2C_EBACE_2018%2C_Le_Grand-Saconnex_%28BL7C0749%29.jpg',
   },
@@ -2599,6 +2631,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 42.65,
     crewCostPerKm: 0.63,
     baseMaintenancePerWk: 2_200,
+    cruiseKmh: 528,   // Pilatus PC-12 NGX: max cruise 290 KTAS
     description: 'Premium Swiss single-engine turboprop. Excellent short-field performance.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Pilatus_PC-12-45%2C_Royal_Flying_Doctor_Service_AN0636290.jpg/960px-Pilatus_PC-12-45%2C_Royal_Flying_Doctor_Service_AN0636290.jpg',
   },
@@ -2641,6 +2674,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 182.78,
     crewCostPerKm: 1.33,
     baseMaintenancePerWk: 9_600,
+    cruiseKmh: 665,   // Saab: max cruise 359 kt, the fastest turboprop airliner
     description: 'Fast 50-seat turboprop, nearly jet speed. Competes on thin short-haul routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Etihad_Saab_2000_take_off.jpg/960px-Etihad_Saab_2000_take_off.jpg',
   },
@@ -2665,6 +2699,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 119.23,
     crewCostPerKm: 1.08,
     baseMaintenancePerWk: 6_200,
+    cruiseKmh: 398,   // Shorts: cruise 215 kt at 10,000 ft
     description: 'Boxy but effective 36-seater. Low acquisition cost for thin UK/Irish routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Pacific_Coastal_Airlines_Short_360-300_C-GPCF_in_CYVR.jpg/960px-Pacific_Coastal_Airlines_Short_360-300_C-GPCF_in_CYVR.jpg',
   },
@@ -2730,6 +2765,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 93.29,
     crewCostPerKm: 0.95,
     baseMaintenancePerWk: 4_000,
+    cruiseKmh: 337,   // De Havilland: max cruise 182 KTAS at 10,000 ft
     description: 'STOL legend. Operates from water, ice, grass, and gravel runways worldwide.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/WinAir_De_Havilland_Canada_DHC-6-300_Twin_Otter_Breidenstein.jpg/960px-WinAir_De_Havilland_Canada_DHC-6-300_Twin_Otter_Breidenstein.jpg',
   },
@@ -2803,7 +2839,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     seats: 0,
     payloadTonnes: 5.5,
-    cruiseKmh: 490,
+    cruiseKmh: 493,   // as the ATR 42-300 (ATR factsheet: 266 KTAS)
     range: 1_100,
     runwayFt: 3700,
     weeklyLease: 11_000,
@@ -2825,7 +2861,7 @@ export const AIRCRAFT_TYPES = [
     freighter: true,
     seats: 0,
     payloadTonnes: 8,
-    cruiseKmh: 510,
+    cruiseKmh: 515,   // as the ATR 72-200 (ATR factsheet: 278 KTAS)
     range: 1_480,
     runwayFt: 4600,
     weeklyLease: 14_000,
@@ -3051,6 +3087,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 116.28,
     crewCostPerKm: 0.9,
     baseMaintenancePerWk: 6_000,
+    cruiseKmh: 333,   // Douglas: cruise 207 mph
     description: 'The aircraft that made air travel mainstream. A 1930s piston legend still flying today on bush and heritage routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/d/df/Douglas_DC-3%2C_SE-CFP.jpg',
   },
@@ -3079,6 +3116,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 116.28,
     crewCostPerKm: 0.9,
     baseMaintenancePerWk: 6_800,
+    cruiseKmh: 260,   // Douglas: cruise 160 mph
     description: 'The surplus DC-3. Military cargo door, bare cabin, bargain price — the airframe most postwar start-ups actually began with.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/442d_Troop_Carrier_Group_Douglas_C-47A-15-DK_Skytrain_42-92879.jpg/960px-442d_Troop_Carrier_Group_Douglas_C-47A-15-DK_Skytrain_42-92879.jpg',
   },
@@ -3160,6 +3198,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 921.75,
     crewCostPerKm: 1.98,
     baseMaintenancePerWk: 65_000,
+    cruiseKmh: 889,   // Vickers: economical cruise 480 kt (Mmo 0.886)
     description: 'Elegant four-engine British long-hauler designed for hot-and-high African routes.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/RAF_Vickers_VC10_K3_over_the_North_Sea_Lofting.jpg/1280px-RAF_Vickers_VC10_K3_over_the_North_Sea_Lofting.jpg',
   },
@@ -3180,6 +3219,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 850,
     crewCostPerKm: 1.8,
     baseMaintenancePerWk: 50_000,
+    cruiseKmh: 895,   // 990A normal cruise Mach 0.84 (897 km/h at 35,000 ft): 40-56 km/h faster than a 707 or DC-8
     description: 'The fastest subsonic airliner of its era. The speed came with thirsty engines.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Swissair_Convair_990_in_flight.jpg/1280px-Swissair_Convair_990_in_flight.jpg',
   },
@@ -3243,6 +3283,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 453.25,
     crewCostPerKm: 1.44,
     baseMaintenancePerWk: 26_000,
+    cruiseKmh: 850,   // Tupolev Tu-134A: cruise 850 km/h
     description: 'Soviet short-haul jet, glass-nosed navigator station and all. A Cold War regional staple.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/c/c2/Tretyakovo_Tupolev_Tu-134.jpg',
   },
@@ -3303,6 +3344,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 470,
     crewCostPerKm: 1.53,
     baseMaintenancePerWk: 32_000,
+    cruiseKmh: 750,   // Yakovlev Yak-42D: economy cruise 740-750 km/h
     description: 'Soviet tri-jet for medium-density routes, rugged enough for unpaved regional fields.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/2/24/International_Jet_Tour_Yakovlev_Yak-42D_Nikiforov.jpg',
   },
@@ -3323,6 +3365,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 279.5,
     crewCostPerKm: 1.08,
     baseMaintenancePerWk: 14_000,
+    cruiseKmh: 550,   // Yakovlev: max cruise 550 km/h
     description: 'Tiny three-engine regional jet that opened jet service to small Soviet towns.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Yakovlev_Yak-40%2C_Centr_Ug_JP7586206.jpg',
   },
@@ -3343,6 +3386,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 151.7,
     crewCostPerKm: 1.17,
     baseMaintenancePerWk: 8_000,
+    cruiseKmh: 480,   // Fokker: cruise about 260 kt
     description: 'Best-selling European turboprop of its generation and a reliable regional workhorse.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/3/37/Fokker_F27_Friendship_US_Army_Golden_Knight.jpg',
   },
@@ -3404,6 +3448,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1818.75,
     crewCostPerKm: 4.14,
     baseMaintenancePerWk: 270_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The original Jumbo Jet that democratized long-haul travel in 1970.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/B-747_Iberia.jpg/1280px-B-747_Iberia.jpg',
   },
@@ -3424,6 +3469,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 1775.75,
     crewCostPerKm: 4.14,
     baseMaintenancePerWk: 275_000,
+    cruiseKmh: 900,   // Mach 0.85 cruise, as the 787/A350
     description: 'The stretched-upper-deck 747. Shares the -400 cabin and its 605-seat exit limit for a fraction of the price — older engines make it far thirstier and it gives up 1,700 km of range.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/67bc_-_JAL_Japan_Airlines_Boeing_747-300%3B_JA8186%40SYD%3B15.08.1999_%285238186138%29.jpg/960px-67bc_-_JAL_Japan_Airlines_Boeing_747-300%3B_JA8186%40SYD%3B15.08.1999_%285238186138%29.jpg',
   },
@@ -3484,6 +3530,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 370.5,
     crewCostPerKm: 1.53,
     baseMaintenancePerWk: 16_000,
+    cruiseKmh: 600,   // Lockheed: cruise about 325 kt, as the L-188F
     description: 'Fast American four-engine turboprop; airframe later spawned the P-3 Orion.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Varig_Lockheed_L-188A_Electra_Groves-1.jpg',
   },
@@ -3524,6 +3571,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 201.69,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 8_500,
+    cruiseKmh: 550,   // Allison 501 conversion: cruise about 300 kt
     description: 'Turboprop conversion of the Convair 340/440 piston twins. A durable regional hauler.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/SAS_Convair_CV-440_Metropolitan%2C_Ivar_Viking_LN-KLB_in_the_air%2C_in_flight.jpg/1280px-SAS_Convair_CV-440_Metropolitan%2C_Ivar_Viking_LN-KLB_in_the_air%2C_in_flight.jpg',
   },
@@ -3569,7 +3617,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Sukhoi Superjet SJ-100',
     manufacturer: 'Sukhoi',
     category: 'Regional Jet',
-    eis: 2026,
+    eis: 2027,   // SJ-100 deliveries moved to H2 2027 (Sept 2026)
     seats: 108,
     typicalSeats: 98,   // seats the headline range is quoted at
     range: 3530,   // UAC SJ-100 datasheet: 3,530 km with 98
@@ -3588,7 +3636,7 @@ export const AIRCRAFT_TYPES = [
     name: 'Irkut MC-21-310',
     manufacturer: 'Irkut',
     category: 'Narrow Body',
-    eis: 2026,
+    eis: 2027,   // import-substituted MC-21: service no earlier than 2027
     seats: 211,
     typicalSeats: 163,   // seats the headline range is quoted at
     range: 3_830,
@@ -3606,7 +3654,7 @@ export const AIRCRAFT_TYPES = [
     name: 'COMAC C929',
     manufacturer: 'COMAC',
     category: 'Wide Body',
-    eis: 2029,
+    eis: 2034,   // COMAC: type certificate targeted 2032, service mid-2030s (Leeham, Oct 2026)
     seats: 440,
     typicalSeats: 280,   // seats the headline range is quoted at
     range: 12_000,
@@ -3636,6 +3684,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 133.38,
     crewCostPerKm: 1.12,
     baseMaintenancePerWk: 8_000,
+    cruiseKmh: 620,   // Dornier: max cruise 335 kt
     description: 'Fast, quiet German regional turboprop with a wide stand-up cabin for its size.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/4/46/Sun-Air_Do-328.jpg',
   },
@@ -3656,6 +3705,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 160,
     crewCostPerKm: 1.08,
     baseMaintenancePerWk: 12_000,
+    cruiseKmh: 740,   // Dornier: cruise 400 kt
     description: 'Jet-powered 328, one of the smallest regional jets ever in airline service.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Dornier_328Jet%2C_SunAir.jpg/960px-Dornier_328Jet%2C_SunAir.jpg',
   },
@@ -3677,6 +3727,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 112.2,
     crewCostPerKm: 0.9,
     baseMaintenancePerWk: 3_600,
+    cruiseKmh: 413,   // Dornier: max cruise 223 KTAS
     description: 'Rugged STOL commuter with a boxy fuselage. Popular for island and bush work.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Do228NG_-_RIAT_2012_%2818649688613%29.jpg/1280px-Do228NG_-_RIAT_2012_%2818649688613%29.jpg',
   },
@@ -3697,6 +3748,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 100.99,
     crewCostPerKm: 1.08,
     baseMaintenancePerWk: 6_000,
+    cruiseKmh: 552,   // Embraer: max cruise 298 kt
     description: 'Sleek Brazilian 30-seat turboprop that built Embraer\'s regional reputation.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/N569SW_LAX_%2826322494726%29.jpg/1280px-N569SW_LAX_%2826322494726%29.jpg',
   },
@@ -3738,6 +3790,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 96.1,
     crewCostPerKm: 1.04,
     baseMaintenancePerWk: 5_400,
+    cruiseKmh: 547,   // BAe: max cruise 295 kt
     description: 'Stretched Jetstream seating 29, a step up into larger commuter markets.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Easternairways_j41_g-majx_arp.jpg/1280px-Easternairways_j41_g-majx_arp.jpg',
   },
@@ -3798,6 +3851,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 149.34,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 9_500,
+    cruiseKmh: 546,   // Aircraft Commerce: 30 kt faster than the -100 (295 kt)
     description: 'Higher-powered Dash 8-100 with better speed and hot-and-high performance.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Icelandair%2C_TF-FXG%2C_De_Havilland_Canada_Dash_8-200_%2852341964812%29.jpg/960px-Icelandair%2C_TF-FXG%2C_De_Havilland_Canada_Dash_8-200_%2852341964812%29.jpg',
   },
@@ -3818,6 +3872,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 232.66,
     crewCostPerKm: 1.4,
     baseMaintenancePerWk: 11_000,
+    cruiseKmh: 428,   // De Havilland: cruise 231 kt
     description: 'Four-engine STOL airliner able to use very short city-centre and mountain strips.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/1/1f/De_Havilland_Canada_DHC-7-110_Dash_7%2C_Brymon_Airways_AN2141415.jpg',
   },
@@ -3878,6 +3933,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 74.4,
     crewCostPerKm: 0.94,
     baseMaintenancePerWk: 4_000,
+    cruiseKmh: 370,   // Cessna: max cruise 200 KTAS
     description: 'New high-wing utility twin. Carries 19 passengers or LD3-friendly freight for feeder operators.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/2021-07-27_CessnaSkyCourier.jpg/1280px-2021-07-27_CessnaSkyCourier.jpg',
   },
@@ -3898,6 +3954,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 196.46,
     crewCostPerKm: 1.26,
     baseMaintenancePerWk: 8_500,
+    cruiseKmh: 450,   // Antonov: cruise 450 km/h
     description: 'Tough Soviet high-wing turboprop built to operate from gravel and ice strips.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Volga-Avia_Antonov_An-24.jpg/1280px-Volga-Avia_Antonov_An-24.jpg',
   },
@@ -3919,6 +3976,7 @@ export const AIRCRAFT_TYPES = [
     fuelBurnPer100km: 81.4,
     crewCostPerKm: 0.9,
     baseMaintenancePerWk: 3_200,
+    cruiseKmh: 411,   // Embraer: max cruise 222 kt
     description: 'Embraer\'s first airliner, a no-frills 18-seat utility commuter twin.',
     image: 'https://upload.wikimedia.org/wikipedia/commons/e/ee/Embraer_EMB_110_%28Forca_Aerea_Brasileira%29_%C3%81gata_7_%288780126305%29.jpg',
   },

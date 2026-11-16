@@ -113,7 +113,7 @@ await test('every map draw goes through the mode: the first draw and the in-plac
 });
 
 const jet = AIRCRAFT_TYPES.find(t => !t.freighter && t.category === 'Narrow Body');
-const mapSave = { ...freshState(), phase: 'playing', week: 20, year: 2, hub: 'DXB', cash: 2e7, scheduleTrimVersion: 1,
+const mapSave = { ...freshState(), phase: 'playing', week: 20, year: 2, hub: 'DXB', cash: 2e7, scheduleTrimVersion: 2,
   hubs: { DXB: { tier: 2, tierSince: 0 } }, gates: { DXB: 16, LHR: 6 },
   fleet: [{ id: 'ac0', typeId: jet.id, name: 'T0', tailNumber: 'A6T', status: 'assigned', ageWeeks: 52, ownershipType: 'owned', config: { economy: jet.seats } }],
   routes: [{ id: 'r0', origin: 'DXB', destination: 'LHR', stops: ['DXB', 'LHR'], aircraftId: 'ac0', weeklyFrequency: 14, weeksOpen: 40, hub: 'DXB', cateringLevel: 'full' }] };

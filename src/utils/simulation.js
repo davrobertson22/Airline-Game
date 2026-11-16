@@ -94,6 +94,7 @@ import {
 } from '../data/alliances.js';
 import { runNetworkTick, trimOwnMetalEntries, rivalIndexFor, rivalOneStopOffersFor, rivalsOn, isLegacy, seatItineraries, connectionLegState, apportion } from '../models/network.js';
 import { hubTimetableOf } from '../models/schedule.js';
+import { peakHoursOf, timetableFieldsFor, peakLandingFee } from '../models/peakHours.js';
 import { competitorMarketingSpend } from '../models/competitorAI.js';
 import { calcReputation, reputationDemandMultiplier, reputationElasticityReduction } from '../models/reputation.js';
 import {
@@ -1828,8 +1829,14 @@ export function aircraftUtilization({
 //      peak month is already down to one weekly flight.
 //   4. Nothing on a tail that is within the cap is touched, ever.
 
-/** Save-schema version for the over-cap schedule trim. Bump to re-run. */
-export const SCHEDULE_TRIM_VERSION = 1;
+/**
+ * Save-schema version for the over-cap schedule trim. Bump to re-run.
+ *   1 — the original one-off trim.
+ *   2 — 2026-11-16 cruise-speed corrections: 30-odd types got slower (DC-3,
+ *       Twin Otter, Caravan, Yak-40, 737-100/-200...), so their block time
+ *       grew and a schedule that fitted the cap may no longer fit.
+ */
+export const SCHEDULE_TRIM_VERSION = 2;
 
 /** How many trim notices a save keeps (they are the player's durable receipt). */
 export const SCHEDULE_TRIM_NOTICE_CAP = 50;
@@ -2533,6 +2540,10 @@ export function simulateRoute(route, aircraft, gameDate = { month: 6 }, labor = 
     // cruise + tours lift leisure, hotels + ride share lift business. 1 = none.
     travelLeisureAppeal:  route.travelLeisureAppeal ?? 1,
     travelBusinessAppeal: route.travelBusinessAppeal ?? 1,
+    // Peak hours (attached by weeklyTick / the previews in peak-hour games):
+    // when the airline's flights on this pair leave and land. 1 = par.
+    timetableLeisure:  route.timetableLeisure ?? 1,
+    timetableBusiness: route.timetableBusiness ?? 1,
     // Loyalty pools (models/loyaltyPools.js): a share term BETWEEN carriers and
     // a price shield inside the same softmax. Never the pool. 1 / 0 = parity.
     loyaltyAppeal:        route.loyaltyAppeal ?? 1,
@@ -5141,6 +5152,11 @@ export function weeklyTick(state) {
   // Run the full network tick: enumerates 1-stop connections, applies logit
   // diversion when a direct route competes, computes O&D-based partner revenue,
   // own-metal itinerary revenue over designated hubs, and hub contest weights.
+  // Peak-hour games (models/peakHours.js): what this week's timetable is
+  // worth — demand by city pair, each landing at the price of its hour, and
+  // parking for aircraft the player holds at the far end. null elsewhere, and
+  // then nothing below changes.
+  const peak = peakHoursOf(state, gameDate.month);
   const networkTick = runNetworkTick({
     routes: activeRoutes,
     competitors,
@@ -5616,6 +5632,8 @@ export function weeklyTick(state) {
           // member's demandOverride, so leaving them off would exempt
           // multi-aircraft pairs from the partner lift.
           ...travelFieldsFor(pairO, pairD),
+          // Peak hours — same reason again.
+          ...timetableFieldsFor(peak, pairO, pairD),
           // Loyalty standing — same reason again.
           ...loyaltyFieldsFor(pairO, pairD),
           // The jet age (models/jetAge.js), blended over the group's schedule
@@ -5767,6 +5785,8 @@ export function weeklyTick(state) {
       // Travel partners: the segment lifts, and (partnership worlds) the
       // leisure/business split on the result that their requirements count.
       ...travelFieldsFor(route.origin, route.destination),
+      // Peak hours: when this pair's flights leave and land (peak-hour games).
+      ...timetableFieldsFor(peak, route.origin, route.destination),
       ...loyaltyFieldsFor(route.origin, route.destination),
       ...(tpWorld ? { travelPartnerTrack: true } : {}),
       ...(() => { const g = handlingFactorFor([route.origin, route.destination]); return g != null ? { groundHandlingFactor: g } : {}; })(),
@@ -5908,7 +5928,7 @@ export function weeklyTick(state) {
       const routeRevenue   = result.revenue;   // no simple connecting add for tag routes
 
       const type       = getAircraftType(aircraft.typeId);
-      const landingFee = routeLandingFee(route, type, route.weeklyFrequency);
+      const landingFee = peakLandingFee(peak, route.id, routeLandingFee(route, type, route.weeklyFrequency));
 
       totalRevenue        += routeRevenue;
       totalFuel           += result.fuelCost;
@@ -6143,12 +6163,13 @@ export function weeklyTick(state) {
     const type         = getAircraftType(aircraft.typeId);
     const originAp     = getAirport(route.origin);
     const destAp       = getAirport(route.destination);
-    const landingFee   = weeklyLandingFee(
+    // Peak-hour games: each landing at the price of its hour, plus parking.
+    const landingFee   = peakLandingFee(peak, route.id, weeklyLandingFee(
       type?.category ?? 'Narrow Body',
       route.weeklyFrequency,
       originAp?.tier ?? 'major',
       destAp?.tier   ?? 'major',
-    );
+    ));
 
     totalRevenue        += routeRevenue;
     totalConnecting     += connecting.totalRevenue;
@@ -6274,12 +6295,12 @@ export function weeklyTick(state) {
     const type     = getAircraftType(aircraft.typeId);
     const originAp = getAirport(route.origin);
     const destAp   = getAirport(route.destination);
-    const landingFee = weeklyLandingFee(
+    const landingFee = peakLandingFee(peak, route.id, weeklyLandingFee(
       freighterLandingCategory(type?.payloadTonnes ?? 0),
       route.weeklyFrequency,
       originAp?.tier ?? 'major',
       destAp?.tier   ?? 'major',
-    );
+    ));
 
     totalRevenue        += result.revenue;
     totalFuel           += result.fuelCost;
