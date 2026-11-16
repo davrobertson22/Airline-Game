@@ -22,8 +22,9 @@ import {
 } from '../src/utils/market.js';
 import {
   weeklyTick, simulateRoute, referencePrice, routePairKey,
-  defaultClassPrices, defaultConfig,
+  defaultClassPrices, defaultConfig, distanceKm,
 } from '../src/utils/simulation.js';
+import { getAirport } from '../src/data/airports.js';
 import { getAircraftType, AIRCRAFT_TYPES } from '../src/data/aircraft.js';
 
 let passed = 0, failed = 0;
@@ -296,8 +297,11 @@ test('a half-empty route is left alone', () => {
 console.log('\n── Freight is not exempt ────────────────────────────────');
 
 test('a full freighter is not perfectly full either', () => {
+  // The smallest freighter that can fly the route: the smallest of all is the
+  // ATR 42-300F, whose 1,100 km does not reach Chicago.
+  const km = distanceKm(getAirport(HUB), getAirport('ORD'));
   const freighter = AIRCRAFT_TYPES
-    .filter(t => t.freighter).sort((a, b) => a.payloadTonnes - b.payloadTonnes)[0];
+    .filter(t => t.freighter && t.range >= km).sort((a, b) => a.payloadTonnes - b.payloadTonnes)[0];
   const st = network();
   st.fleet = [{ id: 'f1', typeId: freighter.id, tailNumber: 'NF', status: 'assigned',
                 ageWeeks: 60, ownershipType: 'owned' }];
