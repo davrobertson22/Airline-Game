@@ -1382,7 +1382,9 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Maintenance Checks</div>
         {aircraft.status === 'maintenance' ? (
           <div style={{ fontSize: 13, color: 'var(--accent)' }}>
-            <Glyph e={aircraft.checkType === 'P2F' ? '📦' : '🔧'} /> In {aircraft.checkType === 'P2F' ? `freighter conversion to the ${getAircraftType(aircraft.pendingConversion?.toTypeId)?.name ?? 'freighter'}` : `${aircraft.checkType || 'C'} check`} — {aircraft.checkWeeksLeft || 1} week{(aircraft.checkWeeksLeft || 1) !== 1 ? 's' : ''} remaining{aircraft.checkForced ? ' (regulator-forced)' : ''}.
+            <Glyph e={aircraft.checkType === 'P2F' ? '📦' : '🔧'} /> In {aircraft.checkType === 'P2F' ? `freighter conversion to the ${getAircraftType(aircraft.pendingConversion?.toTypeId)?.name ?? 'freighter'}` : `${aircraft.checkType || 'C'} check`} — {(aircraft.checkWeeksLeft || 1) <= 1
+              ? `finishes before next week's flights, so it flies its own routes next week and loses no flying`
+              : `${aircraft.checkWeeksLeft} weeks remaining; it misses ${aircraft.checkWeeksLeft - 1} week${aircraft.checkWeeksLeft - 1 !== 1 ? 's' : ''} of flying`}{aircraft.checkForced ? ' (regulator-forced)' : ''}.
           </div>
         ) : (
           <>
@@ -1452,11 +1454,11 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
               // its last week takes its own routes back next week — no cover is
               // dispatched, and none is needed.
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Back in service next week — {aircraft.name} takes its {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} back itself, so no reserve is dispatched.
+                Back before next week's flights — {aircraft.name} flies its {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} itself next week, so no flying is lost and no reserve is needed.
               </div>
             ) : ol.coversNext > 0 ? (
               <div style={{ fontSize: 13, color: 'var(--accent)' }}>
-                {ol.reserves.join(', ')} steps in next week and flies {ol.coversNext} of this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''}. Covers are dispatched by the weekly tick, so they start the week after the breakdown.
+                {ol.reserves.join(', ')} steps in next week and flies {ol.coversNext} of this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''}. Covers start on the first week this aircraft would miss, so none of that flying is lost.
               </div>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--yellow)' }}>
