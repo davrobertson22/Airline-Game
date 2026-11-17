@@ -95,7 +95,7 @@ export const SCREEN_GUIDE = [
   { key: 'departures', tab: 'operations', sub: 'Departure Board', map: 'departures',
     what: 'The departure board for any airport.' },
   { key: 'schedule', tab: 'operations', sub: 'Schedule', mapText: `Network${S}Departures${S}Schedule`,
-    what: 'Each aircraft\'s weekly timeline. Click a flight to type its departure time or set its route\'s whole week; drag to move. In games with hub banks: a card per hub for its bank times and connections.' },
+    what: 'Each aircraft\'s weekly timeline. Click a flight to type its departure time or set its route\'s whole week; drag to move. In games with hub banks: a card per hub for its bank times and connections. In games with peak hours: hold an aircraft at a route\'s far end, and see how the timetable compares with the automatic one.' },
   { key: 'maintenance', tab: 'maintenance', map: 'maintenance',
     what: 'Heavy C and D checks (book them), the maintenance budget and jet bases.' },
   { key: 'ancillaries', tab: 'ancillaries', map: 'ancillaries',

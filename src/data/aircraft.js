@@ -18,9 +18,16 @@
 //                       London City despite not being a regional jet / turboprop)
 // seats:                max passenger capacity (certified exit-limit maximum)
 // payloadTonnes:        freighters only — max structural payload (tonnes)
-// cruiseKmh:            cruise speed override (km/h). Freighters share one
-//                       category, so they cannot take a speed from the category
-//                       table the way passenger types do — each carries its own.
+// cruiseKmh:            cruise speed (km/h). Without it a type flies at its
+//                       category's speed (CRUISE_SPEED_KMH in utils/simulation.js),
+//                       which only fits a typical member of the class. Freighters
+//                       share one category, so each carries its own; so does any
+//                       passenger type that is more than about 5% off its class
+//                       (2026-11-16: 57 types, e.g. Q400 667, DC-3 333, 747 900).
+//                       Turboprops use the maker's max cruise, jets normal cruise
+//                       Mach. Slower means longer block time, so fewer rotations
+//                       fit the weekly cap: lowering one needs a schedule trim
+//                       (SCHEDULE_TRIM_VERSION) for saves already flying it.
 // eis:                  year of entry into service. Read at runtime: it decides
 //                       when a type appears in the market (marketFilters.js,
 //                       Marketplace.jsx), when era launch orders open and first

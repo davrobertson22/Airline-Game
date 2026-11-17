@@ -16,7 +16,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  SCHEDULE_TRIM_VERSION, MAX_WEEKLY_BLOCK_HOURS, applyScheduleTrimMigration,
+  SCHEDULE_TRIM_VERSION, MAX_WEEKLY_BLOCK_HOURS, NWR_MAX_WEEKLY_BLOCK_HOURS, applyScheduleTrimMigration,
   blockTimeHours, routeDistanceKm, cruiseSpeedKmh, routeBlockHours,
 } from '../src/utils/simulation.js';
 import { getAircraftType, AIRCRAFT_TYPES } from '../src/data/aircraft.js';
@@ -71,6 +71,21 @@ test('a save from before the change is trimmed back inside the cap on load, with
   assert.ok(routeBlockHours(r, dc3, r.weeklyFrequency) <= MAX_WEEKLY_BLOCK_HOURS + 1e-6,
     'the trimmed schedule is still over the cap');
   assert.ok((out.scheduleTrimNotices ?? []).length >= 1, 'the player was not told');
+});
+
+test('a 100-hour game is trimmed to its own cap, not to 140', () => {
+  // Realistic utilisation: the tail may fly 100 h a week. A schedule that filled
+  // 100 h at the old DC-3 speed is now over 100 h but under 140 h, so a trim
+  // against the fixed 140 h would leave it over its cap.
+  const oldMax100 = Math.floor(NWR_MAX_WEEKLY_BLOCK_HOURS / oldRotation);
+  const route = { origin: A, destination: B, stops: [A, B] };
+  const hours = routeBlockHours(route, dc3, oldMax100);
+  assert.ok(hours > NWR_MAX_WEEKLY_BLOCK_HOURS && hours <= MAX_WEEKLY_BLOCK_HOURS,
+    `fixture: ${oldMax100} flights is ${hours.toFixed(1)} h — not between the two caps`);
+  const st = { ...saveWithDc3(oldMax100, 1), realisticUtilization: true };
+  const r = applyScheduleTrimMigration(st).routes.find(x => x.id === 'r1');
+  assert.ok(routeBlockHours(r, dc3, r.weeklyFrequency) <= NWR_MAX_WEEKLY_BLOCK_HOURS + 1e-6,
+    `trimmed to ${routeBlockHours(r, dc3, r.weeklyFrequency).toFixed(1)} h, over the 100 h cap`);
 });
 
 test('a save already on the new version is left alone', () => {

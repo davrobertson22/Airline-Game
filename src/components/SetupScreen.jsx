@@ -125,6 +125,7 @@ export default function SetupScreen() {
   const [rivalFreight,      setRivalFreight]      = useState(true);
   const [bellyCargo,        setBellyCargo]        = useState(true);
   const [hubBanks,          setHubBanks]          = useState(true);
+  const [peakHours,         setPeakHours]         = useState(true);
   const [emptyHub,          setEmptyHub]          = useState(false);
   // Sandbox (models/sandbox.js): chosen here and fixed for the life of the game.
   const [sandbox,           setSandbox]           = useState(false);
@@ -251,6 +252,7 @@ export default function SetupScreen() {
       ...(!rivalFreight ? { rivalFreight: false } : {}),
       ...(!bellyCargo ? { bellyCargo: false } : {}),
       ...(!hubBanks ? { hubBanks: false } : {}),
+      ...(!peakHours ? { peakHours: false } : {}),
       ...(emptyHub ? { emptyHub: true } : {}),
       ...(sandbox ? { sandbox: true, startCash: sandboxCash, ...(sandboxInstant ? { sandboxInstantDelivery: true } : {}) } : {}),
     });
@@ -884,6 +886,15 @@ export default function SetupScreen() {
               {hubBanks
                 ? 'Your hubs run on waves of arrivals and departures, and passengers connect only where your timetable lets them. The automatic schedule banks every hub for you.'
                 : 'Every pair of flights at a hub connects, whatever time they leave, as in games started before 10 November 2026.'}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={peakHours} onChange={e => setPeakHours(e.target.checked)} />
+              Peak hours
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, marginLeft: 22 }}>
+              {peakHours
+                ? 'When your flights leave and land matters: travellers want the peaks, big airports charge more for them, and you can hold an aircraft at the far end of a route. Leaving the timetable automatic costs nothing.'
+                : 'The time of day changes nothing but the departure board, as in games started before 16 November 2026.'}
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={emptyHub} onChange={e => setEmptyHub(e.target.checked)} />

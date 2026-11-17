@@ -48,6 +48,7 @@ import {
   routePairKey,
 } from '../utils/simulation.js';
 import { rivalIndexFor } from '../models/network.js';
+import { peakHoursOf, peakLandingFee } from '../models/peakHours.js';
 
 // ─── Remembered view settings ────────────────────────────────────────────────
 // How the player likes this page laid out: the card sort, the table's sort
@@ -1292,7 +1293,8 @@ function TagRouteCard({ route, onClose, onAddAircraft, siblingCount = 1 }) {
     fleetAvgUtilization(state.fleet ?? [], [...(state.routes ?? []), ...(state.cargoRoutes ?? [])]),
     state.satisfaction ?? null, buildEventDemandModel(state.activeEvents).multFor,
     state.ancillaries ?? null, state.competitors ?? [], null, rivalIndexFor(state)) : null;
-  const landingFee = type ? routeLandingFee(route, type, route.weeklyFrequency) : 0;
+  // Peak-hour games: each landing at the price of its hour, plus parking.
+  const landingFee = type ? peakLandingFee(peakHoursOf(state, gd?.month ?? 6), route.id, routeLandingFee(route, type, route.weeklyFrequency)) : 0;
   const profit   = sim ? sim.profit - landingFee : 0;
 
   const loadColor = (lf) => lf >= 0.75 ? 'var(--green)' : lf >= 0.45 ? 'var(--yellow)' : 'var(--red)';

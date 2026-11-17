@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Glyph } from './Icons.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-game Wiki / Help panel.
@@ -79,6 +80,16 @@ const WIKI = [
       { p: 'Two things put an airline at risk of an **operational meltdown**, and either one is enough: working the fleet past about **85%** of its hours (worse with fewer than one aircraft in twenty spare), or letting pilot, ground or cabin crew morale fall below **55**. The risk starts small and grows the further past those lines you go; in practice nothing happens until around 90% of hours or morale in the mid-40s. A meltdown strands passengers, costs satisfaction and reputation, and makes your news. A well-run airline with slack carries no risk at all, and airlines with fewer than five aircraft are exempt. The Dashboard\'s Fleet Utilisation card shows the week\'s risk when there is one.' },
       { h: 'Belly cargo (games started from 9 November 2026)' },
       { p: 'Passenger flights carry freight in their holds. A flight can take the smaller of its hold and the weight it has to spare at that distance: about **14 tonnes** on a 787-9 across the Atlantic, about **one tonne** on a narrow-body, and nothing at the edge of an aircraft\'s range. Around half the space sells in a good week, at about half the freighter rate, and each tonne costs handling plus the fuel to carry it. Each route\'s detail page shows what its holds earned and lets you set the **belly rate**; left alone it follows the market. Rivals sell their hold space too, and holds share each lane\'s freight with the freighters.' },
+      { h: 'Peak hours (games started from 16 November 2026)' },
+      { p: 'When your flights leave and land matters. Business travellers want the **morning and evening peaks** (06:30–09:00 and 16:00–19:30 local); leisure travellers like the middle of the day; hardly anyone flies in the **dead of night**. On a long flight the arrival time counts more than the departure. **Big airports charge more to land at the peaks** (up to +35% at the largest) and less at night (down to 60%); regional airports charge the same all day.' },
+      { ul: [
+        'Every route is measured **against the automatic timetable**, so a route you never time sells and pays exactly as it would have. Timing it well wins up to **+4%** demand; a bad timetable can cost up to **20%**.',
+        'The automatic timetable keeps your flights to waking hours: each day\u2019s flights spread from about 06:00 to 23:00, and an aircraft flying a long first sector is timed to land in the morning.',
+        '**Holds:** in **Company ▸ Operations ▸ Schedule**, click a flight and set a time to **wait at the far end and leave at**. Every flight on the route waits there until that local time, once a day. It costs **parking by the hour** at mega and major airports (none at regional ones), and the aircraft can fly nothing else while it waits. The hold never costs you a flight: one that can\u2019t wait (the week is full, or it lands too late) turns round as usual.',
+        'Each flight\u2019s panel says which band it leaves and lands in, and how the route compares with the automatic timetable on demand, landing fees and parking.',
+        'Older games, and new games with **Peak hours** unticked at setup, leave the clock out.',
+      ] },
+      { tip: 'A business-heavy trunk earns its peak landing fees back. A leisure route can fly at midday and late evening, lose almost nothing, and save on landings at big airports.' },
       { h: 'Board mandates' },
       { p: 'From the second quarter, the board sets you **one mandate a quarter**, chosen from where you stand — grow the traffic, widen the margin, fill the aircraft, lift satisfaction, reach a new country or open new routes. Hit it in any week before the quarter ends for a flat **$1.5M** bonus. Missing it costs nothing but the bonus.' },
     ],
@@ -347,7 +358,7 @@ const WIKI = [
       { h: 'Flight length' },
       { ul: [
         'Costs and the quality at stake both grow with distance, as they do for the classic levels.',
-        'Under 1,000 km a meal counts for half what it does on long haul, and drinks and a snack count for more. From 4,000 km the meal is most of what passengers judge. That is the reason to keep a short-haul plan and a long-haul plan.',
+        'Short flights have their own expectations. Under 1,000 km, water, soft drinks and a snack are a full economy service, and beer, wine or a meal only add a little; premium economy also expects beer and wine and a cold meal, and business and first a little more again. From 4,000 km the meal is most of what passengers judge, and between the two the expectations blend. That is the reason to keep a short-haul plan and a long-haul plan.',
       ] },
       { h: 'Putting a plan on routes' },
       { ul: [
@@ -780,6 +791,18 @@ function Block({ block }) {
 export default function Wiki() {
   const [activeId, setActiveId] = useState(WIKI[0].id);
   const [query, setQuery] = useState('');
+  // Phones: one column, with the topic list folded behind a toggle so the
+  // article isn't pushed below ~40 topic buttons.
+  const isMobile = useIsMobile();
+  const [tocOpen, setTocOpen] = useState(false);
+  const articleRef = useRef(null);
+  const pickTopic = (id) => {
+    setActiveId(id);
+    if (isMobile) {
+      setTocOpen(false);
+      requestAnimationFrame(() => articleRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -803,21 +826,39 @@ export default function Wiki() {
         Detailed how-to guides for every part of the game. Pick a topic, or search to jump to what you need.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 18, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '240px 1fr', gap: isMobile ? 12 : 18, alignItems: 'start' }}>
         {/* ── Table of contents ── */}
-        <div className="card" style={{ padding: 12, position: 'sticky', top: 12 }}>
+        <div className="card" style={{ padding: 12, position: isMobile ? 'static' : 'sticky', top: 12 }}>
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search the wiki…"
             style={{
               width: '100%', boxSizing: 'border-box', marginBottom: 10,
-              padding: '8px 10px', fontSize: 13,
+              padding: '8px 10px', fontSize: isMobile ? 16 : 13,
               background: 'var(--surface2)', color: 'var(--text)',
               border: '1px solid var(--border)', borderRadius: 8, outline: 'none',
             }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {isMobile && !query && (
+            <button
+              type="button"
+              onClick={() => setTocOpen(o => !o)}
+              aria-expanded={tocOpen}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, width: '100%', minHeight: 44,
+                textAlign: 'left', cursor: 'pointer', padding: '8px 10px', borderRadius: 8,
+                border: '1px solid var(--border)', background: 'var(--surface2)',
+                color: 'var(--text)', fontSize: 14, fontWeight: 600,
+              }}
+            >
+              <span style={{ color: 'var(--text-dim)', fontWeight: 500 }}>Topic:</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.title}</span>
+              <span aria-hidden="true" style={{ color: 'var(--text-dim)' }}>{tocOpen ? '▴' : '▾'}</span>
+            </button>
+          )}
+          {(!isMobile || tocOpen || query) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: isMobile && !query ? 8 : 0 }}>
             {filtered.length === 0 && (
               <div style={{ fontSize: 13, color: 'var(--text-dim)', padding: '8px 6px' }}>
                 No topics match “{query}”.
@@ -828,9 +869,10 @@ export default function Wiki() {
               return (
                 <button
                   key={s.id}
-                  onClick={() => setActiveId(s.id)}
+                  onClick={() => pickTopic(s.id)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+                    minHeight: isMobile ? 40 : undefined,
                     textAlign: 'left', cursor: 'pointer',
                     padding: '8px 10px', borderRadius: 8,
                     border: '1px solid', borderColor: isActive ? 'var(--accent)' : 'transparent',
@@ -846,10 +888,11 @@ export default function Wiki() {
               );
             })}
           </div>
+          )}
         </div>
 
         {/* ── Content pane ── */}
-        <div className="card" style={{ padding: '24px 28px', minHeight: 400 }}>
+        <div ref={articleRef} className="card" style={{ padding: isMobile ? '18px 16px' : '24px 28px', minHeight: 400, minWidth: 0, scrollMarginTop: 12 }}>
           {active && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>

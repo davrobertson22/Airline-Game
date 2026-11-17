@@ -14,6 +14,7 @@ import { effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { getAirport } from '../data/airports.js';
 import { tailMaintenanceFn } from '../utils/tailCosts.js';
 import InfoTip from './InfoTip.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
   PROFIT_LABELS, PROFIT_SHORT, PROFIT_HELP,
@@ -275,6 +276,7 @@ export default function Finance({ initialView, group = null }) {
 // can see exactly which cost bucket is driving the outcome. Every figure comes
 // from the canonical projection, so it ties out to the P&L bottom line.
 function ProfitWaterfall({ proj, report }) {
+  const isMobile = useIsMobile();
   const r = report;
   const steps = [
     { label: 'Revenue (booked)', value: proj.effectiveRevenue, kind: 'start' },
@@ -324,7 +326,7 @@ function ProfitWaterfall({ proj, report }) {
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-title">Profit Waterfall · revenue to weekly cash</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 110px', gap: '4px 12px', alignItems: 'center', fontSize: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '112px minmax(0, 1fr) auto' : '180px 1fr 110px', gap: isMobile ? '6px 8px' : '4px 12px', alignItems: 'center', fontSize: 12 }}>
         {rows.map((row, i) => (
           <Fragment key={i}>
             <div style={{ color: row.total ? 'var(--text)' : 'var(--text-muted)', fontWeight: row.total ? 700 : 400 }}>{row.label}</div>

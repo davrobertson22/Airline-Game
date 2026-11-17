@@ -44,6 +44,10 @@ const SITE_PAGES = [
   ['contact.html', 'Contact'],
 ];
 
+// Community: the Discord shared with Headwinds, and the shared subreddit.
+export const DISCORD_URL = 'https://discord.com/invite/B7zP8X3YGm';
+export const REDDIT_URL = 'https://www.reddit.com/r/HeadwindsTailwinds/';
+
 const a = ([file, label]) => `      <a href="/${file}">${label}</a>`;
 
 export const NAV = `
@@ -65,6 +69,8 @@ export const FOOTER = `
     <div class="footwrap">
       <a href="/?home">Home</a>
 ${[...GUIDES, ...ARTICLES, ...SITE_PAGES].map(a).join('\n')}
+      <a href="${DISCORD_URL}" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="${REDDIT_URL}" target="_blank" rel="noopener noreferrer">Reddit</a>
       <a href="/support.html" style="font-weight:600;">&#9829; Support Tailwinds</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
