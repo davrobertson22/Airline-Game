@@ -126,6 +126,12 @@ test('a reserve is not idle', () => {
 });
 
 test('full but losing money: flagged at near-zero fares, quiet once priced', () => {
+  // Its own dice. This airline used to inherit whatever stream BASE left
+  // behind, so any change to how many draws a week takes (2026-11-16: downtime
+  // now lasts its full length, so tails in the shop roll no failures that week)
+  // landed it on a week where a $1-fare route carries no one, and the rule had
+  // nothing full to flag.
+  x = 4242;
   const cheap = tick(airline({ priced: false }), 20);
   const adv = airlineAdvice(cheap, projectWeek(cheap).report);
   const hit = adv.find(a => a.id === 'full-but-losing');

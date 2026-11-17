@@ -27,7 +27,7 @@ import {
   LP_PROMO_GRACE_WEEKS, LP_DEVALUE_REP_WEEKS,
 } from '../models/loyaltyPools.js';
 import { fleetWeeklyDepreciation } from '../utils/financeProjection.js';
-import { prepareWeek } from '../utils/tickPrep.js';
+import { prepareWeek, finishDowntimeWeek } from '../utils/tickPrep.js';
 import { getAircraftType, effectivePurchasePrice, orderDiscount, buyDiscount, AIRCRAFT_TYPES,
          LEASE_DEPOSIT_WEEKS, aircraftAvailability, eraDeliveredAgeWeeks,
          eraPurchasePrice, eraWeeklyLease, setEraPriceYear, isVintage,
@@ -134,7 +134,7 @@ import { buildPairContest } from '../models/rivalBrain.js';
 import { lotsFromEvents, liveLots, LIQUIDATION_WEEKS } from '../models/liquidation.js';
 import { applyCargoYields } from '../models/cargoYieldBulk.js';
 import { buildWeekNews, appendNews, scheduleTrimNews, rangeStrandNews } from '../models/newsLog.js';
-import { normalizeStarts, normalizeHubBankSetting } from '../models/schedule.js';
+import { normalizeStarts, normalizeHubBankSetting, normalizeHold } from '../models/schedule.js';
 import { rollEvents, tickEvents, rollMechanicalFailures, clampImpact } from '../data/events.js';
 import { tickEncroachment } from '../models/encroachment.js';
 import { leaseBuyoutQuote } from '../models/leaseBuyout.js';
@@ -2447,6 +2447,12 @@ function reducer(state, action) {
         // when the timetable makes it. New games only — a save without the flag
         // keeps the old rule (every flight connects, 1.5 h) for life.
         ...(action.hubBanks !== false ? { hubBanksWorld: true } : {}),
+        // Peak hours (models/peakHours.js): every flight is scored by when it
+        // leaves and lands and every landing priced by the hour; the automatic
+        // timetable keeps to waking hours, and the player may hold an aircraft
+        // at the far end of a route. New games only — a save without the flag
+        // keeps the clock out of the tick for life.
+        ...(action.peakHours !== false ? { peakHours: true } : {}),
         // Connection seats (models/network.js seatItineraries): a connection
         // boards on both of its flights or neither, best fares first, and a
         // full flight gives a local seat to a connection worth more, up to the
@@ -3876,7 +3882,9 @@ function reducer(state, action) {
         if (r.id !== routeId) return r;
         const { rangeStranded: _fixed, ...kept } = r;
         const { schedule: _times, ...rest } = kept;
-        return { ...(targetBusy ? rest : kept), aircraftId: toAircraftId };
+        // A hold (peak-hour games) belongs to the route, not to the old week.
+        const held = kept.schedule?.hold != null ? { schedule: { hold: kept.schedule.hold } } : {};
+        return { ...(targetBusy ? { ...rest, ...held } : kept), aircraftId: toAircraftId };
       };
       const nextRoutes = (state.routes ?? []).map(move);
       const nextCargo  = (state.cargoRoutes ?? []).map(move);
@@ -4524,11 +4532,47 @@ function reducer(state, action) {
         const before = r.schedule?.starts ?? [];
         if (starts.length === before.length && starts.every((v, i) => v === before[i])) return r;
         changed = true;
+        // A hold (peak-hour games) is the route's, not one flight's: it stays.
+        const hold = r.schedule?.hold != null ? { hold: r.schedule.hold } : {};
         if (!starts.length) {
           const { schedule, ...rest } = r;
+          return r.schedule?.hold != null ? { ...rest, schedule: hold } : rest;
+        }
+        return { ...r, schedule: { starts, ...hold } };
+      };
+      const routes = (state.routes ?? []).map(apply);
+      const cargoRoutes = (state.cargoRoutes ?? []).map(apply);
+      if (!changed) return state;
+      return {
+        ...state,
+        routes: routes.some((r, i) => r !== state.routes[i]) ? routes : state.routes,
+        cargoRoutes: cargoRoutes.some((r, i) => r !== (state.cargoRoutes ?? [])[i]) ? cargoRoutes : state.cargoRoutes,
+      };
+    }
+
+    // action: { holds: { [routeId]: minutes after local midnight | null } } —
+    // peak-hour games only. Holds the route's aircraft on the ground at its far
+    // end (its last stop) until that local time, every rotation; null goes back
+    // to the minimum turnaround. Free and instant to set; the tick charges
+    // parking for the time held and the tail's week carries the wait
+    // (models/schedule.js, models/peakHours.js). Charters can't be held.
+    case 'SET_ROUTE_HOLDS': {
+      if (state.peakHours !== true) return state;
+      const want = action.holds;
+      if (!want || typeof want !== 'object') return state;
+      let changed = false;
+      const apply = (r) => {
+        if (!Object.prototype.hasOwnProperty.call(want, r.id)) return r;
+        const hold = normalizeHold(want[r.id]);
+        if (hold === (r.schedule?.hold ?? null)) return r;
+        changed = true;
+        const { hold: _old, ...sched } = r.schedule ?? {};
+        if (hold == null) {
+          if (Object.keys(sched).length) return { ...r, schedule: sched };
+          const { schedule: _s, ...rest } = r;
           return rest;
         }
-        return { ...r, schedule: { starts } };
+        return { ...r, schedule: { ...sched, hold } };
       };
       const routes = (state.routes ?? []).map(apply);
       const cargoRoutes = (state.cargoRoutes ?? []).map(apply);
@@ -6397,7 +6441,14 @@ function reducer(state, action) {
         return { factor: Math.min(hubF, mult), weeksSaved: ct === 'D' ? mf.dWeeksSaved : mf.cWeeksSaved, base: mf.code };
       };
 
-      const agedFleet = tickedFleet.map(a => {
+      // Downtime is counted down HERE, after the week was flown without the
+      // tail (utils/tickPrep.js, finishDowntimeWeek): a check or grounding of k
+      // weeks costs exactly k weeks of flying. Freighter conversions finishing
+      // together are numbered against the fleet with earlier finishers swapped
+      // in, so two A321s converted the same week come out #3 and #4.
+      const downtimeNaming = { fleet: [...tickedFleet], pendingOrders: state.pendingOrders ?? [] };
+      const routedThisWeek = new Set([...coverPass.routes, ...coverPass.cargoRoutes].map(r => r.aircraftId));
+      const agedFleet = tickedFleet.map((a, i) => {
         // Written off this week — the airframe leaves the fleet entirely.
         if (writeOffIds.has(a.id)) return null;
         let aged = { ...a, ageWeeks: (a.ageWeeks ?? 0) + agingRate };
@@ -6405,6 +6456,10 @@ function reducer(state, action) {
         if (failedIds.has(a.id)) {
           const failure = newFailures.find(f => f.aircraftId === a.id);
           return { ...aged, status: 'grounded', groundedWeeksLeft: failure.weeksGrounded, groundedReason: 'failure' };
+        }
+        if (isOutOfService(a)) {
+          aged = finishDowntimeWeek(aged, { absWeek: curAbsWeek, hasRoute: routedThisWeek.has(a.id), naming: downtimeNaming });
+          downtimeNaming.fleet[i] = aged;
         }
         // Tick lease countdown for leased aircraft
         if (a.ownershipType === 'lease' && (a.leaseRemainingWeeks ?? 0) > 0) {
@@ -6587,10 +6642,9 @@ function reducer(state, action) {
       ];
 
       // 5. Build recovery toasts (aircraft that just came back from grounding).
-      //    Detect from the PRE-tick fleet (state.fleet): an aircraft recovers this
-      //    week if it was grounded with ≤1 week left, since tickedFleetPre has
-      //    already flipped it back to assigned/idle. Reading tickedFleet here would
-      //    instead match aircraft that are STILL grounded for one more week.
+      //    An aircraft recovers this tick if it started the week grounded with
+      //    ≤1 week left: that week has now been served (finishDowntimeWeek in the
+      //    aging step), so it is back in service for next week.
       const recoveredAircraft = state.fleet
         .filter(a => a.status === 'grounded' && (a.groundedWeeksLeft ?? 1) <= 1)
         .filter(a => !failedIds.has(a.id)); // don't re-announce ones that just failed again
@@ -6615,23 +6669,23 @@ function reducer(state, action) {
       // broken tails that were NOT already listed as gapped last week.
       const prevGapIds = new Set((state.lastReport?.coverage?.gaps ?? []).map(g => g.original?.id));
       const fmtUsd = n => (n ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-      const coverToasts = [
-        ...coverPass.coversStarted.map(c => ({
+      const coverToastsFor = (pass, skipGapIds) => [
+        ...pass.coversStarted.map(c => ({
           type: 'info', icon: '🛡️', duration: 7000,
           title: `🛡️ Reserve dispatched — ${c.reserve.name}`,
           message: `${c.reserve.tailNumber || c.reserve.name} is covering ${c.routes} route${c.routes !== 1 ? 's' : ''} for ${c.original.name} while it's out of service.`,
         })),
-        ...coverPass.coversEnded.map(c => ({
+        ...pass.coversEnded.map(c => ({
           type: 'success', icon: '🛡️', duration: 5000,
           title: `🛡️ Cover complete — ${c.reserve.name}`,
           message: `${c.original.name} is back; ${c.reserve.tailNumber || c.reserve.name} returned ${c.routes} route${c.routes !== 1 ? 's' : ''} and is standing by again.`,
         })),
-        ...coverPass.coversPermanent.map(c => ({
+        ...pass.coversPermanent.map(c => ({
           type: 'info', icon: '🛡️', duration: 7000,
           title: `🛡️ Cover made permanent — ${c.reserve.name}`,
           message: `${c.original.name} left the fleet mid-cover, so ${c.reserve.name} keeps its ${c.routes} route${c.routes !== 1 ? 's' : ''}.`,
         })),
-        ...coverPass.coverGaps.filter(g => !prevGapIds.has(g.original?.id)).map(g => ({
+        ...pass.coverGaps.filter(g => !skipGapIds.has(g.original?.id)).map(g => ({
           type: 'warning', icon: '🛡️', duration: 9000,
           title: `🛡️ No cover for ${g.original.name}`,
           message: `${g.routes} route${g.routes !== 1 ? 's' : ''} (~${fmtUsd(g.revenueAtRisk)}/wk) uncovered — ${g.reason === 'no-reserve'
@@ -6639,6 +6693,7 @@ function reducer(state, action) {
             : 'your matching reserve is out of weekly block hours'}.`,
         })),
       ];
+      const coverToasts = coverToastsFor(coverPass, prevGapIds);
       if (leaseAutoRenewed.length > 0) {
         const n = leaseAutoRenewed.length;
         const yrs = leaseAutoRenewSetting(state).addWeeks / 52;
@@ -7509,6 +7564,33 @@ function reducer(state, action) {
       const charterRepHit = charterSettle.breached
         .reduce((sum, c) => sum + (c.reputationStake ?? 3), 0);
 
+      // ── Reserve aircraft, end of tick ────────────────────────────────────
+      // Downtime now ends AFTER the week is flown, and breakdowns and heavy
+      // checks begin here too, so this is where covers really start and end:
+      // a tail that came back takes its routes home now (not still on the
+      // reserve all next week), and one that broke down or went into the shop
+      // is covered before its first lost week. The same pure pass as the top of
+      // the tick, which then only has to catch what happens between ticks.
+      // Runs on the fleet and routes this tick returns (after lease expiry and
+      // charter settlement).
+      const endCover = applyReserveCovers({
+        fleet:         charterFleet,
+        routes:        finalRoutes,
+        cargoRoutes:   finalCargoRoutes,
+        // Contracts too: a tail that breaks down mid-contract is covered before
+        // its next working week, and one that is back takes its contract home.
+        charters:      charterSettle.charters,
+        hubs:          hubsAfterBuild ?? state.hubs ?? {},
+        absWeek:       newAbsWeek,
+        routeRevenues: historyEntry.routeRevenues ?? {},
+      });
+      newToasts.push(...coverToastsFor(endCover,
+        new Set([...prevGapIds, ...coverPass.coverGaps.map(g => g.original?.id)])));
+      // The week's gaps for the debrief: routes that went unflown this week
+      // (top pass) plus those that will next week (end pass), once per tail.
+      const gapsAfterTick = [...endCover.coverGaps,
+        ...coverPass.coverGaps.filter(g => !endCover.coverGaps.some(e => e.original?.id === g.original?.id))];
+
       // A travel partner walking out is a public falling-out (data/travelPartners.js).
       forcedRepHit += report.travelPartnerRepHit ?? 0;
 
@@ -7611,13 +7693,13 @@ function reducer(state, action) {
         week:              newWeek,
         year:              newYear,
         newsLog:           appendNews(state.newsLog, weekNews),
-        fleet:             charterFleet,
-        charters:          charterSettle.charters,
+        fleet:             endCover.fleet,
+        charters:          endCover.charters,
         charterReliability: charterSettle.reliability,
         charterDismissed:  pruneDismissed(state.charterDismissed ?? [], newAbsWeek),
         reputationPenalty: newReputationPenalty,
-        routes:            finalRoutes,
-        cargoRoutes:       finalCargoRoutes,
+        routes:            endCover.routes,
+        cargoRoutes:       endCover.cargoRoutes,
         pendingOrders:     remainingOrders,
         financialHistory:  newHistory,
         statsHistory:      newStats,
@@ -7633,7 +7715,7 @@ function reducer(state, action) {
           // Present only in a week that paid something, so a classic save's
           // reports stay byte-identical (the fuelMultiplier convention).
           ...(aircraftPayments ? { aircraftPayments } : {}),
-          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: coverPass.coversStarted, ended: coverPass.coversEnded, permanent: coverPass.coversPermanent, gaps: coverPass.coverGaps }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members,
+          loanPayments: totalLoanPayments, loanInterest: totalLoanInterest, leaseRedelivery: leaseRedeliveryCost, leaseDepositReturned: leaseDepositRefund, seasonalReactivation: seasonalReactivationCost, corporateTax, eventDemandAdj: Math.round(eventDemandAdj), strikeLoss: strikeRevenueLoss, strikeVariableSaved, competitorEvents, newEvents, expiredEvents, mechanicalFailures: newFailures, mro: { jobs: mroJobs, aogSpend, aogInsurance, baseCosts: report.totalMroBaseCosts ?? 0, contractSavings: report.mroContractSavings ?? 0, opened: baseBuild.opened, upgraded: baseBuild.upgraded }, maintenanceChecks: { started: checksStarted, forced: checksForced, completed: completedChecks, spend: maintCheckSpend, repHit: forcedRepHit }, coverage: { started: [...coverPass.coversStarted, ...endCover.coversStarted], ended: [...coverPass.coversEnded, ...endCover.coversEnded], permanent: [...coverPass.coversPermanent, ...endCover.coversPermanent], gaps: gapsAfterTick }, charterOutcomes: { completed: charterSettle.completed, breached: charterSettle.breached, penalties: charterPenalties, reliability: charterSettle.reliability }, fuelIndex: currentFuelIndex, fuelMultiplier, loyaltyMemberDelta: updatedLoyalty.members - currentLoyalty.members, loyaltyMembersTotal: updatedLoyalty.members,
           ...(loyaltyNews.length ? { loyaltyNews } : {}) },
         competitors:       competitorsOut,
         // Market development: next week's D from the service that flew THIS
@@ -8213,6 +8295,8 @@ function reconcileState(parsed) {
     ...(parsed.bellyCargoWorld === true ? { bellyCargoWorld: true } : {}),
     // Hub banks — the new-game flag and the player's per-hub settings, carried only when present.
     ...(parsed.hubBanksWorld === true ? { hubBanksWorld: true } : {}),
+    // Peak hours — the new-game flag, carried only when present.
+    ...(parsed.peakHours === true ? { peakHours: true } : {}),
     // Connection seats — the new-game flag, carried only when present.
     ...(parsed.connectionSeatsWorld === true ? { connectionSeatsWorld: true } : {}),
     // Borrowing limits from earnings and equity — the new-game flag, carried only when present.

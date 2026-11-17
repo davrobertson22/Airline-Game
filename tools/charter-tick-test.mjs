@@ -281,9 +281,16 @@ test('the contract goes home the week the original aeroplane does', () => {
       tail('spare', 'b737max8200', { status: 'idle', reserveBase: 'SFO' }),
     ],
   });
-  // One week of grounding left: prepareWeek returns the tail to service before
-  // the tick, so it flies its own contract and nothing is covered at all.
+  // One week of grounding left: the tail is out for that week (since
+  // 2026-11-16 downtime is counted down after the week is flown), so the spare
+  // flies it and the week counts toward the term. The grounding ends with the
+  // week, and the contract is back with its own aeroplane before the next one.
   const next = reducer(st, { type: 'ADVANCE_WEEK' });
+  assert.equal(next.charters.length, 1, 'the contract was breached despite a spare standing by');
+  assert.equal(next.charters[0].weeksRemaining, 9, 'the covered week did not count toward the term');
+  const started = next.lastReport?.coverage?.started ?? [];
+  assert.ok(started.some(c => c.reserve?.id === 'spare' && c.original?.id === 'ac1'),
+    'the spare never flew the last grounded week — the grounded tail did');
   assert.equal(next.charters[0].aircraftId, 'ac1');
   assert.ok(!next.charters[0].coverForAircraftId);
 });

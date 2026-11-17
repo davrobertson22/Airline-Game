@@ -109,8 +109,12 @@ await test('1. % mode: the tile shows this week\'s brand spend — the engine\'s
 });
 
 await test('2. fixed $: the tile shows the budget, says it is fixed, and what share of revenue that is', () => {
-  const s = gameReducer(base, { type: 'SET_MARKETING_BUDGET', amount: 50_000 });
+  // One week on from `base`: the fixture's only flying tail ends week 1 with a
+  // one-week grounding, and since 2026-11-16 that week is genuinely lost, so
+  // base's projection has no revenue to take a share of.
+  const s = gameReducer(tick(base, 1), { type: 'SET_MARKETING_BUDGET', amount: 50_000 });
   const rep = projectWeek(s).report;
+  assert.ok(rep.totalRevenue > 0, 'fixture: the projected week has revenue');
   const t = tile(render(s));
   assert.ok(t, 'no tile with a fixed budget');
   assert.equal(t.exact, 50_000);

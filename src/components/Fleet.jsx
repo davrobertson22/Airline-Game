@@ -1382,9 +1382,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Maintenance Checks</div>
         {aircraft.status === 'maintenance' ? (
           <div style={{ fontSize: 13, color: 'var(--accent)' }}>
-            <Glyph e={aircraft.checkType === 'P2F' ? '📦' : '🔧'} /> In {aircraft.checkType === 'P2F' ? `freighter conversion to the ${getAircraftType(aircraft.pendingConversion?.toTypeId)?.name ?? 'freighter'}` : `${aircraft.checkType || 'C'} check`} — {(aircraft.checkWeeksLeft || 1) <= 1
-              ? `finishes before next week's flights, so it flies its own routes next week and loses no flying`
-              : `${aircraft.checkWeeksLeft} weeks remaining; it misses ${aircraft.checkWeeksLeft - 1} week${aircraft.checkWeeksLeft - 1 !== 1 ? 's' : ''} of flying`}{aircraft.checkForced ? ' (regulator-forced)' : ''}.
+            <Glyph e={aircraft.checkType === 'P2F' ? '📦' : '🔧'} /> In {aircraft.checkType === 'P2F' ? `freighter conversion to the ${getAircraftType(aircraft.pendingConversion?.toTypeId)?.name ?? 'freighter'}` : `${aircraft.checkType || 'C'} check`} — {aircraft.checkWeeksLeft || 1} week{(aircraft.checkWeeksLeft || 1) !== 1 ? 's' : ''} remaining{aircraft.checkForced ? ' (regulator-forced)' : ''}.
           </div>
         ) : (
           <>
@@ -1449,16 +1447,13 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
                   <span style={{ color: 'var(--yellow)' }}> {ol.ownRoutes} uncovered — earning nothing.</span>
                 )}
               </div>
-            ) : ol.returning ? (
-              // The downtime countdown runs BEFORE the reserve pass, so a tail on
-              // its last week takes its own routes back next week — no cover is
-              // dispatched, and none is needed.
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Back before next week's flights — {aircraft.name} flies its {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} itself next week, so no flying is lost and no reserve is needed.
-              </div>
             ) : ol.coversNext > 0 ? (
+              // Sent into the shop (or a refit) between ticks: the next tick's
+              // reserve pass covers it from its first lost week. Downtime that
+              // starts IN the tick is covered at the end of it, so shows as
+              // covered already.
               <div style={{ fontSize: 13, color: 'var(--accent)' }}>
-                {ol.reserves.join(', ')} steps in next week and flies {ol.coversNext} of this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''}. Covers start on the first week this aircraft would miss, so none of that flying is lost.
+                {ol.reserves.join(', ')} flies {ol.coversNext} of this aircraft's {ol.ownRoutes} route{ol.ownRoutes !== 1 ? 's' : ''} from next week, its first week out of service.
               </div>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--yellow)' }}>
@@ -3633,12 +3628,6 @@ export default function Fleet({ initialCheckedIds = [] } = {}) {
                         if (!ol) return null;
                         if (ol.coveredNow > 0) {
                           return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> {ol.coveredNow}/{ol.coveredNow + ol.ownRoutes} covered</span>;
-                        }
-                        // Last week of downtime: the countdown hands it back before
-                        // the reserve pass runs, so it flies its own routes next week.
-                        // Warning about an absent cover here is pure noise.
-                        if (ol.returning) {
-                          return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)' }}>back in service next week</span>;
                         }
                         if (ol.coversNext > 0) {
                           return <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}><Glyph e="🛡️" size={10} /> cover starts next week — {ol.reserves.join(', ')}</span>;
