@@ -552,6 +552,9 @@ function WifiBadge({ aircraft }) {
   // (Discord 2026-09-03). It still takes the absent-amenity drag — the market
   // judges the flight, not the engineering — and the tooltip says so, because
   // a penalty with no visible cause is the complaint that started this.
+  // A freighter has no passengers: no button, no badge, no penalty story.
+  if (getAircraftType(aircraft.typeId)?.freighter) return null;
+
   if (!fitted && !canFitWifiTo(aircraft)) {
     if (aircraft.status === 'retired') return null;
     return (
