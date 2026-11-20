@@ -632,7 +632,7 @@ const TABLE_COLS = [
   { key: 'age',      label: 'Age',          align: 'right', title: 'How old the airframe is on delivery. Out-of-production types arrive used.' },
   { key: 'maint',    label: 'Maint/wk',     align: 'right', title: 'Weekly maintenance as delivered — base rate already scaled for delivered age.' },
   { key: 'maintPer', label: 'Maint/seat',   align: 'right', title: 'Weekly maintenance as delivered, per seat (per tonne for freighters). The fuel efficiency score does not include this.' },
-  { key: 'worldFleet',  label: 'World fleet',  align: 'right', title: 'Flying with every airline in this game, yours included. Hover a number to see who flies it.' },
+  { key: 'worldFleet',  label: 'World fleet',  align: 'right', title: 'Flying with every airline in this game, yours included. Tap or hover a number to see who flies it.' },
   { key: 'worldOrders', label: 'World orders', align: 'right', title: 'On order across every airline in this game, yours included.' },
   { key: 'lease',    label: 'Lease/wk',     align: 'right' },
   { key: 'buy',      label: 'Buy',          align: 'right' },

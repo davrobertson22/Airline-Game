@@ -8,14 +8,14 @@ import {
   weeklyBlockHours, routeDistanceKm, weekToGameDate, fleetAvgUtilization,
   buildEventDemandModel, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, weeklyGateFeeAt,
-  calendarYearFrac,
-} from '../utils/simulation.js';
+  calendarYearFrac, laborWithTurnTimes } from '../utils/simulation.js';
 import { getAircraftType } from '../data/aircraft.js';
 import { effectiveMaintAgeWeeks } from '../data/maintenance.js';
 import { getAirport } from '../data/airports.js';
 import { tailMaintenanceFn } from '../utils/tailCosts.js';
 import InfoTip from './InfoTip.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
+import { FINANCE_GROUP_VIEWS } from './financeGroups.js';
 import {
   allocateFixedCosts, pairEconomics, routeProfit, breakEvenLoad,
   PROFIT_LABELS, PROFIT_SHORT, PROFIT_HELP,
@@ -171,19 +171,7 @@ function futureMonth(currentAbsWeek, offsetWeeks) {
 // Analysis and Breakdown under Finance, and Fuel under Operations (Barca,
 // Discord 2026-10-29; ported from Headwinds). `group` picks one; omitted, it is
 // the classic page.
-export const FINANCE_GROUP_VIEWS = {
-  statements: ['pl', 'cashflow', 'bs'],
-  planning:   ['forecast', 'loans'],
-  analysis:   ['uniteco', 'trends', 'stats'],
-  breakdown:  ['routes', 'airports'],
-  fuel:       ['fuel'],
-};
-
-/** Which map-view Finance group shows `view` (the classic view ids). */
-export function financeGroupOf(view) {
-  for (const [g, views] of Object.entries(FINANCE_GROUP_VIEWS)) if (views.includes(view)) return g;
-  return null;
-}
+export { FINANCE_GROUP_VIEWS, financeGroupOf } from './financeGroups.js';
 
 function FinanceInner({ initialView, group = null }) {
   const allowed = group ? (FINANCE_GROUP_VIEWS[group] ?? null) : null;
@@ -517,7 +505,7 @@ function PLStatement({ proj }) {
   const ytdBellyRev     = ytd(financialHistory, 'bellyRevenue');
 
   // Catering / layover / compensation — canonical totals; per-route detail for display.
-  const { onTimeRate } = laborEffects(labor, avgUtilization, state.satisfaction ?? null);
+  const { onTimeRate } = laborEffects(laborWithTurnTimes(state), avgUtilization, state.satisfaction ?? null);
   const cateringByRoute = routeData.map(({ route, aircraft, result }) => {
     const type = getAircraftType(aircraft.typeId);
     const catering     = result.cateringCost     ?? weeklyCateringCost(result.classSummary ?? {});
@@ -525,7 +513,7 @@ function PLStatement({ proj }) {
     const cateringLevel = normalizeCateringLevel(route.cateringLevel);
     const cateringPlanName = planForRef(route.cateringLevel, state.cateringPlans)?.name ?? null;
     const dist         = result.distance ?? routeDistanceKm(route.origin, route.destination);
-    const blockHrs     = type ? blockTimeHours(dist, type) : 0;
+    const blockHrs     = type ? blockTimeHours(dist, type, route) : 0;
     const layover      = result.layoverCost      ?? weeklyLayoverCost(blockHrs, type?.seats ?? 150, type?.category ?? 'Narrow Body', route.weeklyFrequency);
     const compensation = result.compensationCost ?? weeklyPassengerCompensation(result.passengers * 2, onTimeRate, dist);
     return { route, aircraft, type, catering, cateringRev, cateringLevel, cateringPlanName, layover, compensation, dist, blockHrs };

@@ -13,7 +13,7 @@ import { useNavKeys, reachable, cyclePage, keyHint, mapGroupKey, MAP_KEY_DASHBOA
 import { BACK_KEY_LABEL } from '../utils/pageHistory.js';
 import { DemandWorldShare } from './DemandWorldPanels.jsx';
 import { BellIcon } from './Icons.jsx';
-import { financeGroupOf } from './Finance.jsx';
+import { financeGroupOf } from './financeGroups.js';
 import {
   CoinsIcon, SettingsIcon, CloseIcon, SaveIcon, FolderOpenIcon,
   DashboardIcon, MapIcon, SearchIcon, PlannerIcon, RoutesIcon, GateIcon, HubIcon, CalendarIcon,
