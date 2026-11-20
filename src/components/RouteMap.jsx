@@ -22,6 +22,13 @@ import { AirportDetailModal } from './AirportLink.jsx';
 import { hubFinMarkup, hubFinSize, tailAspect } from '../utils/hubFin.js';
 import { ROUTE_WIDTH_KEY, routeWidthFactors } from '../utils/routeWidth.js';
 import { ROUTE_COLOUR_KEY, LF_BANDS, loadFactorColor, normalizeColourMode } from '../utils/routeColour.js';
+import GlobeMap from './GlobeMap.jsx';
+import { buildGlobeData } from './globeCore.js';
+import { buildFlightPlan } from './flightsCore.js';
+import { airlineWeeks, scheduleInputsOf } from '../models/schedule.js';
+import { liveryFor } from '../data/livery.js';
+import { planeSpriteColors } from '../utils/liveryPaint.js';
+import { cruiseSpeedKmh, turnaroundHours, routeDistanceKm, isRouteActive } from '../utils/simulation.js';
 
 // ── Polar softening ──────────────────────────────────────────────────────────
 // Reported on Discord 2026-10-02 (Headwinds, Gulf hub, 500+ routes): the true
@@ -334,6 +341,113 @@ export function hubMarkerSize(tier) {
   return { core, ring: core + 3 };
 }
 
+// ── Globe (ported from Headwinds, Discord 2026-11-18) ─────────────────────────
+// localStorage keys for the flat-map / globe choice and the globe's planes.
+export const MAP_VIEW_KEY = 'tw_mapView';
+export const GLOBE_PLANES_KEY = 'tw_globePlanes';
+
+const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/**
+ * One flight plan per route a tail flies, for the globe's planes
+ * (flightsCore.js), timed by the airline's timetable (models/schedule.js) —
+ * the player's pinned rotations plus automatic ones — so a tail on two routes
+ * is never in two places at once. Takes the map's own groups, so the
+ * aircraft-type / airport filters and the cargo and charter toggles apply to
+ * the planes exactly as they do to the lines. A tail flies nothing while it's
+ * grounded or in maintenance, or in a month its seasonal route is dormant.
+ *   groups / cargoGroups / charterGroups: { key, members: [{ r, chain, origin, dest }] }
+ *   colorOf(g): the line colour, used for the plane's glow
+ *   weeks: airlineWeeks(...) for ALL the airline's flying (filters must not
+ *          reshuffle the timetable); computed here when omitted
+ * Ported from Headwinds' RouteMap.jsx; Tailwinds adds the charter planes.
+ */
+export function tailFlightPlans({
+  groups = [], cargoGroups = [], charterGroups = [], fleet = [], month, colorOf, cargoColor, charterColor, weeks = null,
+}) {
+  const plans = [];
+  const table = weeks ?? airlineWeeks({
+    fleet,
+    routes: groups.flatMap(g => g.members.map(d => d.r)),
+    cargoRoutes: cargoGroups.flatMap(g => g.members.map(d => d.r)),
+    charters: charterGroups.flatMap(g => g.members.map(d => d.r)),
+  }, month);
+  const add = (g, d, idx, group, color) => {
+    const r = d.r;
+    if (!r || !isRouteActive(r, month)) return;
+    const ac = fleet.find(a => a.id === r.aircraftId);
+    if (!ac || ac.status === 'grounded' || ac.status === 'maintenance') return;
+    const type = getAircraftType(ac.typeId);
+    if (!type) return;
+    const stops = d.chain?.length >= 2 && !d.ferry ? d.chain : [d.origin, d.dest];
+    const startsH = (table.get(ac.id)?.blocks ?? []).filter(b => b.routeId === r.id).map(b => b.start / 60);
+    if (!startsH.length) return;
+    const plan = buildFlightPlan({
+      id: r.id ?? `${group}#${idx}`,
+      group, color,
+      tip: `<div class="map-tip-title">${escHtml(ac.tailNumber || ac.name || type.name)}</div>`
+        + `<div class="map-tip-sub">${escHtml(type.name)} · ${r.weeklyFrequency ?? 0}× weekly</div>`,
+      stops,
+      legKm: stops.slice(1).map((s, i) => routeDistanceKm(stops[i].code, s.code)),
+      weeklyFrequency: r.weeklyFrequency,
+      cruiseKmh: cruiseSpeedKmh(type),
+      turnaroundH: turnaroundHours(type),
+      startsH,
+    });
+    if (plan) plans.push(plan);
+  };
+  for (const g of groups) g.members.forEach((d, i) => add(g, d, i, g.key, colorOf(g)));
+  for (const g of cargoGroups) g.members.forEach((d, i) => add(g, d, i, `cargo:${g.key}`, cargoColor));
+  for (const g of charterGroups) g.members.forEach((d, i) => add(g, d, i, `charter:${g.key}`, charterColor));
+  return plans;
+}
+
+/** Tooltip for an alliance / codeshare / rival line — shared by both views. */
+export function partnerTipHtml({ comp, type, color, origin, dest, stop, contested }) {
+  return `
+        <div class="map-tip">
+          <div class="map-tip-title" style="color:${color}">${origin.code} → ${dest.code}</div>
+          <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
+          ${stop ? `<div class="map-tip-sub">Refuelling stop at ${stop.code} (${stop.city})</div>` : ''}
+          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${
+            type === 'alliance' ? 'Alliance'
+            : type === 'codeshare' ? 'Codeshare'
+            : contested ? 'Competing with you here' : 'Rival'
+          }</div>
+        </div>
+      `;
+}
+
+/** Tooltip for a charter contract's line — shared by both views.
+ *  res: this week's charter result (or null); fleet: the airline's fleet. */
+export function charterTipHtml({ c, origin, dest, ferry }, res = null, fleet = []) {
+  const aircraft = fleet.find(a => a.id === c.aircraftId);
+  const acName   = aircraft ? (aircraft.tailNumber ?? aircraft.name ?? '—') : 'unassigned';
+  const weeks    = `${c.weeksRemaining ?? 0} of ${c.weeksTotal ?? c.weeksRemaining ?? 0} wk left`;
+  const feeStr   = `+${formatMoney(c.feePerWeek ?? 0)}/wk`;
+  // A positioning week earns nothing by design, so its profit line is the
+  // ferry cost with a minus in front of it — which is the number the player
+  // is meant to feel before signing the next one of these.
+  const profit   = res ? res.profit : null;
+  const profStr  = profit == null ? '—'
+    : `<span style="color:${profit >= 0 ? PROFIT_COLOR : LOSS_COLOR}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>`;
+  const positioning = c.status === 'positioning';
+  return `
+        <div class="map-tip">
+          <div class="map-tip-title" style="color:${CHARTER_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
+          <div class="map-tip-sub">${c.icon ? `${c.icon} ` : ''}${c.customer ?? c.name ?? 'Charter'} · ${weeks}</div>
+          <div class="map-tip-sub">${acName} · ${c.weeklyFrequency ?? 1}×/wk${
+            positioning ? ` · positioning from ${ferry?.code ?? c.positionFrom}` : ''}</div>
+          <div class="map-tip-stats">
+            <div><span class="map-tip-lbl">Fee</span><span class="map-tip-val" style="color:${CHARTER_COLOR}">${feeStr}</span></div>
+            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
+          </div>
+          ${positioning ? '<div class="map-tip-hint">Ferrying out — earns nothing this week</div>' : ''}
+        </div>
+      `;
+}
+
 /**
  * The contracts the map draws, with their airports resolved.
  *
@@ -585,6 +699,23 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   }, [colorMode]);
   const colorModeRef = useRef(colorMode);
   colorModeRef.current = colorMode;
+  // Flat map or 3D globe. Remembered per browser; the flat map stays the
+  // default. The Leaflet map stays mounted (hidden) under the globe, so
+  // switching back is instant and keeps the player's zoom.
+  const [mapView, setMapView] = useState(() => {
+    try { return localStorage.getItem(MAP_VIEW_KEY) === 'globe' ? 'globe' : 'flat'; }
+    catch { return 'flat'; }
+  });
+  // Planes on the globe — on by default, remembered per browser.
+  const [showPlanes, setShowPlanes] = useState(() => {
+    try { return localStorage.getItem(GLOBE_PLANES_KEY) !== 'off'; }
+    catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(GLOBE_PLANES_KEY, showPlanes ? 'on' : 'off'); } catch { /* private mode */ }
+  }, [showPlanes]);
+  // Globe plane sprite in the airline's livery (fuselage + tail colours).
+  const planeColors = useMemo(() => planeSpriteColors(liveryFor(state)), [state.livery, state.logoColor]);   // eslint-disable-line react-hooks/exhaustive-deps
   const { fleet, routes, cargoRoutes = [], charters = [], hub, hubs: hubsState,
           competitors = [], allianceMembership, codeshareAgreements = [] } = state;
 
@@ -680,6 +811,8 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   // Viewport bookkeeping — see claimViewportFit / claimRouteFly above.
   const fittedExtentRef = useRef(null);   // airport set the viewport was fitted to
   const flownToRef      = useRef(null);   // route key we last flew to
+  const frameRef        = useRef(null);   // last fitBounds target, for a re-fit after being hidden
+  const fitHiddenRef    = useRef(false);  // true when that fit ran while the flat map was hidden
 
   // 1. Load Leaflet from CDN
   useEffect(() => {
@@ -743,6 +876,19 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
   useEffect(() => {
     if (mapRef.current) mapRef.current.invalidateSize();
   }, [mapHeight]);
+
+  // Back on the flat map: it was hidden (0×0) under the globe, so remeasure, and
+  // redo a framing that ran while it had no size.
+  useEffect(() => {
+    try { localStorage.setItem(MAP_VIEW_KEY, mapView); } catch { /* private mode */ }
+    const map = mapRef.current;
+    if (mapView !== 'flat' || !map) return;
+    map.invalidateSize();
+    if (fitHiddenRef.current && frameRef.current) {
+      map.fitBounds(frameRef.current, { padding: [50, 50], maxZoom: 5 });
+      fitHiddenRef.current = false;
+    }
+  }, [mapView]);
 
   // Satellite / Dark switched (here or from the map-first settings menu).
   useEffect(() => {
@@ -1076,18 +1222,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       const segments = stop
         ? [...segmentsForRoute(origin.lat, origin.lon, stop.lat, stop.lon), ...segmentsForRoute(stop.lat, stop.lon, dest.lat, dest.lon)]
         : segmentsForRoute(origin.lat, origin.lon, dest.lat, dest.lon);
-      const tipHtml = `
-        <div class="map-tip">
-          <div class="map-tip-title" style="color:${color}">${origin.code} → ${dest.code}</div>
-          <div class="map-tip-sub">${origin.city} → ${dest.city}</div>
-          ${stop ? `<div class="map-tip-sub">Refuelling stop at ${stop.code} (${stop.city})</div>` : ''}
-          <div class="map-tip-sub" style="margin-top:4px">${comp.name} · ${
-            type === 'alliance' ? 'Alliance'
-            : type === 'codeshare' ? 'Codeshare'
-            : contested ? 'Competing with you here' : 'Rival'
-          }</div>
-        </div>
-      `;
+      const tipHtml = partnerTipHtml({ comp, type, color, origin, dest, stop, contested });
 
       // A partner's network is drawn as it always was. A rival's is drawn
       // quieter — solid where they are on one of your pairs, and barely there
@@ -1231,31 +1366,8 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
 
     for (const { c, origin, dest, ferry } of filteredCharterData) {
       const res      = charterRrById[c.id] ?? null;
-      const aircraft = fleet.find(a => a.id === c.aircraftId);
-      const acName   = aircraft ? (aircraft.tailNumber ?? aircraft.name ?? '—') : 'unassigned';
-      const weeks    = `${c.weeksRemaining ?? 0} of ${c.weeksTotal ?? c.weeksRemaining ?? 0} wk left`;
-      const feeStr   = `+${formatMoney(c.feePerWeek ?? 0)}/wk`;
-      // A positioning week earns nothing by design, so its profit line is the
-      // ferry cost with a minus in front of it — which is the number the player
-      // is meant to feel before signing the next one of these.
-      const profit   = res ? res.profit : null;
-      const profStr  = profit == null ? '—'
-        : `<span style="color:${profit >= 0 ? PROFIT_COLOR : LOSS_COLOR}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}/wk</span>`;
       const positioning = c.status === 'positioning';
-
-      const tipHtml = `
-        <div class="map-tip">
-          <div class="map-tip-title" style="color:${CHARTER_COLOR}">${origin.code} <span class="map-tip-arrow">→</span> ${dest.code}</div>
-          <div class="map-tip-sub">${c.icon ? `${c.icon} ` : ''}${c.customer ?? c.name ?? 'Charter'} · ${weeks}</div>
-          <div class="map-tip-sub">${acName} · ${c.weeklyFrequency ?? 1}×/wk${
-            positioning ? ` · positioning from ${ferry?.code ?? c.positionFrom}` : ''}</div>
-          <div class="map-tip-stats">
-            <div><span class="map-tip-lbl">Fee</span><span class="map-tip-val" style="color:${CHARTER_COLOR}">${feeStr}</span></div>
-            <div><span class="map-tip-lbl">Profit</span><span class="map-tip-val">${profStr}</span></div>
-          </div>
-          ${positioning ? '<div class="map-tip-hint">Ferrying out — earns nothing this week</div>' : ''}
-        </div>
-      `;
+      const tipHtml = charterTipHtml({ c, origin, dest, ferry }, res, fleet);
 
       // The empty leg, under everything else.
       if (ferry) {
@@ -1461,6 +1573,10 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       // Airports AND the arcs between them — see frameLatLngs above.
       const bounds = L.latLngBounds(frameLatLngs(airportSet, framePaths));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 5 });
+      frameRef.current = bounds;
+      // A hidden container measures 0×0, so a fit made under the globe lands
+      // on a meaningless zoom; redo it when the flat map is shown again.
+      fitHiddenRef.current = map.getSize().x === 0;
     }
 
     applyStyles();
@@ -1604,7 +1720,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     // so this effect also fires on the weekly tick. Fly once per focus — and
     // never while the map has no size yet (see claimRouteFly).
     const map = mapRef.current;
-    const visible = !!map && map.getSize().x > 0;
+    const visible = mapView === 'flat' && !!map && map.getSize().x > 0;
     const focusChanged = claimRouteFly(flownToRef, focusKey, visible);
     if (!focusChanged || !map || !window.L) return;
     if (!focusChain) { flownToRef.current = null; return; }
@@ -1615,12 +1731,75 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
       if (focusChain.length === 1) map.flyTo(bounds.getCenter(), Math.max(map.getZoom(), 4), { duration: 0.8 });
       else map.flyToBounds(bounds, { padding: [90, 90], maxZoom: 6, duration: 0.8 });
     } catch { /* a fly is never worth the page */ }
-  }, [selectedId, focusKey, focusChain, airportFocusKeys, routeGroups, applyStyles]);
+  }, [selectedId, focusKey, focusChain, airportFocusKeys, routeGroups, applyStyles, mapView]);
 
   // A focused airport that leaves the network (its last route closed) clears.
   useEffect(() => {
     if (focusAirport && !airportSet.some(a => a.code === focusAirport)) setFocusAirportRaw(null);
   }, [airportSet, focusAirport]);
+
+  // Globe input — the same groups, colours and tooltips the flat map draws,
+  // with the overlay toggles and airport filter already applied. Only built
+  // while the globe is showing. Charters ride on the dashed partner layer in
+  // their own yellow; rivals show only where they fly one of your pairs (the
+  // faint field of every rival route is a flat-map view).
+  const globeData = useMemo(() => {
+    if (mapView !== 'globe') return null;
+    const showPartner = (p) => (p.type === 'alliance' ? showAlliance
+      : p.type === 'codeshare' ? showCodeshare : (showRivals && p.contested))
+      && (airportFilter === 'all' || p.origin.code === airportFilter || p.dest.code === airportFilter);
+    return buildGlobeData({
+      routes: routeGroups.map(g => ({
+        id: g.key,
+        chain: g.chain?.length >= 2 ? g.chain : [g.origin, g.dest],
+        color: routeGroupColor(g, colorMode),
+        tip: routeTipHtml(g),
+        w: widthFactors.get(g.key) ?? 1,
+      })),
+      cargo: showCargo ? cargoGroups.map(g => ({
+        id: `cargo:${g.key}`, chain: [g.origin, g.dest], color: CARGO_COLOR, tip: cargoTipHtml(g),
+      })) : [],
+      partners: [
+        ...partnerRouteData.filter(showPartner).map((p, i) => ({
+          id: `partner:${i}`, chain: p.stop ? [p.origin, p.stop, p.dest] : [p.origin, p.dest],
+          color: p.color, tip: partnerTipHtml(p),
+        })),
+        ...(showCharters ? filteredCharterData.map(d => ({
+          id: `charter:${d.c.id}`, chain: [d.origin, d.dest], color: CHARTER_COLOR,
+          tip: charterTipHtml(d, charterRrById[d.c.id] ?? null, fleet),
+        })) : []),
+      ],
+      loyalty: loyaltyPoints,
+      airports: airportSet.map(a => {
+        const h = hubs[a.code];
+        return { code: a.code, lat: a.lat, lon: a.lon, hub: !!h, tier: h ? (h.tier ?? 1) : null,
+                 core: h ? hubMarkerSize(h.tier).core : 5, tip: networkAirportTip(a, h ?? null) };
+      }),
+    });
+  }, [mapView, routeGroups, cargoGroups, showCargo, partnerRouteData, showAlliance, showCodeshare, showRivals,
+      showCharters, filteredCharterData, charterRrById, fleet,
+      airportFilter, airportSet, hubs, loyaltyPoints, widthFactors, colorMode]);
+
+  // Planes: one per flying tail, on the same groups (and so the same filters)
+  // as the lines. Only built while the globe is showing with planes on.
+  const flightPlans = useMemo(() => {
+    if (mapView !== 'globe' || !showPlanes) return null;
+    return tailFlightPlans({
+      groups: routeGroups, cargoGroups: showCargo ? cargoGroups : [],
+      charterGroups: showCharters
+        ? filteredCharterData.filter(d => d.c.status === 'active')
+          .map(d => ({ key: d.c.id, members: [{ r: d.c, origin: d.origin, dest: d.dest }] }))
+        : [],
+      fleet, month: gd.month, colorOf: (g) => routeGroupColor(g, colorMode),
+      cargoColor: CARGO_COLOR, charterColor: CHARTER_COLOR,
+      // Hub banks and peak hours shape the timetable, so the planes need them too.
+      weeks: airlineWeeks({ ...scheduleInputsOf(state), fleet, routes, cargoRoutes, charters }, gd.month),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapView, showPlanes, routeGroups, cargoGroups, showCargo, showCharters, filteredCharterData, fleet,
+      routes, cargoRoutes, charters, gd.month, state.hubs, state.hubBanks, state.hubBanksWorld, state.peakHours, colorMode]);
+
+  const globeHome = useMemo(() => getAirport(hub) ?? airportSet[0] ?? null, [hub, airportSet]);
 
   // A carrier can hold a contract before it opens a single scheduled route, so
   // "nothing flying" means none of the three. With no network the map still
@@ -1629,9 +1808,22 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
 
   const selectedData = selectedId != null ? routeGroups.find(x => x.key === selectedId) : null;
 
-  // Satellite / Dark. Shared by the Map tab's header and the full-bleed map's
-  // floating controls.
+  // Flat map / globe, and Satellite / Dark. Shared by the Map tab's header and
+  // the full-bleed map's floating controls.
   const basemapToggle = (
+    <>
+    <div className="map-view-toggle" role="group" aria-label="Map view">
+      {[['flat', 'Map'], ['globe', 'Globe']].map(([v, label]) => (
+        <button
+          key={v}
+          data-map-view={v}
+          className={mapView === v ? 'active' : ''}
+          aria-pressed={mapView === v}
+          onClick={() => setMapView(v)}
+          title={v === 'globe' ? 'Show your network on a 3D globe' : 'Show the flat map'}
+        >{label}</button>
+      ))}
+    </div>
     <div className="map-view-toggle" role="group" aria-label="Map style">
       {[['satellite', 'Satellite'], ['dark', 'Dark']].map(([v, label]) => (
         <button
@@ -1644,11 +1836,35 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
         >{label}</button>
       ))}
     </div>
+    </>
   );
 
-  // The map itself.
+  // The map itself — the globe sits in front; the flat map stays mounted
+  // underneath so switching back keeps its zoom.
   const mapBody = (
     <>
+    {mapView === 'globe' && (
+      <GlobeMap
+        data={globeData}
+        height={mapHeight}
+        home={globeHome}
+        selectedId={selectedId}
+        hoveredId={hoveredId}
+        focusChain={focusChain}
+        focusKey={focusKey}
+        focusIds={airportFocusKeys}
+        onHover={setHoveredId}
+        onSelect={setSelectedId}
+        onSelectAirport={toggleAirportFocus}
+        onFallback={() => setMapView('flat')}
+        flights={flightPlans}
+        planeColors={planeColors}
+        hubFin={hubFin}
+        basemap={basemap}
+        paused={paused}
+      />
+    )}
+    <div style={{ display: mapView === 'globe' ? 'none' : 'block' }}>
     {error ? (
       <div style={{ height: mapHeight, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060b18', color: 'var(--red)', fontSize: 13 }}>
         <Glyph e="⚠" /> Could not load map: {error}
@@ -1663,6 +1879,7 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
     ) : (
       <div ref={mapElRef} style={{ height: mapHeight }} />
     )}
+    </div>
     </>
   );
 
@@ -1678,12 +1895,23 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
         )}
         <div className="map-bleed-controls">
           {basemapToggle}
+          {mapView === 'flat' && (
           <button
             className={`map-bleed-chip${showAirports ? ' on' : ''}`}
             aria-pressed={showAirports}
             onClick={toggleAirports}
             title={showAirports ? 'Hide the airports you don\'t fly to' : 'Show every airport you can fly to'}
           >Airports</button>
+          )}
+          {mapView === 'globe' && (
+            <button
+              className={`map-bleed-chip${showPlanes ? ' on' : ''}`}
+              aria-pressed={showPlanes}
+              data-map-planes-toggle
+              onClick={() => setShowPlanes(v => !v)}
+              title={showPlanes ? 'Hide the planes in the air' : 'Show your planes in the air'}
+            ><Glyph e="✈" /></button>
+          )}
           <button
             className={`map-bleed-chip${widthByPax ? ' on' : ''}`}
             aria-pressed={widthByPax}
@@ -1924,6 +2152,24 @@ export default function RouteMap({ fullBleed = false, paused = false } = {}) {
               >
                 <span style={{ width: 18, height: 2, background: CARGO_COLOR, display: 'inline-block', borderRadius: 1 }} />
                 <Glyph e="📦" /> Cargo
+              </button>
+            )}
+
+            {/* Planes toggle — globe only */}
+            {mapView === 'globe' && (
+              <button
+                onClick={() => setShowPlanes(v => !v)}
+                aria-pressed={showPlanes}
+                data-map-planes-toggle
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  opacity: showPlanes ? 1 : 0.4, transition: 'opacity 0.15s',
+                  color: 'var(--text-muted)', fontSize: 11,
+                }}
+                title={showPlanes ? 'Hide the planes in the air' : 'Show your planes in the air'}
+              >
+                <Glyph e="✈" /> Planes
               </button>
             )}
 

@@ -153,6 +153,7 @@ const WIKI = [
     blocks: [
       { p: 'The Map shows your whole route network geographically, every city pair you fly, your hubs, and where your aircraft are deployed.' },
       { p: 'Use it to spot gaps and opportunities: clusters of demand you are not yet serving, routes that overlap inefficiently, or regions where a hub could feed connecting traffic. Click elements on the map to drill into airports and routes.' },
+      { p: 'Switch between **Map** and **Globe** above the map. The globe draws the same routes on a 3D Earth you can spin, so long routes over the poles and across the Pacific show their true path. On the globe your aircraft fly their timetables in your livery: hover a plane to see which tail it is and how far along it is. The **✈** button hides them. The globe needs a browser with WebGL; if yours has none, it offers the flat map instead.' },
     ],
   },
   {
