@@ -2284,6 +2284,19 @@ export function calendarYear(state) {
   return s + ((state?.year ?? 1) - 1);
 }
 
+/**
+ * Fractional calendar year (1973.5 = W27 of 1973) for era games, null for
+ * classic. The hedge desk uses it to know how many weeks remain in the
+ * current year before the fuel walk's era target steps on January W1.
+ * (Same definition as Headwinds' calendarYearFrac.)
+ */
+export function calendarYearFrac(state) {
+  const s = state?.startYear;
+  if (!Number.isInteger(s)) return null;
+  const week = Math.min(52, Math.max(1, Number(state?.week) || 1));
+  return s + ((state?.year ?? 1) - 1) + (week - 1) / 52;
+}
+
 /** "1952" in an era game, "Year 3" in a classic one. */
 export function yearLabel(state, year = state?.year ?? 1) {
   const s = state?.startYear;

@@ -13,7 +13,7 @@ import {
   blockHourFit, blockTimeHours, activeCharterOps,
   applyScheduleTrimMigration, rangeStrandedRoutes,
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
-  calcReconfCost, refitWeeks, calendarYear, shortYearLabel, buildEventDemandModel,
+  calcReconfCost, refitWeeks, calendarYear, calendarYearFrac, shortYearLabel, buildEventDemandModel,
   lineFitCost, orderCabinChangeCost, configSeatUnits,
   syncCycleKnobs, fleetAvgUtilizationOf,
 } from '../utils/simulation.js';
@@ -7859,7 +7859,7 @@ function reducer(state, action) {
       if (!Number.isFinite(coverage) || coverage <= 0 || coverage > 1) return state;
 
       const marketIndex  = state.fuelPrice?.index ?? 1.0;
-      const locked       = hedgeLockedPrice(marketIndex, opt);
+      const locked       = hedgeLockedPrice(marketIndex, opt, calendarYearFrac(state));
       const startAbsWeek = absoluteWeek(state.year, state.week);
       const newContract  = {
         id:            uid(),
