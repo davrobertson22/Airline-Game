@@ -33,6 +33,7 @@ import { marketLockReason, marketLeaseLockReason, passesMarketFilters, DEFAULT_M
 import { designAgeQualityPts, DESIGN_AGE_GRACE_YEARS, DESIGN_AGE_CAP_YEARS, DESIGN_AGE_MAX_PENALTY } from '../models/demand.js';
 import { LABOR_GROUPS, CREW_LEAD_WEEKS, crewBodiesForAircraft } from '../data/labor.js';
 import { Glyph } from './Icons.jsx';
+import FoldOnPhone from './FoldOnPhone.jsx';
 
 // ── Delivered-age economics ───────────────────────────────────────────────────
 //
@@ -1024,9 +1025,11 @@ export default function Marketplace() {
       <>
       {/* Header + category filter */}
       <div style={{ marginBottom: 20 }}>
+        <FoldOnPhone id="market" label="How ordering works">
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14 }}>
           Order aircraft to grow your fleet. Nothing arrives the week you order it: each type quotes its own delivery wait, shortest for turboprops and longest for the biggest jets.
         </div>
+        </FoldOnPhone>
 
         {/* Search + view toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -1092,7 +1095,13 @@ export default function Marketplace() {
             Filter by manufacturer
           </span>
         </div>
-        <div style={{
+        {/* Phones: one drop-down instead of the wall of chips (~40 makers, 358px
+            tall): mfr-select shows and mfr-chips hides below 640px (index.css). */}
+        <select className="form-select mfr-select" value={safeMfr} onChange={e => setActiveMfr(e.target.value)}
+          aria-label="Filter by manufacturer">
+          {mfrsInCategory.map(mfr => <option key={mfr} value={mfr}>{mfr}</option>)}
+        </select>
+        <div className="mfr-chips" style={{
           display: 'flex', gap: 6, flexWrap: 'wrap',
           paddingBottom: 4, marginTop: 6,
         }}>
@@ -1313,7 +1322,7 @@ export default function Marketplace() {
                       {type.eis != null && <span title="Year the type entered service"> · Introduced {type.eis}</span>}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  <div className="amc-desc" style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
                     {type.description}
                   </div>
                 </div>
@@ -1389,7 +1398,7 @@ export default function Marketplace() {
                     Only in worlds running the crew pipeline — elsewhere crew is instant and
                     the number would be trivia. */}
                 {crewOn && (
-                  <div style={{ marginTop: 10, padding: '7px 9px', borderRadius: 4, background: 'var(--surface2)' }}>
+                  <div className="amc-crew" style={{ marginTop: 10, padding: '7px 9px', borderRadius: 4, background: 'var(--surface2)' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
                       Crew required for one {type.name}
                       <InfoTip text={`Staffing for one airframe, sized on aircraft size. Hire before you order: pilots take ${CREW_LEAD_WEEKS.pilots} weeks to train, cabin crew ${CREW_LEAD_WEEKS.cabinCrew}, maintenance ${CREW_LEAD_WEEKS.maintenanceTeam}, ramp ${CREW_LEAD_WEEKS.groundStaff}.`} />

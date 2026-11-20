@@ -19,6 +19,7 @@ import {
   formatMoney, effectiveRangeKm, routeBlockHours, blockHourFit,
   maxWeeklyBlockHoursFor, routeDistanceKm,
 } from '../utils/simulation.js';
+import FoldOnPhone from './FoldOnPhone.jsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CHARTERS — the offer board and the contract book.
@@ -385,11 +386,13 @@ export default function Charters() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18 }}><Glyph e="📜" size={18} /> Charters</h2>
+            <FoldOnPhone id="charters" label="How charters work">
             <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', maxWidth: 640, lineHeight: 1.6 }}>
               Fixed-fee flying, posted by brokers who know your airline. The cheque is the same
               whoever flies it — what it is worth depends on which of your aircraft takes it,
               how far that aircraft is from the pickup, and what you give up on the schedule.
             </p>
+            </FoldOnPhone>
           </div>
           <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
             <Stat label="Contracts running" value={contracts.length} />
