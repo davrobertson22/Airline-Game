@@ -249,7 +249,7 @@ export function LiquidationSale({ lots, absWeek, cash, onBuy }) {
         delivered straight away — no order queue. A sale runs for {LIQUIDATION_WEEKS} weeks.
       </div>
       <div style={{ overflowX: 'auto', marginBottom: 24 }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table className="m-cards" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr>
               <th style={head}>From</th>
@@ -267,15 +267,15 @@ export function LiquidationSale({ lots, absWeek, cash, onBuy }) {
               const type = getAircraftType(r.typeId);
               const short = cash < r.price;
               return (
-                <tr key={r.key} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={cell}>{r.airlineName}</td>
-                  <td style={cell}>{type?.name ?? r.typeId}</td>
-                  <td style={cell}>{r.ageYears < 1 ? 'Under a year' : `${r.ageYears} yr`}</td>
-                  <td style={cell}>{type?.seats ?? '—'}</td>
-                  <td style={cell}>{r.count}</td>
-                  <td style={cell}>{r.weeksLeft} wk</td>
-                  <td style={{ ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(r.price)}</td>
-                  <td style={{ ...cell, textAlign: 'right' }}>
+                <tr key={r.key} className="m-row" style={{ borderTop: '1px solid var(--border)' }}>
+                  <td className="m-stat m-wide" data-label="From" style={cell}>{r.airlineName}</td>
+                  <td className="m-head" style={cell}>{type?.name ?? r.typeId}</td>
+                  <td className="m-stat" data-label="Age" style={cell}>{r.ageYears < 1 ? 'Under a year' : `${r.ageYears} yr`}</td>
+                  <td className="m-stat" data-label="Seats" style={cell}>{type?.seats ?? '—'}</td>
+                  <td className="m-stat" data-label="Left" style={cell}>{r.count}</td>
+                  <td className="m-stat" data-label="Closes in" style={cell}>{r.weeksLeft} wk</td>
+                  <td className="m-stat" data-label="Price each" style={{ ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(r.price)}</td>
+                  <td className="m-act" style={{ ...cell, textAlign: 'right' }}>
                     <button type="button" className="btn" disabled={short}
                       title={short ? `You need ${formatMoney(r.price - cash)} more` : 'Joins your fleet now, idle'}
                       onClick={() => onBuy(r.lotId)}>
