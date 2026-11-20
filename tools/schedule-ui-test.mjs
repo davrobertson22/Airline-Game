@@ -345,5 +345,13 @@ await test('what a set timetable did is said plainly', () => {
   assert.equal(timetableNotice(null).tone, 'bad');
 });
 
+await test('browser translators leave the day ruler alone', () => {
+  // A lone "Tue", translated as the French word, read "Kill" (2026-11-18).
+  save([r0(), r1]);
+  const html = render(ScheduleTimeline);
+  const days = html.match(/<div translate="no" class="sched-day"/g) ?? [];
+  assert.equal(days.length, 7, 'all seven day columns opt out of translation');
+});
+
 console.log(`\nschedule-ui-test: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

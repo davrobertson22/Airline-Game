@@ -689,8 +689,10 @@ export default function ScheduleTimeline({ initialSelection = null } = {}) {
                   <div key={s.key} className={`sched-band is-${s.kind}`} style={{ left: s.left, width: s.width }}
                     aria-hidden="true" />
                 ))}
+              {/* translate="no": a lone "Tue" is French for "kills" to a browser
+                  translator, which showed players "Kill" (2026-11-18). */}
               {DAYS.map((d, i) => (
-                <div key={d} className="sched-day" style={{ left: i * 1440 * pxPerMin, width: 1440 * pxPerMin }}>
+                <div key={d} translate="no" className="sched-day" style={{ left: i * 1440 * pxPerMin, width: 1440 * pxPerMin }}>
                   <span>{d}</span>
                   {Array.from({ length: 24 / hourStep - 1 }, (_, k) => (k + 1) * hourStep).map(h => (
                     <span key={h} className="sched-hour" style={{ left: h * 60 * pxPerMin }}>
