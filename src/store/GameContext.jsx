@@ -130,6 +130,7 @@ import {
 import { tickCompetitorAI, retainedProfit, competitorMarketingSpend,
          acquisitionQuote, RIVAL_PRESSURE } from '../models/competitorAI.js';
 import { buildCargoContest, computeCompetitorCargoStats, withCargoStats, cargoTailKey } from '../models/competitorCargo.js';
+import { coverGapLine } from '../utils/coverGapText.js';
 import { buildPairContest } from '../models/rivalBrain.js';
 import { lotsFromEvents, liveLots, LIQUIDATION_WEEKS } from '../models/liquidation.js';
 import { applyCargoYields } from '../models/cargoYieldBulk.js';
@@ -6688,9 +6689,7 @@ function reducer(state, action) {
         ...pass.coverGaps.filter(g => !skipGapIds.has(g.original?.id)).map(g => ({
           type: 'warning', icon: '🛡️', duration: 9000,
           title: `🛡️ No cover for ${g.original.name}`,
-          message: `${g.routes} route${g.routes !== 1 ? 's' : ''} (~${fmtUsd(g.revenueAtRisk)}/wk) uncovered — ${g.reason === 'no-reserve'
-            ? 'no same-type reserve is based at an airport these routes touch'
-            : 'your matching reserve is out of weekly block hours'}.`,
+          message: `${coverGapLine(g, fmtUsd)}.`,
         })),
       ];
       const coverToasts = coverToastsFor(coverPass, prevGapIds);

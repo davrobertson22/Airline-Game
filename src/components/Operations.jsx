@@ -44,6 +44,7 @@ import { consumeNavFilter } from '../utils/navIntent.js';
 import ScheduleTimeline from './ScheduleTimeline.jsx';
 import { Glyph } from './Icons.jsx';
 import { instantDeliveryOn } from '../models/sandbox.js';
+import { coverGapLine } from '../utils/coverGapText.js';
 
 // ─── Headcount ────────────────────────────────────────────────────────────────
 //
@@ -1184,7 +1185,7 @@ export default function Operations({ section = null } = {}) {
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                 {gaps.map((g, i) => (
                   <div key={i} style={{ fontSize: 12, color: 'var(--yellow)' }}>
-                    <Glyph e="⚠" size={11} /> {g.original?.name}: {g.routes} route{g.routes !== 1 ? 's' : ''} uncovered (~{formatMoney(g.revenueAtRisk)}/wk) — {g.reason === 'no-reserve' ? 'no same-type reserve based where they fly' : 'matching reserve is out of block hours'}.
+                    <Glyph e="⚠" size={11} /> {g.original?.name}: {coverGapLine(g, formatMoney)}.
                   </div>
                 ))}
               </div>
