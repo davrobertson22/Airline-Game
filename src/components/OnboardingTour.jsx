@@ -48,7 +48,7 @@ const STEPS = [
   {
     icon: '⏩',
     title: 'Step 3, Advance the Week',
-    body: "Hit Next Week in the top bar to fly your routes and collect revenue. The game also auto-advances every hour. Check your Dashboard after each week. It shows alerts when something needs attention.",
+    body: "Hit Next Week in the top bar to fly your routes and collect revenue. The game also auto-advances every hour (you can change that, or turn it off, with the clock button). Check your Dashboard after each week. It shows alerts when something needs attention.",
     highlight: 'Next Week',
   },
   {

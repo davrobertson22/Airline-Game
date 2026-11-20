@@ -292,7 +292,7 @@ export default function MapShell({
   state, remote, remoteChrome,
   tabs, tabLabel, activeTab, navigate, pages, footer,
   canGoBack, backTarget, onBack,
-  onAdvance, countdown, onBranding, onTour, onSave, onLoad, onNewGame, onClassic,
+  onAdvance, countdown, autoAdvance = null, onBranding, onTour, onSave, onLoad, onNewGame, onClassic,
   discordHref, supportHref,
 }) {
   const [menu, setMenu] = useState(null);         // { key, anchor }
@@ -531,6 +531,11 @@ export default function MapShell({
               <button key={v} className={basemap === v ? 'active' : ''} aria-pressed={basemap === v} onClick={() => setBasemap(v)}>{l}</button>
             ))}
           </div>
+          {autoAdvance && (<>
+            <div className="ms-menu-sep" />
+            <div className="ms-menu-title">Auto-advance</div>
+            <div className="ms-menu-auto-advance" data-shell="auto-advance" style={{ padding: '2px 10px 6px' }}>{autoAdvance}</div>
+          </>)}
           {/* Randomized games: the world number, to share (Discord 2026-11-05). */}
           {state?.demandWorld && (<><div className="ms-menu-sep" /><DemandWorldShare world={state.demandWorld} variant="menu" /></>)}
           <div className="ms-menu-sep" />

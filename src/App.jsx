@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { lazyPage, preloadPagesWhenIdle } from './utils/lazyPage.jsx';
+import AutoAdvancePicker, { AutoAdvanceDialog } from './components/AutoAdvancePicker.jsx';
+import { loadAutoAdvanceMin, saveAutoAdvanceMin, normalizeAutoAdvanceMin, nextDueAt, autoAdvanceLabel } from './utils/autoAdvance.js';
 import WeekCountdown from './components/WeekCountdown.jsx';
 import { createPortal } from 'react-dom';
 import { useGame } from './store/GameContext.jsx';
@@ -18,7 +20,7 @@ const Fleet = lazyPage(() => import('./components/Fleet.jsx'), 'Fleet');
 const Routes = lazyPage(() => import('./components/Routes.jsx'), 'Routes');
 const Marketplace = lazyPage(() => import('./components/Marketplace.jsx'), 'Marketplace');
 import Finance from './components/Finance.jsx';
-import { ArrowLeftIcon, BellIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon, BulbIcon } from './components/Icons.jsx';
+import { ArrowLeftIcon, BellIcon, ClockIcon, DashboardIcon, RoutesIcon, FleetIcon, MarketIcon, FinanceIcon, CompetitionIcon, PlannerIcon, GateIcon, OperationsIcon, RepIcon, HubIcon, LoyaltyIcon, HandshakeIcon, PlaneIcon, SaveIcon, FolderOpenIcon, AlertIcon, SkullIcon, TrophyIcon, NewsIcon, WrenchIcon, SearchIcon, GlobeIcon, BulbIcon } from './components/Icons.jsx';
 import MapShell, { readLayout, writeLayout, MAP_TAB, MAP_PAGES, readInviteOpen, closeInvite, resolveMapPage } from './components/MapShell.jsx';
 const HubManagement = lazyPage(() => import('./components/HubManagement.jsx'), 'HubManagement');
 const Reputation = lazyPage(() => import('./components/Reputation.jsx'), 'Reputation');
@@ -277,16 +279,16 @@ function AppInner() {
     dispatch({ type: 'CLEAR_TOASTS' });
   }, [state.pendingToasts, toastWeekKey]);
 
-  const WEEK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  // How often the week advances on its own: the player's choice, 60 min by
+  // default, 0 = off (utils/autoAdvance.js). Kept in a ref too so the timer
+  // and resetTimer always read the current setting without re-subscribing.
   const LS_KEY = 'airline_next_week_at';
+  const [autoAdvanceMin, setAutoAdvanceMinState] = useState(() => loadAutoAdvanceMin());
+  const autoAdvanceMinRef = useRef(autoAdvanceMin);
+  const [showAutoAdvance, setShowAutoAdvance] = useState(false);
 
   function loadNextWeekAt() {
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved) {
-      const ts = parseInt(saved, 10);
-      if (ts > Date.now()) return ts;
-    }
-    return Date.now() + WEEK_INTERVAL_MS;
+    return nextDueAt(Date.now(), autoAdvanceMinRef.current, localStorage.getItem(LS_KEY));
   }
 
   const nextWeekAt = useRef(loadNextWeekAt());
@@ -296,10 +298,20 @@ function AppInner() {
   const [countdownVersion, setCountdownVersion] = useState(0);
 
   function resetTimer() {
-    const ts = Date.now() + WEEK_INTERVAL_MS;
+    const ts = nextDueAt(Date.now(), autoAdvanceMinRef.current);
     nextWeekAt.current = ts;
-    localStorage.setItem(LS_KEY, String(ts));
+    if (Number.isFinite(ts)) localStorage.setItem(LS_KEY, String(ts));
+    else localStorage.removeItem(LS_KEY);
     setCountdownVersion((v) => v + 1);
+  }
+
+  // A new interval restarts the countdown from now.
+  function setAutoAdvanceMin(min) {
+    const m = normalizeAutoAdvanceMin(min);
+    saveAutoAdvanceMin(m);
+    autoAdvanceMinRef.current = m;
+    setAutoAdvanceMinState(m);
+    resetTimer();
   }
 
   // Shared week-advance, used by both the manual button and the hourly timer so
@@ -323,7 +335,7 @@ function AppInner() {
     }
   };
 
-  // Auto-advance every hour
+  // Auto-advance on the player's interval (never, when it is off)
   useEffect(() => {
     if (state.phase !== 'playing') return;
 
@@ -652,6 +664,11 @@ function AppInner() {
         />
       )}
 
+      {/* How often the week advances on its own */}
+      {showAutoAdvance && (
+        <AutoAdvanceDialog value={autoAdvanceMin} onChange={setAutoAdvanceMin} onClose={() => setShowAutoAdvance(false)} />
+      )}
+
       {/* Onboarding tour */}
       {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
 
@@ -705,6 +722,7 @@ function AppInner() {
           footer={footer}
           onAdvance={handleAdvanceWeek}
           countdown={<WeekCountdown atRef={nextWeekAt} version={countdownVersion} />}
+          autoAdvance={remote ? null : <AutoAdvancePicker value={autoAdvanceMin} onChange={setAutoAdvanceMin} compact />}
           onBranding={() => setShowBranding(true)}
           onTour={() => setShowTour(true)}
           onSave={() => setSaveLoadMode('save')}
@@ -792,6 +810,18 @@ function AppInner() {
           <GlobeIcon size={13} /><span className="topbar-mapview-label">Map view</span>
           {layoutInvite && <span className="new-dot new-dot-corner" aria-label="new" />}
         </button>
+        {!remote && (
+        <button
+          className="btn btn-ghost"
+          data-auto-advance-open
+          style={{ fontSize: 12, padding: '5px 9px', display: 'inline-flex', alignItems: 'center' }}
+          onClick={() => setShowAutoAdvance(true)}
+          title={`Auto-advance: ${autoAdvanceMin ? 'every ' + autoAdvanceLabel(autoAdvanceMin) : 'off'} — change how often the week advances on its own`}
+          aria-label="Auto-advance settings"
+        >
+          <ClockIcon size={13} />
+        </button>
+        )}
         <button
           className="btn btn-ghost"
           data-alert-settings
@@ -873,6 +903,11 @@ function AppInner() {
                   <button role="menuitem" data-layout-switch="map" onClick={() => switchLayout('map')}>
                     <GlobeIcon size={14} /> Try map view <span className="beta-chip">Beta</span>
                   </button>
+                  {!remote && (
+                  <button role="menuitem" data-auto-advance-open onClick={() => { setShowMobileMenu(false); setShowAutoAdvance(true); }}>
+                    <ClockIcon size={14} /> Auto-advance: {autoAdvanceLabel(autoAdvanceMin)}
+                  </button>
+                  )}
                   <button role="menuitem" data-alert-settings onClick={() => { setShowMobileMenu(false); openAlertSettings(); }}>
                     <BellIcon size={14} /> Pop-up alerts
                   </button>

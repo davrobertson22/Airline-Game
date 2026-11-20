@@ -34,7 +34,7 @@ const WIKI = [
         'Hit **Next Week** in the top bar to fly the route and collect revenue. Check the **Dashboard** afterwards for alerts.',
       ] },
       { tip: "Don't over-spend in week one. Keep a cash cushion, leases, fuel and crew are billed every week whether your planes are full or not." },
-      { p: "The game auto-advances one week every hour, but you can always advance manually with **Next Week**. Your progress is auto-saved; use **Save** to keep manual save slots you can return to." },
+      { p: "The game auto-advances one week every hour by default. You can change how often, or turn it off, from the clock button in the top bar (in the map view: **Settings → Auto-advance**). You can always advance manually with **Next Week**. Your progress is auto-saved; use **Save** to keep manual save slots you can return to." },
     ],
   },
   {

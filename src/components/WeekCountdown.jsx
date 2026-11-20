@@ -31,5 +31,8 @@ export default function WeekCountdown({ atRef, version = 0 }) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [version]);
-  return formatCountdown((atRef?.current ?? now) - now);
+  const at = atRef?.current ?? now;
+  // Auto-advance switched off: the due time is Infinity.
+  if (at === Infinity) return 'auto off';
+  return formatCountdown(at - now);
 }
