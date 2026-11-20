@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGame } from '../store/GameContext.jsx';
 import { AIRPORTS, getAirport } from '../data/airports.js';
 import { AIRCRAFT_TYPES, getAircraftType, aircraftOrderable } from '../data/aircraft.js';
+import { preorderOpen } from '../data/productionLines.js';
 import { distanceKm, formatMoney, currentGameDate, calendarYear, effectiveRangeKm } from '../utils/simulation.js';
 import { cargoCityPairDemand, cargoReferenceYield, cargoBackhaulFactor } from '../utils/market.js';
 import { cargoLaneServed, rankByDemandLeft } from '../models/routeFinder.js';
@@ -96,6 +97,12 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
     () => AIRCRAFT_TYPES.filter(t => t.freighter && aircraftOrderable(t, calendarYear(state))
       && !fleetTypes.some(f => f.type.id === t.id)),
     [fleetTypes, state.startYear, state.year]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Freighters you can order today that do not fly yet (see RouteFinder).
+  const preorderTypes = useMemo(
+    () => AIRCRAFT_TYPES
+      .filter(t => t.freighter && !aircraftOrderable(t, calendarYear(state)) && preorderOpen(state, t))
+      .map(t => ({ type: t, pre: preorderOpen(state, t) })),
+    [state.startYear, state.year, state.week, state.productionLinesWorld]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const owned        = fleetTypes.find(f => f.type.id === rangeTypeId) ?? null;
   const selectedType = rangeTypeId ? getAircraftType(rangeTypeId) : null;
@@ -179,7 +186,8 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
   // ── Presets (utils/finderPresets.js) — the freight half of the same feature.
   const presetSearch = { rangeTypeId, minDist, maxDist, sortBy, showServed };
   const presetTypeOk = id => fleetTypes.some(f => f.type.id === id)
-    || AIRCRAFT_TYPES.some(t => t.id === id && t.freighter && aircraftOrderable(t, calendarYear(state)));
+    || AIRCRAFT_TYPES.some(t => t.id === id && t.freighter && aircraftOrderable(t, calendarYear(state)))
+    || preorderTypes.some(p => p.type.id === id);
   function applyPreset(p) {
     const { search, missingType } = resolvePreset('freight', p, {
       current: { rangeTypeId },
@@ -266,11 +274,19 @@ export default function CargoRouteFinder({ onPick, standalone = false }) {
                     <option key={t.id} value={t.id}>{t.name} — {t.range.toLocaleString()} km</option>
                   ))}
                 </optgroup>
+                {preorderTypes.length > 0 && (
+                  <optgroup label="Pre-order — not flying yet">
+                    {preorderTypes.map(({ type: t, pre }) => (
+                      <option key={t.id} value={t.id}>{t.name} — {t.range.toLocaleString()} km · from {pre.label}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               {selectedType && (
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>
                   {reach.toLocaleString()} km · {selectedType.payloadTonnes}t payload
-                  {owned ? '' : ' · lease required'}
+                  {owned ? '' : (() => { const pre = preorderTypes.find(p => p.type.id === selectedType.id)?.pre;
+                    return pre ? ` · pre-order only, first deliveries ${pre.label}` : ' · lease required'; })()}
                 </div>
               )}
             </div>

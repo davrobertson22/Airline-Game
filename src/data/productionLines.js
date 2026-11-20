@@ -601,6 +601,26 @@ export function launchWindow(state, type) {
   };
 }
 
+/**
+ * Can this not-yet-flying type be ordered right now, and when does it first
+ * deliver? Null when it cannot. In Tailwinds the only way to order an aircraft
+ * before it enters service is a launch order (launchWindow above); Headwinds'
+ * version of this function adds its era preorders.
+ *
+ * The aircraft pickers that are about sizing a FUTURE order — the Route Finder
+ * and the Route Planner — list these types under their own heading (Discord,
+ * Nilla_wafer, 2026-11-16: "going to look at routes for new aircraft but can't
+ * find it in the drop down"). aircraftOrderable() stays false for them: nothing
+ * can fly one yet, so nothing that commits an aircraft to a route offers it.
+ *
+ * { kind: 'launch', firstDeliveryAbs, label }  — label like "January 1970"
+ */
+export function preorderOpen(state, type) {
+  const lw = launchWindow(state, type);
+  if (!lw?.open) return null;
+  return { kind: 'launch', firstDeliveryAbs: lw.eisAbs, label: `January ${type.eis}` };
+}
+
 // ── Server-side race check ───────────────────────────────────────────────────
 /**
  * Given fresh OTHER-airline bookings (read under the world lock) and this
