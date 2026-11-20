@@ -15,8 +15,9 @@ import {
   applyReserveCovers, planCovers, freighterBodyClass, formatMoney,
   calcReconfCost, refitWeeks, calendarYear, calendarYearFrac, shortYearLabel, buildEventDemandModel,
   lineFitCost, orderCabinChangeCost, configSeatUnits,
-  syncCycleKnobs, fleetAvgUtilizationOf,
+  syncCycleKnobs, fleetAvgUtilizationOf, turnTimeEffectsOf, turnTimeBreaches,
 } from '../utils/simulation.js';
+import { setPlayerTurnTimes, cleanTurnTimes, clampTurnForClass, turnClassKey, turnLimits } from '../models/turnTimes.js';
 import { computeMarketCap, referencePrice as mktReferencePrice, TOTAL_SHARES, cargoReferenceYield, isSameLocation,
          setFareIndex, setEraStartYear, setEraCalendarYear,
          setDemandModel, isDemandModel, DEMAND_MODEL_CLASSIC, DEMAND_MODEL_LATEST } from '../utils/market.js';
@@ -2243,6 +2244,7 @@ function reducer(state, action) {
   applyDemandWorld(state?.demandWorld ?? null);
   // Demand model (utils/market.js "Demand model v2"): this game's, never the last one's.
   setDemandModel(state?.demandModel);
+  setPlayerTurnTimes(state?.turnTimes ?? null);   // this game's turn times (models/turnTimes.js)
   // The business cycle's demand and lease knobs (models/economyCycle.js; identity outside v4).
   syncCycleKnobs(state);
   // Market development (models/marketDev.js): this state's D table, or none.
@@ -2280,6 +2282,7 @@ function reducer(state, action) {
       const _demandModel = action.demandModel === DEMAND_MODEL_CLASSIC ? DEMAND_MODEL_CLASSIC
         : isDemandModel(action.demandModel) ? action.demandModel : DEMAND_MODEL_LATEST;
       setDemandModel(_demandModel);
+      setPlayerTurnTimes(null);   // a new game starts on standard turns
       // Sandbox (models/sandbox.js): the player chose the starting money. It is
       // era-scaled exactly like the usual $10M. Outside a sandbox a startCash
       // on the action is ignored.
@@ -4585,6 +4588,61 @@ function reducer(state, action) {
       };
     }
 
+    // action: { byClass: { [classKey]: minutes | null } } — the fleet-wide
+    // standard turn per aircraft class (models/turnTimes.js). Merged into the
+    // current settings; null (or the standard) puts a class back on standard.
+    // Free and instant; the tick reads it (block hours, on-time rate, morale).
+    // Refused when it would push any tail past its weekly block-hour cap — the
+    // Operations card names those tails before the player can press Save.
+    case 'SET_TURN_TIMES': {
+      const want = action.byClass;
+      if (!want || typeof want !== 'object' || Array.isArray(want)) return state;
+      const merged = { ...(state.turnTimes?.byClass ?? {}) };
+      for (const [k, v] of Object.entries(want)) {
+        if (v == null) delete merged[k]; else merged[k] = v;
+      }
+      const next = cleanTurnTimes({ byClass: merged });
+      if (JSON.stringify(next) === JSON.stringify(state.turnTimes ?? null)) return state;
+      if (turnTimeBreaches(state, { turnTimes: next }).length) return state;
+      setPlayerTurnTimes(next);
+      if (next) return { ...state, turnTimes: next };
+      const { turnTimes: _old, ...rest } = state;
+      return rest;
+    }
+
+    // action: { routeId, turnMin: minutes | null } — one route's own turn,
+    // overriding its class's setting (route.schedule.turnMin). Passenger or
+    // freight route; charters can't be overridden. null goes back to the
+    // fleet setting. Refused when it would push the tail past its cap.
+    case 'SET_ROUTE_TURN': {
+      const fleet = state.fleet ?? [];
+      const apply = (r) => {
+        if (r.id !== action.routeId || r.charter) return r;
+        const type = getAircraftType(fleet.find(a => a.id === r.aircraftId)?.typeId);
+        if (!type) return r;
+        const v = action.turnMin == null ? null : clampTurnForClass(turnClassKey(type), action.turnMin);
+        if (v === (r.schedule?.turnMin ?? null)) return r;
+        const { turnMin: _old, ...sched } = r.schedule ?? {};
+        if (v == null) {
+          if (Object.keys(sched).length) return { ...r, schedule: sched };
+          const { schedule: _s, ...rest } = r;
+          return rest;
+        }
+        return { ...r, schedule: { ...sched, turnMin: v } };
+      };
+      const routes = (state.routes ?? []).map(apply);
+      const cargoRoutes = (state.cargoRoutes ?? []).map(apply);
+      const changedPax = routes.some((r, i) => r !== state.routes[i]);
+      const changedCargo = cargoRoutes.some((r, i) => r !== (state.cargoRoutes ?? [])[i]);
+      if (!changedPax && !changedCargo) return state;
+      if (turnTimeBreaches(state, { routes, cargoRoutes }).length) return state;
+      return {
+        ...state,
+        routes: changedPax ? routes : state.routes,
+        cargoRoutes: changedCargo ? cargoRoutes : state.cargoRoutes,
+      };
+    }
+
     // action: { banks: { [hubCode]: setting | null } } — hub-bank games only.
     // How each designated hub runs its waves: { mode: 'rolling' },
     // { mode: 'banks', count: 3|4|6 } or { mode: 'banks', times: [local min] };
@@ -6788,6 +6846,9 @@ function reducer(state, action) {
         : (state.labor ?? DEFAULT_LABOR_STATE);
       const grievancePrev = relationsPrev.grievance ?? DEFAULT_LABOR_RELATIONS.grievance;
       const updatedLabor = {};
+      // Turn times (models/turnTimes.js): quick turns wear ground staff (and a
+      // little cabin crew) down; padded turns ease them. Zero on standard turns.
+      const turnLift = turnTimeEffectsOf(state).moraleLift;
       // Crew pipeline (A7): the week we are advancing INTO — batches whose
       // training finishes by then join the line.
       const crewAbsWeek = absoluteWeek(state.year ?? 1, state.week ?? 1) + 1;
@@ -6799,7 +6860,8 @@ function reducer(state, action) {
         // rosters with slack. Zero without spare people or the crew pipeline.
         const reserveLift = state.crewPipeline && g.headcount != null
           ? reserveMoraleBonus(currentLabor, id, state.fleet ?? [], (a) => getAircraftType(a.typeId)) : 0;
-        const target   = grievedMoraleTarget(Math.min(100, moraleTarget(g.payMultiplier) + reserveLift), grievancePrev?.[id]);
+        const turnShift = turnLift?.[id] ?? 0;
+        const target   = grievedMoraleTarget(Math.max(5, Math.min(100, moraleTarget(g.payMultiplier) + reserveLift + turnShift)), grievancePrev?.[id]);
         const newMorale = g.morale + (target - g.morale) * 0.12;
         const morale = Math.max(5, Math.min(100, Math.round(newMorale * 10) / 10));
         if (!state.crewPipeline || g.headcount == null) {
@@ -8025,6 +8087,7 @@ function reducer(state, action) {
       // while reconcileState re-derives anything from demand or tiers.
       applyDemandWorld(action.payload?.demandWorld ?? null);
       setDemandModel(action.payload?.demandModel);
+      setPlayerTurnTimes(action.payload?.turnTimes ?? null);
       return reconcileState(action.payload);
     }
 
@@ -8191,6 +8254,13 @@ function reconcileState(parsed) {
     delete parsed.demandModel;
   }
   setDemandModel(parsed.demandModel);
+  // Turn times (models/turnTimes.js): well-formed or dropped.
+  if (parsed.turnTimes != null) {
+    const tt = cleanTurnTimes(parsed.turnTimes);
+    parsed = { ...parsed };
+    if (tt) parsed.turnTimes = tt; else delete parsed.turnTimes;
+  }
+  setPlayerTurnTimes(parsed.turnTimes ?? null);
   // Market development survives a load only on a flagged world, and only
   // well-formed (bad entries dropped). An unflagged save never grows the key.
   if (parsed.marketDevWorld === true) {
@@ -8502,6 +8572,7 @@ export function GameProvider({ children }) {
   setEraModuleState(state?.startYear ?? null, calendarYear(state));
   applyDemandWorld(state?.demandWorld ?? null);
   setDemandModel(state?.demandModel);
+  setPlayerTurnTimes(state?.turnTimes ?? null);   // this game's turn times (models/turnTimes.js)
   syncCycleKnobs(state);
   setMarketDev(state);
   setJetAgeEnabled(jetAgeOn(state));

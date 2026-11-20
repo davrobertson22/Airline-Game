@@ -428,7 +428,7 @@ export default function Routes() {
     for (const r of group.routes) {
       const t = getAircraftType(fleet.find(a => a.id === r.aircraftId)?.typeId);
       if (!t) continue;
-      const one = blockTimeHours(pairKm, t);
+      const one = blockTimeHours(pairKm, t, r);
       if (blockHrs == null || one > blockHrs) blockHrs = one;
       weeklyBlockHrs += routeBlockHours(r, t, r.weeklyFrequency);
     }
@@ -1748,7 +1748,7 @@ function ExpandedGroupPanel({ group, getResult, onClose, onPriceChange, onAddFli
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
     const result   = aircraft ? getResult(route, aircraft) : null;
-    const bh       = type && result ? weeklyBlockHours(result.distance, route.weeklyFrequency, type) : 0;
+    const bh       = type && result ? weeklyBlockHours(result.distance, route.weeklyFrequency, type, route) : 0;
     return { route, aircraft, type, result, blockHrs: bh };
   });
 
@@ -1831,7 +1831,7 @@ function RouteGroupCard({ group, getResult, selected, onToggleSelect, onClose, o
     const aircraft = fleet.find(a => a.id === route.aircraftId);
     const type     = aircraft ? getAircraftType(aircraft.typeId) : null;
     const result   = aircraft ? getResult(route, aircraft) : null;
-    const bh       = type && result ? weeklyBlockHours(result.distance, route.weeklyFrequency, type) : 0;
+    const bh       = type && result ? weeklyBlockHours(result.distance, route.weeklyFrequency, type, route) : 0;
     return { route, aircraft, type, result, blockHrs: bh };
   });
 

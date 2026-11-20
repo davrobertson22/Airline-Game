@@ -880,7 +880,7 @@ export function AircraftDetail({ aircraft, onClose, onConfigure, onRetire, onSel
           evMult,
           state.ancillaries ?? null, state.competitors ?? [], rivalIndexFor(state));
     if (!result) return null;
-    const bh = type ? weeklyBlockHours(result.distance, r.weeklyFrequency, type) : 0;
+    const bh = type ? weeklyBlockHours(result.distance, r.weeklyFrequency, type, r) : 0;
     return { route: r, result, blockHrs: bh };
   }).filter(Boolean);
 

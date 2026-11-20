@@ -18,6 +18,7 @@ import { setMarketDev } from '../models/marketDev.js';
 import { syncCycleKnobs, calendarYear } from './simulation.js';
 import { setEraCalendarYear } from './market.js';
 import { setJetAgeEnabled, jetAgeOn } from '../models/jetAge.js';
+import { setPlayerTurnTimes } from '../models/turnTimes.js';
 
 // A worker is its own module world: the main thread's module-level demand
 // knobs (demand model version, randomized-demand world, market development)
@@ -26,6 +27,7 @@ import { setJetAgeEnabled, jetAgeOn } from '../models/jetAge.js';
 // finder would rank routes on classic demand.
 function syncDemandModules(state) {
   setDemandModel(state?.demandModel);
+  setPlayerTurnTimes(state?.turnTimes);   // this game's turn times (models/turnTimes.js)
   syncCycleKnobs(state);   // the business cycle's demand / lease knobs (v4 games)
   applyDemandWorld(state?.demandWorld ?? null);
   setMarketDev(state);

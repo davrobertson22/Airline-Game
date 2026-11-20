@@ -871,7 +871,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const floor   = Math.max(MIN_FREQUENCY, Math.round(cfg.frequency * (1 - TRIM_STEP)));
         const newFreq = Math.min(cfg.frequency - 1, Math.max(want, floor, MIN_FREQUENCY));
         if (newFreq >= cfg.frequency) continue;
-        const newTails = tailsForCompetitorRoute(key, cfg, newFreq);
+        const newTails = tailsForCompetitorRoute(key, cfg, newFreq, c.tier);
         const surplus  = Math.max(0, (cfg.tails ?? 1) - newTails);
         if (projected(key, { ...cfg, frequency: newFreq, tails: Math.max(1, (cfg.tails ?? 1) - surplus) }) < p.profit) continue;
         if (surplus > 0) {
@@ -944,7 +944,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const step    = Math.max(1, Math.round(cfg.frequency * GROW_STEP));
         const newFreq = Math.min(MAX_FREQUENCY, cfg.frequency + step, Math.max(cfg.frequency + 1, want));
         if (newFreq <= cfg.frequency) continue;
-        const newTails = tailsForCompetitorRoute(key, cfg, newFreq);
+        const newTails = tailsForCompetitorRoute(key, cfg, newFreq, c.tier);
         const addTails = Math.max(0, newTails - tails);
         const cost     = tailDeposit(type, addTails);
         if (cash - cost < reserve) continue;
@@ -1050,7 +1050,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const dist   = routeLegKm(key, cfg);
         const type   = cfg.aircraftType ? getAircraftType(cfg.aircraftType) : pickCompetitorAircraftType(dist, c.tier, c.fleetPref);
         if (!type) continue;
-        const needTails = tailsForCompetitorRoute(key, cfg, targetFreq);
+        const needTails = tailsForCompetitorRoute(key, cfg, targetFreq, c.tier);
         const addTails  = Math.max(0, needTails - (cfg.tails ?? 1));
         const cost      = tailDeposit(type, addTails);
         if (cash - cost < reserve * 0.5) continue;
@@ -1211,7 +1211,7 @@ export function tickCompetitorAI(competitors, ctx) {
         : cand.plan ? cand.plan.options
         : rankCompetitorAircraftTypes(cand.legKm, c.tier, c.fleetPref).slice(0, lines ? AI_LINE_ALTERNATIVES : 1).map(type => ({
             type, frequency: cand.frequency, seats: maxSeatsForRange(type, cand.legKm),
-            tails: tailsForCompetitorRoute(cand.key, candCfg, cand.frequency) }));
+            tails: tailsForCompetitorRoute(cand.key, candCfg, cand.frequency, c.tier) }));
       if (cand && lines) {
         // Production lines: order the frames; the route opens when they
         // arrive. A favourite whose line is booked solid gives way to the next
@@ -1270,7 +1270,7 @@ export function tickCompetitorAI(competitors, ctx) {
         const type = pickCompetitorAircraftType(direct, c.tier, c.fleetPref, typeOpts(pnl[key]?.demandOneWay));
         if (!type) continue;
         const { via, ...rest } = cfg;
-        const tails  = tailsForRoute(direct, cfg.frequency);
+        const tails  = tailsForRoute(direct, cfg.frequency, c.tier);
         const next   = { ...rest, aircraftType: type.id, seats: laneSeats(type, direct), tails };
         const nowProfit = pnl[key]?.profit ?? computeCompetitorRoutePnL(c, key, cfg, month, incumbents, world)?.profit ?? 0;
         if (projected(key, next) <= nowProfit) continue;
@@ -1590,7 +1590,7 @@ export function planLaunch(c, cand, { fleet = [], nRoutes = 0, incumbents = null
   for (const type of types.slice(0, LAUNCH_TYPES_CONSIDERED)) {
     const seats     = rivalLaneSeats(type, cand.legKm, c.tier);
     const frequency = launchFrequency(demand, seats);
-    const tails     = tailsForCompetitorRoute(cand.key, candCfg, frequency);
+    const tails     = tailsForCompetitorRoute(cand.key, candCfg, frequency, c.tier);
     const cfg = { frequency, priceMultiplier: cand.priceMultiplier, aircraftType: type.id, seats, tails, ...candCfg };
     const p1 = computeCompetitorRoutePnL(c, cand.key, cfg, month, counts, world);
     const p2 = computeCompetitorRoutePnL(c, cand.key, cfg, offMonth, counts, world);

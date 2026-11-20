@@ -48,6 +48,7 @@ import {
   simulateCargoRoute, maxFrequency, CARGO_YIELD_ELASTICITY, FREIGHTER_CAPTURE_RATE,
 } from '../utils/simulation.js';
 import { preferredTypes, makeCompetitorTail } from './demand.js';
+import { STANDARD_TURN } from './turnTimes.js';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -141,7 +142,8 @@ export function aiFreighterTypes(distKm, pref = null) {
 
 /** Airframes needed to fly `frequency` weekly rotations (same 140 block-hour cap the player flies to). */
 export function cargoTailsFor(distKm, type, frequency) {
-  const perTail = Math.max(1, maxFrequency(distKm, type));
+  // A rival's turn is the standard, never the player's setting (turnTimes.js).
+  const perTail = Math.max(1, maxFrequency(distKm, type, undefined, STANDARD_TURN));
   return Math.max(1, Math.ceil(frequency / perTail));
 }
 

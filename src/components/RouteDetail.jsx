@@ -22,7 +22,7 @@ import {
   isRouteActive, routeActiveMonths, routeQualityBreakdown, fleetAvgUtilization, routeDistanceKm,
   buildEventDemandModel, stateBrandReach, rivalSpecsFor,
   stateLoungeFields, stateGroundHandlingFields, stateCateringFields, stateCateringCapReport, stateCateringKitchenReport, stateSensReduction, CLASS_FARE_MULTIPLIERS,
-  stateTravelPartnerFields, stateLoyaltyFields, routeStops,
+  stateTravelPartnerFields, stateLoyaltyFields, routeStops, turnTimeEffectsOf,
 } from '../utils/simulation.js';
 import {
   TRAVEL_PARTNER_MAP, TP_TYPES, travelPartnerCovers, travelPartnerInSeason, travelLiftScale, seasonLabel,
@@ -30,6 +30,7 @@ import {
 import { weeklyLandingFee } from '../data/overhead.js';
 import { normalizeCateringRef } from '../data/cateringPlans.js';
 import CateringSelector from './CateringSelector.jsx';
+import { RouteTurnControl } from './TurnTimes.jsx';
 import { Glyph, GlyphLabel } from './Icons.jsx';
 import { crewGroundedAircraftIds } from '../utils/tickPrep.js';
 import { peakHoursOf } from '../models/peakHours.js';
@@ -100,9 +101,11 @@ function travelPartnerRows(state, route) {
 function QualityBreakdownPanel({ route, aircraft, state }) {
   const bd = routeQualityBreakdown(route, aircraft, state);
   if (!bd) return null;
+  const otpFx = turnTimeEffectsOf(state).otpDelta;
+  const turnOtp = Math.abs(otpFx) > 1e-9 ? otpFx : 0;
   const fmt = (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 10) / 10}`;
   const rows = [
-    { label: 'On-time performance', pts: bd.onTimePts,   sub: `${Math.round(bd.onTimeRate * 100)}% on time · morale + fleet utilization` },
+    { label: 'On-time performance', pts: bd.onTimePts,   sub: `${Math.round(bd.onTimeRate * 100)}% on time · morale + fleet utilization${turnOtp ? ` + turn times (${turnOtp > 0 ? '+' : '−'}${Math.abs(turnOtp * 100).toFixed(1)} pts)` : ''}` },
     { label: 'Customer rating',     pts: bd.ratingPts,   sub: bd.satisfaction != null
         ? `${bd.customerRating.toFixed(1)}★ · earned satisfaction ${Math.round(bd.satisfaction)}/100`
         : `${bd.customerRating.toFixed(1)}★ · from cabin crew morale` },
@@ -914,6 +917,8 @@ export default function RouteDetail({ origin, dest, rrById = {}, onBack }) {
               </div>
             );
           })()}
+          {/* Turn time (models/turnTimes.js): this route's own, or the fleet setting. */}
+          <RouteTurnControl state={state} dispatch={dispatch} routes={playerRoutes} />
           {/* Quality score breakdown — engine-accurate per-source points */}
           {(() => {
             const r0 = playerRoutes[0];
